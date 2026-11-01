@@ -1,0 +1,17 @@
+#!/bin/sh
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+if ! command -v node >/dev/null 2>&1; then
+  printf '%s\n' 'Cảnh báo: không có Node.js; bỏ qua secret scan pre-commit.' >&2
+  exit 0
+fi
+
+node "$repo_root/docs/agent/hooks/agent-hooks.cjs" secret-scan
+status=$?
+if [ "$status" -eq 1 ]; then
+  exit 1
+fi
+if [ "$status" -ne 0 ]; then
+  printf '%s\n' 'Cảnh báo: secret scan gặp lỗi môi trường; tiếp tục commit.' >&2
+fi
+exit 0
