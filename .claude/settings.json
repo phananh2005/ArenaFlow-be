@@ -1,0 +1,43 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/docs/agent/hooks/agent-hooks.cjs\" guard",
+            "timeout": 5,
+            "statusMessage": "Kiểm tra lệnh có thao tác phá huỷ"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/docs/agent/hooks/agent-hooks.cjs\" logger",
+            "timeout": 5,
+            "statusMessage": "Ghi log tối thiểu"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/docs/agent/hooks/agent-hooks.cjs\" session-start",
+            "timeout": 5,
+            "statusMessage": "Kiểm tra Git pre-commit"
+          }
+        ]
+      }
+    ]
+  }
+}
