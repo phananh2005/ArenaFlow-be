@@ -1,0 +1,433 @@
+// ArenaFlow Database Schema
+// Generated from V1__initial_schema.sql
+// Use at: https://dbdiagram.io
+
+Project ArenaFlow {
+  database_type: 'PostgreSQL'
+  Note: 'ArenaFlow - Nền tảng kết nối đội bóng'
+}
+
+// ================================================================
+// 1. User & Authentication
+// ================================================================
+
+Table administrative_unit {
+  id uuid [pk]
+  name varchar(100) [not null]
+  level varchar(20) [not null, note: 'province, district, ward']
+  parent_id uuid [ref: > administrative_unit.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    parent_id
+    level
+  }
+}
+
+Table user {
+  id uuid [pk]
+  display_name varchar(100) [not null]
+  avatar_url varchar(500)
+  bio text
+  preferred_position varchar(50)
+  date_of_birth date
+  gender varchar(20)
+  district_id uuid [ref: > administrative_unit.id]
+  phone_number varchar(20)
+  reliability_score integer [not null, default: 80, note: '0-100']
+  total_matches_completed integer [not null, default: 0]
+  total_matches_confirmed integer [not null, default: 0]
+  average_rating decimal(3,2) [note: '1.0-5.0']
+  report_count_noshow integer [not null, default: 0]
+  report_count_bad_play integer [not null, default: 0]
+  report_count_bad_communication integer [not null, default: 0]
+  report_count_skill_mismatch integer [not null, default: 0]
+  clean_streak integer [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz
+
+  indexes {
+    (phone_number) [unique, note: 'WHERE deleted_at IS NULL']
+    district_id
+    deleted_at
+  }
+}
+
+Table oauth_account {
+  id uuid [pk]
+  user_id uuid [not null, ref: > user.id]
+  provider varchar(50) [not null, note: 'google, facebook, phone']
+  provider_user_id varchar(255) [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (provider, provider_user_id) [unique]
+    user_id
+  }
+}
+
+// ================================================================
+// 2. Team
+// ================================================================
+
+Table team {
+  id uuid [pk]
+  name varchar(100) [not null]
+  created_by uuid [not null, ref: > user.id]
+  avatar_url varchar(500)
+  description text
+  status varchar(20) [not null, default: 'ACTIVE', note: 'ACTIVE, INACTIVE']
+  reliability_score integer [not null, default: 80, note: '0-100']
+  total_matches_completed integer [not null, default: 0]
+  total_matches_confirmed integer [not null, default: 0]
+  average_rating decimal(3,2) [note: '1.0-5.0']
+  report_count_noshow integer [not null, default: 0]
+  report_count_bad_play integer [not null, default: 0]
+  report_count_bad_communication integer [not null, default: 0]
+  report_count_skill_mismatch integer [not null, default: 0]
+  clean_streak integer [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    created_by
+    status
+  }
+}
+
+Table team_member {
+  id uuid [pk]
+  team_id uuid [not null, ref: > team.id]
+  user_id uuid [not null, ref: > user.id]
+  role varchar(20) [not null, note: 'CAPTAIN, MEMBER']
+  status varchar(20) [not null, note: 'PENDING, ACTIVE, LEFT']
+  invited_at timestamptz [not null, default: `now()`]
+  joined_at timestamptz
+  left_at timestamptz
+
+  indexes {
+    (team_id, user_id, status) [unique, note: 'WHERE status = ACTIVE']
+    (team_id, role, status)
+    (user_id, status)
+  }
+}
+
+Table team_tag {
+  id uuid [pk]
+  team_id uuid [not null, ref: > team.id]
+  tag varchar(50) [not null, note: 'Chill, Nhiệt tình, Máu lửa, etc.']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (team_id, tag) [unique]
+    team_id
+  }
+}
+
+Table team_captain_history {
+  id uuid [pk]
+  team_id uuid [not null, ref: > team.id]
+  from_user_id uuid [ref: > user.id]
+  to_user_id uuid [not null, ref: > user.id]
+  transferred_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (team_id, transferred_at)
+  }
+}
+
+// ================================================================
+// 3. Sport
+// ================================================================
+
+Table sport {
+  id uuid [pk]
+  name varchar(50) [not null, unique]
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+
+  Note: 'Initial data: Bóng đá'
+}
+
+// ================================================================
+// 4. Venue
+// ================================================================
+
+Table venue {
+  id uuid [pk]
+  name varchar(200) [not null]
+  address text [not null]
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+  created_by_type varchar(20) [not null, note: 'ADMIN, USER']
+  created_by_user_id uuid [ref: > user.id]
+  phone varchar(20)
+  website varchar(500)
+  venue_type varchar(50)
+  status varchar(20) [not null, default: 'ACTIVE', note: 'ACTIVE, INACTIVE']
+  last_selected_at timestamptz
+  admin_verified_inactive_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (latitude, longitude, status) [note: 'WHERE status = ACTIVE']
+    (status, last_selected_at)
+    created_by_user_id
+  }
+}
+
+Table venue_image {
+  id uuid [pk]
+  venue_id uuid [not null, ref: > venue.id]
+  image_url varchar(500) [not null]
+  is_primary boolean [not null, default: false]
+  display_order integer [not null, note: '> 0']
+  uploaded_by uuid [ref: > user.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (venue_id, is_primary) [unique, note: 'WHERE is_primary = TRUE']
+    (venue_id, display_order)
+  }
+}
+
+Table venue_report {
+  id uuid [pk]
+  venue_id uuid [not null, ref: > venue.id]
+  reporter_id uuid [not null, ref: > user.id]
+  reason text [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (venue_id, created_at)
+    reporter_id
+  }
+}
+
+// ================================================================
+// 5. Match & Pairing
+// ================================================================
+
+Table match {
+  id uuid [pk]
+  type varchar(20) [not null, note: 'HAS_VENUE, NEED_VENUE']
+  author_team_id uuid [not null, ref: > team.id]
+  status varchar(20) [not null, default: 'OPEN', note: 'OPEN, CONFIRMED, ARCHIVED, COMPLETED, EXPIRED, CANCELLED']
+  sport_id uuid [not null, ref: > sport.id]
+  format varchar(10)
+  age_note text
+  match_nature text
+  venue_id uuid [ref: > venue.id]
+  match_start_time timestamptz [not null]
+  match_end_time timestamptz [not null]
+  expires_at timestamptz [not null]
+  search_lat decimal(10,7)
+  search_lng decimal(10,7)
+  search_radius_km decimal(5,2)
+  cost_type varchar(50)
+  cost_split varchar(50)
+  cost_venue_amount bigint
+  cost_drinks_amount bigint
+  cost_deposit_holder varchar(100)
+  confirmed_opponent_team_id uuid [ref: > team.id]
+  confirmed_venue_id uuid [ref: > venue.id]
+  confirmed_match_time timestamptz
+  cancelled_by_team_id uuid [ref: > team.id]
+  cancelled_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (author_team_id, status)
+    (status, expires_at)
+    (status, match_end_time)
+    (sport_id, status, match_start_time)
+    (search_lat, search_lng) [note: 'WHERE type = NEED_VENUE AND status = OPEN']
+  }
+}
+
+Table match_venue_option {
+  id uuid [pk]
+  match_id uuid [not null, ref: > match.id]
+  venue_id uuid [not null, ref: > venue.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    match_id
+  }
+}
+
+Table match_time_option {
+  id uuid [pk]
+  match_id uuid [not null, ref: > match.id]
+  proposed_start_time timestamptz [not null]
+  proposed_end_time timestamptz [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    match_id
+  }
+}
+
+Table cost_custom_item {
+  id uuid [pk]
+  match_id uuid [not null, ref: > match.id]
+  item_name varchar(100) [not null]
+  amount bigint [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    match_id
+  }
+}
+
+Table match_request {
+  id uuid [pk]
+  match_id uuid [not null, ref: > match.id]
+  requester_team_id uuid [not null, ref: > team.id]
+  status varchar(20) [not null, default: 'PENDING', note: 'PENDING, ACCEPTED, REJECTED, WITHDRAWN, SUPERSEDED, EXPIRED']
+  requested_at timestamptz [not null, default: `now()`]
+  responded_at timestamptz
+  withdrawn_at timestamptz
+
+  indexes {
+    (match_id, requester_team_id) [unique, note: 'WHERE status NOT IN (WITHDRAWN, EXPIRED)']
+    (match_id, status)
+    (requester_team_id, status)
+  }
+}
+
+Table pairing {
+  id uuid [pk]
+  match_id uuid [not null, ref: > match.id]
+  interested_team_id uuid [not null, ref: > team.id]
+  status varchar(20) [not null, default: 'NEGOTIATING', note: 'NEGOTIATING, CONFIRMED, EXPIRED, SUPERSEDED']
+  author_confirmed_at timestamptz
+  interested_confirmed_at timestamptz
+  final_confirmed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (match_id, interested_team_id) [unique, note: 'WHERE status NOT IN (EXPIRED, SUPERSEDED)']
+    (match_id, status)
+    (interested_team_id, status)
+    (match_id, final_confirmed_at) [note: 'WHERE status = CONFIRMED']
+  }
+}
+
+// ================================================================
+// 6. Rating & Report
+// ================================================================
+
+Table rating {
+  id uuid [pk]
+  match_id uuid [not null, ref: > match.id]
+  rater_type varchar(20) [not null, note: 'TEAM, INDIVIDUAL']
+  rater_id uuid [not null, note: 'FK to team or user']
+  ratee_type varchar(20) [not null, note: 'TEAM, INDIVIDUAL']
+  ratee_id uuid [not null, note: 'FK to team or user']
+  score decimal(2,1) [not null, note: '1.0-5.0']
+  comment text
+  match_score_home integer
+  match_score_away integer
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (match_id, rater_type, rater_id, ratee_type, ratee_id) [unique]
+    (ratee_type, ratee_id)
+  }
+}
+
+Table report {
+  id uuid [pk]
+  match_id uuid [not null, ref: > match.id]
+  reporter_type varchar(20) [not null, note: 'TEAM, INDIVIDUAL']
+  reporter_id uuid [not null, note: 'FK to team or user']
+  reported_type varchar(20) [not null, note: 'TEAM, INDIVIDUAL']
+  reported_id uuid [not null, note: 'FK to team or user']
+  report_type varchar(50) [not null, note: 'NOSHOW, BAD_PLAY, BAD_COMMUNICATION, SKILL_MISMATCH']
+  reason text
+  status varchar(20) [not null, default: 'PENDING', note: 'PENDING, CONFIRMED, REJECTED']
+  admin_reviewed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    match_id
+    (reported_type, reported_id, report_type)
+    (status, created_at)
+  }
+}
+
+// ================================================================
+// 7. Mercenary
+// ================================================================
+
+Table mercenary_recruitment {
+  id uuid [pk]
+  match_id uuid [not null, ref: > match.id]
+  team_id uuid [not null, ref: > team.id]
+  position varchar(50) [not null, note: 'Thủ môn, Hậu vệ, Tiền vệ, Tiền đạo']
+  quantity_needed integer [not null, note: '> 0']
+  quantity_approved integer [not null, default: 0]
+  status varchar(20) [not null, default: 'OPEN', note: 'OPEN, FILLED, EXPIRED, CLOSED']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    match_id
+    (team_id, status)
+    (status, position)
+  }
+}
+
+Table mercenary_application {
+  id uuid [pk]
+  recruitment_id uuid [not null, ref: > mercenary_recruitment.id]
+  applicant_id uuid [not null, ref: > user.id]
+  status varchar(20) [not null, default: 'PENDING', note: 'PENDING, APPROVED, REJECTED, WITHDRAWN']
+  applied_at timestamptz [not null, default: `now()`]
+  responded_at timestamptz
+  withdrawn_at timestamptz
+
+  indexes {
+    (recruitment_id, applicant_id) [unique, note: 'WHERE status NOT IN (WITHDRAWN, REJECTED)']
+    (recruitment_id, status)
+    (applicant_id, status)
+  }
+}
+
+// ================================================================
+// 8. Chat & Notification
+// ================================================================
+
+Table chat_message {
+  id uuid [pk]
+  pairing_id uuid [not null, ref: > pairing.id]
+  sender_user_id uuid [not null, ref: > user.id]
+  message text [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (pairing_id, created_at)
+    created_at [note: 'For retention cleanup']
+  }
+}
+
+Table notification {
+  id uuid [pk]
+  recipient_user_id uuid [not null, ref: > user.id]
+  type varchar(50) [not null, note: 'MATCH_REQUEST_RECEIVED, REQUEST_ACCEPTED, etc.']
+  title varchar(200) [not null]
+  body text [not null]
+  reference_type varchar(50)
+  reference_id uuid
+  is_read boolean [not null, default: false]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (recipient_user_id, is_read, created_at)
+    created_at [note: 'For retention cleanup']
+  }
+}
