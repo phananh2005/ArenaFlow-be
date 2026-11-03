@@ -41,7 +41,7 @@
 | Phân tích yêu cầu nghiệp vụ | procedure `business-analyst` → duyệt → spec nghiệp vụ | đoán yêu cầu, bỏ qua phân tích |
 | Thiết kế chức năng mới | kiểm tra spec → chưa có → `business-analyst`; đã có spec → `solution-architect` → duyệt → `architect-reviewer` | bỏ qua thiết kế, code thẳng |
 | Implement chức năng mới | kiểm tra thiết kế → chưa có → `solution-architect`; đã có → `developer` | code chức năng mới khi chưa có thiết kế |
-| Implement sửa nhỏ | procedure `developer` | viết code tự do không qua procedure |
+| Sửa chức năng đã triển khai | `developer` → code & test → kiểm tra ảnh hưởng → cập nhật design (nếu có) → cập nhật SRS (nếu có) → `architect-reviewer` (nếu sửa design) → `code-review` | bỏ qua cập nhật tài liệu khi có ảnh hưởng |
 | Debug / lỗi | skill `debug` | đoán nguyên nhân khi chưa reproduce |
 | Review thiết kế | procedure `architect-reviewer` | tự sửa thiết kế |
 | Review code / chuẩn bị MR | procedure `code-reviewer` | commit khi chưa review |
@@ -97,14 +97,42 @@
 ## §8 — MUST / NEVER (ưu tiên cao nhất)
 
 ### MUST
-- **Thiết kế trước khi code:** chức năng mới (endpoint mới, entity mới, luồng nghiệp vụ mới) → **MUST** chạy `solution-architect` sinh tài liệu thiết kế → duyệt → `architect-reviewer` → duyệt → mới cho `developer` code. Sửa nhỏ (bugfix, refactor không đổi hợp đồng) → thẳng `developer`.
+- **Thiết kế trước khi code:** 
+  - **Chức năng mới** (endpoint mới, entity mới, use case mới) → **MUST** chạy `solution-architect` sinh tài liệu thiết kế → duyệt → `architect-reviewer` → duyệt → mới cho `developer` code.
+  - **Sửa chức năng đã có** → `developer` code trước → sau khi test PASS → kiểm tra ảnh hưởng:
+    - Có ảnh hưởng design (API/DB/sequence/integration) → **MUST** cập nhật design document → `architect-reviewer` review phần sửa
+    - Có ảnh hưởng nghiệp vụ (use case/business rule/actor) → **MUST** cập nhật SRS
+    - Không ảnh hưởng → bỏ qua cập nhật tài liệu
 - TDD **luôn bật và bắt buộc** cho mọi thay đổi làm đổi hành vi code: viết test trước (Red), xác nhận fail đúng lý do, viết code tối thiểu (Green), rồi refactor và chạy lại test. Chỉ thay đổi thuần tài liệu mới không cần TDD.
-- Nhận yêu cầu implement → **MUST** chạy `task-state-init` trước khi viết code (sau khi thiết kế đã duyệt nếu là chức năng mới).
+- Nhận yêu cầu implement **chức năng mới** → **MUST** chạy `task-state-init` trước khi viết code (sau khi thiết kế đã duyệt).
 - **MUST** ghi kế hoạch chi tiết vào `current-task.md` và chờ user duyệt — một cổng duyệt duy nhất.
 - Viết endpoint / truy vấn DB → **MUST** đọc `docs/agent/non-functional-standards.md` **trước** khi lập kế hoạch; không đạt ngưỡng → dừng, chờ xác nhận.
-- Sau khi viết/sửa code → **MUST** chạy `./mvnw test` liên quan, dán output, xác nhận PASS. Test cần PostgreSQL hoạt động với datasource được cấu hình; thiếu DB → báo blocker, không khẳng định PASS.
+- Sau khi viết/sửa code → **MUST** chạy `./mvnw test` liên quan, dán output, xác nhận PASS.
+  - **Unit test thuần** (không dựng Spring context/DB) chạy độc lập, **không** cần `.env.dev`.
+  - **Integration test** (`@SpringBootTest`, `@DataJpaTest`, migration test) cần DB → agent **tự nạp `.env.dev`** (DB dev) rồi chạy, không cần hỏi: `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Dtest=<Test> test`. **NEVER** in giá trị biến môi trường.
+  - Chỉ báo blocker khi không có `.env.dev` hoặc DB dev không kết nối được; khi đó không khẳng định PASS.
+- **Sau khi sửa chức năng đã triển khai và test PASS → MUST tự kiểm tra:**
+  1. Có thay đổi API contract / database schema / luồng component / integration? → cập nhật design
+  2. Có thay đổi use case / business rule / actor / workflow? → cập nhật SRS
+  3. Đã cập nhật design → gọi `architect-reviewer` review phần sửa
 - Sau mỗi bước implement → **MUST** chạy `progress-tracker`.
 - Trước khi commit → **MUST** chạy `code-review`.
+- **Đồng bộ `main`:** trên **mọi nhánh khác `main`**, agent **MUST tự** chạy `git fetch origin && git rebase --autostash origin/main` tại 3 thời điểm: (1) trước khi bắt đầu triển khai một chức năng, (2) trước mỗi commit, (3) trước mỗi push.
+  - Conflict khi rebase → `git rebase --abort`, **dừng**, báo danh sách file conflict; **NEVER** tự resolve. Conflict khi áp lại autostash → dừng, báo (stash vẫn còn trong `git stash list`).
+  - `fetch` lỗi (mạng/quyền) → báo, **không** khẳng định đã đồng bộ.
+  - Rebase kéo về commit mới → chạy lại test liên quan trước khi commit/push.
+  - Nhánh đã push trước đó → push sau rebase dùng `git push --force-with-lease` (vẫn chỉ push khi user yêu cầu); **NEVER** `--force`; **NEVER** force-push `main`.
+- **Quy ước tên nhánh:** mọi nhánh tạo từ `origin/main` (sau `git fetch origin`); `<MÃ>` viết hoa như mã spec/design, phần mô tả kebab-case chữ thường.
+
+  | Nhánh | Chứa | Ví dụ |
+  |---|---|---|
+  | `feature/<MÃ>-<mô-tả>` | Code chức năng mới / sửa chức năng + SRS/Design của chính chức năng đó (commit riêng `docs(<MÃ>): ...`) | `feature/USER-001-user-team-management` |
+  | `docs/<MÃ>-<chủ-đề>` | Chỉ tài liệu không kèm code: `docs/agent/business-spec/`, `docs/agent/design/<MÃ>/`, `docs/agent/decisions/`, `docs/database/` | `docs/USER-001-update-api-spec` |
+  | `chore/agent-framework-<chủ-đề>` | Claude-framework: `CLAUDE.md`, `.claude/`, `.agent-bootstrap/`, `.githooks/`, `docs/agent/hooks/`, `docs/agent/*.md`, các `_template/` | `chore/agent-framework-test-env-rebase` |
+
+  - Bắt đầu chức năng mà đang ở `main` → tự tạo nhánh `feature/<MÃ>-<mô-tả>` từ `origin/main`.
+  - Trước commit: thay đổi thuộc nhóm khác nhánh hiện tại (vd framework trên nhánh `feature/`) → **NEVER** commit lẫn; tách sang nhánh đúng nhóm (tạo từ `origin/main`), không rõ nhóm → hỏi user.
+- **Merge vào `main` chỉ qua merge request (GitHub Pull Request):** push nhánh → `gh pr create --base main` → `code-reviewer` → user tự merge trên GitHub. **NEVER** `git merge` / `git rebase` / `git commit` / `git push` trực tiếp lên `main` local hay `origin/main`. Tạo PR vẫn chỉ khi user yêu cầu.
 - Debug → **MUST** reproduce trước khi nêu nguyên nhân.
 
 ### NEVER

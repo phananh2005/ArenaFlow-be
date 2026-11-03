@@ -5,7 +5,7 @@
 ## 1. Package Structure
 
 ```
-com.arenaflow
+com.phananh.ArenaFlow
 ├── config/                 # Configuration classes (@Configuration)
 ├── controller/             # REST Controllers (@RestController)
 ├── service/                # Business logic interfaces
@@ -78,7 +78,7 @@ public class ArenaController {
 
 ```java
 @GetMapping("/{id}")
-public ResponseEntity<ArenaResponse> getArena(@PathVariable Long id) {
+public ResponseEntity<ArenaResponse> getArena(@PathVariable UUID id) {
     ArenaResponse response = arenaService.findById(id);
     return ResponseEntity.ok(response);
 }
@@ -93,7 +93,7 @@ public ResponseEntity<ArenaResponse> createArena(
 
 @PatchMapping("/{id}")
 public ResponseEntity<ArenaResponse> updateArena(
-    @PathVariable Long id,
+    @PathVariable UUID id,
     @Valid @RequestBody UpdateArenaRequest request
 ) {
     ArenaResponse response = arenaService.update(id, request);
@@ -101,7 +101,7 @@ public ResponseEntity<ArenaResponse> updateArena(
 }
 
 @DeleteMapping("/{id}")
-public ResponseEntity<Void> deleteArena(@PathVariable Long id) {
+public ResponseEntity<Void> deleteArena(@PathVariable UUID id) {
     arenaService.delete(id);
     return ResponseEntity.noContent().build();
 }
@@ -204,8 +204,9 @@ public interface ArenaRepository extends JpaRepository<Arena, Long> {
 public class Arena extends BaseEntity {
     
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue
+    @UuidGenerator(style = UuidGenerator.Style.TIME)
+    private UUID id;
     
     @Column(name = "arena_name", nullable = false, length = 100)
     private String arenaName;
@@ -386,6 +387,22 @@ public class GlobalExceptionHandler {
 public BookingResponse createBooking(CreateBookingRequest request) {
     // Tất cả trong 1 transaction
     // Rollback nếu có exception
+}
+```
+
+**Ngoại lệ — Method có optimistic lock retry:**
+- **Không** annotate `@Transactional` ở method level
+- Transaction do `OptimisticLockRetrier` quản lý — mỗi lần thử là 1 transaction mới
+- Lý do: retry phải nằm **ngoài** transaction; nếu `@Transactional` bọc retry → toàn bộ lần thử dùng chung persistence context đã rollback-only
+- Xem ADR-0003 cho chi tiết
+
+```java
+// Method có retry - KHÔNG có @Transactional
+public TeamResponse updateTeam(UUID teamId, UUID userId, UpdateTeamRequest request) {
+    return optimisticLockRetrier.execute(() -> {
+        // Transaction mới cho mỗi lần thử
+        // ...
+    });
 }
 ```
 

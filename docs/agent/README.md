@@ -104,7 +104,7 @@ node docs/agent/hooks/fixture-tests.cjs
 node docs/agent/hooks/agent-hooks.cjs test
 ```
 
-Project Neon `ArenaFlow-be` (`misty-dew-90700890`) ở Singapore có database mặc định `neondb` và branch `main`. `./mvnw test` cần PostgreSQL đang chạy và datasource được cấu hình qua `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`. Chưa cấu hình Testcontainers hay DB test riêng; không báo test PASS nếu chưa có PostgreSQL và test chưa chạy đạt.
+Project Neon `ArenaFlow-be` (`misty-dew-90700890`) ở Singapore có database mặc định `neondb` và branch `main`. Unit test thuần chạy độc lập, không cần `.env.dev`. Integration test cần DB: agent tự nạp `.env.dev` (DB dev; `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`) bằng `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Dtest=<Test> test`. Chưa cấu hình Testcontainers hay DB test riêng; integration test ghi vào DB dev. Không báo test PASS nếu test chưa chạy đạt.
 
 ## Ownership
 
