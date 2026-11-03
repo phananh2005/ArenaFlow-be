@@ -23,6 +23,8 @@ State theo namespace từng dev (`docs/agent/state/<DEV_ID>/`) để nhiều ng�
 ### Bước 0 — Xác định namespace
 - `<DEV_ID>` mặc định là `local-dev`. Đội mở rộng → đổi theo alias cấu hình.
 - Chưa có `docs/agent/state/local-dev/` → copy toàn bộ `docs/agent/state/_template/` sang.
+- Đang ở `main` → tự tạo nhánh `feature/<MÃ>-<mô-tả>` từ `origin/main` (quy ước tên nhánh `CLAUDE.md` §8).
+- Đang ở nhánh khác `main` → tự đồng bộ `main` trước khi bắt đầu chức năng, theo `CLAUDE.md` §8 (`git fetch origin && git rebase --autostash origin/main`); conflict → abort, dừng, báo.
 
 ### Bước 1 — Thu thập thông tin & đánh giá sơ bộ
 - Hỏi nếu chưa rõ: tên task, Definition of Done, ràng buộc kỹ thuật.
