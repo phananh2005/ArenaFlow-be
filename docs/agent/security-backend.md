@@ -28,7 +28,7 @@
 ```
 
 **Token expiration:**
-- Access token: 24 giờ
+- Access token: 1 giờ (theo ADR-0001: balance giữa security và UX, kết hợp auto-refresh)
 - Refresh token: 7 ngày
 
 ### 1.3. Authorization Rules

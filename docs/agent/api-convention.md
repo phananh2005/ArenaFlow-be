@@ -150,6 +150,7 @@ Format: `<DOMAIN>_<NUMBER>`
 - `ARENA` — Sân thể thao
 - `BOOKING` — Đặt lịch
 - `USER` — Người dùng
+- `TEAM` — Đội
 - `AUTH` — Authentication/Authorization
 - `PAYMENT` — Thanh toán
 

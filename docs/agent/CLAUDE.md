@@ -26,6 +26,7 @@ _(Chưa có file kiến trúc/thuật ngữ — thêm khi dự án phát triển
 | Điều chỉnh cách làm việc agent | `docs/agent/adaptation-rules.md` |
 | Rà quyết định kiến trúc | `docs/agent/decisions/` |
 | Tra cứu Neon project/schema | `docs/agent/external-knowledge.md` |
+| Làm việc với user/hồ sơ/đội/lời mời/xác thực (USER-001) | `docs/agent/design/USER-001/` |
 
 ---
 

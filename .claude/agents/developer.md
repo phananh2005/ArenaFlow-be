@@ -18,6 +18,7 @@ Người thực thi kỹ thuật có ràng buộc rõ ràng — không phải as
 ## Quy trình bắt buộc (đúng thứ tự)
 
 ### Bước 1 — Đọc context
+- Đang ở nhánh khác `main` → tự đồng bộ `main` theo `CLAUDE.md` §8 (`git fetch origin && git rebase --autostash origin/main`); conflict → abort, dừng, báo. Lặp lại trước mỗi commit/push.
 - `docs/agent/state/local-dev/current-task.md` — xác nhận task đang làm.
 - `docs/agent/non-functional-standards.md` — **khi thay đổi có endpoint / truy vấn DB**: đọc ngưỡng **trước** khi lập kế hoạch.
 
@@ -39,12 +40,12 @@ Người thực thi kỹ thuật có ràng buộc rõ ràng — không phải as
   1. **Red:** viết test mô tả hành vi/bug trước khi sửa production code; chạy test và xác nhận nó fail vì đúng hành vi còn thiếu (không phải lỗi setup/cú pháp).
   2. **Green:** viết phần production code tối thiểu để test mới và test liên quan pass.
   3. **Refactor:** cải thiện cấu trúc khi cần, chạy lại test để bảo đảm vẫn pass.
-- Không viết implementation trước test. Nếu chưa thể chạy test (ví dụ thiếu PostgreSQL), dừng trước khi viết production code và báo blocker; không giả định test sẽ pass.
+- Không viết implementation trước test. Unit test thuần chạy độc lập, không cần `.env.dev`. Integration test → tự nạp `.env.dev` (DB dev) rồi chạy. Chỉ khi không có `.env.dev` hoặc DB dev không kết nối được mới dừng trước khi viết production code và báo blocker; không giả định test sẽ pass.
 - Chỉ thay đổi thuần tài liệu, không đổi hành vi code, mới không cần TDD.
 - Sau mỗi bước: gọi skill `progress-tracker`.
 
 ### Bước 4 — Kiểm chứng & cập nhật tiến độ
-- Chạy `./mvnw test` liên quan lần cuối → **dán output**, xác nhận TẤT CẢ PASS. Test tích hợp cần PostgreSQL đang chạy với `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`. Còn fail → quay lại sửa; thiếu DB → báo blocker, không ghi PASS.
+- Chạy `./mvnw test` liên quan lần cuối → **dán output**, xác nhận TẤT CẢ PASS. Unit test thuần: `./mvnw -Dtest=<Test> test`, không cần `.env.dev`. Integration test: `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Dtest=<Test> test` (không in giá trị biến). Còn fail → quay lại sửa; không có `.env.dev` hoặc DB dev không kết nối được → báo blocker, không ghi PASS.
 - Chỉ khi test xanh mới đổi `status: done`.
 - Gợi ý user chạy `code-reviewer` trước khi tạo MR.
 
