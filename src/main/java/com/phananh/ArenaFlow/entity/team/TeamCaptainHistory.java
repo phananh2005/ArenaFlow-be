@@ -30,6 +30,9 @@ public class TeamCaptainHistory {
     @Column(name = "transferred_at", nullable = false)
     private OffsetDateTime transferredAt;
 
+    @Column(name = "reason", length = 500)
+    private String reason;
+
     @PrePersist
     protected void onCreate() {
         if (transferredAt == null) {
@@ -77,5 +80,13 @@ public class TeamCaptainHistory {
 
     public void setTransferredAt(OffsetDateTime transferredAt) {
         this.transferredAt = transferredAt;
+    }
+
+    public String getReason() {
+        return reason;
+    }
+
+    public void setReason(String reason) {
+        this.reason = reason;
     }
 }

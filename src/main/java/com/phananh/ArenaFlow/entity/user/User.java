@@ -13,7 +13,7 @@ import java.util.UUID;
  * Mapping từ bảng "user" trong database
  */
 @Entity
-@Table(name = "user")
+@Table(name = "\"user\"") // "user" là từ khoá PostgreSQL → phải quote, khớp V1 (CREATE TABLE "user")
 public class User {
 
     @Id
@@ -39,8 +39,12 @@ public class User {
     @Column(name = "gender", length = 20)
     private String gender;
 
-    @Column(name = "district_id")
-    private UUID districtId;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", nullable = false, length = 20)
+    private Role role = Role.USER;
+
+    @Column(name = "ward_id")
+    private UUID wardId;
 
     @Column(name = "phone_number", length = 20)
     private String phoneNumber;
@@ -150,12 +154,20 @@ public class User {
         this.gender = gender;
     }
 
-    public UUID getDistrictId() {
-        return districtId;
+    public Role getRole() {
+        return role;
     }
 
-    public void setDistrictId(UUID districtId) {
-        this.districtId = districtId;
+    public void setRole(Role role) {
+        this.role = role;
+    }
+
+    public UUID getWardId() {
+        return wardId;
+    }
+
+    public void setWardId(UUID wardId) {
+        this.wardId = wardId;
     }
 
     public String getPhoneNumber() {
@@ -260,6 +272,10 @@ public class User {
 
     public void setDeletedAt(OffsetDateTime deletedAt) {
         this.deletedAt = deletedAt;
+    }
+
+    public enum Role {
+        USER, ADMIN
     }
 
     // Soft delete helper

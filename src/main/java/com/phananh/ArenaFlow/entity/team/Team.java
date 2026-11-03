@@ -1,10 +1,12 @@
 package com.phananh.ArenaFlow.entity.team;
 
+import com.phananh.ArenaFlow.entity.converter.SkillLevelsConverter;
 import jakarta.persistence.*;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -30,6 +32,17 @@ public class Team {
 
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
+
+    @Convert(converter = SkillLevelsConverter.class)
+    @Column(name = "skill_levels", nullable = false, columnDefinition = "TEXT")
+    private List<String> skillLevels = List.of();
+
+    @Column(name = "inactive_reason", length = 500)
+    private String inactiveReason;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -119,6 +132,26 @@ public class Team {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public List<String> getSkillLevels() {
+        return skillLevels;
+    }
+
+    public void setSkillLevels(List<String> skillLevels) {
+        this.skillLevels = skillLevels;
+    }
+
+    public String getInactiveReason() {
+        return inactiveReason;
+    }
+
+    public void setInactiveReason(String inactiveReason) {
+        this.inactiveReason = inactiveReason;
+    }
+
+    public Long getVersion() {
+        return version;
     }
 
     public TeamStatus getStatus() {

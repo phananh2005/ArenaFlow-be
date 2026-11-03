@@ -25,12 +25,12 @@ class UserEntityTest {
     }
 
     @Test
-    void whenSetDistrictId_thenAcceptsUUID() {
+    void whenSetWardId_thenAcceptsUUID() {
         User user = new User();
-        UUID districtId = UUID.randomUUID();
+        UUID wardId = UUID.randomUUID();
 
-        user.setDistrictId(districtId);
+        user.setWardId(wardId);
 
-        assertThat(user.getDistrictId()).isEqualTo(districtId);
+        assertThat(user.getWardId()).isEqualTo(wardId);
     }
 }
