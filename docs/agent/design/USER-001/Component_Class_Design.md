@@ -6,8 +6,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
-| Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.ArenaFlow.entity.*`, ADR-0001/0002/0003 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline, chờ duyệt) |
+| Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.ArenaFlow.entity.*`, ADR-0001/0002/0003/0004 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code, bugfix lỗi framework, ADR-0004, mã `SYS_*` — 28 mục, xem `CHANGELOG.md`) |
 
 ## 1. Tổng quan kiến trúc
 
@@ -19,16 +19,22 @@ Base package: `com.phananh.ArenaFlow`. Entity giữ nguyên bố cục `entity/<
 
 ```
 com.phananh.ArenaFlow
-├── config/        SecurityConfig, JwtConfig (JwtProperties), JpaConfig
-├── security/      JwtTokenService, JwtAuthenticationConverter, RestAuthenticationEntryPoint,
-│                  RestAccessDeniedHandler, CurrentUser
+├── config/        SecurityConfig (+ bean JwtDecoder, JwtAuthenticationConverter), JwtProperties,
+│                  WebMvcConfig (đăng ký CurrentUserArgumentResolver)
+├── security/      JwtTokenService, AccessTokenTypeValidator, CurrentUser (annotation),
+│                  CurrentUserArgumentResolver, RestAuthenticationEntryPoint, RestAccessDeniedHandler,
+│                  SecurityErrorWriter (package-private)
 ├── controller/    AuthController, ProfileController, TeamController, InvitationController, AdminTeamController
-├── service/       AuthService, ProfileService, TeamService, TeamMembershipService, AdminTeamService
-│   └── impl/      *ServiceImpl
+├── service/       AuthService, AuthResult, ProfileService, TeamService, TeamStatusFilter,
+│   │              TeamMembershipService, AdminTeamService
+│   ├── impl/      *ServiceImpl
+│   └── support/   TeamGuard
 ├── repository/    UserRepository, OAuthAccountRepository, AdministrativeUnitRepository,
 │   │              TeamRepository, TeamMemberRepository, TeamCaptainHistoryRepository
-│   └── projection/ TeamSummaryView, TeamDetailView, MemberView, CaptainHistoryView, ProfileView
+│   └── projection/ ProfileView, UserAuthView, WardView, TeamDetailView, TeamSummaryView,
+│                   CaptainTeamView, MemberView, CaptainHistoryView
 ├── entity/        (đã có) user/, team/ …  + converter/SkillLevelsConverter
+├── validation/    OneOf, MinAge, ValidSkillLevels (+ *Validator)
 ├── dto/request/   OAuthLoginRequest, SendOtpRequest, VerifyOtpRequest, RefreshTokenRequest,
 │                  ProfileUpdateRequest, CreateTeamRequest, UpdateTeamRequest, InviteMemberRequest,
 │                  TransferCaptainRequest, MarkInactiveRequest
@@ -36,16 +42,29 @@ com.phananh.ArenaFlow
 │                  ProfileResponse, WardResponse, ProviderResponse, TeamResponse, TeamSummaryResponse,
 │                  AdminTeamSummaryResponse, InvitationResponse, MemberResponse, CaptainTransferResponse,
 │                  CaptainHistoryResponse
-├── mapper/        ProfileMapper, TeamMapper, MembershipMapper (MapStruct)
-├── exception/     ErrorCode, BusinessException, ErrorResponse, ValidationError, GlobalExceptionHandler
+├── mapper/        ProfileMapper, TeamMapper, MembershipMapper (MapStruct), MapperSupport
+├── exception/     ErrorCode, BusinessException, ErrorEnvelope, ErrorResponse, ValidationError,
+│                  GlobalExceptionHandler
 └── common/        OptimisticLockRetrier, SkillLevel, PageRequestFactory, DeletedUserMasking
 ```
 
-Thành phần trong `common/`, `dto/response/ApiResponse|PageResponse`, `exception/` là **dùng chung** → developer MUST chạy `reuse-scan` trước khi tạo.
+Thành phần trong `common/`, `dto/response/ApiResponse|PageResponse`, `exception/`, `mapper/MapperSupport`, `service/support/` là **dùng chung** → developer MUST chạy `reuse-scan` trước khi tạo.
+
+Không có `JpaConfig`: Spring Boot auto-config (JPA, Flyway, transaction) đủ dùng. Chỉ thêm khi cần cấu hình JPA tường minh (vd auditing, nhiều datasource).
 
 ## 3. Controller Layer
 
-Mọi controller: `@RestController`, `@RequiredArgsConstructor`, `@Validated`; nhận `@Valid @RequestBody`; lấy user hiện tại qua `CurrentUser` (§9.4). Không chứa business logic.
+Mọi controller: `@RestController`, `@RequiredArgsConstructor`, `@Validated`; nhận `@Valid @RequestBody`; lấy user hiện tại qua tham số `@CurrentUser UUID currentUserId` (§9.4). Không chứa business logic.
+
+**Tham số danh sách** (chặn ở controller, sai → 400 `VALIDATION_ERROR`; `PageRequestFactory` ném `IllegalArgumentException` nếu nhận giá trị sai nên không để giá trị sai lọt xuống):
+
+```java
+@RequestParam(defaultValue = "1")  @Min(1)          int page,
+@RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
+@RequestParam(defaultValue = "ACTIVE") TeamStatusFilter status   // 2.10; 2.21 mặc định "ALL"
+```
+
+`status` bind thẳng enum `TeamStatusFilter`; giá trị lạ → `MethodArgumentTypeMismatchException` → 400 (§10).
 
 | Controller | `@RequestMapping` | Endpoint (`API_Spec.md` §2) | Service |
 |---|---|---|---|
@@ -61,7 +80,17 @@ Mọi controller: `@RestController`, `@RequiredArgsConstructor`, `@Validated`; n
 
 Phân quyền captain/người được mời **làm trong service** (cần thứ tự guard 404 → 403, xem `Processing_Flow.md` §3), không dùng `@PreAuthorize` theo team. Admin chặn ở `SecurityConfig` (`/api/v1/admin/**` → `hasRole('ADMIN')`).
 
-**Guard đội INACTIVE:** Các method `updateTeam`, `inviteMember`, `transferCaptain`, `acceptInvitation` MUST check `team.status = INACTIVE → TEAM_015` trước khi ghi.
+**Guard đội INACTIVE:** Các method `updateTeam`, `inviteMember`, `transferCaptain`, `acceptInvitation`, `rejectInvitation` MUST check `team.status = INACTIVE → TEAM_015` trước khi ghi.
+
+**`service/support/TeamGuard`** (`@Component`, deps `TeamRepository`, `TeamMemberRepository`) — một nguồn cho guard đội, dùng chung bởi `TeamServiceImpl` và `TeamMembershipServiceImpl`:
+
+```java
+Team activeTeam(UUID teamId);                        // không có → TEAM_001; INACTIVE → TEAM_015
+void requireTeam(UUID teamId);                       // không có → TEAM_001 (endpoint đọc, rời đội)
+TeamMember requireCaptain(UUID teamId, UUID userId); // captain ACTIVE ≠ userId → TEAM_002
+```
+
+`AdminTeamServiceImpl` không dùng `TeamGuard` (admin thao tác cả đội INACTIVE, quy tắc riêng TEAM_011/012/013).
 
 ### 4.1. AuthService
 ```java
@@ -70,7 +99,7 @@ OtpSentResponse sendOtp(SendOtpRequest request);           // mock, không chạ
 AuthResult verifyOtp(VerifyOtpRequest request);            // register-or-login, provider=phone
 AuthResponse refresh(RefreshTokenRequest request);
 ```
-`AuthResult` = record `(AuthResponse body, boolean isNewUser)`. Deps: `UserRepository`, `OAuthAccountRepository`, `JwtTokenService`.
+`AuthResult` = record `(AuthResponse body, boolean isNewUser)`. Deps: `UserRepository`, `OAuthAccountRepository`, `JwtTokenService`, `JwtProperties` (`expiresIn` trong response), `TransactionTemplate` (tạo tài khoản, §4.6).
 
 ### 4.2. ProfileService
 ```java
@@ -89,7 +118,13 @@ TeamResponse updateTeam(UUID teamId, UUID userId, UpdateTeamRequest request);
 CaptainTransferResponse transferCaptain(UUID teamId, UUID userId, TransferCaptainRequest request);
 PageResponse<CaptainHistoryResponse> listCaptainHistory(UUID teamId, int page, int pageSize);
 ```
-`TeamStatusFilter` = enum `ACTIVE | INACTIVE | ALL`.
+`TeamStatusFilter` = enum `ACTIVE | INACTIVE | ALL`; `toQueryValue()` trả `null` cho `ALL`, còn lại `name()` (tham số `status` của `TeamRepository.findSummaries`).
+
+Deps: `UserRepository`, `TeamRepository`, `TeamMemberRepository`, `TeamCaptainHistoryRepository`, `OptimisticLockRetrier`, `TeamMapper`, `PageRequestFactory`, `TeamGuard`.
+
+**Phân trang dùng chung** (cho `TeamService`, `TeamMembershipService`, `AdminTeamService`):
+- `PageRequestFactory` là `@Component`, inject vào service; dựng `Pageable` từ `page` (bắt đầu 1) + `pageSize`.
+- `PageResponse.from(Page<S> source, Function<S, T> mapper, int page, int pageSize)` — factory tĩnh trên record `PageResponse<T>`, dựng `data` + `PaginationMeta`.
 
 ### 4.4. TeamMembershipService
 ```java
@@ -99,6 +134,7 @@ InvitationResponse rejectInvitation(UUID invitationId, UUID userId);
 PageResponse<MemberResponse> listMembers(UUID teamId, int page, int pageSize);
 void leaveTeam(UUID teamId, UUID userId);
 ```
+Deps: `UserRepository`, `TeamMemberRepository`, `OptimisticLockRetrier`, `MembershipMapper`, `PageRequestFactory`, `TeamGuard` (không inject `TeamRepository` trực tiếp).
 
 ### 4.5. AdminTeamService
 ```java
@@ -111,7 +147,8 @@ PageResponse<AdminTeamSummaryResponse> listTeams(TeamStatusFilter status, int pa
 - **Không** đặt `@Transactional` ở class level.
 - Method đọc: `@Transactional(readOnly = true)`.
 - Method ghi chạm `team`/`team_member` (`updateProfile` không thuộc nhóm này): **không** annotate; thân method gọi `optimisticLockRetrier.execute(() -> …)` — mỗi lần thử là 1 transaction mới.
-- Method ghi còn lại (`loginWithOAuth`, `verifyOtp`, `updateProfile`, `createTeam`, `inviteMember`): `@Transactional`.
+- `loginWithOAuth`, `verifyOtp`: **không** annotate; tạo tài khoản trong `transactionTemplate.execute(...)`, bắt `DataIntegrityViolationException` ngoài transaction đã rollback rồi đọc lại — ranh giới, nguồn đụng độ và các nhánh kết quả: `Processing_Flow.md` §4.
+- Method ghi còn lại (`updateProfile`, `createTeam`, `inviteMember`): `@Transactional`.
 
 ## 5. Repository Layer
 
@@ -124,7 +161,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Modifying int softDelete(UUID id, OffsetDateTime now);             // WHERE deleted_at IS NULL
 }
 public interface OAuthAccountRepository extends JpaRepository<OAuthAccount, UUID> {
-    Optional<UserAuthView> findAuthView(OAuthAccount.Provider provider, String providerUserId); // join user
+    default Optional<UserAuthView> findAuthView(OAuthAccount.Provider provider, String providerUserId) {
+        return findAuthViewByProviderName(provider.name(), providerUserId);   // DB lưu lowercase
+    }
+    Optional<UserAuthView> findAuthViewByProviderName(String provider, String providerUserId); // native, join user
     List<OAuthAccount> findByUserId(UUID userId);
 }
 public interface AdministrativeUnitRepository extends JpaRepository<AdministrativeUnit, UUID> {
@@ -141,6 +181,7 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
     boolean existsByTeamIdAndUserIdAndStatusIn(UUID teamId, UUID userId, Collection<TeamMember.Status> statuses);
     List<CaptainTeamView> findCaptainTeamsWithActiveCount(UUID userId); // 1 truy vấn, count bằng subquery
     Page<MemberView> findActiveMembers(UUID teamId, Pageable pageable);
+    Optional<MemberView> findMemberViewById(UUID memberId);             // native, join user (response 2.13)
     @Modifying int leaveAllActive(UUID userId, OffsetDateTime now);      // ACTIVE → LEFT, version + 1
     @Modifying int rejectAllPending(UUID userId);                        // PENDING → REJECTED, version + 1
 }
@@ -150,6 +191,14 @@ public interface TeamCaptainHistoryRepository extends JpaRepository<TeamCaptainH
 ```
 
 `Page` native query MUST khai báo `countQuery` tường minh. Bulk `@Modifying` tự tăng `version` vì không qua dirty-checking.
+
+**Kiểu dữ liệu trong projection (native query):**
+
+| Dữ liệu | Kiểu trong projection | Chuyển ở mapper (§8) |
+|---|---|---|
+| Thời gian (`timestamptz`) | `Instant` — Spring Data không chuyển native `timestamptz` sang `OffsetDateTime` cho projection | `Instant` → `OffsetDateTime` UTC |
+| `skill_levels` (cột TEXT) | `String` (JSON thô) | JSON → `List<String>` bằng `SkillLevelsConverter` |
+| User đã xoá | Cờ `Boolean *Deleted` (`captainDeleted`, `userDeleted`, `fromUserDeleted`, `toUserDeleted`; `UserAuthView.deleted`) | Che tên/avatar bằng `DeletedUserMasking` |
 
 ## 6. Entity — thay đổi so với hiện trạng
 
@@ -172,9 +221,9 @@ public interface TeamCaptainHistoryRepository extends JpaRepository<TeamCaptainH
 - Field + ràng buộc: `API_Spec.md` §3. Request DTO dùng `record` hoặc Lombok theo convention §7; annotation: `@NotBlank`, `@Size`, `@Email`, `@Pattern`, `@Past`.
 - Ràng buộc tuỳ biến: `@MinAge(13)` (cho `dateOfBirth`), `@ValidSkillLevels` (≤3, không trùng, ∈ `SkillLevel`), `@OneOf` cho enum dạng chuỗi (`provider`, `gender`, `preferredPosition`).
 - `SkillLevel`: hằng danh sách 9 nhãn (nguồn duy nhất cho validator).
-- **Enum mapping:** `provider` lưu DB lowercase (`google`, `facebook`, `phone`) → API UPPERCASE (`GOOGLE`, `FACEBOOK`, `PHONE`). Dùng `@JsonProperty` hoặc mapper tuỳ biến.
-- Thời gian trả ra: `OffsetDateTime` (UTC, ISO-8601) — cột DB là `TIMESTAMPTZ`.
-- `DeletedUserMasking`: hàm thuần áp quy tắc tên user đã xoá (`API_Spec.md` §3.12) — dùng trong mapper, hoặc làm ngay trong SQL bằng `CASE WHEN u.deleted_at IS NOT NULL`.
+- **Enum mapping:** `provider` lưu DB lowercase (`google`, `facebook`, `phone`) → API UPPERCASE (`GOOGLE`, `FACEBOOK`, `PHONE`) — chuyển trong `ProfileMapper` (§8).
+- Thời gian trả ra: `OffsetDateTime` (UTC, ISO-8601) — cột DB là `TIMESTAMPTZ`; projection trả `Instant`, mapper chuyển (§5).
+- `DeletedUserMasking`: hàm thuần áp quy tắc tên user đã xoá (`API_Spec.md` §3.12). **Chỉ dùng trong mapper** (qua `MapperSupport`), dựa vào cờ `*Deleted` của projection — SQL không che tên, để logic che tên có một nguồn.
 
 ## 8. Mapper (MapStruct)
 
@@ -184,14 +233,36 @@ public interface TeamCaptainHistoryRepository extends JpaRepository<TeamCaptainH
 | `TeamMapper` | `TeamResponse toResponse(TeamDetailView view)` · `TeamSummaryResponse toSummary(TeamSummaryView view)` · `AdminTeamSummaryResponse toAdminSummary(TeamSummaryView view)` · `CaptainHistoryResponse toResponse(CaptainHistoryView view)` |
 | `MembershipMapper` | `InvitationResponse toInvitation(TeamMember m, String teamName)` · `MemberResponse toMember(MemberView view)` |
 
-`@Mapper(componentModel = "spring")`. Cần thêm dependency (§11).
+Cấu hình chung: `@Mapper(componentModel = "spring", uses = MapperSupport.class, unmappedTargetPolicy = ReportingPolicy.ERROR)` (`TeamMapper`, `MembershipMapper` thêm `imports = MapperSupport.class` để gọi trong `expression`). Dependency: §11.
+
+**`MapperSupport`** (`final class`, method `static`) — một nguồn chuyển đổi cho 3 mapper:
+
+```java
+static OffsetDateTime toUtc(Instant instant);              // null-safe, ZoneOffset.UTC
+static List<String> skillLevels(String json);              // qua SkillLevelsConverter
+static String maskName(String displayName, Boolean deleted);   // qua DeletedUserMasking
+static String maskAvatar(String avatarUrl, Boolean deleted);   // qua DeletedUserMasking
+```
+
+`ProfileMapper` có `default String provider(OAuthAccount.Provider)` chuyển lowercase → UPPERCASE.
 
 ## 9. Security (ADR-0001)
 
 ### 9.1. SecurityConfig
-- Stateless, `csrf` tắt, `oauth2ResourceServer(jwt)` với `JwtDecoder` HS256 (`NimbusJwtDecoder.withSecretKey`).
-- `permitAll`: `/api/v1/auth/**`. `hasRole('ADMIN')`: `/api/v1/admin/**`. Còn lại: `authenticated()`.
-- `RestAuthenticationEntryPoint` → `401 AUTH_001`; `RestAccessDeniedHandler` → `403 AUTH_004` (envelope `error`).
+- Stateless, `csrf` tắt, `oauth2ResourceServer(jwt)` với bean `JwtDecoder` HS256 (`NimbusJwtDecoder.withSecretKey`), validator = `JwtValidators.createDefault()` + `AccessTokenTypeValidator` (§9.2).
+- Chuyển claim → quyền: **bean `JwtAuthenticationConverter` của Spring** khai báo trong `SecurityConfig`, dùng `JwtGrantedAuthoritiesConverter` (claim `roles`, prefix `ROLE_`). Không viết class converter riêng.
+- Phân quyền theo đường dẫn:
+
+| Đường dẫn | Quy tắc |
+|---|---|
+| `/api/v1/auth/**` | `permitAll` |
+| `GET /actuator/health`, `GET /actuator/health/**` | `permitAll` — health check cho hạ tầng. `/actuator/health` trả `{"status":"UP"}` (không có `components`); đường dẫn thành phần (vd `/health/db`) trả 404 vì Spring Boot mặc định ẩn thành phần. `/**` dành cho probe liveness/readiness khi bật |
+| `GET /v3/api-docs/**`, `GET /swagger-ui/**`, `GET /swagger-ui.html` | `permitAll` — tài liệu API cho dev FE; **mặc định tắt** (404), bật khi `SPRINGDOC_ENABLED=true` |
+| `/api/v1/admin/**` | `hasRole('ADMIN')` |
+| Còn lại | `authenticated()` — gồm actuator khác; hiện chỉ `health` được expose qua web (không cấu hình `management.endpoints.web.exposure.*`), quy tắc này là lớp chặn thứ hai khi expose thêm |
+
+- **API docs fail-closed (ADR-0004):** `application.properties` đặt `springdoc.api-docs.enabled` và `springdoc.swagger-ui.enabled` = `${SPRINGDOC_ENABLED:false}` → không đặt biến (prod) = tắt. Dev bật bằng `SPRINGDOC_ENABLED=true` (`.env.dev`; `.env.example` để dạng comment để copy nguyên file không mở Swagger). Quyết định mở health + API docs: user duyệt 2026-11-03.
+- `RestAuthenticationEntryPoint` → `401 AUTH_001`; `RestAccessDeniedHandler` → `403 AUTH_004` (envelope `error`). Hai class dùng chung `SecurityErrorWriter` (package-private) để ghi envelope JSON.
 
 ### 9.2. JwtTokenService
 ```java
@@ -199,19 +270,39 @@ String issueAccessToken(UUID userId, User.Role role);   // typ=access, exp = 360
 String issueRefreshToken(UUID userId);                  // typ=refresh, exp = 7 ngày
 UUID parseRefreshToken(String token);                   // sai chữ ký/hết hạn/typ≠refresh → AUTH_002
 ```
-Claims: `sub` = userId, `roles` = `["USER"]` hoặc `["ADMIN"]` (theo `security-backend.md` §1.2), `typ`, `iat`, `exp`. `JwtDecoder` của resource server có validator từ chối `typ ≠ access`.
+Claims: `sub` = userId, `roles` = `["USER"]` hoặc `["ADMIN"]` (theo `security-backend.md` §1.2), `typ`, `iat`, `exp`. `JwtDecoder` của resource server có validator `security/AccessTokenTypeValidator` (`OAuth2TokenValidator<Jwt>`) từ chối `typ ≠ access` → refresh token không dùng được để gọi API (401).
 
 ### 9.3. JwtProperties (`arenaflow.jwt.*`)
 `secret` (từ env `JWT_SECRET`, ≥256 bit, base64; không commit giá trị thật) · `access-token-ttl = 1h` · `refresh-token-ttl = 7d`. `security-backend.md` đã đồng bộ (cập nhật từ 24h → 1h).
 
 ### 9.4. CurrentUser
-Bean/argument resolver lấy `UUID` từ `Jwt.getSubject()`; controller nhận `UUID currentUserId`.
+- `security/CurrentUser`: annotation `@Target(PARAMETER)`, `@Retention(RUNTIME)`.
+- `security/CurrentUserArgumentResolver` (`HandlerMethodArgumentResolver`): tham số `UUID` có `@CurrentUser` → `UUID.fromString(jwt.getSubject())`.
+- `config/WebMvcConfig` (`WebMvcConfigurer`) đăng ký resolver.
+- Controller nhận `@CurrentUser UUID currentUserId`.
 
 ## 10. Exception Handling
 
-- `ErrorCode` enum: `code`, `HttpStatus`, `message` — một nguồn cho bảng `API_Spec.md` §4.
-- `BusinessException(ErrorCode, String details)` — mọi lỗi miền ném qua class này.
-- `GlobalExceptionHandler` (`@RestControllerAdvice`): `BusinessException` → status + envelope `error`; `MethodArgumentNotValidException`/`ConstraintViolationException`/`HandlerMethodValidationException` → `VALIDATION_ERROR`; `DataIntegrityViolationException` trên unique index lời mời → `TEAM_003`; fallback → 500 (không lộ stack trace).
+- `ErrorCode` enum: `code`, `HttpStatus`, `message` — một nguồn cho mọi mã trong `API_Spec.md` §4 (mã miền, `VALIDATION_ERROR`, `SYS_001`–`SYS_005`). `SYS_004`/`SYS_005` mang status danh nghĩa (400/500); handler trả status gốc của exception framework.
+- `BusinessException(ErrorCode, String details)` — mọi lỗi miền ném qua class này. **NEVER** ném `SYS_*` hoặc dùng `VALIDATION_ERROR` qua `BusinessException`: các mã này chỉ do `GlobalExceptionHandler` phát ra.
+- Envelope lỗi: `ErrorEnvelope(ErrorResponse error)`; `ErrorResponse` chứa `code`, `message`, `details`, `timestamp`, `path`, `validationErrors` (`List<ValidationError>`).
+- `GlobalExceptionHandler` (`@RestControllerAdvice`):
+
+| Exception | Kết quả | Log |
+|---|---|---|
+| `BusinessException` | status + mã theo `ErrorCode` | `WARN` (mã lỗi + URI) |
+| `MethodArgumentNotValidException`, `ConstraintViolationException`, `HandlerMethodValidationException` | 400 `VALIDATION_ERROR` | — |
+| `HttpMessageNotReadableException` (JSON sai cú pháp) | 400 `VALIDATION_ERROR` | — |
+| `MethodArgumentTypeMismatchException` (UUID path sai, enum `status` sai) | 400 `VALIDATION_ERROR` | — |
+| `MissingServletRequestParameterException` | 400 `VALIDATION_ERROR`, `field` = tên tham số | — |
+| `DataIntegrityViolationException` trên unique index lời mời | 409 `TEAM_003` — **lớp phòng hờ**: hiện không luồng nào chạy tới (`inviteMember` tự bắt lỗi trùng và ném `TEAM_003`); giữ để luồng ghi `team_member` sau này không rơi vào 500 (user chọn giữ 2026-11-04) | `WARN` |
+| `DataIntegrityViolationException` khác | 500 `SYS_005` | `ERROR` chỉ ghi tên constraint (`unknown` khi không lấy được) + class lỗi gốc — **không** kèm exception |
+| `Exception` là `org.springframework.web.ErrorResponse` (`NoResourceFoundException`, `HttpRequestMethodNotSupportedException`, `HttpMediaTypeNotSupportedException`, `ResponseStatusException`…) | 400 → `VALIDATION_ERROR`; 404 `SYS_001`; 405 `SYS_002`; 415 `SYS_003`; 4xx khác `SYS_004`; 5xx `SYS_005` — giữ status + header gốc (vd `Allow`), không lộ `reason`. Status không chuẩn (vd 499) → 500 `SYS_005` | 4xx `WARN` (status + URI); 5xx / status không chuẩn `ERROR` kèm exception |
+| `Exception` (fallback còn lại) | 500 `SYS_005`, không lộ stack trace | `ERROR` kèm exception |
+
+Log `WARN` chỉ ghi mã lỗi/status + URI; log `ERROR` kèm exception (stack trace) để điều tra, trừ lỗi SQL (chỉ tên constraint). **NEVER** ghi token/secret/PII/body request.
+
+**Chặn PII từ lỗi SQL ở gốc:** pgjdbc mặc định đưa `Detail: Key (cột)=(giá trị)` vào message `SQLException` → logger `org.hibernate.orm.jdbc.error` (WARN) và mọi log kèm exception đều chứa giá trị dòng (vd số điện thoại). `application.properties` đặt `spring.datasource.hikari.data-source-properties.logServerErrorDetail=false` → message chỉ còn severity + primary message (không có Detail/Hint/Where); với 23505 primary message chứa tên constraint (nhận diện `TEAM_003` theo tên index vẫn đúng). Kiểm bằng `SqlErrorLoggingPiiTest` (đụng unique thật trên DB dev). **NEVER** đặt `logServerErrorDetail` trong `DATABASE_URL` — pgjdbc ưu tiên tham số URL hơn connection properties, đặt `true` ở URL sẽ mở lại rò rỉ. Lưu ý: lỗi SQLState khác (vd 22P02 sai kiểu UUID) có thể chứa giá trị input ngay trong primary message.
 
 ### Lệch convention có chủ đích
 
@@ -220,19 +311,24 @@ Bean/argument resolver lấy `UUID` từ `Jwt.getSubject()`; controller nhận `
 | `convention-backend.md` §8: một exception class cho mỗi lỗi | `BusinessException` + `ErrorCode` | 22 mã lỗi → tránh 22 class + 22 handler trùng lặp |
 | §9: `@Transactional(readOnly = true)` ở class level | Annotate theo method; ghi có retry dùng `OptimisticLockRetrier` | Retry phải nằm **ngoài** transaction; class-level tx sẽ bọc cả vòng retry |
 | §10: `@SQLDelete` + `@Where` trên entity soft-delete | Lọc `deleted_at IS NULL` tường minh trong query | Lịch sử/thành viên phải join được user đã xoá để hiển thị "Người dùng đã xóa" |
+| `api-convention.md` §6: danh sách domain mã lỗi (`ARENA`, `BOOKING`, `USER`, `TEAM`, `AUTH`, `PAYMENT`) | Thêm domain `SYS` cho lỗi tầng HTTP/hệ thống (`SYS_001`–`SYS_005`) | Lỗi không gắn miền nghiệp vụ; giữ format `<DOMAIN>_<NUMBER>`. User chọn 2026-11-04. `[cần xác nhận]` bổ sung `SYS` vào `api-convention.md` trên nhánh `chore/agent-framework-*` riêng |
+| `non-functional-standards.md` §3: NEVER truy vấn lại dữ liệu đã nạp trong cùng request | 2.6 `PATCH /profile` đọc lại `ProfileView` sau U user (5/W6) | Response lấy đúng dữ liệu DB sau flush, dùng chung `ProfileMapper.toResponse(ProfileView, …)` với `GET /profile`. User chấp nhận 2026-11-04 |
 
 ## 11. Dependencies
 
 | Dependency | Trạng thái |
 |---|---|
-| `spring-boot-starter-web`, `-data-jpa`, `-security`, `-validation`, `-flyway`, `flyway-database-postgresql`, PostgreSQL driver, Lombok | Đã có trong `pom.xml` |
+| `spring-boot-starter-webmvc`, `-data-jpa`, `-security`, `-validation`, `-flyway`, `flyway-database-postgresql`, PostgreSQL driver, Lombok | Đã có trong `pom.xml` |
+| `micrometer-registry-prometheus`, `spring-boot-devtools` | Đã có — không dùng trong USER-001 (endpoint prometheus chưa expose) |
 | `spring-boot-starter-security-oauth2-resource-server` (Nimbus JOSE, dùng cho HS256) | Đã có |
-| `org.mapstruct:mapstruct` + `mapstruct-processor` (+ `lombok-mapstruct-binding` trong `annotationProcessorPaths`) | **Cần thêm** — phiên bản chốt khi implement |
-| `spring-boot-starter-security-oauth2-authorization-server` | **Gỡ bỏ** — USER-001 không làm OAuth provider |
+| `org.mapstruct:mapstruct` + `mapstruct-processor` (+ `lombok-mapstruct-binding` trong `annotationProcessorPaths`) | Đã thêm — `mapstruct.version = 1.5.5.Final` |
+| `spring-boot-starter-actuator` | Đã có — chỉ `health` public (§9.1) |
+| `org.springdoc:springdoc-openapi-starter-webmvc-ui` `3.0.3` | Đã có — Swagger UI / OpenAPI, mặc định tắt, bật bằng `SPRINGDOC_ENABLED=true` (§9.1, ADR-0004) |
+| `spring-boot-starter-security-oauth2-authorization-server` | Đã gỡ — USER-001 không làm OAuth provider |
+| H2 (test) | Đã gỡ — integration test chạy trên DB dev PostgreSQL (`.env.dev`) |
 
 ## 12. Ghi chú thiết kế
 
-- **Base package & ID type:** Repo dùng `com.phananh.ArenaFlow` + UUID. `convention-backend.md` sẽ cập nhật qua `workflow-adapt` (chốt sau khi thiết kế được duyệt).
+- **Base package & ID type:** Repo dùng `com.phananh.ArenaFlow` + UUID; `convention-backend.md` đã cập nhật qua `workflow-adapt` (2026-11-02, xem `decisions-log.md`).
 - **TTL access token:** `security-backend.md` đã cập nhật từ 24h → 1h (theo ADR-0001).
-- **Enum `provider`:** DB lưu lowercase, API trả UPPERCASE — cần mapper trong DTO layer.
-- **Dependency `oauth2-authorization-server`:** Gỡ khỏi `pom.xml` (USER-001 không làm OAuth provider).
+- **Enum `provider`:** DB lưu lowercase, API trả UPPERCASE — chuyển trong `ProfileMapper` (§8).

@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline, chờ duyệt) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code: 2.1/2.3/2.6, §4, §5) |
 
 ## 1. Tổng quan luồng
 
@@ -32,7 +32,7 @@ sequenceDiagram
 
     C->>AC: POST /api/v1/auth/oauth
     AC->>AS: loginWithOAuth(req)
-    AS->>OR: findAuthView(provider, email)
+    AS->>OR: findAuthView(provider, providerUserId)
     alt Đã có tài khoản
         alt deleted_at != null
             AS-->>AC: BusinessException(AUTH_003)
@@ -42,11 +42,25 @@ sequenceDiagram
             AC-->>C: 200
         end
     else Chưa có
-        AS->>UR: save(User role=USER, displayName mặc định)
+        Note over AS,OR: TransactionTemplate.execute — transaction tạo tài khoản
+        AS->>UR: save(User role=USER)
+        Note right of AS: id chỉ có sau persist → set displayName = "User " + 6 ký tự cuối id (U khi flush)
         AS->>OR: saveAndFlush(OAuthAccount)
-        Note over AS,OR: Unique (provider, provider_user_id) vi phạm do request song song → rollback, đọc lại → 200
-        AS->>JW: issue tokens
-        AC-->>C: 201 + Location
+        alt DataIntegrityViolationException (request song song đã tạo)
+            Note over AS,OR: transaction đã rollback, bắt ngoài transaction
+            AS->>OR: findAuthView(provider, providerUserId)
+            alt Không tìm thấy (lỗi unique khác)
+                AS-->>AC: ném lại DataIntegrityViolationException → 500
+            else deleted_at != null
+                AS-->>AC: BusinessException(AUTH_003)
+            else
+                AS->>JW: issue tokens
+                AC-->>C: 200
+            end
+        else
+            AS->>JW: issue tokens
+            AC-->>C: 201 + Location
+        end
     end
 ```
 
@@ -68,7 +82,7 @@ sequenceDiagram
         RT-->>C: 422 USER_003
     else
         RT->>TR: markInactiveByIds(teamIds có activeCount = 1)
-        Note over RT,TR: số dòng cập nhật < số đội → có người vừa vào đội → retry
+        Note over RT,TR: số dòng cập nhật < số đội → có người vừa vào đội<br/>→ ném ObjectOptimisticLockingFailureException(Team, ids) → retry
         RT->>TMR: leaveAllActive(userId)
         RT->>TMR: rejectAllPending(userId)
         RT->>UR: softDelete(userId)
@@ -109,12 +123,12 @@ Ký hiệu truy vấn: **S** = SELECT, **I** = INSERT, **U** = UPDATE. Loại: D
 
 | # | Endpoint | Guard & logic (theo thứ tự) | Truy vấn | Tổng / Ngưỡng |
 |---|---|---|---|---|
-| 2.1 | `POST /auth/oauth` | S tài khoản theo `(provider, email)` join user → có: `deleted_at` ≠ null → AUTH_003, ngược lại 200 · không có: I user, I oauth_account (`saveAndFlush`) → 201 · vi phạm unique (song song) → rollback, S lại → 200 | S, I, I (+S khi đụng độ) | 3–4 / W6 ✅ |
+| 2.1 | `POST /auth/oauth` | S tài khoản theo `(provider, providerUserId = email)` join user → có: `deleted_at` ≠ null → AUTH_003, ngược lại 200 · không có (trong `TransactionTemplate`): I user, I oauth_account (`saveAndFlush`), U user (tên mặc định cần id sinh lúc persist) → 201 · vi phạm unique (song song) → rollback, S lại ngoài transaction đã rollback → 200 (tài khoản đã xoá → AUTH_003; không thấy → ném lại → 500) | Tạo mới: S, I, I, U (đo ≤ 6 bằng `AuthServiceIntegrationTest`) · Đụng độ: ước tính S, I, I (lỗi), S — dựa vào thứ tự flush INSERT trước UPDATE của Hibernate, **chưa đo** | 4 / W6 ✅ |
 | 2.2 | `POST /auth/send-otp` | Validate phone, trả `expiresIn=300` | — | 0 ✅ |
-| 2.3 | `POST /auth/verify-otp` | Như 2.1 với `provider=phone`, `provider_user_id=phone`; user mới set `phone_number=phone` | S, I, I (+S) | 3–4 / W6 ✅ |
+| 2.3 | `POST /auth/verify-otp` | Như 2.1 với `provider=phone`, `provider_user_id=phone`; user mới set `phone_number=phone` · đụng độ có thể đến từ `idx_user_phone_unique` (I user lỗi) hoặc unique oauth_account | Như 2.1 | ≤ 4 / W6 ✅ |
 | 2.4 | `POST /auth/refresh` | Parse refresh token (AUTH_002) → S user theo id (không có/đã xoá → AUTH_003) → cấp cặp token mới với `role` hiện tại | S | 1 / D3 ✅ |
 | 2.5 | `GET /profile` | S `ProfileView` (user LEFT JOIN ward LEFT JOIN province, `deleted_at IS NULL`) → USER_001 · S oauth_account theo user | S, S | 2 / D3 ✅ |
-| 2.6 | `PATCH /profile` | S user chưa xoá (USER_001) → nếu có `wardId`: S ward+province (USER_002); nếu không: S ward hiện tại (cho response) → áp field ≠ null → U user → S oauth_account (response) | S, S, U, S | 4 / W6 ✅ |
+| 2.6 | `PATCH /profile` | S user chưa xoá (USER_001) → nếu có `wardId`: S ward+province (USER_002) → áp field ≠ null → U user (`saveAndFlush`) → S `ProfileView` (response qua `ProfileMapper`, khớp DB — đọc lại có chủ đích, lệch NFS §3 đã duyệt: `Component_Class_Design.md` §10) → S oauth_account (response) | S, (S ward), U, S, S | 4–5 / W6 ✅ |
 | 2.7 | `DELETE /profile` | Xem §2.2 · `inactive_reason` của đội tự INACTIVE = hằng `"Đội trưởng duy nhất đã xoá tài khoản"` · `markInactiveByIds` chỉ cập nhật đội còn đúng 1 thành viên ACTIVE (điều kiện subquery trong UPDATE) · **membership ACTIVE → LEFT, PENDING → REJECTED** · `softDelete` chỉ khi `deleted_at IS NULL` → gọi lại vẫn 204 · Access token còn hiệu lực tối đa 1h (JWT stateless, grace period chấp nhận cho MVP) | S, U, U, U, U | 5 / W6 ✅ |
 | 2.8 | `POST /teams` | S user chưa xoá (USER_001; lấy `displayName` làm `captainName`) → I team (`skill_levels` JSON) → I team_member (CAPTAIN, ACTIVE, `joined_at=now`) → I history (`from=null`) · response dựng từ dữ liệu đã có (`memberCount=1`) | S, I, I, I | 4 / W6 ✅ |
 | 2.9 | `GET /teams/{id}` | S `TeamDetailView` (team LEFT JOIN captain ACTIVE LEFT JOIN user, `memberCount` bằng subquery COUNT) → TEAM_001 | S | 1 / D3 ✅ |
@@ -138,7 +152,8 @@ Ký hiệu truy vấn: **S** = SELECT, **I** = INSERT, **U** = UPDATE. Loại: D
 | Nhóm | Ranh giới | Ghi chú |
 |---|---|---|
 | Đọc (2.5, 2.9, 2.10, 2.16, 2.17, 2.21, 2.4) | `@Transactional(readOnly = true)` trên method service | — |
-| Ghi không retry (2.1, 2.3, 2.6, 2.8, 2.12) | `@Transactional` trên method service | 2.1/2.3: đụng độ unique → transaction rollback; đọc lại chạy trong transaction readOnly mới |
+| Đăng ký-hoặc-đăng nhập (2.1, 2.3) | Method service **không** có `@Transactional`; phần tạo tài khoản (I user, I oauth_account, U user) chạy trong `TransactionTemplate.execute` | Đụng độ unique (`oauth_account (provider, provider_user_id)`; 2.3 thêm `idx_user_phone_unique`) → transaction tạo tài khoản rollback → `DataIntegrityViolationException` bắt **ngoài** transaction đó → đọc lại bằng truy vấn riêng → 200 (đọc lại rỗng → ném lại exception → 500). Không dùng `@Transactional` cho cả method vì sau lỗi unique transaction bị rollback-only, không đọc lại được |
+| Ghi không retry (2.6, 2.8, 2.12) | `@Transactional` trên method service | — |
 | Ghi có retry (2.7, 2.11, 2.13, 2.14, 2.15, 2.18, 2.19, 2.20) | Mỗi lần thử = 1 transaction do `OptimisticLockRetrier` mở qua `TransactionTemplate` | Method service **không** có `@Transactional` |
 
 Isolation: `READ_COMMITTED` (mặc định PostgreSQL). Không gọi dịch vụ ngoài trong transaction (OTP/OAuth đều mock).
@@ -146,7 +161,8 @@ Isolation: `READ_COMMITTED` (mặc định PostgreSQL). Không gọi dịch vụ
 ## 5. Concurrency & Locking (ADR-0003)
 
 - `@Version` trên `Team`, `TeamMember`. `User` không có version — cập nhật hồ sơ theo last-write-wins (chỉ chủ tài khoản sửa).
-- `OptimisticLockRetrier.execute(Supplier<T>)`: bắt `ObjectOptimisticLockingFailureException` (và tín hiệu "cập nhật thiếu dòng" của 2.7) → thử lại ngay, không backoff, **tối đa 3 lần thử** (1 lần đầu + 2 lần retry) → hết → `BusinessException(TEAM_014)`. Lỗi nghiệp vụ (`BusinessException`) không retry.
+- `OptimisticLockRetrier.execute(Supplier<T>)`: bắt `ObjectOptimisticLockingFailureException` → thử lại ngay, không backoff, **tối đa 3 lần thử** (1 lần đầu + 2 lần retry) → hết → `BusinessException(TEAM_014)`. Lỗi nghiệp vụ (`BusinessException`) không retry.
+- **Tín hiệu "cập nhật thiếu dòng" của 2.7:** `deleteAccount` tự ném `ObjectOptimisticLockingFailureException(Team.class, ids)` khi `markInactiveByIds` trả số dòng < số đội → retrier xử lý như xung đột optimistic lock thông thường, không cần sửa retrier.
 - Bulk update (2.7) tự `SET version = version + 1` để các transaction đang giữ bản cũ phát hiện xung đột.
 
 | Kịch bản song song | Kết quả |
@@ -156,7 +172,7 @@ Isolation: `READ_COMMITTED` (mặc định PostgreSQL). Không gọi dịch vụ
 | Accept 2 lần cùng lời mời | 1 thành công; lần sau → TEAM_006 |
 | Mời trùng cùng lúc | Unique index `(team_id, user_id) WHERE status IN ('PENDING','ACTIVE')` → TEAM_003 |
 | Captain duy nhất xoá tài khoản khi có người vừa accept | `markInactiveByIds` cập nhật thiếu dòng → retry → S1 thấy `activeCount = 2` → USER_003 |
-| Đăng ký cùng email song song | Unique `(provider, provider_user_id)` → request sau trả 200 với tài khoản đã tạo |
+| Đăng ký cùng email/số điện thoại song song | Unique `(provider, provider_user_id)` (phone: thêm `idx_user_phone_unique`) → request sau trả 200 với tài khoản đã tạo |
 
 ## 6. Error Handling
 

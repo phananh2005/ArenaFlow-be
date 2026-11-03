@@ -8,7 +8,7 @@
 | Quy ước áp dụng | `docs/agent/api-convention.md`, `docs/agent/security-backend.md` |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + delta V2/V3 (xem §5) · `docs/agent/non-functional-standards.md` |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (UC-U01..U03, UC-T01..T05, BR-U01..U06, BR-T01..T06) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline, chờ duyệt) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (TEAM_015 thêm reject; bảng "Lỗi chung" `SYS_*` §4 — xem `CHANGELOG.md`) |
 
 ## 1. Tổng quan
 
@@ -23,7 +23,7 @@ Foundation module: xác thực mock (OAuth Google/Facebook, Phone OTP) + JWT, h�
 - **Giá trị enum trên API: UPPERCASE.** `provider` = `GOOGLE|FACEBOOK|PHONE`; `status` = `ACTIVE|INACTIVE|PENDING|LEFT|REJECTED`; `role` = `USER|ADMIN|CAPTAIN|MEMBER`; `gender` = `MALE|FEMALE|OTHER`.
 - Danh sách: `page` (≥1, mặc định 1), `pageSize` (1..100, mặc định 20); sort cố định ghi ở từng endpoint, chưa hỗ trợ tham số `sort`.
 - Ghi lên `team`/`team_member` có optimistic lock + tự retry; hết retry → `409 TEAM_014` (xem `Processing_Flow.md` §5).
-- **Đội INACTIVE:** chặn sửa/mời/chuyển quyền/accept lời mời → `422 TEAM_015`.
+- **Đội INACTIVE:** chặn sửa/mời/chuyển quyền/accept/reject lời mời → `422 TEAM_015`.
 
 ## 2. Endpoints
 
@@ -430,7 +430,7 @@ Như §3.6 nhưng mọi field `No`; `teamName` nếu có thì không blank.
 
 | Mã | HTTP | Ngữ cảnh | Message |
 |---|---|---|---|
-| `VALIDATION_ERROR` | 400 | Bean Validation fail | "Dữ liệu không hợp lệ" + `validationErrors` |
+| `VALIDATION_ERROR` | 400 | Bean Validation fail · JSON sai · sai kiểu path/query · lỗi 400 khác do framework phát hiện (thiếu query param bắt buộc → `validationErrors[].field` = tên tham số; thiếu header…) | "Dữ liệu không hợp lệ" + `validationErrors` |
 | `AUTH_001` | 401 | Access token thiếu/sai/hết hạn | "Token không hợp lệ hoặc đã hết hạn" |
 | `AUTH_002` | 401 | Refresh token sai/hết hạn/sai loại | "Refresh token không hợp lệ hoặc đã hết hạn" |
 | `AUTH_003` | 403 | Đăng nhập/refresh bằng tài khoản đã xoá | "Tài khoản đã bị xoá" |
@@ -452,9 +452,19 @@ Như §3.6 nhưng mọi field `No`; `teamName` nếu có thì không blank.
 | `TEAM_012` | 409 | Reactivate đội đang ACTIVE | "Đội đang hoạt động" |
 | `TEAM_013` | 422 | Reactivate đội không còn captain ACTIVE | "Đội không còn đội trưởng, không thể kích hoạt lại" |
 | `TEAM_014` | 409 | Xung đột cập nhật đồng thời sau khi hết retry | "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại" |
-| `TEAM_015` | 422 | Thao tác trên đội INACTIVE (sửa/mời/chuyển quyền/accept) | "Đội đang tạm ngưng hoạt động" |
+| `TEAM_015` | 422 | Thao tác trên đội INACTIVE (sửa/mời/chuyển quyền/accept/reject) | "Đội đang tạm ngưng hoạt động" |
 
 UC-T04 luồng 2a ("Đội không có thành viên khác") được bao bởi `TEAM_007`/`TEAM_008`.
+
+**Lỗi chung (không gắn endpoint)** — miền `SYS`, cùng envelope `error`. Danh sách đóng; chỉ `GlobalExceptionHandler` phát ra (lỗi 400 của framework dùng `VALIDATION_ERROR` ở bảng trên):
+
+| Mã | HTTP | Ngữ cảnh | Message |
+|---|---|---|---|
+| `SYS_001` | 404 | URL không khớp endpoint nào (đã xác thực) | "Không tìm thấy tài nguyên" |
+| `SYS_002` | 405 | Sai HTTP method; kèm header `Allow` | "Phương thức không được hỗ trợ" |
+| `SYS_003` | 415 | `Content-Type` không phải `application/json` | "Kiểu nội dung không được hỗ trợ" |
+| `SYS_004` | 4xx khác (giữ status gốc, vd 409 từ `ResponseStatusException`) | Lỗi client khác do framework phát hiện | "Yêu cầu không hợp lệ" |
+| `SYS_005` | 500 (5xx của framework giữ status gốc, vd 503) | Lỗi ngoài dự kiến; không lộ chi tiết | "Đã xảy ra lỗi hệ thống" |
 
 ---
 
@@ -473,4 +483,4 @@ UC-T04 luồng 2a ("Đội không có thành viên khác") được bao bởi `T
 - **Hồ sơ mặc định:** Tài khoản mới có `displayName = "User " + 6 ký tự cuối userId`, `avatarUrl = null`.
 - **Domain mã lỗi `TEAM`:** Đã bổ sung vào `api-convention.md` §6 (cùng ARENA/BOOKING/USER/AUTH/PAYMENT).
 - **Idempotency-Key cho `POST /teams`:** Hoãn MVP — endpoint này không có khoá tự nhiên (tên đội được trùng), hỗ trợ `Idempotency-Key` cần bảng `idempotency_keys`. Ghi tech-debt.
-- **Đội INACTIVE:** Chặn sửa/mời/chuyển quyền/accept lời mời → `422 TEAM_015 "Đội đang tạm ngưng hoạt động"`.
+- **Đội INACTIVE:** Chặn sửa/mời/chuyển quyền/accept/reject lời mời → `422 TEAM_015 "Đội đang tạm ngưng hoạt động"`.
