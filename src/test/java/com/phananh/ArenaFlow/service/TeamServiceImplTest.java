@@ -25,6 +25,7 @@ import com.phananh.ArenaFlow.repository.projection.CaptainHistoryView;
 import com.phananh.ArenaFlow.repository.projection.TeamDetailView;
 import com.phananh.ArenaFlow.repository.projection.TeamSummaryView;
 import com.phananh.ArenaFlow.service.impl.TeamServiceImpl;
+import com.phananh.ArenaFlow.service.support.TeamGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
@@ -70,7 +71,7 @@ class TeamServiceImplTest {
     @SuppressWarnings("unchecked")
     void setUp() {
         service = new TeamServiceImpl(userRepository, teamRepository, teamMemberRepository, historyRepository,
-                retrier, teamMapper, new PageRequestFactory());
+                retrier, teamMapper, new PageRequestFactory(), new TeamGuard(teamRepository, teamMemberRepository));
         when(retrier.execute(any())).thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(0)).get());
         when(teamRepository.save(any(Team.class))).thenAnswer(invocation -> withId(invocation.getArgument(0), teamId));
     }

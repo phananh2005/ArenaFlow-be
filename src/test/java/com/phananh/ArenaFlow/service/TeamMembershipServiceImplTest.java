@@ -17,6 +17,7 @@ import com.phananh.ArenaFlow.repository.TeamRepository;
 import com.phananh.ArenaFlow.repository.UserRepository;
 import com.phananh.ArenaFlow.repository.projection.MemberView;
 import com.phananh.ArenaFlow.service.impl.TeamMembershipServiceImpl;
+import com.phananh.ArenaFlow.service.support.TeamGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
@@ -62,8 +63,8 @@ class TeamMembershipServiceImplTest {
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
-        service = new TeamMembershipServiceImpl(userRepository, teamRepository, teamMemberRepository, retrier,
-                membershipMapper, new PageRequestFactory());
+        service = new TeamMembershipServiceImpl(userRepository, teamMemberRepository, retrier,
+                membershipMapper, new PageRequestFactory(), new TeamGuard(teamRepository, teamMemberRepository));
         when(retrier.execute(any())).thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(0)).get());
     }
 

@@ -12,9 +12,9 @@ import com.phananh.ArenaFlow.exception.BusinessException;
 import com.phananh.ArenaFlow.exception.ErrorCode;
 import com.phananh.ArenaFlow.mapper.MembershipMapper;
 import com.phananh.ArenaFlow.repository.TeamMemberRepository;
-import com.phananh.ArenaFlow.repository.TeamRepository;
 import com.phananh.ArenaFlow.repository.UserRepository;
 import com.phananh.ArenaFlow.service.TeamMembershipService;
+import com.phananh.ArenaFlow.service.support.TeamGuard;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,32 +30,29 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
             List.of(TeamMember.Status.PENDING, TeamMember.Status.ACTIVE);
 
     private final UserRepository userRepository;
-    private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final OptimisticLockRetrier optimisticLockRetrier;
     private final MembershipMapper membershipMapper;
     private final PageRequestFactory pageRequestFactory;
+    private final TeamGuard teamGuard;
 
-    public TeamMembershipServiceImpl(UserRepository userRepository, TeamRepository teamRepository,
-                                     TeamMemberRepository teamMemberRepository,
+    public TeamMembershipServiceImpl(UserRepository userRepository, TeamMemberRepository teamMemberRepository,
                                      OptimisticLockRetrier optimisticLockRetrier, MembershipMapper membershipMapper,
-                                     PageRequestFactory pageRequestFactory) {
+                                     PageRequestFactory pageRequestFactory, TeamGuard teamGuard) {
         this.userRepository = userRepository;
-        this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.optimisticLockRetrier = optimisticLockRetrier;
         this.membershipMapper = membershipMapper;
         this.pageRequestFactory = pageRequestFactory;
+        this.teamGuard = teamGuard;
     }
 
     /** 2.12 — S team → TEAM_001/015 → S captain → TEAM_002 → S invitee → USER_001 → S tồn tại → TEAM_003 → I. */
     @Override
     @Transactional
     public InvitationResponse inviteMember(UUID teamId, UUID captainUserId, InviteMemberRequest request) {
-        Team team = activeTeam(teamId);
-        teamMemberRepository.findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE)
-                .filter(captain -> captain.getUserId().equals(captainUserId))
-                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_002));
+        Team team = teamGuard.activeTeam(teamId);
+        teamGuard.requireCaptain(teamId, captainUserId);
         if (userRepository.findByIdAndDeletedAtIsNull(request.userId()).isEmpty()) {
             throw new BusinessException(ErrorCode.USER_001);
         }
@@ -104,7 +101,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<MemberResponse> listMembers(UUID teamId, int page, int pageSize) {
-        requireTeam(teamId);
+        teamGuard.requireTeam(teamId);
         return PageResponse.from(teamMemberRepository.findActiveMembers(teamId, pageRequestFactory.create(page, pageSize)),
                 membershipMapper::toMember, page, pageSize);
     }
@@ -113,7 +110,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
     @Override
     public void leaveTeam(UUID teamId, UUID userId) {
         optimisticLockRetrier.execute(() -> {
-            requireTeam(teamId);
+            teamGuard.requireTeam(teamId);
             TeamMember member = teamMemberRepository
                     .findByTeamIdAndUserIdAndStatus(teamId, userId, TeamMember.Status.ACTIVE)
                     .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_010));
@@ -138,24 +135,10 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
         if (!invitation.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.TEAM_005);
         }
-        Team team = activeTeam(invitation.getTeamId());
+        Team team = teamGuard.activeTeam(invitation.getTeamId());
         if (invitation.getStatus() != TeamMember.Status.PENDING) {
             throw new BusinessException(ErrorCode.TEAM_006);
         }
         return team;
-    }
-
-    private Team activeTeam(UUID teamId) {
-        Team team = teamRepository.findById(teamId).orElseThrow(() -> new BusinessException(ErrorCode.TEAM_001));
-        if (team.getStatus() == Team.TeamStatus.INACTIVE) {
-            throw new BusinessException(ErrorCode.TEAM_015);
-        }
-        return team;
-    }
-
-    private void requireTeam(UUID teamId) {
-        if (!teamRepository.existsById(teamId)) {
-            throw new BusinessException(ErrorCode.TEAM_001);
-        }
     }
 }

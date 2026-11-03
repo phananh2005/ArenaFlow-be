@@ -23,6 +23,7 @@ import com.phananh.ArenaFlow.repository.TeamRepository;
 import com.phananh.ArenaFlow.repository.UserRepository;
 import com.phananh.ArenaFlow.service.TeamService;
 import com.phananh.ArenaFlow.service.TeamStatusFilter;
+import com.phananh.ArenaFlow.service.support.TeamGuard;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,11 +41,12 @@ public class TeamServiceImpl implements TeamService {
     private final OptimisticLockRetrier optimisticLockRetrier;
     private final TeamMapper teamMapper;
     private final PageRequestFactory pageRequestFactory;
+    private final TeamGuard teamGuard;
 
     public TeamServiceImpl(UserRepository userRepository, TeamRepository teamRepository,
                            TeamMemberRepository teamMemberRepository, TeamCaptainHistoryRepository historyRepository,
                            OptimisticLockRetrier optimisticLockRetrier, TeamMapper teamMapper,
-                           PageRequestFactory pageRequestFactory) {
+                           PageRequestFactory pageRequestFactory, TeamGuard teamGuard) {
         this.userRepository = userRepository;
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
@@ -52,6 +54,7 @@ public class TeamServiceImpl implements TeamService {
         this.optimisticLockRetrier = optimisticLockRetrier;
         this.teamMapper = teamMapper;
         this.pageRequestFactory = pageRequestFactory;
+        this.teamGuard = teamGuard;
     }
 
     /** 2.8 — S user, I team, I captain member, I history; response dựng từ dữ liệu đã có (memberCount = 1). */
@@ -105,8 +108,8 @@ public class TeamServiceImpl implements TeamService {
     @Override
     public TeamResponse updateTeam(UUID teamId, UUID userId, UpdateTeamRequest request) {
         return optimisticLockRetrier.execute(() -> {
-            Team team = activeTeam(teamId);
-            requireCaptain(teamId, userId);
+            Team team = teamGuard.activeTeam(teamId);
+            teamGuard.requireCaptain(teamId, userId);
             if (request.teamName() != null) {
                 team.setName(request.teamName().trim());
             }
@@ -128,8 +131,8 @@ public class TeamServiceImpl implements TeamService {
     @Override
     public CaptainTransferResponse transferCaptain(UUID teamId, UUID userId, TransferCaptainRequest request) {
         return optimisticLockRetrier.execute(() -> {
-            activeTeam(teamId);
-            TeamMember oldCaptain = requireCaptain(teamId, userId);
+            teamGuard.activeTeam(teamId);
+            TeamMember oldCaptain = teamGuard.requireCaptain(teamId, userId);
             if (request.newCaptainId().equals(userId)) {
                 throw new BusinessException(ErrorCode.TEAM_008);
             }
@@ -149,26 +152,9 @@ public class TeamServiceImpl implements TeamService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<CaptainHistoryResponse> listCaptainHistory(UUID teamId, int page, int pageSize) {
-        if (!teamRepository.existsById(teamId)) {
-            throw new BusinessException(ErrorCode.TEAM_001);
-        }
+        teamGuard.requireTeam(teamId);
         return PageResponse.from(historyRepository.findHistory(teamId, pageRequestFactory.create(page, pageSize)),
                 teamMapper::toResponse, page, pageSize);
-    }
-
-    private Team activeTeam(UUID teamId) {
-        Team team = teamRepository.findById(teamId).orElseThrow(() -> new BusinessException(ErrorCode.TEAM_001));
-        if (team.getStatus() == Team.TeamStatus.INACTIVE) {
-            throw new BusinessException(ErrorCode.TEAM_015);
-        }
-        return team;
-    }
-
-    private TeamMember requireCaptain(UUID teamId, UUID userId) {
-        return teamMemberRepository
-                .findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE)
-                .filter(captain -> captain.getUserId().equals(userId))
-                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_002));
     }
 
     private static TeamCaptainHistory history(UUID teamId, UUID fromUserId, UUID toUserId, String reason,
