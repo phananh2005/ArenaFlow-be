@@ -99,6 +99,7 @@
 ### MUST
 - **Thiết kế trước khi code:** 
   - **Chức năng mới** (endpoint mới, entity mới, use case mới) → **MUST** chạy `solution-architect` sinh tài liệu thiết kế → duyệt → `architect-reviewer` → duyệt → mới cho `developer` code.
+    - **Lệch thiết kế khi đang code:** code khác design → **NEVER** sửa design giữa chừng; **MUST** ghi ngay vào bảng "Lệch thiết kế" trong `current-task.md` (phase · design · code thực tế · lý do · file design cần sửa). Sau khi **mọi phase đã code xong + test PASS** → cập nhật design **một lần** theo bảng → `architect-reviewer` review phần sửa. Thay đổi làm đổi API contract / DB schema / nghiệp vụ so với design đã duyệt → **dừng, hỏi user** trước khi code (không chỉ ghi lệch).
   - **Sửa chức năng đã có** → `developer` code trước → sau khi test PASS → kiểm tra ảnh hưởng:
     - Có ảnh hưởng design (API/DB/sequence/integration) → **MUST** cập nhật design document → `architect-reviewer` review phần sửa
     - Có ảnh hưởng nghiệp vụ (use case/business rule/actor) → **MUST** cập nhật SRS

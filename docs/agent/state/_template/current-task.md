@@ -20,6 +20,13 @@ _Khung do `task-state-init` điền, điều chỉnh nhẹ theo đánh giá sơ 
 - [ ] 3. Triển khai code + test
 - [ ] 4. Chạy test & xác nhận PASS (dán output)
 - [ ] 5. Review & chuẩn bị MR
+- [ ] 6. (Chức năng có thiết kế) **Sau cùng:** cập nhật design theo bảng "Lệch thiết kế" → `architect-reviewer` review phần sửa
+
+## Lệch thiết kế
+_Ghi ngay khi code khác design; KHÔNG sửa design giữa chừng — cập nhật một lần ở bước cuối (`CLAUDE.md` §8). Trống = code khớp design._
+
+| # | Phase | Design | Code thực tế | Lý do | Sửa ở |
+|---|---|---|---|---|---|
 
 ## Tái sử dụng
 _Trống — skill `reuse-scan` điền: DÙNG LẠI / MỞ RỘNG / VIẾT MỚI + nguồn đã quét + từ khoá đã tra._
