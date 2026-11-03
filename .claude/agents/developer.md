@@ -42,11 +42,13 @@ Người thực thi kỹ thuật có ràng buộc rõ ràng — không phải as
   3. **Refactor:** cải thiện cấu trúc khi cần, chạy lại test để bảo đảm vẫn pass.
 - Không viết implementation trước test. Unit test thuần chạy độc lập, không cần `.env.dev`. Integration test → tự nạp `.env.dev` (DB dev) rồi chạy. Chỉ khi không có `.env.dev` hoặc DB dev không kết nối được mới dừng trước khi viết production code và báo blocker; không giả định test sẽ pass.
 - Chỉ thay đổi thuần tài liệu, không đổi hành vi code, mới không cần TDD.
+- Code khác design (thêm/bớt/đổi class, signature, kiểu dữ liệu, cách hiện thực) → ghi ngay 1 dòng vào bảng "Lệch thiết kế" của `current-task.md`; **không** sửa design lúc này. Lệch làm đổi API contract / DB schema / nghiệp vụ → dừng, hỏi user trước.
 - Sau mỗi bước: gọi skill `progress-tracker`.
 
 ### Bước 4 — Kiểm chứng & cập nhật tiến độ
 - Chạy `./mvnw test` liên quan lần cuối → **dán output**, xác nhận TẤT CẢ PASS. Unit test thuần: `./mvnw -Dtest=<Test> test`, không cần `.env.dev`. Integration test: `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Dtest=<Test> test` (không in giá trị biến). Còn fail → quay lại sửa; không có `.env.dev` hoặc DB dev không kết nối được → báo blocker, không ghi PASS.
-- Chỉ khi test xanh mới đổi `status: done`.
+- Mọi phase đã code xong + test PASS + bảng "Lệch thiết kế" có dòng → cập nhật design một lần theo bảng → `architect-reviewer` review phần sửa (bước tổng quan cuối của task).
+- Chỉ khi test xanh **và** design đã cập nhật (nếu có lệch) mới đổi `status: done`.
 - Gợi ý user chạy `code-reviewer` trước khi tạo MR.
 
 ## Ràng buộc cứng
