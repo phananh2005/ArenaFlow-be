@@ -132,7 +132,7 @@
 
   - Bắt đầu chức năng mà đang ở `main` → tự tạo nhánh `feature/<MÃ>-<mô-tả>` từ `origin/main`.
   - Trước commit: thay đổi thuộc nhóm khác nhánh hiện tại (vd framework trên nhánh `feature/`) → **NEVER** commit lẫn; tách sang nhánh đúng nhóm (tạo từ `origin/main`), không rõ nhóm → hỏi user.
-- **Merge vào `main` chỉ qua merge request (GitHub Pull Request):** push nhánh → `gh pr create --base main` → `code-reviewer` → user tự merge trên GitHub. **NEVER** `git merge` / `git rebase` / `git commit` / `git push` trực tiếp lên `main` local hay `origin/main`. Tạo PR vẫn chỉ khi user yêu cầu.
+- **Merge vào `main` chỉ qua merge request (GitHub Pull Request):** push nhánh → `gh pr create --base main` → `code-reviewer` → user tự merge trên GitHub **hoặc** yêu cầu agent merge bằng `gh pr merge <số> --squash` (chỉ khi user yêu cầu rõ PR nào; mặc định squash). **NEVER** `git merge` / `git rebase` / `git commit` / `git push` trực tiếp lên `main` local hay `origin/main`. Tạo PR vẫn chỉ khi user yêu cầu.
 - Debug → **MUST** reproduce trước khi nêu nguyên nhân.
 
 ### NEVER
