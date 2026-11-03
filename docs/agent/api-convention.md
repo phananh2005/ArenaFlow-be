@@ -153,6 +153,14 @@ Format: `<DOMAIN>_<NUMBER>`
 - `TEAM` — Đội
 - `AUTH` — Authentication/Authorization
 - `PAYMENT` — Thanh toán
+- `SYS` — Lỗi tầng HTTP/hệ thống, không gắn miền nghiệp vụ; **chỉ** global exception handler phát ra (NEVER ném qua exception nghiệp vụ):
+  - `SYS_001` — 404, URL không khớp endpoint nào
+  - `SYS_002` — 405, sai HTTP method (kèm header `Allow`)
+  - `SYS_003` — 415, `Content-Type` không được hỗ trợ
+  - `SYS_004` — 4xx khác do framework phát hiện (giữ status gốc)
+  - `SYS_005` — 500 lỗi ngoài dự kiến (5xx của framework giữ status gốc); không lộ chi tiết
+
+Lỗi 400 do framework phát hiện (thiếu query param bắt buộc, sai kiểu path/query, JSON sai) dùng `VALIDATION_ERROR` (§11), **không** dùng `SYS_*`.
 
 **Ví dụ:**
 - `ARENA_001` — Sân không tồn tại

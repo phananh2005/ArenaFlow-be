@@ -44,6 +44,11 @@
 | `POST /api/v1/bookings` | ✅ | ✅ | ❌ |
 | `PATCH /api/v1/bookings/{id}` | ✅ (own) | ✅ (all) | ❌ |
 | `DELETE /api/v1/bookings/{id}` | ✅ (own, pending) | ✅ (all) | ❌ |
+| `GET /actuator/health`, `GET /actuator/health/**` | ✅ | ✅ | ✅ — chỉ trạng thái tổng `UP`/`DOWN`; đường dẫn thành phần (vd `/health/db`) bị ẩn → 404 |
+| `GET /v3/api-docs/**`, `GET /swagger-ui/**`, `GET /swagger-ui.html` | ✅ | ✅ | ✅ khi `SPRINGDOC_ENABLED=true` (chỉ dev); **mặc định tắt** → 404 |
+| Actuator khác (`metrics`, `env`, `prometheus`…) | ❌ | ❌ | ❌ — chưa expose qua web; nếu expose phải cần token, NEVER `permitAll` |
+
+Endpoint vận hành public: ADR-0004 (`docs/agent/decisions/0004-public-operational-endpoints.md`). Không bật `management.endpoint.health.show-details` / `show-components` khi health còn public.
 
 **Roles:**
 - `USER` — Người dùng thường
@@ -71,6 +76,8 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/v1/auth/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/arenas/**").permitAll()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
