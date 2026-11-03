@@ -1,0 +1,198 @@
+# Processing Flow — User & Team Management
+
+| Mục | Giá trị |
+|---|---|
+| Mã chức năng | `USER-001` |
+| Phạm vi tầng | Backend (Spring Boot REST API) |
+| Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
+| Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
+| Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline, chờ duyệt) |
+
+## 1. Tổng quan luồng
+
+21 endpoint (`API_Spec.md` §2). Mã lỗi chỉ ghi mã — nghĩa ở `API_Spec.md` §4. Class/method: `Component_Class_Design.md` §4–§5.
+
+**Thứ tự guard chuẩn cho thao tác ghi:** Bean Validation (400) → xác thực JWT (401) → tồn tại tài nguyên (404) → quyền trên tài nguyên (403) → trạng thái/quy tắc nghiệp vụ (409/422) → ghi.
+
+**Số truy vấn** tính cho **một lần thử**; retry optimistic lock (§5) chạy lại toàn bộ lần thử trong transaction mới. Xác thực JWT không truy vấn DB.
+
+## 2. Sequence Diagrams
+
+### 2.1. Đăng ký-hoặc-đăng nhập OAuth (mock) — `POST /auth/oauth`
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant AC as AuthController
+    participant AS as AuthServiceImpl
+    participant OR as OAuthAccountRepository
+    participant UR as UserRepository
+    participant JW as JwtTokenService
+
+    C->>AC: POST /api/v1/auth/oauth
+    AC->>AS: loginWithOAuth(req)
+    AS->>OR: findAuthView(provider, email)
+    alt Đã có tài khoản
+        alt deleted_at != null
+            AS-->>AC: BusinessException(AUTH_003)
+        else
+            AS->>JW: issueAccessToken / issueRefreshToken
+            AS-->>AC: AuthResult(isNewUser=false)
+            AC-->>C: 200
+        end
+    else Chưa có
+        AS->>UR: save(User role=USER, displayName mặc định)
+        AS->>OR: saveAndFlush(OAuthAccount)
+        Note over AS,OR: Unique (provider, provider_user_id) vi phạm do request song song → rollback, đọc lại → 200
+        AS->>JW: issue tokens
+        AC-->>C: 201 + Location
+    end
+```
+
+### 2.2. Xoá tài khoản — `DELETE /profile`
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant PS as ProfileServiceImpl
+    participant RT as OptimisticLockRetrier
+    participant TMR as TeamMemberRepository
+    participant TR as TeamRepository
+    participant UR as UserRepository
+
+    C->>PS: deleteAccount(userId)
+    PS->>RT: execute(tx)
+    RT->>TMR: findCaptainTeamsWithActiveCount(userId)
+    alt Có đội activeCount > 1
+        RT-->>C: 422 USER_003
+    else
+        RT->>TR: markInactiveByIds(teamIds có activeCount = 1)
+        Note over RT,TR: số dòng cập nhật < số đội → có người vừa vào đội → retry
+        RT->>TMR: leaveAllActive(userId)
+        RT->>TMR: rejectAllPending(userId)
+        RT->>UR: softDelete(userId)
+        RT-->>C: 204
+    end
+```
+
+### 2.3. Chuyển quyền đội trưởng — `POST /teams/{teamId}/captain/transfer`
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant TS as TeamServiceImpl
+    participant RT as OptimisticLockRetrier
+    participant TR as TeamRepository
+    participant TMR as TeamMemberRepository
+    participant HR as TeamCaptainHistoryRepository
+
+    C->>TS: transferCaptain(teamId, userId, req)
+    TS->>RT: execute(tx)
+    RT->>TR: findById(teamId)
+    Note right of RT: không có → TEAM_001
+    RT->>TMR: findByTeamIdAndRoleAndStatus(teamId, CAPTAIN, ACTIVE)
+    Note right of RT: captain.userId ≠ userId → TEAM_002<br/>newCaptainId = userId → TEAM_008
+    RT->>TMR: findByTeamIdAndUserIdAndStatus(teamId, newCaptainId, ACTIVE)
+    Note right of RT: không có → TEAM_007
+    RT->>TMR: flush: captain cũ role=MEMBER, captain mới role=CAPTAIN (@Version)
+    RT->>HR: save(TeamCaptainHistory from, to, reason)
+    alt ObjectOptimisticLockingFailureException
+        RT->>RT: thử lại (tối đa 3 lần) → hết → TEAM_014
+    end
+    RT-->>C: 200 CaptainTransferResponse
+```
+
+## 3. Luồng chi tiết theo endpoint
+
+Ký hiệu truy vấn: **S** = SELECT, **I** = INSERT, **U** = UPDATE. Loại: D = đọc chi tiết (≤3), L = danh sách (≤4), W = ghi (≤6).
+
+| # | Endpoint | Guard & logic (theo thứ tự) | Truy vấn | Tổng / Ngưỡng |
+|---|---|---|---|---|
+| 2.1 | `POST /auth/oauth` | S tài khoản theo `(provider, email)` join user → có: `deleted_at` ≠ null → AUTH_003, ngược lại 200 · không có: I user, I oauth_account (`saveAndFlush`) → 201 · vi phạm unique (song song) → rollback, S lại → 200 | S, I, I (+S khi đụng độ) | 3–4 / W6 ✅ |
+| 2.2 | `POST /auth/send-otp` | Validate phone, trả `expiresIn=300` | — | 0 ✅ |
+| 2.3 | `POST /auth/verify-otp` | Như 2.1 với `provider=phone`, `provider_user_id=phone`; user mới set `phone_number=phone` | S, I, I (+S) | 3–4 / W6 ✅ |
+| 2.4 | `POST /auth/refresh` | Parse refresh token (AUTH_002) → S user theo id (không có/đã xoá → AUTH_003) → cấp cặp token mới với `role` hiện tại | S | 1 / D3 ✅ |
+| 2.5 | `GET /profile` | S `ProfileView` (user LEFT JOIN ward LEFT JOIN province, `deleted_at IS NULL`) → USER_001 · S oauth_account theo user | S, S | 2 / D3 ✅ |
+| 2.6 | `PATCH /profile` | S user chưa xoá (USER_001) → nếu có `wardId`: S ward+province (USER_002); nếu không: S ward hiện tại (cho response) → áp field ≠ null → U user → S oauth_account (response) | S, S, U, S | 4 / W6 ✅ |
+| 2.7 | `DELETE /profile` | Xem §2.2 · `inactive_reason` của đội tự INACTIVE = hằng `"Đội trưởng duy nhất đã xoá tài khoản"` · `markInactiveByIds` chỉ cập nhật đội còn đúng 1 thành viên ACTIVE (điều kiện subquery trong UPDATE) · **membership ACTIVE → LEFT, PENDING → REJECTED** · `softDelete` chỉ khi `deleted_at IS NULL` → gọi lại vẫn 204 · Access token còn hiệu lực tối đa 1h (JWT stateless, grace period chấp nhận cho MVP) | S, U, U, U, U | 5 / W6 ✅ |
+| 2.8 | `POST /teams` | S user chưa xoá (USER_001; lấy `displayName` làm `captainName`) → I team (`skill_levels` JSON) → I team_member (CAPTAIN, ACTIVE, `joined_at=now`) → I history (`from=null`) · response dựng từ dữ liệu đã có (`memberCount=1`) | S, I, I, I | 4 / W6 ✅ |
+| 2.9 | `GET /teams/{id}` | S `TeamDetailView` (team LEFT JOIN captain ACTIVE LEFT JOIN user, `memberCount` bằng subquery COUNT) → TEAM_001 | S | 1 / D3 ✅ |
+| 2.10 | `GET /teams` | S `TeamSummaryView` trang (join như 2.9, lọc status) · S COUNT | S, S | 2 / L4 ✅ |
+| 2.11 | `PATCH /teams/{id}` | *(retry)* S team (TEAM_001) → **status INACTIVE (TEAM_015)** → S captain ACTIVE, so `userId` (TEAM_002) → áp field → U team (`@Version`) → S `TeamDetailView` (response) | S, U, S | 3 / W6 ✅ |
+| 2.12 | `POST /teams/{id}/invitations` | S team (TEAM_001) → **status INACTIVE (TEAM_015)** → S captain (TEAM_002) → S user mời chưa xoá (USER_001) → S tồn tại PENDING/ACTIVE (TEAM_003) → I team_member PENDING (`saveAndFlush`; vi phạm unique → TEAM_003) | S, S, S, S, I | 5 / W6 ✅ |
+| 2.13 | `POST /invitations/{id}/accept` | *(retry)* S team_member theo id (TEAM_004) → `userId` ≠ caller (TEAM_005) → S team → **status INACTIVE (TEAM_015)** → member.status ≠ PENDING (TEAM_006) → U status=ACTIVE, `joined_at=now` (`@Version`) → S `MemberView` (response) | S, S, U, S | 4 / W6 ✅ |
+| 2.14 | `POST /invitations/{id}/reject` | *(retry)* S team_member theo id (TEAM_004) → `userId` ≠ caller (TEAM_005) → S team → **status INACTIVE (TEAM_015)** → member.status ≠ PENDING (TEAM_006) → U status=REJECTED → S tên đội (response) | S, S, U, S | 4 / W6 ✅ |
+| 2.15 | `POST /teams/{id}/captain/transfer` | Xem §2.3 · **thêm check status INACTIVE (TEAM_015) sau S team** | S, S, S, U, U, I | 6 / W6 ✅ (bằng ngưỡng) |
+| 2.16 | `GET /teams/{id}/captain/history` | S tồn tại team (TEAM_001) → S trang history (LEFT JOIN user from/to, che tên đã xoá) → S COUNT | S, S, S | 3 / L4 ✅ |
+| 2.17 | `GET /teams/{id}/members` | S tồn tại team (TEAM_001) → S trang member ACTIVE JOIN user → S COUNT | S, S, S | 3 / L4 ✅ |
+| 2.18 | `POST /teams/{id}/members/leave` | *(retry)* S tồn tại team (TEAM_001) → S member ACTIVE của caller (TEAM_010) → role CAPTAIN (TEAM_009) → U status=LEFT, `left_at=now` | S, S, U | 3 / W6 ✅ |
+| 2.19 | `PATCH /admin/teams/{id}/mark-inactive` | *(retry)* S team (TEAM_001) → đã INACTIVE (TEAM_011) → U status, `inactive_reason` (`@Version`) → S `TeamDetailView` | S, U, S | 3 / W6 ✅ |
+| 2.20 | `PATCH /admin/teams/{id}/reactivate` | *(retry)* S team (TEAM_001) → đang ACTIVE (TEAM_012) → S captain ACTIVE (TEAM_013) → U status=ACTIVE, `inactive_reason=null` → S `TeamDetailView` | S, S, U, S | 4 / W6 ✅ |
+| 2.21 | `GET /admin/teams` | Như 2.10, mặc định `ALL`, thêm `inactive_reason` | S, S | 2 / L4 ✅ |
+
+**Kết luận:** 21/21 endpoint trong ngưỡng. Endpoint 2.15 dùng đủ 6/6 — mọi bổ sung truy vấn cho 2.15 (audit, notification…) phải gộp hoặc xin duyệt vượt ngưỡng. Thêm guard INACTIVE cho 2.11/2.12/2.13/2.14/2.15 không tăng truy vấn (dùng kết quả đã SELECT).
+
+## 4. Transaction Boundary
+
+| Nhóm | Ranh giới | Ghi chú |
+|---|---|---|
+| Đọc (2.5, 2.9, 2.10, 2.16, 2.17, 2.21, 2.4) | `@Transactional(readOnly = true)` trên method service | — |
+| Ghi không retry (2.1, 2.3, 2.6, 2.8, 2.12) | `@Transactional` trên method service | 2.1/2.3: đụng độ unique → transaction rollback; đọc lại chạy trong transaction readOnly mới |
+| Ghi có retry (2.7, 2.11, 2.13, 2.14, 2.15, 2.18, 2.19, 2.20) | Mỗi lần thử = 1 transaction do `OptimisticLockRetrier` mở qua `TransactionTemplate` | Method service **không** có `@Transactional` |
+
+Isolation: `READ_COMMITTED` (mặc định PostgreSQL). Không gọi dịch vụ ngoài trong transaction (OTP/OAuth đều mock).
+
+## 5. Concurrency & Locking (ADR-0003)
+
+- `@Version` trên `Team`, `TeamMember`. `User` không có version — cập nhật hồ sơ theo last-write-wins (chỉ chủ tài khoản sửa).
+- `OptimisticLockRetrier.execute(Supplier<T>)`: bắt `ObjectOptimisticLockingFailureException` (và tín hiệu "cập nhật thiếu dòng" của 2.7) → thử lại ngay, không backoff, **tối đa 3 lần thử** (1 lần đầu + 2 lần retry) → hết → `BusinessException(TEAM_014)`. Lỗi nghiệp vụ (`BusinessException`) không retry.
+- Bulk update (2.7) tự `SET version = version + 1` để các transaction đang giữ bản cũ phát hiện xung đột.
+
+| Kịch bản song song | Kết quả |
+|---|---|
+| Captain chuyển quyền 2 lần cùng lúc | Cùng cập nhật dòng captain cũ → 1 thành công; lần thử lại của request kia thấy caller không còn là captain → TEAM_002 |
+| Chuyển quyền cho X trong khi X rời đội | Cùng dòng `team_member` của X → 1 thắng; bên thua retry → TEAM_007 hoặc TEAM_010 |
+| Accept 2 lần cùng lời mời | 1 thành công; lần sau → TEAM_006 |
+| Mời trùng cùng lúc | Unique index `(team_id, user_id) WHERE status IN ('PENDING','ACTIVE')` → TEAM_003 |
+| Captain duy nhất xoá tài khoản khi có người vừa accept | `markInactiveByIds` cập nhật thiếu dòng → retry → S1 thấy `activeCount = 2` → USER_003 |
+| Đăng ký cùng email song song | Unique `(provider, provider_user_id)` → request sau trả 200 với tài khoản đã tạo |
+
+## 6. Error Handling
+
+`BusinessException(ErrorCode)` → `GlobalExceptionHandler` → envelope `error` (`api-convention.md` §4.4). Ánh xạ exception framework: `Component_Class_Design.md` §10. Không trả stack trace; log `WARN` cho 4xx nghiệp vụ, `ERROR` cho 5xx; **NEVER** log token/secret (`security-backend.md`).
+
+## 7. Idempotency
+
+| Endpoint | Cơ chế |
+|---|---|
+| 2.1, 2.3 | Khoá tự nhiên `(provider, provider_user_id)`: gọi lại → 200 cùng tài khoản |
+| 2.12 | Unique index lời mời → gọi lại → TEAM_003 |
+| 2.13, 2.14 | Chuyển trạng thái chỉ từ PENDING → gọi lại → TEAM_006 |
+| 2.7 | `softDelete` có điều kiện `deleted_at IS NULL` → gọi lại → 204 |
+| 2.19, 2.20 | Kiểm trạng thái → gọi lại → TEAM_011 / TEAM_012 |
+| 2.8 | **Không idempotent** — trùng tên được phép; `Idempotency-Key` hoãn (`API_Spec.md` §6 #4) |
+
+## 8. Performance Considerations
+
+**N+1:** mọi danh sách/chi tiết dùng native query + projection, join user/ward trong cùng câu; `memberCount` bằng subquery COUNT trong câu chính; không lazy-load. Developer MUST đo số truy vấn thật bằng log SQL / Hibernate statistics trong integration test (NFS §3).
+
+**Index:**
+
+| Bảng | Index | Dùng cho | Nguồn |
+|---|---|---|---|
+| `team` | `(status, created_at DESC)` | 2.10, 2.21 lọc + sort | V2 (thay `idx_team_status`) |
+| `team_member` | unique `(team_id, user_id) WHERE status IN ('PENDING','ACTIVE')` | 2.12, tra member theo team+user | V2 (thay `idx_team_member_active`) |
+| `team_member` | `(team_id, role, status)` | captain, đếm ACTIVE, 2.17 | V1 |
+| `team_member` | `(user_id, status)` | 2.7 | V1 |
+| `team_captain_history` | `(team_id, transferred_at DESC)` | 2.16 | V1 |
+| `oauth_account` | unique `(provider, provider_user_id)`, `(user_id)` | 2.1, 2.3, 2.5 | V1 |
+| `"user"` | `(ward_id)` | FK | V2 (đổi tên từ `idx_user_district`) |
+| `administrative_unit` | `(parent_id)` | join province | V1 |
+
+## 9. Ghi chú thiết kế
+
+- **Retry 3 lần thử:** 1 lần đầu + 2 lần retry (tổng 3 lần).
+- **Membership khi xóa tài khoản:** Chuyển ACTIVE→LEFT, PENDING→REJECTED (để user đã xóa không xuất hiện trong danh sách thành viên/lời mời).
+- **Grace period sau xóa tài khoản:** JWT stateless → access token còn hiệu lực tối đa 1h. Refresh bị chặn (`AUTH_003`); các API hồ sơ trả `USER_001`. Chấp nhận cho MVP (client tự xóa token local).
+- **Dữ liệu Neon DB:** Trống — V2 migration chạy được (DROP `team_tag`, bỏ `district`).
