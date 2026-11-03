@@ -24,6 +24,7 @@ import com.phananh.ArenaFlow.repository.UserRepository;
 import com.phananh.ArenaFlow.service.TeamService;
 import com.phananh.ArenaFlow.service.TeamStatusFilter;
 import com.phananh.ArenaFlow.service.support.TeamGuard;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class TeamServiceImpl implements TeamService {
 
     private final UserRepository userRepository;
@@ -42,20 +44,6 @@ public class TeamServiceImpl implements TeamService {
     private final TeamMapper teamMapper;
     private final PageRequestFactory pageRequestFactory;
     private final TeamGuard teamGuard;
-
-    public TeamServiceImpl(UserRepository userRepository, TeamRepository teamRepository,
-                           TeamMemberRepository teamMemberRepository, TeamCaptainHistoryRepository historyRepository,
-                           OptimisticLockRetrier optimisticLockRetrier, TeamMapper teamMapper,
-                           PageRequestFactory pageRequestFactory, TeamGuard teamGuard) {
-        this.userRepository = userRepository;
-        this.teamRepository = teamRepository;
-        this.teamMemberRepository = teamMemberRepository;
-        this.historyRepository = historyRepository;
-        this.optimisticLockRetrier = optimisticLockRetrier;
-        this.teamMapper = teamMapper;
-        this.pageRequestFactory = pageRequestFactory;
-        this.teamGuard = teamGuard;
-    }
 
     /** 2.8 — S user, I team, I captain member, I history; response dựng từ dữ liệu đã có (memberCount = 1). */
     @Override

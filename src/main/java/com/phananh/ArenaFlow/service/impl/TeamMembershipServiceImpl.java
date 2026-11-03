@@ -16,6 +16,7 @@ import com.phananh.ArenaFlow.repository.UserRepository;
 import com.phananh.ArenaFlow.service.TeamMembershipService;
 import com.phananh.ArenaFlow.service.support.TeamGuard;
 import org.springframework.dao.DataIntegrityViolationException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class TeamMembershipServiceImpl implements TeamMembershipService {
 
     private static final List<TeamMember.Status> OPEN_MEMBERSHIP =
@@ -35,17 +37,6 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
     private final MembershipMapper membershipMapper;
     private final PageRequestFactory pageRequestFactory;
     private final TeamGuard teamGuard;
-
-    public TeamMembershipServiceImpl(UserRepository userRepository, TeamMemberRepository teamMemberRepository,
-                                     OptimisticLockRetrier optimisticLockRetrier, MembershipMapper membershipMapper,
-                                     PageRequestFactory pageRequestFactory, TeamGuard teamGuard) {
-        this.userRepository = userRepository;
-        this.teamMemberRepository = teamMemberRepository;
-        this.optimisticLockRetrier = optimisticLockRetrier;
-        this.membershipMapper = membershipMapper;
-        this.pageRequestFactory = pageRequestFactory;
-        this.teamGuard = teamGuard;
-    }
 
     /** 2.12 — S team → TEAM_001/015 → S captain → TEAM_002 → S invitee → USER_001 → S tồn tại → TEAM_003 → I. */
     @Override

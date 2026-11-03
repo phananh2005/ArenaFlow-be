@@ -18,6 +18,7 @@ import com.phananh.ArenaFlow.security.JwtTokenService;
 import com.phananh.ArenaFlow.service.AuthResult;
 import com.phananh.ArenaFlow.service.AuthService;
 import org.springframework.dao.DataIntegrityViolationException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -31,6 +32,7 @@ import java.util.UUID;
  * transaction đó rollback và việc đọc lại tài khoản thắng chạy ngoài transaction đã hỏng (Processing_Flow §4).
  */
 @Service
+@RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
     private static final int OTP_EXPIRES_IN_SECONDS = 300;
@@ -43,16 +45,6 @@ public class AuthServiceImpl implements AuthService {
     private final JwtTokenService jwtTokenService;
     private final JwtProperties jwtProperties;
     private final TransactionTemplate transactionTemplate;
-
-    public AuthServiceImpl(UserRepository userRepository, OAuthAccountRepository oauthAccountRepository,
-                           JwtTokenService jwtTokenService, JwtProperties jwtProperties,
-                           TransactionTemplate transactionTemplate) {
-        this.userRepository = userRepository;
-        this.oauthAccountRepository = oauthAccountRepository;
-        this.jwtTokenService = jwtTokenService;
-        this.jwtProperties = jwtProperties;
-        this.transactionTemplate = transactionTemplate;
-    }
 
     @Override
     public AuthResult loginWithOAuth(OAuthLoginRequest request) {

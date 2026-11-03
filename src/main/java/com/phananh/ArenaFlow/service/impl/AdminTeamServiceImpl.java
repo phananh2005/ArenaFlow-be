@@ -15,12 +15,14 @@ import com.phananh.ArenaFlow.repository.TeamMemberRepository;
 import com.phananh.ArenaFlow.repository.TeamRepository;
 import com.phananh.ArenaFlow.service.AdminTeamService;
 import com.phananh.ArenaFlow.service.TeamStatusFilter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class AdminTeamServiceImpl implements AdminTeamService {
 
     private final TeamRepository teamRepository;
@@ -28,16 +30,6 @@ public class AdminTeamServiceImpl implements AdminTeamService {
     private final OptimisticLockRetrier optimisticLockRetrier;
     private final TeamMapper teamMapper;
     private final PageRequestFactory pageRequestFactory;
-
-    public AdminTeamServiceImpl(TeamRepository teamRepository, TeamMemberRepository teamMemberRepository,
-                                OptimisticLockRetrier optimisticLockRetrier, TeamMapper teamMapper,
-                                PageRequestFactory pageRequestFactory) {
-        this.teamRepository = teamRepository;
-        this.teamMemberRepository = teamMemberRepository;
-        this.optimisticLockRetrier = optimisticLockRetrier;
-        this.teamMapper = teamMapper;
-        this.pageRequestFactory = pageRequestFactory;
-    }
 
     /** 2.19 (retry) — S team → TEAM_001 → đã INACTIVE TEAM_011 → U (@Version) → S detail. */
     @Override

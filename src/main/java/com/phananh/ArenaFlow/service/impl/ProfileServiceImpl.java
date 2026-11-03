@@ -17,6 +17,7 @@ import com.phananh.ArenaFlow.repository.projection.CaptainTeamView;
 import com.phananh.ArenaFlow.repository.projection.ProfileView;
 import com.phananh.ArenaFlow.service.ProfileService;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +28,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class ProfileServiceImpl implements ProfileService {
 
     static final String SOLE_CAPTAIN_DELETED_REASON = "Đội trưởng duy nhất đã xoá tài khoản";
@@ -38,19 +40,6 @@ public class ProfileServiceImpl implements ProfileService {
     private final TeamMemberRepository teamMemberRepository;
     private final OptimisticLockRetrier optimisticLockRetrier;
     private final ProfileMapper profileMapper;
-
-    public ProfileServiceImpl(UserRepository userRepository, OAuthAccountRepository oauthAccountRepository,
-                              AdministrativeUnitRepository administrativeUnitRepository, TeamRepository teamRepository,
-                              TeamMemberRepository teamMemberRepository, OptimisticLockRetrier optimisticLockRetrier,
-                              ProfileMapper profileMapper) {
-        this.userRepository = userRepository;
-        this.oauthAccountRepository = oauthAccountRepository;
-        this.administrativeUnitRepository = administrativeUnitRepository;
-        this.teamRepository = teamRepository;
-        this.teamMemberRepository = teamMemberRepository;
-        this.optimisticLockRetrier = optimisticLockRetrier;
-        this.profileMapper = profileMapper;
-    }
 
     @Override
     @Transactional(readOnly = true)
