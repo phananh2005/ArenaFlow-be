@@ -40,4 +40,5 @@ docs/agent/state/*/
 .claude/logs/
 .neon
 node_modules/
-.env.local
+.env.dev
+.env
