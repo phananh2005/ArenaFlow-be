@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-/** 2.5–2.7 — hồ sơ của user hiện tại. */
+/** Hồ sơ của user hiện tại. */
 @RestController
 @RequestMapping("/api/v1/profile")
 @RequiredArgsConstructor

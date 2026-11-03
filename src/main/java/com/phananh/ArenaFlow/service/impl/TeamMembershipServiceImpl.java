@@ -38,7 +38,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
     private final PageRequestFactory pageRequestFactory;
     private final TeamGuard teamGuard;
 
-    /** 2.12 — S team → TEAM_001/015 → S captain → TEAM_002 → S invitee → USER_001 → S tồn tại → TEAM_003 → I. */
+    /** S team → TEAM_001/015 → S captain → TEAM_002 → S invitee → USER_001 → S tồn tại → TEAM_003 → I. */
     @Override
     @Transactional
     public InvitationResponse inviteMember(UUID teamId, UUID captainUserId, InviteMemberRequest request) {
@@ -63,7 +63,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
         }
     }
 
-    /** 2.13 (retry) — S member → TEAM_004/005 → S team → TEAM_015 → TEAM_006 → U ACTIVE → S MemberView. */
+    /** (retry) S member → TEAM_004/005 → S team → TEAM_015 → TEAM_006 → U ACTIVE → S MemberView. */
     @Override
     public MemberResponse acceptInvitation(UUID invitationId, UUID userId) {
         return optimisticLockRetrier.execute(() -> {
@@ -76,7 +76,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
         });
     }
 
-    /** 2.14 (retry) — guard như 2.13 → U REJECTED; tên đội lấy từ team đã đọc. */
+    /** (retry) guard như acceptInvitation → U REJECTED; tên đội lấy từ team đã đọc. */
     @Override
     public InvitationResponse rejectInvitation(UUID invitationId, UUID userId) {
         return optimisticLockRetrier.execute(() -> {
@@ -97,7 +97,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
                 membershipMapper::toMember, page, pageSize);
     }
 
-    /** 2.18 (retry) — S team → TEAM_001 → S member ACTIVE → TEAM_010 → captain → TEAM_009 → U LEFT. */
+    /** (retry) S team → TEAM_001 → S member ACTIVE → TEAM_010 → captain → TEAM_009 → U LEFT. */
     @Override
     public void leaveTeam(UUID teamId, UUID userId) {
         optimisticLockRetrier.execute(() -> {

@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-/** 2.13–2.14 — chỉ người được mời xử lý lời mời (kiểm trong service). */
+/** Chỉ người được mời xử lý lời mời (kiểm trong service). */
 @RestController
 @RequestMapping("/api/v1/invitations")
 @RequiredArgsConstructor

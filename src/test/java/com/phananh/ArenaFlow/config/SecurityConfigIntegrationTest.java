@@ -89,10 +89,29 @@ class SecurityConfigIntegrationTest {
     }
 
     @Test
-    void healthAndApiDocsArePublic() throws Exception {
-        mockMvc.perform(get("/actuator/health")).andExpect(status().isOk());
-        mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk());
-        mockMvc.perform(get("/swagger-ui/index.html")).andExpect(status().isOk());
+    void healthIsPublic() throws Exception {
+        mockMvc.perform(get("/actuator/health")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"))
+                .andExpect(jsonPath("$.components").doesNotExist())
+                .andExpect(jsonPath("$.details").doesNotExist());
+    }
+
+    /**
+     * /actuator/health/** public (không 401) nhưng thành phần bị ẩn theo mặc định Spring Boot → 404,
+     * không lộ trạng thái DB (ADR-0004). permitAll dành cho probe liveness/readiness khi được bật.
+     */
+    @Test
+    void healthComponentPathIsPublicButHidden() throws Exception {
+        mockMvc.perform(get("/actuator/health/db"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").doesNotExist());
+    }
+
+    /** ADR-0004: API docs mặc định TẮT (fail-closed) — chỉ bật khi SPRINGDOC_ENABLED=true (dev). */
+    @Test
+    void apiDocsAreDisabledByDefault() throws Exception {
+        mockMvc.perform(get("/v3/api-docs")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/swagger-ui/index.html")).andExpect(status().isNotFound());
     }
 
     @Test

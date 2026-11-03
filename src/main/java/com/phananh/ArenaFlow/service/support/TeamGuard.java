@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 import java.util.UUID;
 
 /**
- * Guard dùng chung cho thao tác trên đội — một nguồn cho thứ tự kiểm tra (Processing_Flow §3):
+ * Guard dùng chung cho thao tác trên đội — một nguồn cho thứ tự kiểm tra:
  * tồn tại (TEAM_001) → đội INACTIVE (TEAM_015) → caller là captain ACTIVE (TEAM_002).
  */
 @Component

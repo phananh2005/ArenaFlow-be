@@ -45,7 +45,7 @@ public class TeamServiceImpl implements TeamService {
     private final PageRequestFactory pageRequestFactory;
     private final TeamGuard teamGuard;
 
-    /** 2.8 — S user, I team, I captain member, I history; response dựng từ dữ liệu đã có (memberCount = 1). */
+    /** S user, I team, I captain member, I history; response dựng từ dữ liệu đã có (memberCount = 1). */
     @Override
     @Transactional
     public TeamResponse createTeam(UUID userId, CreateTeamRequest request) {
@@ -92,7 +92,7 @@ public class TeamServiceImpl implements TeamService {
                 teamMapper::toSummary, page, pageSize);
     }
 
-    /** 2.11 (retry) — S team → TEAM_001 → INACTIVE TEAM_015 → S captain → TEAM_002 → U team (@Version) → S detail. */
+    /** (retry) S team → TEAM_001 → INACTIVE TEAM_015 → S captain → TEAM_002 → U team (@Version) → S detail. */
     @Override
     public TeamResponse updateTeam(UUID teamId, UUID userId, UpdateTeamRequest request) {
         return optimisticLockRetrier.execute(() -> {
@@ -115,7 +115,7 @@ public class TeamServiceImpl implements TeamService {
         });
     }
 
-    /** 2.15 (retry) — S team, S captain, S member mới, U ×2 (@Version), I history = 6 (W6). */
+    /** (retry) S team, S captain, S member mới, U ×2 (@Version), I history = 6 (W6). */
     @Override
     public CaptainTransferResponse transferCaptain(UUID teamId, UUID userId, TransferCaptainRequest request) {
         return optimisticLockRetrier.execute(() -> {

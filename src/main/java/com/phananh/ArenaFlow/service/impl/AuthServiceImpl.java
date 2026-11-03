@@ -29,7 +29,7 @@ import java.util.UUID;
 /**
  * Đăng ký-hoặc-đăng nhập (OAuth/OTP mock) và refresh token.
  * Tạo tài khoản chạy trong transaction riêng (TransactionTemplate) để khi đụng unique (đăng ký song song)
- * transaction đó rollback và việc đọc lại tài khoản thắng chạy ngoài transaction đã hỏng (Processing_Flow §4).
+ * transaction đó rollback và việc đọc lại tài khoản thắng chạy ngoài transaction đã hỏng.
  */
 @Service
 @RequiredArgsConstructor
@@ -102,7 +102,7 @@ public class AuthServiceImpl implements AuthService {
         user.setDisplayName(DEFAULT_NAME_PREFIX.trim());
         user.setPhoneNumber(phoneNumber);
         User saved = userRepository.save(user);
-        // id chỉ có sau persist → tên mặc định "User " + 6 ký tự cuối userId (API_Spec §3.11).
+        // id chỉ có sau persist → tên mặc định "User " + 6 ký tự cuối userId.
         String id = saved.getId().toString();
         saved.setDisplayName(DEFAULT_NAME_PREFIX + id.substring(id.length() - DEFAULT_NAME_SUFFIX_LENGTH));
 

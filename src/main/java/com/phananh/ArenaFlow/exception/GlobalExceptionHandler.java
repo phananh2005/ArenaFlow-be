@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
@@ -15,10 +16,11 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Objects;
 
 /**
- * Ánh xạ exception → envelope lỗi. Log theo Processing_Flow §6: lỗi nghiệp vụ 4xx → WARN (mã lỗi + path),
- * 5xx → ERROR kèm exception; response không lộ stack trace. NEVER log token/secret.
+ * Ánh xạ exception → envelope lỗi. Lỗi 4xx → WARN (mã lỗi + path), 5xx → ERROR kèm exception;
+ * response không lộ stack trace. NEVER log token/secret/PII.
  */
 @Slf4j
 @RestControllerAdvice
@@ -74,6 +76,14 @@ public class GlobalExceptionHandler {
         return validationResponse(request, List.of(new ValidationError(exception.getName(), "Giá trị không hợp lệ")));
     }
 
+    /** Thiếu query param bắt buộc → 400 VALIDATION_ERROR, field = tên tham số. */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorEnvelope> handleMissingParameter(
+            MissingServletRequestParameterException exception, HttpServletRequest request) {
+        return validationResponse(request,
+                List.of(new ValidationError(exception.getParameterName(), "Tham số bắt buộc")));
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorEnvelope> handleDataIntegrityViolation(
             DataIntegrityViolationException exception, HttpServletRequest request) {
@@ -82,14 +92,56 @@ public class GlobalExceptionHandler {
             log.warn("Business error {} at {}", ErrorCode.TEAM_003.getCode(), request.getRequestURI());
             return businessResponse(ErrorCode.TEAM_003, request);
         }
-        log.error("Unhandled data integrity violation at {}", request.getRequestURI(), exception);
+        // Message/stack của lỗi SQL chứa giá trị dòng ("Detail: Key (phone_number)=(...)") → PII.
+        // Chỉ log tên constraint + loại lỗi gốc.
+        log.error("Unhandled data integrity violation at {} (constraint={}, cause={})", request.getRequestURI(),
+                constraintName(exception), exception.getMostSpecificCause().getClass().getName());
         return internalServerError(request);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorEnvelope> handleUnexpectedException(Exception exception, HttpServletRequest request) {
+        if (exception instanceof org.springframework.web.ErrorResponse frameworkError) {
+            return frameworkErrorResponse(frameworkError, exception, request);
+        }
         log.error("Unhandled exception at {}", request.getRequestURI(), exception);
         return internalServerError(request);
+    }
+
+    /**
+     * Exception của Spring đã mang status → mã SYS_* (giữ status + header gốc, vd {@code Allow});
+     * 400 → VALIDATION_ERROR; 4xx → WARN, còn lại → ERROR; status không chuẩn → 500.
+     */
+    private ResponseEntity<ErrorEnvelope> frameworkErrorResponse(org.springframework.web.ErrorResponse frameworkError,
+                                                                 Exception exception, HttpServletRequest request) {
+        HttpStatus status = HttpStatus.resolve(frameworkError.getStatusCode().value());
+        if (status == null) {
+            log.error("Unhandled exception with non-standard status at {}", request.getRequestURI(), exception);
+            return internalServerError(request);
+        }
+        if (status.is4xxClientError()) {
+            log.warn("Framework error {} at {}", status.value(), request.getRequestURI());
+        } else {
+            log.error("Framework error {} at {}", status.value(), request.getRequestURI(), exception);
+        }
+        if (status == HttpStatus.BAD_REQUEST) {
+            return validationResponse(request, List.of());
+        }
+        ErrorCode errorCode = switch (status) {
+            case NOT_FOUND -> ErrorCode.SYS_001;
+            case METHOD_NOT_ALLOWED -> ErrorCode.SYS_002;
+            case UNSUPPORTED_MEDIA_TYPE -> ErrorCode.SYS_003;
+            default -> status.is4xxClientError() ? ErrorCode.SYS_004 : ErrorCode.SYS_005;
+        };
+        return ResponseEntity.status(status).headers(frameworkError.getHeaders())
+                .body(new ErrorEnvelope(ErrorResponse.from(errorCode, null, request.getRequestURI())));
+    }
+
+    private static String constraintName(DataIntegrityViolationException exception) {
+        String name = exception.getCause() instanceof org.hibernate.exception.ConstraintViolationException violation
+                ? violation.getConstraintName()
+                : null;
+        return Objects.requireNonNullElse(name, "unknown");
     }
 
     private ResponseEntity<ErrorEnvelope> validationResponse(HttpServletRequest request, List<ValidationError> errors) {
@@ -105,8 +157,6 @@ public class GlobalExceptionHandler {
     }
 
     private ResponseEntity<ErrorEnvelope> internalServerError(HttpServletRequest request) {
-        ErrorResponse error = new ErrorResponse("INTERNAL_ERROR", "Đã xảy ra lỗi hệ thống", null,
-                OffsetDateTime.now(), request.getRequestURI(), List.of());
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorEnvelope(error));
+        return businessResponse(ErrorCode.SYS_005, request);
     }
 }

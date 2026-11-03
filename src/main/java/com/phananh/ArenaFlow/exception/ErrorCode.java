@@ -25,7 +25,13 @@ public enum ErrorCode {
     TEAM_012("TEAM_012", HttpStatus.CONFLICT, "Đội đang hoạt động"),
     TEAM_013("TEAM_013", HttpStatus.UNPROCESSABLE_ENTITY, "Đội không còn đội trưởng, không thể kích hoạt lại"),
     TEAM_014("TEAM_014", HttpStatus.CONFLICT, "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại"),
-    TEAM_015("TEAM_015", HttpStatus.UNPROCESSABLE_ENTITY, "Đội đang tạm ngưng hoạt động");
+    TEAM_015("TEAM_015", HttpStatus.UNPROCESSABLE_ENTITY, "Đội đang tạm ngưng hoạt động"),
+    // Lỗi tầng HTTP/hệ thống (không gắn miền nghiệp vụ). SYS_004/SYS_005: response giữ status gốc của exception.
+    SYS_001("SYS_001", HttpStatus.NOT_FOUND, "Không tìm thấy tài nguyên"),
+    SYS_002("SYS_002", HttpStatus.METHOD_NOT_ALLOWED, "Phương thức không được hỗ trợ"),
+    SYS_003("SYS_003", HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Kiểu nội dung không được hỗ trợ"),
+    SYS_004("SYS_004", HttpStatus.BAD_REQUEST, "Yêu cầu không hợp lệ"),
+    SYS_005("SYS_005", HttpStatus.INTERNAL_SERVER_ERROR, "Đã xảy ra lỗi hệ thống");
 
     private final String code;
     private final HttpStatus httpStatus;

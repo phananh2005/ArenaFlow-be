@@ -31,7 +31,7 @@ public class AdminTeamServiceImpl implements AdminTeamService {
     private final TeamMapper teamMapper;
     private final PageRequestFactory pageRequestFactory;
 
-    /** 2.19 (retry) — S team → TEAM_001 → đã INACTIVE TEAM_011 → U (@Version) → S detail. */
+    /** (retry) S team → TEAM_001 → đã INACTIVE TEAM_011 → U (@Version) → S detail. */
     @Override
     public TeamResponse markInactive(UUID teamId, MarkInactiveRequest request) {
         return optimisticLockRetrier.execute(() -> {
@@ -46,7 +46,7 @@ public class AdminTeamServiceImpl implements AdminTeamService {
         });
     }
 
-    /** 2.20 (retry) — S team → TEAM_001 → đang ACTIVE TEAM_012 → S captain ACTIVE → TEAM_013 → U → S detail. */
+    /** (retry) S team → TEAM_001 → đang ACTIVE TEAM_012 → S captain ACTIVE → TEAM_013 → U → S detail. */
     @Override
     public TeamResponse reactivate(UUID teamId) {
         return optimisticLockRetrier.execute(() -> {

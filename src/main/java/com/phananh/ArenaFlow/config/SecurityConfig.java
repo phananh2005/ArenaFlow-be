@@ -35,8 +35,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**").permitAll()
-                        // Health cho hạ tầng; tài liệu API cho dev (tắt ở prod: SPRINGDOC_API_DOCS_ENABLED=false,
-                        // SPRINGDOC_SWAGGER_UI_ENABLED=false). Actuator khác (metrics, prometheus…) vẫn cần token.
+                        // Health cho hạ tầng; tài liệu API cho dev (springdoc mặc định tắt, bật bằng
+                        // SPRINGDOC_ENABLED=true). Actuator khác (metrics, prometheus…) vẫn cần token.
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")

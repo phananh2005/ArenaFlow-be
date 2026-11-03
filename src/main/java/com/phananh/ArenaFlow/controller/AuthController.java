@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
 
-/** 2.1–2.4 — public (SecurityConfig permitAll `/api/v1/auth/**`). */
+/** Public (SecurityConfig permitAll `/api/v1/auth/**`). */
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor

@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-/** 2.19–2.21 — chỉ ADMIN (SecurityConfig `hasRole('ADMIN')` → 403 AUTH_004). */
+/** Chỉ ADMIN (SecurityConfig `hasRole('ADMIN')` → 403 AUTH_004). */
 @RestController
 @RequestMapping("/api/v1/admin/teams")
 @RequiredArgsConstructor

@@ -34,7 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.net.URI;
 import java.util.UUID;
 
-/** 2.8–2.12, 2.15–2.18. Quyền captain/thành viên kiểm trong service (thứ tự 404 → 403). */
+/** Quyền captain/thành viên kiểm trong service (thứ tự 404 → 403). */
 @RestController
 @RequestMapping("/api/v1/teams")
 @RequiredArgsConstructor
