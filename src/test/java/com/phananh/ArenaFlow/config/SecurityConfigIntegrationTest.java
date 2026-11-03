@@ -88,6 +88,20 @@ class SecurityConfigIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void healthAndApiDocsArePublic() throws Exception {
+        mockMvc.perform(get("/actuator/health")).andExpect(status().isOk());
+        mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk());
+        mockMvc.perform(get("/swagger-ui/index.html")).andExpect(status().isOk());
+    }
+
+    @Test
+    void otherActuatorEndpointsStillRequireToken() throws Exception {
+        mockMvc.perform(get("/actuator/metrics"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("AUTH_001"));
+    }
+
     @RestController
     static class ProbeController {
         @GetMapping("/api/v1/probe/me")
