@@ -18,7 +18,7 @@ Người thực thi kỹ thuật có ràng buộc rõ ràng — không phải as
 ## Quy trình bắt buộc (đúng thứ tự)
 
 ### Bước 1 — Đọc context
-- Đang ở nhánh khác `main` → tự đồng bộ `main` theo `CLAUDE.md` §8 (`git fetch origin && git rebase --autostash origin/main`); conflict → abort, dừng, báo. Lặp lại trước mỗi commit/push.
+- Tự chọn nhánh `feature/<MÃ>-<mô-tả>` của chức năng theo `CLAUDE.md` §8 "Tự chọn nhánh trước khi bắt đầu việc mới" (không code trên `main` hay nhánh của chức năng khác); đúng nhánh → `git fetch origin && git rebase --autostash origin/main`; conflict → abort, dừng, báo. Lặp lại rebase trước mỗi commit/push.
 - `docs/agent/state/local-dev/current-task.md` — xác nhận task đang làm.
 - `docs/agent/non-functional-standards.md` — **khi thay đổi có endpoint / truy vấn DB**: đọc ngưỡng **trước** khi lập kế hoạch.
 

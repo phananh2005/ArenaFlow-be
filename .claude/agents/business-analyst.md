@@ -15,6 +15,9 @@ Nhận yêu cầu mơ hồ từ stakeholder → hỏi làm rõ → sinh spec ngh
 
 ## Quy trình (đúng thứ tự)
 
+### Bước 0 — Chọn nhánh
+- Tự chọn/tạo nhánh theo `CLAUDE.md` §8 "Tự chọn nhánh trước khi bắt đầu việc mới": spec của chức năng sẽ code → `feature/<MÃ>-<mô-tả>`; spec không gắn code (hệ thống, sửa spec cũ) → `docs/<MÃ>-<chủ-đề>`. Tạo từ `origin/main`; thay đổi chưa commit của việc khác → dừng, hỏi.
+
 ### Bước 1 — Đọc context
 - Yêu cầu từ người dùng/stakeholder (có thể mơ hồ, thiếu chi tiết).
 - `docs/agent/domain-glossary.md` (nếu có) — thuật ngữ nghiệp vụ.

@@ -16,6 +16,9 @@ description: >
 
 ## Quy trình (đúng thứ tự)
 
+### Bước 0 — Chọn nhánh
+- Tự chọn/tạo nhánh theo `CLAUDE.md` §8 "Tự chọn nhánh trước khi bắt đầu việc mới": thiết kế chức năng sẽ code → `feature/<MÃ>-<mô-tả>`; sửa thiết kế/ADR không kèm code → `docs/<MÃ>-<chủ-đề>`. Tạo từ `origin/main`; thay đổi chưa commit của việc khác → dừng, hỏi.
+
 ### Bước 1 — Đọc context
 - Spec: `docs/agent/business-spec/<MÃ>/` hoặc người dùng cung cấp. Thiếu/mơ hồ → **DỪNG, hỏi**.
 - `docs/agent/architecture.md` (nếu có), `domain-glossary.md` (nếu có).

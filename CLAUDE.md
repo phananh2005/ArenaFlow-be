@@ -130,7 +130,10 @@
   | `docs/<MÃ>-<chủ-đề>` | Chỉ tài liệu không kèm code: `docs/agent/business-spec/`, `docs/agent/design/<MÃ>/`, `docs/agent/decisions/`, `docs/database/` | `docs/USER-001-update-api-spec` |
   | `chore/agent-framework-<chủ-đề>` | Claude-framework: `CLAUDE.md`, `.claude/`, `.agent-bootstrap/`, `.githooks/`, `docs/agent/hooks/`, `docs/agent/*.md`, các `_template/` | `chore/agent-framework-test-env-rebase` |
 
-  - Bắt đầu chức năng mà đang ở `main` → tự tạo nhánh `feature/<MÃ>-<mô-tả>` từ `origin/main`.
+  - **Tự chọn nhánh trước khi bắt đầu việc mới** (SRS, Design, code, framework) — **MUST**:
+    1. Xác định nhánh đích: SRS/Design của chức năng sẽ code → `feature/<MÃ>-<mô-tả>` (code sau làm tiếp trên chính nhánh này); tài liệu không gắn code → `docs/<MÃ>-<chủ-đề>`; framework → `chore/agent-framework-<chủ-đề>`. Chưa rõ `<MÃ>`/nhóm → hỏi user.
+    2. Working tree còn thay đổi chưa commit **của việc khác** → **dừng**, hỏi user (commit hay stash); **NEVER** mang sang nhánh mới.
+    3. `git fetch origin` → nhánh hiện tại **là** nhánh đích → `git rebase --autostash origin/main`; nhánh đích đã tồn tại → checkout rồi rebase; chưa có → `git switch -c <nhánh-đích> origin/main`.
   - Trước commit: thay đổi thuộc nhóm khác nhánh hiện tại (vd framework trên nhánh `feature/`) → **NEVER** commit lẫn; tách sang nhánh đúng nhóm (tạo từ `origin/main`), không rõ nhóm → hỏi user.
 - **Merge vào `main` chỉ qua merge request (GitHub Pull Request):** push nhánh → `gh pr create --base main` → `code-reviewer` → user tự merge trên GitHub **hoặc** yêu cầu agent merge bằng `gh pr merge <số> --squash` (chỉ khi user yêu cầu rõ PR nào; mặc định squash). **NEVER** `git merge` / `git rebase` / `git commit` / `git push` trực tiếp lên `main` local hay `origin/main`. Tạo PR vẫn chỉ khi user yêu cầu.
 - Debug → **MUST** reproduce trước khi nêu nguyên nhân.
