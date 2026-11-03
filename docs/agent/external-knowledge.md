@@ -1,13 +1,16 @@
 # Tra cứu Neon ngoài repo
 
 > Neon MCP đến từ plugin `neon-postgres@neon` (marketplace `neon`, khai báo trong `.claude/settings.json`), tên server `plugin:neon:neon`.
-> Server này **không** pin project ở URL — project duy nhất được phép thao tác là `misty-dew-90700890` (org `org-purple-hall-06771419`).
-> Lần đầu sử dụng cần hoàn tất OAuth trong Claude Code (`/mcp`). Không ghi API key hoặc database connection string vào repo.
+> URL server không pin project; phạm vi project do **OAuth** quyết định lúc Authenticate qua `/mcp`.
+> Khi Authenticate **MUST** chọn project `ArenaFlow-be` (`misty-dew-90700890`, org `org-purple-hall-06771419`); **NEVER** chọn "All projects you can access".
+> Kiểm tra phạm vi: `describe_project` không truyền `project_id` phải trả về `misty-dew-90700890`, và danh sách tool không có `list_projects`/`create_project`. Sai → dừng, đăng xuất và Authenticate lại.
+> Không ghi API key hoặc database connection string vào repo.
 
 ## Quy tắc
 
 - Dùng source local làm chuẩn cho code của repo hiện tại; dùng Neon MCP để xem trạng thái project/branch/schema khi cần.
-- Mọi lời gọi tool Neon MCP có tham số project **MUST** truyền `projectId=misty-dew-90700890`; **NEVER** đọc/ghi project khác. Không chắc project của một thao tác → dừng, hỏi người dùng.
+- Tool có tham số `project_id`: bỏ trống (kết nối đã scope tự điền) hoặc truyền `misty-dew-90700890`; **NEVER** project khác. Không chắc project của một thao tác → dừng, hỏi người dùng.
+- Server bật write mode: tool có `destructiveHint: true` **NEVER** gọi khi chưa hỏi người dùng.
 - Trước thay đổi database, migration, role, branch hoặc cấu hình bảo mật phải trình kế hoạch và chờ xác nhận.
 - Không thực hiện lệnh SQL ghi/xóa, migration, reset, restore, branch deletion hoặc credential rotation nếu chưa được người dùng yêu cầu rõ.
 - Không đưa connection string, password, token hoặc PII vào prompt, log, tài liệu hay output.
