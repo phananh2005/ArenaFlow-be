@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Trạng thái** | Proposed |
+| **Trạng thái** | Accepted (PO duyệt qua PR #8, 2026-11-04) |
 | **Ngày** | 2026-11-03 |
 | **Người quyết định** | Product Owner (duyệt mở endpoint + chọn mặc định tắt) · developer (đề xuất) |
 | **Liên quan** | ADR-0001 · `docs/agent/design/USER-001/Component_Class_Design.md` §9.1 · `docs/agent/security-backend.md` §1.3 |

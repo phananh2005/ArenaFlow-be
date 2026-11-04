@@ -52,7 +52,7 @@ Refresh (`POST /api/v1/auth/refresh`) đọc lại `role` và `deleted_at` từ 
 **Bối cảnh.** Code review PR #8 chỉ ra: `POST /api/v1/auth/oauth` tin mọi `oauthToken`, `POST /api/v1/auth/verify-otp` tin mọi OTP 6 số. Ai biết email (Google/Facebook) hoặc số điện thoại của một tài khoản — kể cả ADMIN — đều nhận được access token mang quyền của tài khoản đó. Mock luôn bật, không có cờ tắt theo môi trường, chưa có rate limit.
 
 **Quyết định bổ sung:**
-- Chấp nhận rủi ro mạo danh cho MVP (user chọn phương án ghi rủi ro, 2026-11-04 — **chờ PO xác nhận qua PR #8**) — giữ mock, không thêm cờ tắt.
+- Chấp nhận rủi ro mạo danh cho MVP (user chọn phương án ghi rủi ro, 2026-11-04 — **PO xác nhận qua PR #8, 2026-11-04**) — giữ mock, không thêm cờ tắt.
 - **NEVER** deploy build khi xác thực OAuth/OTP mock còn hoạt động trên môi trường truy cập từ bên ngoài (internet, mạng có người dùng thật hoặc dữ liệu thật). Trong phiên bản hiện tại, mock luôn bật nên chỉ được chạy local/dev nội bộ với dữ liệu giả.
 - **NEVER** tạo tài khoản ADMIN có email/số điện thoại thật trên môi trường còn mock.
 - Trước khi deploy ra môi trường ngoài, MUST chọn một trong hai lối ra; lối nào cũng cần **ADR mới** và cập nhật `API_Spec.md` của chức năng liên quan:
