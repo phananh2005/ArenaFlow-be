@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.ArenaFlow.entity.*`, ADR-0001/0002/0003/0004 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code, bugfix lỗi framework, ADR-0004, mã `SYS_*` — 32 mục, xem `CHANGELOG.md`) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code, bugfix lỗi framework, ADR-0004, mã `SYS_*` — 33 mục, xem `CHANGELOG.md`) |
 
 ## 1. Tổng quan kiến trúc
 
@@ -251,7 +251,9 @@ static String maskAvatar(String avatarUrl, Boolean deleted);   // qua DeletedUse
 ### 9.1. SecurityConfig
 - Stateless, `csrf` tắt, `oauth2ResourceServer(jwt)` với bean `JwtDecoder` HS256 (`NimbusJwtDecoder.withSecretKey`), validator = `JwtValidators.createDefault()` + `AccessTokenTypeValidator` (§9.2).
 - Chuyển claim → quyền: **bean `JwtAuthenticationConverter` của Spring** khai báo trong `SecurityConfig`, dùng `JwtGrantedAuthoritiesConverter` (claim `roles`, prefix `ROLE_`). Không viết class converter riêng.
-- **`BearerTokenResolver` bỏ qua header trên `/api/v1/auth/**`:** bộ lọc Bearer của Spring xác thực token ngay khi có header `Authorization: Bearer`, kể cả trên đường dẫn `permitAll` — token hết hạn/sai sẽ làm endpoint public trả 401 (client tự gắn access token hết hạn khi gọi `/auth/refresh` → không refresh được). `SecurityConfig` khai báo resolver: khớp `/api/v1/auth/**` → trả `null` (không xác thực), còn lại → `DefaultBearerTokenResolver`.
+- **`BearerTokenResolver` bỏ qua header trên `/api/v1/auth/**`** (hợp đồng ngoài: `API_Spec.md` §2): bộ lọc Bearer của Spring xác thực token ngay khi có header `Authorization: Bearer`, kể cả trên đường dẫn `permitAll` — token sai làm endpoint public trả 401 (client tự gắn access token hết hạn khi gọi `/auth/refresh` → không refresh được). Test: token sai định dạng (`AuthControllerTest.publicAuthEndpointIgnoresInvalidBearerHeader`); token hết hạn đi cùng cơ chế, chưa có test riêng. Resolver dùng chung hằng `PUBLIC_AUTH_PATH` với `permitAll`: khớp → trả `null` (không xác thực), còn lại → `DefaultBearerTokenResolver`.
+  - Chỉ áp cho `/api/v1/auth/**`. Health và API docs giữ hành vi mặc định có chủ đích (Bearer sai → 401 theo cơ chế mặc định; chưa có test); đưa vào matcher khi có client gọi các đường dẫn này kèm token.
+  - **NEVER** đặt endpoint cần xác thực dưới `/api/v1/auth/**`: SecurityContext ở đó luôn anonymous, `CurrentUserArgumentResolver` ném `AUTH_001` dù token hợp lệ. Cần endpoint như vậy (vd logout) → thu hẹp `PUBLIC_AUTH_PATH` (dùng cho cả `permitAll` và resolver) thành danh sách endpoint public cụ thể, để endpoint mới rơi vào `authenticated()`.
 - Phân quyền theo đường dẫn:
 
 | Đường dẫn | Quy tắc |

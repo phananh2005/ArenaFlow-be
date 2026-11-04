@@ -2,7 +2,9 @@
 
 ## [v1.1] — 2026-11-04
 
-**Type:** MINOR (mã 500 đổi `INTERNAL_ERROR` → `SYS_005` không tính là "đổi mã lỗi" vì v1.0 chưa công bố mã này trong `API_Spec.md` — chỉ hard-code trong handler) · **Tóm tắt:** Đồng bộ thiết kế với code sau implement (19 điểm lệch + bổ sung khi review), bugfix lỗi framework (4xx bị trả 500, PII trong log) kèm mã lỗi `SYS_*`, và API docs mặc định tắt (ADR-0004), không đổi endpoint, request/response thành công, mã lỗi miền hay DB schema.
+**Type:** MINOR (mã 500 đổi `INTERNAL_ERROR` → `SYS_005` không tính là "đổi mã lỗi" vì v1.0 chưa công bố mã này trong `API_Spec.md` — chỉ hard-code trong handler) · **Tóm tắt:** Đồng bộ thiết kế với code sau implement (19 điểm lệch + bổ sung khi review), bugfix lỗi framework (4xx bị trả 500, PII trong log) kèm mã lỗi `SYS_*`, API docs mặc định tắt (ADR-0004), bugfix header Bearer chặn endpoint auth (#31) và ghi rủi ro mạo danh của mock (#32); không đổi endpoint, request/response thành công, mã lỗi miền hay DB schema.
+
+> Entry v1.1 còn mở đến khi PR #8 merge: mục phát sinh khi review trong PR này gộp vào đây. Sau merge, mọi thay đổi → entry mới (design-standards §10).
 
 ### Thay đổi
 
@@ -38,12 +40,13 @@
 | 28 | CCD §10 · PF §3 (2.6) | Thêm | — → ghi lệch có chủ đích: 2.6 đọc lại `ProfileView` (NFS §3) | architect-reviewer lượt 2 MAJOR; user chấp nhận 2026-11-04 |
 | 29 | CCD §9.1 · ADR-0004 | Thêm | `/actuator/health/**` public (chưa nêu hành vi) → `/actuator/health` chỉ trả `UP`/`DOWN`, đường dẫn thành phần trả 404 (mặc định Spring Boot); `/**` dành cho probe liveness/readiness | architect-reviewer lượt 2 MINOR: chưa test; kiểm bằng `SecurityConfigIntegrationTest` |
 | 30 | CCD §10 | Sửa | Nhánh `TEAM_003` trong `GlobalExceptionHandler` (chưa nêu vai trò) → ghi rõ là lớp phòng hờ, hiện không luồng nào chạy tới | architect-reviewer lượt 4 MINOR; user chọn giữ 2026-11-04 |
-| 31 | CCD §9.1 · `SecurityConfig` | Sửa (bugfix) | `/api/v1/auth/**` permitAll nhưng header Bearer hết hạn/sai vẫn bị xác thực → 401 → `BearerTokenResolver` bỏ qua header trên `/api/v1/auth/**` | code-reviewer PR #8 M1; reproduce `AuthControllerTest.publicAuthEndpointIgnoresInvalidBearerHeader` (refresh kèm `Bearer garbage` → 401) |
+| 31 | CCD §9.1 · API_Spec §2 · `SecurityConfig` | Sửa (bugfix) | `/api/v1/auth/**` permitAll nhưng header Bearer hết hạn/sai vẫn bị xác thực → 401 → `BearerTokenResolver` bỏ qua header trên `/api/v1/auth/**` | code-reviewer PR #8 M1; reproduce `AuthControllerTest.publicAuthEndpointIgnoresInvalidBearerHeader` (refresh kèm `Bearer garbage` → 401) |
 | 32 | ADR-0001 (Sửa đổi) | Thêm | Mock OAuth/OTP: rủi ro mạo danh (kể cả ADMIN) chưa ghi → ghi rõ + **NEVER** deploy build còn mock ra môi trường truy cập từ ngoài | code-reviewer PR #8 M3; user chọn ghi rủi ro (phương án b) 2026-11-04 |
+| 33 | API_Spec §1, §2 · CCD §9.1 · ADR-0001 (Sửa đổi) | Sửa | Làm rõ sau #31/#32: hợp đồng bỏ qua Bearer ghi ở API_Spec; CCD thêm phạm vi resolver (chỉ `/auth/**`), NEVER đặt endpoint cần xác thực dưới `/auth/**`, mức phủ test; API_Spec trỏ lệnh cấm deploy; ADR-0001: hai lối ra trước deploy ngoài đều cần ADR mới, trạng thái "chờ PO xác nhận" | architect-reviewer lượt 5 (phần sửa PR #8): M1, m1, m2, m4–m8; user chọn 2026-11-04 |
 
 ### Ảnh hưởng
-- API contract: thêm bảng "Lỗi chung" `SYS_*` (`API_Spec.md` §4) — client nhận 404 `SYS_001` / 405 `SYS_002` / 415 `SYS_003` thay cho 500 khi gọi sai URL/method/Content-Type; mã 500 đổi `INTERNAL_ERROR` → `SYS_005`. Endpoint, request/response thành công, mã lỗi miền: **không đổi**.
+- API contract: thêm bảng "Lỗi chung" `SYS_*` (`API_Spec.md` §4) — client nhận 404 `SYS_001` / 405 `SYS_002` / 415 `SYS_003` thay cho 500 khi gọi sai URL/method/Content-Type; mã 500 đổi `INTERNAL_ERROR` → `SYS_005`. #31: endpoint Public `/api/v1/auth/**` không còn trả 401 khi kèm Bearer sai/hết hạn (`API_Spec.md` §2). Endpoint, request/response thành công, mã lỗi miền: **không đổi**.
 - DB schema, nghiệp vụ (SRS): **không đổi**.
 - Cấu hình: `application.properties` thêm `logServerErrorDetail=false` cho datasource (#27) và `SPRINGDOC_ENABLED`; `.env.example` có dòng `# SPRINGDOC_ENABLED=true` (comment, chỉ bỏ comment ở dev) (#25) — môi trường deploy **không** đặt biến này → Swagger/OpenAPI trả 404.
 - Code: `SecurityConfig` (#31) + `AuthControllerTest`; `GlobalExceptionHandler` + `ErrorCode` (#24, #26, #27) + `FrameworkErrorStatusTest`, `GlobalExceptionHandlerTest`, `ErrorCodeTest`, `SqlErrorLoggingPiiTest`; `SecurityConfigIntegrationTest` (API docs tắt mặc định; health `UP` không `components`, `/health/db` 404 — #29) + `ApiDocsEnabledIntegrationTest` (#25); các mục còn lại là tài liệu theo code đã test PASS. Full suite **157 tests, 0 fail** (2026-11-04).
-- Theo dõi: domain `SYS` (`api-convention.md` §6) + endpoint public (`security-backend.md` §1.3/§2.1) — PR #9, merge sau PR này. Race condition trạng thái đội (code-review M2) — task riêng sau merge.
+- Theo dõi: domain `SYS` (`api-convention.md` §6) + endpoint public health/API docs (`security-backend.md` §1.3/§2.1) + quy tắc "endpoint public bỏ qua Bearer" (`security-backend.md` §2.1, từ #31) — PR #9, merge sau PR này. Race condition trạng thái đội (code-review M2) — task riêng sau merge.

@@ -8,11 +8,13 @@
 | Quy ước áp dụng | `docs/agent/api-convention.md`, `docs/agent/security-backend.md` |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + delta V2/V3 (xem §5) · `docs/agent/non-functional-standards.md` |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (UC-U01..U03, UC-T01..T05, BR-U01..U06, BR-T01..T06) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (TEAM_015 thêm reject; bảng "Lỗi chung" `SYS_*` §4 — xem `CHANGELOG.md`) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (TEAM_015 thêm reject; bảng "Lỗi chung" `SYS_*` §4; endpoint Public bỏ qua header Bearer §2 — xem `CHANGELOG.md`) |
 
 ## 1. Tổng quan
 
 Foundation module: xác thực mock (OAuth Google/Facebook, Phone OTP) + JWT, hồ sơ cá nhân, đội, lời mời, chuyển quyền đội trưởng, admin đánh dấu/kích hoạt lại đội.
+
+**Ràng buộc vận hành của mock:** rủi ro mạo danh và lệnh cấm deploy ra môi trường truy cập từ ngoài khi còn mock — xem ADR-0001 §"Sửa đổi 2026-11-04".
 
 **Ngoài phạm vi:** notification (UC-U01/T02/T03/T04/T05 bước gửi thông báo) · khôi phục tài khoản đã xoá · liên kết nhiều provider vào 1 tài khoản · frontend (ngoài phạm vi repo này).
 
@@ -52,6 +54,8 @@ Foundation module: xác thực mock (OAuth Google/Facebook, Phone OTP) + JWT, h�
 | 2.21 | `GET /api/v1/admin/teams` | Admin | 200 |
 
 Mọi endpoint không Public: thiếu/sai/hết hạn access token → `401 AUTH_001`.
+
+Endpoint Public `/api/v1/auth/**` (2.1–2.4) **bỏ qua header `Authorization`**: gửi kèm access token sai/hết hạn không gây 401, request được xử lý như không có header (client có thể giữ interceptor gắn token cho mọi request, kể cả `/auth/refresh`).
 
 ---
 
