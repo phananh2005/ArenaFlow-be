@@ -117,7 +117,7 @@
   2. Có thay đổi use case / business rule / actor / workflow? → cập nhật SRS
   3. Đã cập nhật design → gọi `architect-reviewer` review phần sửa
 - Sau mỗi bước implement → **MUST** chạy `progress-tracker`.
-- Trước khi commit → **MUST** chạy `code-review`.
+- Trước khi commit → **MUST** chạy `code-review`. **Ngoại lệ:** commit/PR **chỉ** đổi file tài liệu `*.md` → không chạy `code-review` / `code-reviewer`. Có bất kỳ file nào khác (`src/**`, `pom.xml`, migration SQL, `application*.properties`, `.claude/settings.json`, hook `.cjs`, `.githooks/*`…) → vẫn MUST review. Git pre-commit vẫn quét secret.
 - **Đồng bộ `main`:** trên **mọi nhánh khác `main`**, agent **MUST tự** chạy `git fetch origin && git rebase --autostash origin/main` tại 3 thời điểm: (1) trước khi bắt đầu triển khai một chức năng, (2) trước mỗi commit, (3) trước mỗi push.
   - Conflict khi rebase → `git rebase --abort`, **dừng**, báo danh sách file conflict; **NEVER** tự resolve. Conflict khi áp lại autostash → dừng, báo (stash vẫn còn trong `git stash list`).
   - `fetch` lỗi (mạng/quyền) → báo, **không** khẳng định đã đồng bộ.
@@ -136,8 +136,9 @@
     2. Working tree còn thay đổi chưa commit **của việc khác** → **dừng**, hỏi user (commit hay stash); **NEVER** mang sang nhánh mới.
     3. `git fetch origin` → nhánh hiện tại **là** nhánh đích → `git rebase --autostash origin/main`; nhánh đích đã tồn tại → checkout rồi rebase; chưa có → `git switch -c <nhánh-đích> origin/main`.
   - Trước commit: thay đổi thuộc nhóm khác nhánh hiện tại (vd framework trên nhánh `feature/`) → **NEVER** commit lẫn; tách sang nhánh đúng nhóm (tạo từ `origin/main`), không rõ nhóm → hỏi user.
-- **Merge vào `main` chỉ qua merge request (GitHub Pull Request):** push nhánh → `gh pr create --base main` → `code-reviewer` → user tự merge trên GitHub **hoặc** yêu cầu agent merge bằng `gh pr merge <số> --squash` (chỉ khi user yêu cầu rõ PR nào; mặc định squash). **NEVER** `git merge` / `git rebase` / `git commit` / `git push` trực tiếp lên `main` local hay `origin/main`. Tạo PR vẫn chỉ khi user yêu cầu.
+- **Merge vào `main` chỉ qua merge request (GitHub Pull Request):** push nhánh → `gh pr create --base main` → `code-reviewer` (bỏ qua khi PR chỉ đổi `*.md`) → user tự merge trên GitHub **hoặc** yêu cầu agent merge bằng `gh pr merge <số> --squash` (chỉ khi user yêu cầu rõ PR nào; mặc định squash, **không** kèm `--delete-branch`). **NEVER** `git merge` / `git rebase` / `git commit` / `git push` trực tiếp lên `main` local hay `origin/main`. Tạo PR vẫn chỉ khi user yêu cầu.
 - Debug → **MUST** reproduce trước khi nêu nguyên nhân.
+- **Subagent chạy trên repo thật** (mặc định, không `isolation: "worktree"`): agent đọc/review (`architect-reviewer`, `code-reviewer`, `Explore`) phải thấy diff chưa commit; agent viết code chạy tuần tự với phiên chính. Chỉ dùng worktree khi user yêu cầu nhiều agent ghi code song song trên phần độc lập — worktree tạo từ commit (không có thay đổi chưa commit) và không có `.env.dev` (test cần DB không chạy được nếu chưa copy). Xong việc → gộp kết quả về rồi `git worktree remove` (không xoá nhánh).
 
 ### NEVER
 - **NEVER** code chức năng mới khi chưa có thiết kế được duyệt.
@@ -145,6 +146,7 @@
 - **NEVER** tạo thành phần dùng chung mới khi chưa có Reuse Report.
 - **NEVER** suy đoán hợp đồng service/repo khác khi chưa tra nguồn — không tra được → `[cần xác nhận]`.
 - **NEVER** tự commit / push / tạo MR khi chưa được yêu cầu.
+- **NEVER** xoá nhánh local hay remote (`git branch -d/-D`, `git push --delete`, `gh pr merge --delete-branch`, xoá worktree kèm nhánh) khi user chưa yêu cầu rõ nhánh nào — kể cả nhánh đã merge.
 - **NEVER** tự sửa tài liệu thiết kế khi đang review (`architect-reviewer`); chỉ ghi findings.
 - **NEVER** `@` mọi tài liệu — chỉ `@` file cần ở hầu hết mọi phiên.
 - **NEVER** sửa file do generator quản lý (`.mvn/`, `mvnw`, `mvnw.cmd`, `HELP.md`).
