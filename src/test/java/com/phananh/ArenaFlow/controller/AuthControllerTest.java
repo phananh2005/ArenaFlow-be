@@ -95,4 +95,17 @@ class AuthControllerTest extends ApiIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error.code").value("AUTH_002"));
     }
+
+    /** Endpoint auth là public: client gửi kèm access token hết hạn/sai vẫn phải refresh được. */
+    @Test
+    void publicAuthEndpointIgnoresInvalidBearerHeader() throws Exception {
+        var user = saveUser("Expired Bearer");
+        flush();
+        String refresh = jwtTokenService.issueRefreshToken(user.getId());
+
+        mockMvc.perform(json(post("/api/v1/auth/refresh"), "{\"refreshToken\":\"" + refresh + "\"}")
+                        .header("Authorization", "Bearer garbage"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userId").value(user.getId().toString()));
+    }
 }
