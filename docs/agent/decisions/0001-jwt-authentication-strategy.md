@@ -6,6 +6,7 @@
 | **Ngày** | 2026-11-02 |
 | **Người quyết định** | Product Owner (chốt tham số) · solution-architect (đề xuất) |
 | **Liên quan** | ADR-0002 · `docs/agent/design/USER-001/` · `docs/agent/security-backend.md` |
+| **Sửa đổi** | 2026-11-04 — ghi rõ rủi ro mạo danh do OAuth/OTP mock; cấm deploy ra môi trường truy cập từ ngoài khi còn mock |
 
 ## Bối cảnh (Context)
 - REST API phục vụ web + mobile, cần xác thực stateless. Đăng nhập Google/Facebook/Phone OTP đều là **mock** trong MVP.
@@ -45,3 +46,17 @@ Refresh (`POST /api/v1/auth/refresh`) đọc lại `role` và `deleted_at` từ 
 **Cần theo dõi**
 - Cần đăng xuất/thu hồi tức thời, hoặc có service khác cần xác minh token → xem lại (blacklist, rotate refresh, RS256).
 - Thay OAuth/OTP mock bằng provider thật → ADR mới cho luồng xác minh provider.
+
+## Sửa đổi 2026-11-04 — Rủi ro mạo danh của OAuth/OTP mock
+
+**Bối cảnh.** Code review PR #8 chỉ ra: `POST /api/v1/auth/oauth` tin mọi `oauthToken`, `POST /api/v1/auth/verify-otp` tin mọi OTP 6 số. Ai biết email (Google/Facebook) hoặc số điện thoại của một tài khoản — kể cả ADMIN — đều nhận được access token mang quyền của tài khoản đó. Mock luôn bật, không có cờ tắt theo môi trường, chưa có rate limit.
+
+**Quyết định bổ sung:**
+- Chấp nhận rủi ro mạo danh cho MVP (user chọn phương án ghi rủi ro, 2026-11-04 — PO xác nhận khi duyệt PR) — giữ mock, không thêm cờ tắt.
+- **NEVER** deploy build khi xác thực OAuth/OTP mock còn hoạt động trên môi trường truy cập từ bên ngoài (internet, mạng có người dùng thật hoặc dữ liệu thật). Trong phiên bản hiện tại, mock luôn bật nên chỉ được chạy local/dev nội bộ với dữ liệu giả.
+- **NEVER** tạo tài khoản ADMIN có email/số điện thoại thật trên môi trường còn mock.
+- Trước khi deploy ra môi trường ngoài, MUST thay mock bằng xác minh provider thật (ADR mới, xem "Cần theo dõi") **hoặc** triển khai cơ chế tắt mock mặc định tắt và xác minh rằng mock không thể được kích hoạt ngoài ý muốn. Chỉ đặt biến môi trường không được xem là đã tắt mock nếu ứng dụng chưa hỗ trợ và kiểm tra cờ đó.
+
+**Phương án loại:** Cờ `AUTH_MOCK_ENABLED` mặc định tắt + mã lỗi mới — đổi API contract khi chưa cần (chưa có môi trường deploy ngoài).
+
+**Hệ quả:** Bảo mật xác thực của build hiện tại chỉ dựa vào việc không deploy ra ngoài — đây là ràng buộc vận hành, không phải kiểm soát kỹ thuật. Mục "Cần theo dõi" về thay mock bằng provider thật trở thành **điều kiện bắt buộc** trước deploy ngoài.
