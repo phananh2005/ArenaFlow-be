@@ -48,4 +48,4 @@ Ghi vào mục `## Tái sử dụng` của `docs/agent/state/local-dev/current-t
 **NEVER** để Reuse Report chỉ trong chat — `code-reviewer` (chiều 5) đối chiếu bảng này.
 
 ## Liên kết
-- Gọi từ `developer` (bước quét tái sử dụng) · đối chiếu ở `code-reviewer` / `code-review`.
+- Gọi từ `developer` (bước quét tái sử dụng) · đối chiếu ở `code-reviewer`.

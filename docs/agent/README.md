@@ -72,7 +72,7 @@ ArenaFlow-be/
 4. **Sửa nhỏ:** thẳng `developer`.
 5. Khi implement, đọc skill `task-state-init`, procedure `developer`, rồi cập nhật `progress-tracker`.
 6. Kết thúc phiên: `/af-handoff`; tiếp tục phiên: `/af-resume`.
-7. Trước commit: chạy skill `code-review` (bỏ qua khi commit chỉ đổi `*.md` — `CLAUDE.md` §8); Git pre-commit quét secret trong staged content.
+7. Trước commit: diff có code (`*/src/**`, POM, hook) → agent `code-reviewer`; không có code → không review (`CLAUDE.md` §8). Git pre-commit quét secret trong staged content.
 8. Rà ADR khi cần bằng skill `decisions-relevance`.
 
 ## Hooks
