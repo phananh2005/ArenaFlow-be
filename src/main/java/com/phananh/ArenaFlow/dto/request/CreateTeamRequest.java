@@ -9,7 +9,7 @@ import java.util.List;
 
 public record CreateTeamRequest(
         @NotBlank @Size(max = 100) String teamName,
-        @URL @Size(max = 500) String avatarUrl,
+        @URL(regexp = "^https?://.*") @Size(max = 500) String avatarUrl,
         @Size(max = 1000) String description,
         @ValidSkillLevels List<String> skillLevels) {
 }

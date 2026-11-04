@@ -13,7 +13,7 @@ import java.util.UUID;
 /** PATCH /profile: mọi field tuỳ chọn; null = giữ nguyên. */
 public record ProfileUpdateRequest(
         @Size(max = 100) @Pattern(regexp = ".*\\S.*", message = "Không được để trống") String displayName,
-        @URL @Size(max = 500) String avatarUrl,
+        @URL(regexp = "^https?://.*") @Size(max = 500) String avatarUrl,
         @Size(max = 1000) String bio,
         @OneOf({"Thủ môn", "Hậu vệ", "Tiền vệ", "Tiền đạo"}) String preferredPosition,
         @Past @MinAge(13) LocalDate dateOfBirth,

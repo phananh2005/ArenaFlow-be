@@ -93,6 +93,24 @@ class RequestDtoValidationTest {
     }
 
     @Test
+    void avatarUrlAcceptsOnlyHttpAndHttps() {
+        for (String allowed : List.of("http://cdn.example.com/a.png", "https://cdn.example.com/a.png")) {
+            assertThat(invalidFields(new ProfileUpdateRequest(null, allowed, null, null, null, null, null)))
+                    .as(allowed).isEmpty();
+            assertThat(invalidFields(new CreateTeamRequest("Team", allowed, null, null))).as(allowed).isEmpty();
+            assertThat(invalidFields(new UpdateTeamRequest(null, allowed, null, null))).as(allowed).isEmpty();
+        }
+        for (String rejected : List.of("file:///etc/passwd", "ftp://cdn.example.com/a.png", "javascript:alert(1)")) {
+            assertThat(invalidFields(new ProfileUpdateRequest(null, rejected, null, null, null, null, null)))
+                    .as(rejected).containsExactly("avatarUrl");
+            assertThat(invalidFields(new CreateTeamRequest("Team", rejected, null, null)))
+                    .as(rejected).containsExactly("avatarUrl");
+            assertThat(invalidFields(new UpdateTeamRequest(null, rejected, null, null)))
+                    .as(rejected).containsExactly("avatarUrl");
+        }
+    }
+
+    @Test
     void memberAndCaptainAndAdminRequests() {
         assertThat(invalidFields(new InviteMemberRequest(UUID.randomUUID()))).isEmpty();
         assertThat(invalidFields(new InviteMemberRequest(null))).containsExactly("userId");
