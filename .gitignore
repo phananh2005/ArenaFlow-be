@@ -38,6 +38,7 @@ docs/agent/state/*/
 
 ### Claude Code logs ###
 .claude/logs/
+.claude/worktrees/
 .neon
 node_modules/
 .env.dev

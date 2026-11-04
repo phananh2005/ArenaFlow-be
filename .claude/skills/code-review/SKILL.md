@@ -16,6 +16,9 @@ description: >
 
 **NEVER** commit khi chưa chạy đủ 5 chiều.
 
+## Không chạy
+- Commit **chỉ** đổi file tài liệu `*.md` (không có file nào khác trong diff) — `CLAUDE.md` §8. Có file code/cấu hình/hook/migration → vẫn chạy.
+
 ## Quy trình
 1. **Phạm vi:** diff nào? Người dùng đã chỉ định → bắt đầu luôn.
 2. **5 chiều:**

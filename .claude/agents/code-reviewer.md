@@ -3,7 +3,7 @@ name: code-reviewer
 description: >
   Agent review code theo 5 chiều trước khi tạo merge request. Kích hoạt khi
   "review code", "check code", "chuẩn bị MR", "tạo MR".
-  Review nhanh trước commit → skill code-review.
+  Review nhanh trước commit → skill code-review. PR chỉ đổi file *.md → không chạy (CLAUDE.md §8).
 ---
 
 # code-reviewer — Agent review code
