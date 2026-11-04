@@ -37,8 +37,8 @@ public class AuthController {
     }
 
     @PostMapping("/send-otp")
-    public ApiResponse<OtpSentResponse> sendOtp(@Valid @RequestBody SendOtpRequest request) {
-        return ApiResponse.of(authService.sendOtp(request));
+    public ResponseEntity<ApiResponse<OtpSentResponse>> sendOtp(@Valid @RequestBody SendOtpRequest request) {
+        return ResponseEntity.ok(ApiResponse.of(authService.sendOtp(request)));
     }
 
     @PostMapping("/verify-otp")
@@ -47,8 +47,8 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ApiResponse<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
-        return ApiResponse.of(authService.refresh(request));
+    public ResponseEntity<ApiResponse<AuthResponse>> refresh(@Valid @RequestBody RefreshTokenRequest request) {
+        return ResponseEntity.ok(ApiResponse.of(authService.refresh(request)));
     }
 
     /** Tạo mới → 201 + Location hồ sơ; đã có → 200. */

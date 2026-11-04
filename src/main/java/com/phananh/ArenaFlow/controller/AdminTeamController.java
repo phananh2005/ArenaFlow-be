@@ -11,6 +11,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -32,21 +33,21 @@ public class AdminTeamController {
     private final AdminTeamService adminTeamService;
 
     @PatchMapping("/{teamId}/mark-inactive")
-    public ApiResponse<TeamResponse> markInactive(@PathVariable UUID teamId,
+    public ResponseEntity<ApiResponse<TeamResponse>> markInactive(@PathVariable UUID teamId,
                                                   @Valid @RequestBody MarkInactiveRequest request) {
-        return ApiResponse.of(adminTeamService.markInactive(teamId, request));
+        return ResponseEntity.ok(ApiResponse.of(adminTeamService.markInactive(teamId, request)));
     }
 
     @PatchMapping("/{teamId}/reactivate")
-    public ApiResponse<TeamResponse> reactivate(@PathVariable UUID teamId) {
-        return ApiResponse.of(adminTeamService.reactivate(teamId));
+    public ResponseEntity<ApiResponse<TeamResponse>> reactivate(@PathVariable UUID teamId) {
+        return ResponseEntity.ok(ApiResponse.of(adminTeamService.reactivate(teamId)));
     }
 
     @GetMapping
-    public PageResponse<AdminTeamSummaryResponse> listTeams(
+    public ResponseEntity<PageResponse<AdminTeamSummaryResponse>> listTeams(
             @RequestParam(defaultValue = "ALL") TeamStatusFilter status,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize) {
-        return adminTeamService.listTeams(status, page, pageSize);
+        return ResponseEntity.ok(adminTeamService.listTeams(status, page, pageSize));
     }
 }

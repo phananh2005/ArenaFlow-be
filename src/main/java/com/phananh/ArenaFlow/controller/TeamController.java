@@ -52,22 +52,22 @@ public class TeamController {
     }
 
     @GetMapping("/{teamId}")
-    public ApiResponse<TeamResponse> getTeam(@PathVariable UUID teamId) {
-        return ApiResponse.of(teamService.getTeam(teamId));
+    public ResponseEntity<ApiResponse<TeamResponse>> getTeam(@PathVariable UUID teamId) {
+        return ResponseEntity.ok(ApiResponse.of(teamService.getTeam(teamId)));
     }
 
     @GetMapping
-    public PageResponse<TeamSummaryResponse> listTeams(
+    public ResponseEntity<PageResponse<TeamSummaryResponse>> listTeams(
             @RequestParam(defaultValue = "ACTIVE") TeamStatusFilter status,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize) {
-        return teamService.listTeams(status, page, pageSize);
+        return ResponseEntity.ok(teamService.listTeams(status, page, pageSize));
     }
 
     @PatchMapping("/{teamId}")
-    public ApiResponse<TeamResponse> updateTeam(@PathVariable UUID teamId, @CurrentUser UUID currentUserId,
+    public ResponseEntity<ApiResponse<TeamResponse>> updateTeam(@PathVariable UUID teamId, @CurrentUser UUID currentUserId,
                                                 @Valid @RequestBody UpdateTeamRequest request) {
-        return ApiResponse.of(teamService.updateTeam(teamId, currentUserId, request));
+        return ResponseEntity.ok(ApiResponse.of(teamService.updateTeam(teamId, currentUserId, request)));
     }
 
     @PostMapping("/{teamId}/invitations")
@@ -80,26 +80,26 @@ public class TeamController {
     }
 
     @PostMapping("/{teamId}/captain/transfer")
-    public ApiResponse<CaptainTransferResponse> transferCaptain(@PathVariable UUID teamId,
+    public ResponseEntity<ApiResponse<CaptainTransferResponse>> transferCaptain(@PathVariable UUID teamId,
                                                                 @CurrentUser UUID currentUserId,
                                                                 @Valid @RequestBody TransferCaptainRequest request) {
-        return ApiResponse.of(teamService.transferCaptain(teamId, currentUserId, request));
+        return ResponseEntity.ok(ApiResponse.of(teamService.transferCaptain(teamId, currentUserId, request)));
     }
 
     @GetMapping("/{teamId}/captain/history")
-    public PageResponse<CaptainHistoryResponse> listCaptainHistory(
+    public ResponseEntity<PageResponse<CaptainHistoryResponse>> listCaptainHistory(
             @PathVariable UUID teamId,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize) {
-        return teamService.listCaptainHistory(teamId, page, pageSize);
+        return ResponseEntity.ok(teamService.listCaptainHistory(teamId, page, pageSize));
     }
 
     @GetMapping("/{teamId}/members")
-    public PageResponse<MemberResponse> listMembers(
+    public ResponseEntity<PageResponse<MemberResponse>> listMembers(
             @PathVariable UUID teamId,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize) {
-        return membershipService.listMembers(teamId, page, pageSize);
+        return ResponseEntity.ok(membershipService.listMembers(teamId, page, pageSize));
     }
 
     @PostMapping("/{teamId}/members/leave")

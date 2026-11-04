@@ -28,14 +28,14 @@ public class ProfileController {
     private final ProfileService profileService;
 
     @GetMapping
-    public ApiResponse<ProfileResponse> getProfile(@CurrentUser UUID currentUserId) {
-        return ApiResponse.of(profileService.getProfile(currentUserId));
+    public ResponseEntity<ApiResponse<ProfileResponse>> getProfile(@CurrentUser UUID currentUserId) {
+        return ResponseEntity.ok(ApiResponse.of(profileService.getProfile(currentUserId)));
     }
 
     @PatchMapping
-    public ApiResponse<ProfileResponse> updateProfile(@CurrentUser UUID currentUserId,
+    public ResponseEntity<ApiResponse<ProfileResponse>> updateProfile(@CurrentUser UUID currentUserId,
                                                       @Valid @RequestBody ProfileUpdateRequest request) {
-        return ApiResponse.of(profileService.updateProfile(currentUserId, request));
+        return ResponseEntity.ok(ApiResponse.of(profileService.updateProfile(currentUserId, request)));
     }
 
     @DeleteMapping

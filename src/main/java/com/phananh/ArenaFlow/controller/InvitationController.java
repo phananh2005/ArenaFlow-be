@@ -6,6 +6,7 @@ import com.phananh.ArenaFlow.dto.response.MemberResponse;
 import com.phananh.ArenaFlow.security.CurrentUser;
 import com.phananh.ArenaFlow.service.TeamMembershipService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,12 +25,12 @@ public class InvitationController {
     private final TeamMembershipService membershipService;
 
     @PostMapping("/{invitationId}/accept")
-    public ApiResponse<MemberResponse> accept(@PathVariable UUID invitationId, @CurrentUser UUID currentUserId) {
-        return ApiResponse.of(membershipService.acceptInvitation(invitationId, currentUserId));
+    public ResponseEntity<ApiResponse<MemberResponse>> accept(@PathVariable UUID invitationId, @CurrentUser UUID currentUserId) {
+        return ResponseEntity.ok(ApiResponse.of(membershipService.acceptInvitation(invitationId, currentUserId)));
     }
 
     @PostMapping("/{invitationId}/reject")
-    public ApiResponse<InvitationResponse> reject(@PathVariable UUID invitationId, @CurrentUser UUID currentUserId) {
-        return ApiResponse.of(membershipService.rejectInvitation(invitationId, currentUserId));
+    public ResponseEntity<ApiResponse<InvitationResponse>> reject(@PathVariable UUID invitationId, @CurrentUser UUID currentUserId) {
+        return ResponseEntity.ok(ApiResponse.of(membershipService.rejectInvitation(invitationId, currentUserId)));
     }
 }
