@@ -87,13 +87,13 @@ class NfsQueryCountTest {
         assertThat(measure(() -> profileService.updateProfile(captain.getId(), new ProfileUpdateRequest(
                 "Renamed", null, null, null, null, null, BEN_NGHE_WARD)))).as("2.6").isLessThanOrEqualTo(W);
         assertThat(measure(() -> teamService.updateTeam(teamId, captain.getId(),
-                new UpdateTeamRequest("NFS Renamed", null, null, List.of("Chill"))))).as("2.11").isLessThanOrEqualTo(W);
+                new UpdateTeamRequest("NFS Renamed", null, null, List.of("Chill"))))).as("2.11").isEqualTo(4);
 
         User invitee = saveUser("NFS Invitee");
         UUID invitation = membershipService.inviteMember(teamId, captain.getId(),
                 new InviteMemberRequest(invitee.getId())).invitationId();
         assertThat(measure(() -> membershipService.rejectInvitation(invitation, invitee.getId()))).as("2.14")
-                .isLessThanOrEqualTo(W);
+                .isEqualTo(3);
 
         assertThat(measure(() -> adminTeamService.markInactive(teamId, new MarkInactiveRequest("NFS"))))
                 .as("2.19").isLessThanOrEqualTo(W);
