@@ -34,7 +34,7 @@ public class JwtTokenService {
     }
 
     public JwtTokenService(byte[] secret, Duration accessTokenTtl, Duration refreshTokenTtl) {
-        if (secret.length < 32) {
+        if (secret.length < JwtProperties.MIN_SECRET_BYTES) {
             throw new IllegalArgumentException("JWT secret must contain at least 256 bits");
         }
         this.secret = secret.clone();

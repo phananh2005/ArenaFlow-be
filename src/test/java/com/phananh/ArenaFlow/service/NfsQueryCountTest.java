@@ -96,8 +96,8 @@ class NfsQueryCountTest {
                 .isEqualTo(3);
 
         assertThat(measure(() -> adminTeamService.markInactive(teamId, new MarkInactiveRequest("NFS"))))
-                .as("2.19").isLessThanOrEqualTo(W);
-        assertThat(measure(() -> adminTeamService.reactivate(teamId))).as("2.20").isLessThanOrEqualTo(W);
+                .as("2.19").isEqualTo(3);
+        assertThat(measure(() -> adminTeamService.reactivate(teamId))).as("2.20").isEqualTo(4);
     }
 
     private User saveUser(String name) {

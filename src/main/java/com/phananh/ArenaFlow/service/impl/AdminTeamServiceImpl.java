@@ -14,7 +14,9 @@ import com.phananh.ArenaFlow.mapper.TeamMapper;
 import com.phananh.ArenaFlow.repository.TeamMemberRepository;
 import com.phananh.ArenaFlow.repository.TeamRepository;
 import com.phananh.ArenaFlow.service.AdminTeamService;
+import com.phananh.ArenaFlow.service.TeamService;
 import com.phananh.ArenaFlow.service.TeamStatusFilter;
+import com.phananh.ArenaFlow.service.support.TeamGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,19 +32,21 @@ public class AdminTeamServiceImpl implements AdminTeamService {
     private final OptimisticLockRetrier optimisticLockRetrier;
     private final TeamMapper teamMapper;
     private final PageRequestFactory pageRequestFactory;
+    private final TeamGuard teamGuard;
+    private final TeamService teamService;
 
     /** (retry) S team → TEAM_001 → đã INACTIVE TEAM_011 → U (@Version) → S detail. */
     @Override
     public TeamResponse markInactive(UUID teamId, MarkInactiveRequest request) {
         return optimisticLockRetrier.execute(() -> {
-            Team team = findTeam(teamId);
+            Team team = teamGuard.findTeam(teamId);
             if (team.getStatus() == Team.TeamStatus.INACTIVE) {
                 throw new BusinessException(ErrorCode.TEAM_011);
             }
             team.setStatus(Team.TeamStatus.INACTIVE);
             team.setInactiveReason(request.reason().trim());
             teamRepository.saveAndFlush(team);
-            return detail(teamId);
+            return teamService.getTeam(teamId);
         });
     }
 
@@ -50,7 +54,7 @@ public class AdminTeamServiceImpl implements AdminTeamService {
     @Override
     public TeamResponse reactivate(UUID teamId) {
         return optimisticLockRetrier.execute(() -> {
-            Team team = findTeam(teamId);
+            Team team = teamGuard.findTeam(teamId);
             if (team.getStatus() == Team.TeamStatus.ACTIVE) {
                 throw new BusinessException(ErrorCode.TEAM_012);
             }
@@ -61,7 +65,7 @@ public class AdminTeamServiceImpl implements AdminTeamService {
             team.setStatus(Team.TeamStatus.ACTIVE);
             team.setInactiveReason(null);
             teamRepository.saveAndFlush(team);
-            return detail(teamId);
+            return teamService.getTeam(teamId);
         });
     }
 
@@ -73,12 +77,4 @@ public class AdminTeamServiceImpl implements AdminTeamService {
                 teamMapper::toAdminSummary, page, pageSize);
     }
 
-    private Team findTeam(UUID teamId) {
-        return teamRepository.findById(teamId).orElseThrow(() -> new BusinessException(ErrorCode.TEAM_001));
-    }
-
-    private TeamResponse detail(UUID teamId) {
-        return teamRepository.findDetailById(teamId).map(teamMapper::toResponse)
-                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_001));
-    }
 }

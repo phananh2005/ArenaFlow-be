@@ -22,9 +22,14 @@ public class TeamGuard {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
 
+    /** Đội tồn tại (TEAM_001), không kiểm trạng thái — dùng cho thao tác admin trên cả đội INACTIVE. */
+    public Team findTeam(UUID teamId) {
+        return teamRepository.findById(teamId).orElseThrow(() -> new BusinessException(ErrorCode.TEAM_001));
+    }
+
     /** Đội tồn tại và không INACTIVE (dùng trước mọi thao tác ghi lên đội). */
     public Team activeTeam(UUID teamId) {
-        Team team = teamRepository.findById(teamId).orElseThrow(() -> new BusinessException(ErrorCode.TEAM_001));
+        Team team = findTeam(teamId);
         if (team.getStatus() == Team.TeamStatus.INACTIVE) {
             throw new BusinessException(ErrorCode.TEAM_015);
         }

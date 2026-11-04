@@ -8,7 +8,8 @@ import java.util.Base64;
 @ConfigurationProperties(prefix = "arenaflow.jwt")
 public record JwtProperties(String secret, Duration accessTokenTtl, Duration refreshTokenTtl) {
 
-    private static final int MIN_SECRET_BYTES = 32;
+    /** HS256 cần secret ≥ 256 bit — một nguồn cho mọi nơi kiểm độ dài secret. */
+    public static final int MIN_SECRET_BYTES = 32;
 
     public JwtProperties {
         if (secret == null || secret.isBlank()) {

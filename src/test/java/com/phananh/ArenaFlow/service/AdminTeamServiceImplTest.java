@@ -16,6 +16,7 @@ import com.phananh.ArenaFlow.repository.TeamRepository;
 import com.phananh.ArenaFlow.repository.projection.TeamDetailView;
 import com.phananh.ArenaFlow.repository.projection.TeamSummaryView;
 import com.phananh.ArenaFlow.service.impl.AdminTeamServiceImpl;
+import com.phananh.ArenaFlow.service.support.TeamGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
@@ -44,6 +45,7 @@ class AdminTeamServiceImplTest {
     private final TeamRepository teamRepository = mock(TeamRepository.class);
     private final TeamMemberRepository teamMemberRepository = mock(TeamMemberRepository.class);
     private final OptimisticLockRetrier retrier = mock(OptimisticLockRetrier.class);
+    private final TeamService teamService = mock(TeamService.class);
     private final TeamMapper teamMapper = Mappers.getMapper(TeamMapper.class);
     private final SpelAwareProxyProjectionFactory projections = new SpelAwareProxyProjectionFactory();
     private final UUID teamId = UUID.randomUUID();
@@ -54,9 +56,9 @@ class AdminTeamServiceImplTest {
     @SuppressWarnings("unchecked")
     void setUp() {
         service = new AdminTeamServiceImpl(teamRepository, teamMemberRepository, retrier, teamMapper,
-                new PageRequestFactory());
+                new PageRequestFactory(), new TeamGuard(teamRepository, teamMemberRepository), teamService);
         when(retrier.execute(any())).thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(0)).get());
-        when(teamRepository.findDetailById(teamId)).thenReturn(Optional.of(projections.createProjection(
+        when(teamService.getTeam(teamId)).thenReturn(teamMapper.toResponse(projections.createProjection(
                 TeamDetailView.class, Map.of("teamId", teamId, "skillLevels", "[]", "memberCount", 1L))));
     }
 
