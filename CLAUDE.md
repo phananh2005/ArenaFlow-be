@@ -117,7 +117,7 @@
   2. Có thay đổi use case / business rule / actor / workflow? → cập nhật SRS
   3. Đã cập nhật design → gọi `architect-reviewer` review phần sửa
 - Sau mỗi bước implement → **MUST** chạy `progress-tracker`.
-- Trước khi commit → **MUST** chạy `code-review`. **Ngoại lệ:** commit/PR **chỉ** đổi file tài liệu `*.md` → không chạy `code-review` / `code-reviewer`. Có bất kỳ file nào khác (`src/**`, `pom.xml`, migration SQL, `application*.properties`, `.claude/settings.json`, hook `.cjs`, `.githooks/*`…) → vẫn MUST review. Git pre-commit vẫn quét secret.
+- Trước khi commit → **MUST** chạy `code-review`. **Ngoại lệ:** commit/PR **chỉ** đổi file tài liệu `*.md` → không chạy `code-review` / `code-reviewer`. Có bất kỳ file nào khác (`*/src/**`, `pom.xml`, `*/pom.xml`, migration SQL, `application*.properties`, `.claude/settings.json`, hook `.cjs`, `.githooks/*`…) → vẫn MUST review. Git pre-commit vẫn quét secret.
 - **Đồng bộ `main`:** trên **mọi nhánh khác `main`**, agent **MUST tự** chạy `git fetch origin && git rebase --autostash origin/main` tại 3 thời điểm: (1) trước khi bắt đầu triển khai một chức năng, (2) trước mỗi commit, (3) trước mỗi push.
   - Conflict khi rebase → `git rebase --abort`, **dừng**, báo danh sách file conflict; **NEVER** tự resolve. Conflict khi áp lại autostash → dừng, báo (stash vẫn còn trong `git stash list`).
   - `fetch` lỗi (mạng/quyền) → báo, **không** khẳng định đã đồng bộ.
@@ -129,10 +129,11 @@
   |---|---|---|
   | `feature/<MÃ>-<mô-tả>` | Code chức năng mới / sửa chức năng + SRS/Design của chính chức năng đó (commit riêng `docs(<MÃ>): ...`) | `feature/USER-001-user-team-management` |
   | `docs/<MÃ>-<chủ-đề>` | Chỉ tài liệu không kèm code: `docs/agent/business-spec/`, `docs/agent/design/<MÃ>/`, `docs/agent/decisions/`, `docs/database/` | `docs/USER-001-update-api-spec` |
+  | `refactor/<chủ-đề>` | Tái cấu trúc code **không đổi hành vi** (API/DB/nghiệp vụ giữ nguyên) + design/ADR bị ảnh hưởng (commit riêng `docs(REFACTOR): ...`); framework bị ảnh hưởng vẫn tách sang `chore/agent-framework-<chủ-đề>` | `refactor/multi-module-structure` |
   | `chore/agent-framework-<chủ-đề>` | Claude-framework: `CLAUDE.md`, `.claude/`, `.agent-bootstrap/`, `.githooks/`, `docs/agent/hooks/`, `docs/agent/*.md`, các `_template/` | `chore/agent-framework-test-env-rebase` |
 
   - **Tự chọn nhánh trước khi bắt đầu việc mới** (SRS, Design, code, framework) — **MUST**:
-    1. Xác định nhánh đích: SRS/Design của chức năng sẽ code → `feature/<MÃ>-<mô-tả>` (code sau làm tiếp trên chính nhánh này); tài liệu không gắn code → `docs/<MÃ>-<chủ-đề>`; framework → `chore/agent-framework-<chủ-đề>`. Chưa rõ `<MÃ>`/nhóm → hỏi user.
+    1. Xác định nhánh đích: SRS/Design của chức năng sẽ code → `feature/<MÃ>-<mô-tả>` (code sau làm tiếp trên chính nhánh này); tài liệu không gắn code → `docs/<MÃ>-<chủ-đề>`; framework → `chore/agent-framework-<chủ-đề>`; tái cấu trúc code không đổi hành vi → `refactor/<chủ-đề>`. Chưa rõ `<MÃ>`/nhóm → hỏi user.
     2. Working tree còn thay đổi chưa commit **của việc khác** → **dừng**, hỏi user (commit hay stash); **NEVER** mang sang nhánh mới.
     3. `git fetch origin` → nhánh hiện tại **là** nhánh đích → `git rebase --autostash origin/main`; nhánh đích đã tồn tại → checkout rồi rebase; chưa có → `git switch -c <nhánh-đích> origin/main`.
   - Trước commit: thay đổi thuộc nhóm khác nhánh hiện tại (vd framework trên nhánh `feature/`) → **NEVER** commit lẫn; tách sang nhánh đúng nhóm (tạo từ `origin/main`), không rõ nhóm → hỏi user.

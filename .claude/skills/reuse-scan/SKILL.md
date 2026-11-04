@@ -18,7 +18,7 @@ description: >
 ## Quy trình
 
 ### Bước 0 — Xác định nguồn quét
-- Các package trong `src/main/java/` — quét bằng search text, symbol.
+- Các package trong `*/src/main/java/` của 4 module `common`, `domain`, `application`, `api` (ADR-0006) — quét bằng search text, symbol.
 - Nguồn nào đọc được nội dung, nguồn nào không → ghi là **vùng mù**.
 
 ### Bước 1 — Lập bộ từ khoá
