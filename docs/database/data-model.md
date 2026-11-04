@@ -2,7 +2,7 @@
 
 > Trạng thái: **Đặc tả nghiệp vụ hoàn chỉnh; sẵn sàng thiết kế schema**
 
-> Cập nhật: 2026-11-01
+> Cập nhật: 2026-11-01 (nội dung nghiệp vụ) · 2026-11-05 (ghi chú đường dẫn multi-module, §2)
 
 > **Phạm vi cốt lõi:** tạo kèo / ghép người chơi. Sân là địa điểm tham chiếu; ArenaFlow không quản lý vận hành, đặt sân hoặc thanh toán.
 
@@ -23,6 +23,8 @@ Khảo sát ngày 2026-11-01:
 | `application.properties` | PostgreSQL datasource; Flyway bật; Hibernate `ddl-auto=validate` | Migration và entity cần đồng bộ khi triển khai |
 | `pom.xml` | Spring Data JPA, Flyway và PostgreSQL driver | Persistence đã được cấu hình |
 | Neon `neondb`, branch mặc định `main` | Không có bảng tại thời điểm khảo sát | Chỉ là ảnh chụp tại ngày khảo sát |
+
+> Đường dẫn trong bảng là cấu trúc một module tại ngày khảo sát. Từ 2026-11-05 (ADR-0006) repo là Maven multi-module: entity/repository ở `domain/src/main/java/`, migration Flyway và `application.properties` ở `api/src/main/resources/`, dependency persistence ở `domain/pom.xml` và `api/pom.xml`.
 
 ## 3. Quyết định nghiệp vụ đã xác nhận
 
