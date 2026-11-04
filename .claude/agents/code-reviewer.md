@@ -40,7 +40,7 @@ Review **diff** theo 5 chiều bắt buộc. Output là phát hiện có mức �
 
 ### 5. Reuse & Duplication
 - [ ] Thay đổi tạo thành phần dùng chung mới → có **Reuse Report** trong `current-task.md`? Thiếu → **MAJOR**.
-- [ ] Thành phần mới có tương đương trong `src/` hoặc thư viện dùng chung project đang dùng? Trùng → **MAJOR**.
+- [ ] Thành phần mới có tương đương trong `*/src/` (4 module) hoặc thư viện dùng chung project đang dùng? Trùng → **MAJOR**.
 - [ ] Logic lặp ≥ 2 chỗ trong chính thay đổi → gom lại.
 
 ## Output

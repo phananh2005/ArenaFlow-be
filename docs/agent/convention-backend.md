@@ -4,22 +4,39 @@
 
 ## 1. Package Structure
 
+Maven multi-module (ADR-0006), base package `com.phananh.arenaflow`. Chiều phụ thuộc `api → application → domain → common`. Maven chỉ chặn **phụ thuộc ngược** (vd `domain` → `application`); module trên vẫn thấy module dưới qua phụ thuộc bắc cầu, nên **controller không gọi thẳng repository** vẫn là quy tắc giữ bằng review (§1 Quy tắc).
+
 ```
-com.phananh.ArenaFlow
-├── config/                 # Configuration classes (@Configuration)
-├── controller/             # REST Controllers (@RestController)
-├── service/                # Business logic interfaces
-│   └── impl/              # Service implementations
-├── repository/             # JPA Repositories (extends JpaRepository)
-├── entity/                 # JPA Entities (@Entity)
-├── dto/                    # Data Transfer Objects
-│   ├── request/           # Request DTOs
-│   └── response/          # Response DTOs
-├── mapper/                 # Entity ↔ DTO mappers (MapStruct hoặc manual)
-├── exception/              # Custom exceptions
-├── security/               # Security config, filters, JWT utils
-└── util/                   # Utility classes
+ArenaFlow-be/
+├── pom.xml                  # packaging=pom, parent spring-boot-starter-parent, khai báo 4 module
+├── common/                  # com.phananh.arenaflow.common
+│   ├── enums/               # Enum dùng chung (SkillLevel…)
+│   ├── exception/           # ErrorCode, BusinessException, ErrorResponse… (chỉ phụ thuộc spring-web: HttpStatus)
+│   └── DeletedUserMasking   # Tiện ích ở root package common
+├── domain/                  # com.phananh.arenaflow.domain
+│   ├── entity/<nhóm>/       # JPA Entities (@Entity) theo nhóm: user/, team/, match/… + converter/
+│   ├── repository/          # JPA Repositories (extends JpaRepository)
+│   └── projection/          # Interface projection cho native query
+├── application/             # com.phananh.arenaflow.application
+│   ├── service/             # Business logic interfaces
+│   │   └── impl/            # Service implementations
+│   ├── dto/
+│   │   ├── request/         # Request DTOs
+│   │   └── response/        # Response DTOs (ApiResponse, PageResponse…)
+│   ├── mapper/              # Entity ↔ DTO mappers (MapStruct)
+│   ├── validation/          # Custom constraint annotation + validator
+│   └── support/             # Thành phần hỗ trợ service: guard, retry, phân trang
+│       └── security/        # JwtTokenService, JwtProperties (service gọi trực tiếp)
+└── api/                     # com.phananh.arenaflow (ArenaFlowApplication) + com.phananh.arenaflow.api
+    ├── <nhóm>/              # REST Controllers (@RestController) theo nhóm: auth/, profile/, team/…
+    ├── config/              # @Configuration, SecurityConfig, WebMvcConfig, GlobalExceptionHandler
+    └── security/            # Filter/handler/argument resolver của Spring Security
 ```
+
+Resource: `api/src/main/resources/` (`application.properties`, `db/migration/` Flyway). Module khác không có resource.
+
+**Đặt lớp mới vào module nào:** tầng thấp nhất mà mọi nơi dùng lớp đó đều thấy được. Ví dụ service dùng → `application`, entity/projection dùng → `domain` hoặc `common`.
+**Test:** cùng package với lớp được kiểm; cùng module, **trừ** test cần Spring context (`@SpringBootTest`) → đặt ở `api` (chỉ `api` có lớp `main` và migration) nhưng giữ package của lớp được kiểm (vd `api/src/test/.../domain/repository/TeamRepositoryTest`).
 
 **Quy tắc:**
 - **Controller** chỉ xử lý HTTP, gọi service, không chứa business logic
@@ -517,7 +534,7 @@ class ArenaRepositoryTest {
 
 ## Checklist tuân thủ
 
-- [ ] Package structure đúng (`controller`, `service/impl`, `repository`, `entity`, `dto/request`, `dto/response`)
+- [ ] Đặt đúng module & package (`api/<nhóm>` controller, `application/service/impl`, `application/dto/request|response`, `domain/repository`, `domain/entity`); không import ngược tầng
 - [ ] Class naming đúng pattern
 - [ ] Controller chỉ xử lý HTTP, không có business logic
 - [ ] Service có `@Transactional`, method ghi bỏ `readOnly`

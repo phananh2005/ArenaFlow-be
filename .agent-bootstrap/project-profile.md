@@ -40,7 +40,7 @@
 
 | `id` | Thư mục | Ngôn ngữ | Lệnh build | Lệnh test | Lệnh lint | Tài liệu convention | Bằng chứng |
 |---|---|---|---|---|---|---|---|
-| `backend` | `src/main/java/` | Java 21 | `./mvnw compile` | `./mvnw test` (unit thuần: độc lập; integration: tự nạp `.env.dev`) | không có | không có | `pom.xml` → `<java.version>21</java.version>`, Maven Wrapper; `./mvnw compile` đã BUILD SUCCESS |
+| `backend` | `common/`, `domain/`, `application/`, `api/` (`*/src/main/java/`, Maven multi-module — ADR-0006) | Java 21 | `./mvnw compile` | `./mvnw test` (unit thuần: độc lập; integration: tự nạp `.env.dev`) | không có | không có | `pom.xml` → `<java.version>21</java.version>`, Maven Wrapper; `./mvnw compile` đã BUILD SUCCESS |
 
 > Unit test thuần chạy không cần `.env.dev`. Integration test dùng DB dev qua `.env.dev`: `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Dtest=<Test> test`.
 
@@ -146,6 +146,7 @@
 | 2026-11-04 | Người dùng yêu cầu giữ nhánh mặc định | User: "Mặc định không xóa bất kì nhánh nào, trừ khi tôi yêu cầu" (2026-11-04); chưa có quy tắc nào về xoá nhánh | `CLAUDE.md` §8 NEVER xoá nhánh local/remote khi chưa được yêu cầu rõ; `gh pr merge` không kèm `--delete-branch` (chỉ quy tắc, chưa thêm vào hook guard) | Nhánh là lịch sử user muốn tự quản lý | Xoá dòng NEVER và ghi chú `--delete-branch` |
 | 2026-11-04 | Worktree subagent hiện `??` trong `git status` | `.claude/worktrees/agent-a1e332093507a2b9d` untracked | `.gitignore` thêm `.claude/worktrees/` | Worktree tạm của subagent không thuộc repo | Xoá dòng trong `.gitignore` |
 | 2026-11-04 | Worktree subagent bị bỏ lại; reviewer cần thấy diff chưa commit | `.claude/worktrees/agent-a1e332093507a2b9d` detached ở commit cũ, không dọn; `architect-reviewer` phiên này review `git diff` working tree; `.env.dev` gitignore → không có trong worktree | `CLAUDE.md` §8: subagent mặc định chạy trên repo thật; worktree chỉ khi user yêu cầu agent ghi code song song, xong → `git worktree remove` | Worktree không thấy thay đổi chưa commit và thiếu `.env.dev` | Xoá bullet trong `CLAUDE.md` §8 |
+| 2026-11-05 | User yêu cầu cấu trúc giống `vdbas_expenditure_service_be` | User: "làm cấu trúc giống dự án đó đi"; "tài liệu, claude-framework giữ nguyên vị trí, nội dung phải thay đổi theo cấu trúc mới" (2026-11-05) | Tách 4 module Maven `common`/`domain`/`application`/`api`, package `com.phananh.arenaflow` (ADR-0006); cập nhật đường dẫn `src/` → `*/src/` ở hub, procedure, skill; thêm loại nhánh `refactor/`; root POM đặt `surefire.failIfNoSpecifiedTests=false` để lệnh `./mvnw -Dtest=<Test> test` giữ nguyên | Đồng nhất cấu trúc với dự án song song; Maven chặn phụ thuộc ngược | Gộp lại thành 1 module, revert ADR-0006 |
 
 ## 13. Còn chờ xác nhận
 

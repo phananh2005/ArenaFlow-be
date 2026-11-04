@@ -48,7 +48,7 @@ description: >
 - Trình tóm tắt + danh sách `[cần xác nhận]` + ADR mới (nếu có). Gợi ý chạy `architect-reviewer`.
 
 ## Ràng buộc cứng
-- **NEVER** viết file trong `src/` hay code production.
+- **NEVER** viết file trong `*/src/` (các module Maven) hay code production.
 - **NEVER** thiết kế tầng frontend — ghi "Ngoài phạm vi repo này".
 - **NEVER** tự đặt ADR `Accepted` khi vừa tạo.
 
