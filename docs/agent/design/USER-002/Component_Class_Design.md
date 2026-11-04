@@ -7,26 +7,34 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` · kiến trúc hiện hành theo USER-001 |
 | Ràng buộc dữ liệu | USER-001 schema V1/V2/V3; delta USER-002 dưới đây cần migration Flyway |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · đường dẫn package theo Maven multi-module (ADR-0006), không đổi nội dung thiết kế |
 
 ## 1. Tổng quan kiến trúc
 
-Mở rộng module USER-001 theo layered Controller → Service → Repository → Entity. Tái dùng `TeamController`, `ProfileController`, `TeamService`, `ProfileService`, `TeamRepository`, `TeamMemberRepository`, `TeamGuard`, `OptimisticLockRetrier`, `TeamMapper`, DTO/envelope/error handling hiện có. Không tạo service/component dùng chung mới.
+Mở rộng module USER-001 theo layered Controller → Service → Repository → Entity, đặt trong các module Maven `api` → `application` → `domain` (ADR-0006). Tái dùng `TeamController`, `ProfileController`, `TeamService`, `ProfileService`, `TeamRepository`, `TeamMemberRepository`, `TeamGuard`, `OptimisticLockRetrier`, `TeamMapper`, DTO/envelope/error handling hiện có. Không tạo service/component dùng chung mới.
 
 ## 2. Package Structure (delta)
 
+Base package `com.phananh.arenaflow`, Maven multi-module (ADR-0006, `convention-backend.md` §1).
+
 ```text
-com.phananh.ArenaFlow
-├── controller/      TeamController (endpoint disband; danh sách/detail đã có), AdminTeamController (membership history admin)
+api/           com.phananh.arenaflow.api
+└── team/            TeamController (endpoint disband; danh sách/detail đã có), AdminTeamController (membership history admin)
+
+application/   com.phananh.arenaflow.application
 ├── service/         TeamService, ProfileService, AdminTeamService, TeamStatusFilter (thêm DISBANDED), MemberHistoryStatusFilter (enum mới: ACTIVE | LEFT | ALL, cùng package với TeamStatusFilter)
 ├── service/impl/    TeamServiceImpl, ProfileServiceImpl, AdminTeamServiceImpl
-├── repository/      TeamRepository, TeamMemberRepository
-├── repository/projection/ TeamDetailView, TeamSummaryView (thêm người giải tán; dùng chung list user/admin), MemberHistoryView (mới)
-├── entity/team/     Team (thêm lifecycle/disband fields), TeamMember (giữ model)
 ├── dto/request/     DisbandTeamRequest
 ├── dto/response/    TeamResponse, TeamSummaryResponse, AdminTeamSummaryResponse, MemberHistoryResponse (mới)
 └── mapper/          TeamMapper, MembershipMapper (tái sử dụng)
+
+domain/        com.phananh.arenaflow.domain
+├── repository/      TeamRepository, TeamMemberRepository
+├── projection/      TeamDetailView, TeamSummaryView (thêm người giải tán; dùng chung list user/admin), MemberHistoryView (mới)
+└── entity/team/     Team (thêm lifecycle/disband fields), TeamMember (giữ model)
 ```
+
+Tái dùng không đổi vị trí: `TeamGuard`, `OptimisticLockRetrier` (`application/support/`), `ProfileController` (`api/profile/`). Test cần Spring context (migration, integration, đếm query) đặt ở module `api`, giữ package của lớp được kiểm.
 
 ## 3. Controller Layer
 
@@ -79,7 +87,7 @@ USER-001 có `team.status` với `ACTIVE|INACTIVE`, `inactive_reason VARCHAR(500
 | Disband actor | `disbanded_by UUID` FK tới user | Giữ tham chiếu lịch sử kể cả soft-delete |
 | Admin reason | `inactive_reason` giữ nguyên | Giải tán khi INACTIVE không ghi đè |
 
-**Migration `V4__team_disband.sql`** (đã đối chiếu V1/V2 và DB dev Neon `misty-dew-90700890`, 2026-11-05: CHECK tên `team_status_check`; bảng `team` có 0 dòng, không có đội thiếu captain → không cần migration dữ liệu):
+**Migration `V4__team_disband.sql`** (`api/src/main/resources/db/migration/`) (đã đối chiếu V1/V2 và DB dev Neon `misty-dew-90700890`, 2026-11-05: CHECK tên `team_status_check`; bảng `team` có 0 dòng, không có đội thiếu captain → không cần migration dữ liệu):
 
 ```sql
 ALTER TABLE team DROP CONSTRAINT team_status_check;
