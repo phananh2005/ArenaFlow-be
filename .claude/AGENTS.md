@@ -23,7 +23,7 @@ Nhận request
 │       └── CÓ ảnh hưởng                      → cập nhật SRS
 ├── Debug / lỗi / không chạy                  → skill debug
 ├── Review thiết kế                            → procedure architect-reviewer
-├── Review code / chuẩn bị MR                 → procedure code-reviewer
+├── Review code / chuẩn bị push               → procedure code-reviewer
 ├── Rà ADR / quyết định kiến trúc              → skill decisions-relevance
 ├── Agent làm lệch quy ước repo (lặp lại)     → skill workflow-adapt
 └── Hỏi đáp / giải thích / tìm kiếm           → xử lý trực tiếp
@@ -73,7 +73,7 @@ Nhận request
 | `solution-architect` | "thiết kế [X]", "design API/luồng/class", "làm đặc tả kỹ thuật" | Tài liệu thiết kế trong `docs/agent/design/<MÃ>/` | Viết code production |
 | `architect-reviewer` | "review thiết kế", "soi design" | CRITICAL/MAJOR/MINOR cho tài liệu thiết kế | Tự sửa thiết kế |
 | `developer` | "implement/viết/tạo/build/thêm/sửa [X]" | Code + test PASS + cập nhật tài liệu (nếu có ảnh hưởng) + state cập nhật | Code khi chưa duyệt kế hoạch; code chức năng mới khi chưa có thiết kế; bỏ qua cập nhật tài liệu khi có ảnh hưởng |
-| `code-reviewer` | "review code", "tạo MR" | CRITICAL/MAJOR/MINOR có `file:line` | Tự sửa / commit |
+| `code-reviewer` | "review code", trước khi push (bỏ qua khi chỉ đổi `*.md`) | CRITICAL/MAJOR/MINOR có `file:line` | Tự sửa / commit |
 | `debug` | "lỗi", "bug", "exception" | Root cause + fix + test | Đoán khi chưa reproduce |
 | `workflow-adapt` | Người dùng sửa cùng hành vi ≥ 2 lần; lệnh/quy tắc lệch repo | Đề xuất điều chỉnh có bằng chứng | Nới guardrail, sửa file org-owned |
 
@@ -87,7 +87,7 @@ Nhận request
 | Thiết kế kỹ thuật chức năng mới | ✗ → `solution-architect` |
 | Viết / sửa code production | ✗ → `developer` (chức năng mới phải có thiết kế trước) |
 | Review thiết kế | ✗ → `architect-reviewer` |
-| Review code trước merge | ✗ → `code-reviewer` |
+| Review code trước push | ✗ → `code-reviewer` |
 
 ## §4 — Cách thực thi một procedure
 
