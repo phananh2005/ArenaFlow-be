@@ -8,7 +8,7 @@
 | Quy ước áp dụng | `docs/agent/api-convention.md`, `docs/agent/security-backend.md` |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + delta V2/V3 (xem §5) · `docs/agent/non-functional-standards.md` |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (UC-U01..U03, UC-T01..T05, BR-U01..U06, BR-T01..T06) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (TEAM_015 thêm reject; bảng "Lỗi chung" `SYS_*` §4; endpoint Public bỏ qua header Bearer §2 — xem `CHANGELOG.md`) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (TEAM_015 thêm reject; bảng "Lỗi chung" `SYS_*` §4; endpoint Public bỏ qua header Bearer §2; `avatarUrl` chỉ http/https §3.5–3.7; chuẩn hoá email 2.1 — xem `CHANGELOG.md`) |
 
 ## 1. Tổng quan
 
@@ -74,7 +74,7 @@ Endpoint Public `/api/v1/auth/**` (2.1–2.4) **bỏ qua header `Authorization`*
 
 **Validation:** `provider` ∈ {`GOOGLE`,`FACEBOOK`} · `oauthToken` không rỗng (mock: không xác minh với provider) · `email` bắt buộc, định dạng email (BR-U02), ≤255.
 
-**Ghi chú mock:** `email` thay cho claim email lẽ ra lấy từ token provider; lưu vào `oauth_account.provider_user_id`. Cùng email ở Google và Facebook → 2 tài khoản khác nhau (chưa liên kết provider).
+**Ghi chú mock:** `email` thay cho claim email lẽ ra lấy từ token provider; chuyển về chữ thường (BR-U02) rồi lưu vào `oauth_account.provider_user_id` — `An@Gmail.com` và `an@gmail.com` là cùng tài khoản; email có khoảng trắng đầu/cuối → `400 VALIDATION_ERROR` (`@Email`). Cùng email ở Google và Facebook → 2 tài khoản khác nhau (chưa liên kết provider).
 
 ---
 
@@ -341,7 +341,7 @@ Endpoint Public `/api/v1/auth/**` (2.1–2.4) **bỏ qua header `Authorization`*
 | Field | Type | Required | Ràng buộc |
 |---|---|---|---|
 | `displayName` | `String` | No | nếu có: không blank, ≤100 (BR-U03) |
-| `avatarUrl` | `String` | No | URL, ≤500 |
+| `avatarUrl` | `String` | No | URL bắt đầu bằng `http://` hoặc `https://` (chữ thường; giao thức khác như `file:`, `ftp:`, `javascript:` hoặc `HTTPS://` → 400), ≤500 |
 | `bio` | `String` | No | ≤1000 |
 | `preferredPosition` | `String` | No | `Thủ môn` \| `Hậu vệ` \| `Tiền vệ` \| `Tiền đạo` (BR-U06; cùng giá trị với `mercenary_recruitment.position`) |
 | `dateOfBirth` | `LocalDate` | No | ISO date, trong quá khứ, ≥13 tuổi (BR-U04) |
@@ -352,7 +352,7 @@ Endpoint Public `/api/v1/auth/**` (2.1–2.4) **bỏ qua header `Authorization`*
 | Field | Type | Required | Ràng buộc |
 |---|---|---|---|
 | `teamName` | `String` | Yes | không blank, ≤100, cho phép trùng (BR-T01) |
-| `avatarUrl` | `String` | No | URL, ≤500 |
+| `avatarUrl` | `String` | No | URL bắt đầu bằng `http://` hoặc `https://` (chữ thường; giao thức khác như `file:`, `ftp:`, `javascript:` hoặc `HTTPS://` → 400), ≤500 |
 | `description` | `String` | No | ≤1000 |
 | `skillLevels` | `List<String>` | No | ≤3 phần tử, không trùng, thuộc 9 nhãn (BR-T02): `Chill`, `Nhiệt tình`, `Máu lửa`, `Vui chơi`, `Rèn luyện`, `Thi đấu`, `Mới bắt đầu`, `Đã có kinh nghiệm`, `Lão làng` |
 

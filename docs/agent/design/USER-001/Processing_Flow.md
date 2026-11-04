@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code: 2.1/2.3/2.6, §4, §5) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code: 2.1/2.3/2.6, §3 (2.11, 2.14), §4, §5) |
 
 ## 1. Tổng quan luồng
 
@@ -133,10 +133,10 @@ Ký hiệu truy vấn: **S** = SELECT, **I** = INSERT, **U** = UPDATE. Loại: D
 | 2.8 | `POST /teams` | S user chưa xoá (USER_001; lấy `displayName` làm `captainName`) → I team (`skill_levels` JSON) → I team_member (CAPTAIN, ACTIVE, `joined_at=now`) → I history (`from=null`) · response dựng từ dữ liệu đã có (`memberCount=1`) | S, I, I, I | 4 / W6 ✅ |
 | 2.9 | `GET /teams/{id}` | S `TeamDetailView` (team LEFT JOIN captain ACTIVE LEFT JOIN user, `memberCount` bằng subquery COUNT) → TEAM_001 | S | 1 / D3 ✅ |
 | 2.10 | `GET /teams` | S `TeamSummaryView` trang (join như 2.9, lọc status) · S COUNT | S, S | 2 / L4 ✅ |
-| 2.11 | `PATCH /teams/{id}` | *(retry)* S team (TEAM_001) → **status INACTIVE (TEAM_015)** → S captain ACTIVE, so `userId` (TEAM_002) → áp field → U team (`@Version`) → S `TeamDetailView` (response) | S, U, S | 3 / W6 ✅ |
+| 2.11 | `PATCH /teams/{id}` | *(retry)* S team (TEAM_001) → **status INACTIVE (TEAM_015)** → S captain ACTIVE, so `userId` (TEAM_002) → áp field → U team (`@Version`) → S `TeamDetailView` (response) | S, S, U, S (đo: `NfsQueryCountTest`) | 4 / W6 ✅ |
 | 2.12 | `POST /teams/{id}/invitations` | S team (TEAM_001) → **status INACTIVE (TEAM_015)** → S captain (TEAM_002) → S user mời chưa xoá (USER_001) → S tồn tại PENDING/ACTIVE (TEAM_003) → I team_member PENDING (`saveAndFlush`; vi phạm unique → TEAM_003) | S, S, S, S, I | 5 / W6 ✅ |
 | 2.13 | `POST /invitations/{id}/accept` | *(retry)* S team_member theo id (TEAM_004) → `userId` ≠ caller (TEAM_005) → S team → **status INACTIVE (TEAM_015)** → member.status ≠ PENDING (TEAM_006) → U status=ACTIVE, `joined_at=now` (`@Version`) → S `MemberView` (response) | S, S, U, S | 4 / W6 ✅ |
-| 2.14 | `POST /invitations/{id}/reject` | *(retry)* S team_member theo id (TEAM_004) → `userId` ≠ caller (TEAM_005) → S team → **status INACTIVE (TEAM_015)** → member.status ≠ PENDING (TEAM_006) → U status=REJECTED → S tên đội (response) | S, S, U, S | 4 / W6 ✅ |
+| 2.14 | `POST /invitations/{id}/reject` | *(retry)* S team_member theo id (TEAM_004) → `userId` ≠ caller (TEAM_005) → S team → **status INACTIVE (TEAM_015)** → member.status ≠ PENDING (TEAM_006) → U status=REJECTED → response dùng tên đội từ team đã nạp (không SELECT thêm) | S, S, U (đo: `NfsQueryCountTest`) | 3 / W6 ✅ |
 | 2.15 | `POST /teams/{id}/captain/transfer` | Xem §2.3 · **thêm check status INACTIVE (TEAM_015) sau S team** | S, S, S, U, U, I | 6 / W6 ✅ (bằng ngưỡng) |
 | 2.16 | `GET /teams/{id}/captain/history` | S tồn tại team (TEAM_001) → S trang history (LEFT JOIN user from/to, che tên đã xoá) → S COUNT | S, S, S | 3 / L4 ✅ |
 | 2.17 | `GET /teams/{id}/members` | S tồn tại team (TEAM_001) → S trang member ACTIVE JOIN user → S COUNT | S, S, S | 3 / L4 ✅ |
