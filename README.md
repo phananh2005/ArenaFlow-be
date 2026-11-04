@@ -42,6 +42,34 @@ ArenaFlow muốn gỡ những rào cản đó:
 | Migration | Flyway |
 | Tài liệu API | springdoc-openapi (Swagger UI) |
 | Giám sát | Micrometer + Prometheus |
-| Build | Maven (Maven Wrapper `./mvnw`) |
+| Build | Maven multi-module (Maven Wrapper `./mvnw`) |
 | Tiện ích | Lombok |
 | Kiểm thử | JUnit 5, Spring Boot Test, Spring Security Test |
+
+## Cấu trúc dự án
+
+Maven multi-module, base package `com.phananh.arenaflow` ([ADR-0006](docs/agent/decisions/0006-maven-multi-module-structure.md)):
+
+```
+ArenaFlow-be
+├── common      — enum, mã lỗi, exception nghiệp vụ dùng chung
+├── domain      — JPA entity, repository, projection
+├── application — service, DTO, MapStruct mapper, validation
+└── api         — REST controller, security, cấu hình, Spring Boot entry point, Flyway migration
+```
+
+Chiều phụ thuộc: `api → application → domain → common`.
+
+## Build & chạy
+
+```sh
+# Build toàn bộ + chạy test (integration test cần DB: nạp biến từ .env.dev)
+./mvnw clean test
+
+# Chạy một test cụ thể (ở bất kỳ module nào)
+./mvnw -Dtest=TeamGuardTest test
+
+# Đóng gói và chạy ứng dụng
+./mvnw install -DskipTests
+java -jar api/target/api-0.0.1-SNAPSHOT.jar
+```

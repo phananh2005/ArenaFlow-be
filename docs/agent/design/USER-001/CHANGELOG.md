@@ -1,5 +1,25 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v1.2] — 2026-11-05
+
+**Type:** MINOR (cấu trúc mã nguồn, không đổi hợp đồng) · **Tóm tắt:** Tách repo thành Maven multi-module `common` / `domain` / `application` / `api` theo mẫu `vdbas_expenditure_service_be`, đổi base package `com.phananh.ArenaFlow` → `com.phananh.arenaflow` (ADR-0006). Không đổi endpoint, request/response, mã lỗi, DB schema hay nghiệp vụ.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | CCD §1, §2 | Sửa | Một module, package theo tầng → 4 module Maven, chiều phụ thuộc `api → application → domain → common` | ADR-0006 |
+| 2 | CCD §4, §5, §9.2, §9.4 | Sửa | `service/support/TeamGuard`, `repository/projection/`, `security/*`, `config/WebMvcConfig` → `application/support/`, `domain/projection/`, `api/security/`, `api/config/` | Đường dẫn theo module mới |
+| 3 | CCD §2 | Sửa | `JwtTokenService`, `JwtProperties` (`security/`, `config/`) → `application/support/security/`; `GlobalExceptionHandler` (`exception/`) → `api/config/`; `SkillLevel` → `common/enums/`; `OptimisticLockRetrier`, `PageRequestFactory` (`common/`) → `application/support/` | `AuthServiceImpl` gọi trực tiếp JWT service; handler HTTP thuộc tầng api; `SkillLevel` được cả entity converter (`domain`) lẫn validator (`application`) dùng → tầng thấp nhất `common`; retry/phân trang chỉ service dùng và cần Spring tx/data → `application` |
+| 4 | CCD §2 | Sửa | `controller/` (5 controller chung một package) → `api/{auth,profile,team}/` theo nhóm chức năng | Theo mẫu `vdbas_expenditure_service_be` (`api/<chức-năng>/`) |
+| 5 | CCD §2 | Sửa | `exception/{ErrorCode, BusinessException, ErrorEnvelope, ErrorResponse, ValidationError}` → `common/exception/`; `dto/`, `mapper/`, `validation/` → `application/` | Service và security handler đều dùng mã lỗi → `common`; DTO/mapper/validation là hợp đồng của service |
+| 6 | CCD header, §11, §12 | Sửa | `com.phananh.ArenaFlow.entity.*` → `com.phananh.arenaflow.domain.entity.*`; §11 thêm ghi chú dependency theo module POM; §12 base package mới | Đồng bộ với code |
+| 7 | `API_Spec.md`, `Processing_Flow.md` header | Sửa | v1.1 → v1.2 | Đồng bộ phiên bản theo `design-standards.md` §10; nội dung không đổi |
+
+### Ảnh hưởng
+- API contract, DB schema, nghiệp vụ (SRS): **không đổi**.
+- Code: 161 file Java + 4 resource (`application.properties`, `db/migration/V1..V3`) `git mv` sang module (resource → `api/src/main/resources/`); `ApiIntegrationTest` → `public` (controller test tách package). Full suite **163 tests, 0 fail** (2026-11-05), số test từng lớp khớp trước khi tách.
+
 ## [v1.1] — 2026-11-04
 
 **Type:** MINOR (mã 500 đổi `INTERNAL_ERROR` → `SYS_005` không tính là "đổi mã lỗi" vì v1.0 chưa công bố mã này trong `API_Spec.md` — chỉ hard-code trong handler) · **Tóm tắt:** Đồng bộ thiết kế với code sau implement (19 điểm lệch + bổ sung khi review), bugfix lỗi framework (4xx bị trả 500, PII trong log) kèm mã lỗi `SYS_*`, API docs mặc định tắt (ADR-0004), bugfix header Bearer chặn endpoint auth (#31), ghi rủi ro mạo danh của mock (#32), `avatarUrl` chỉ http/https (#34), chuẩn hoá email OAuth (#35), controller thống nhất `ResponseEntity` (#37), gộp logic trùng ở admin service và kiểm secret (#38), `field` lỗi validation tham số đúng tên client gửi (#39); không đổi endpoint, request/response thành công, mã lỗi miền hay DB schema.

@@ -6,49 +6,59 @@
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
-| Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.ArenaFlow.entity.*`, ADR-0001/0002/0003/0004 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code, bugfix lỗi framework, ADR-0004, mã `SYS_*` — 39 mục, xem `CHANGELOG.md`) |
+| Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code, bugfix lỗi framework, ADR-0004, mã `SYS_*` — 39 mục, xem `CHANGELOG.md`) · developer · 2026-11-05 · v1.2 (Maven multi-module, ADR-0006) |
 
 ## 1. Tổng quan kiến trúc
 
-Layered: Controller → Service (interface + impl) → Repository → Entity. Entity **đã có** (24 class, FK lưu dạng cột UUID, không dùng `@ManyToOne`) — USER-001 chỉ sửa 5 entity, xoá 1 (§6). Hợp đồng API: `API_Spec.md`. Luồng/transaction/số truy vấn: `Processing_Flow.md`.
+Layered, tách thành 4 module Maven (ADR-0006): `api` (Controller) → `application` (Service interface + impl) → `domain` (Repository → Entity) → `common`. Maven chỉ chặn phụ thuộc ngược; controller → service → repository (không nhảy tầng) vẫn giữ bằng quy ước `convention-backend.md` §1. Entity **đã có** (24 class, FK lưu dạng cột UUID, không dùng `@ManyToOne`) — USER-001 chỉ sửa 5 entity, xoá 1 (§6). Hợp đồng API: `API_Spec.md`. Luồng/transaction/số truy vấn: `Processing_Flow.md`.
 
 ## 2. Package Structure
 
-Base package: `com.phananh.ArenaFlow`. Entity giữ nguyên bố cục `entity/<domain>/`.
+Base package: `com.phananh.arenaflow`. Maven multi-module, chiều phụ thuộc `api → application → domain → common` (ADR-0006); Maven chặn import ngược ở compile time, không chặn nhảy tầng (api → domain). Entity giữ nguyên bố cục `entity/<domain>/`.
 
 ```
-com.phananh.ArenaFlow
-├── config/        SecurityConfig (+ bean JwtDecoder, JwtAuthenticationConverter), JwtProperties,
-│                  WebMvcConfig (đăng ký CurrentUserArgumentResolver)
-├── security/      JwtTokenService, AccessTokenTypeValidator, CurrentUser (annotation),
-│                  CurrentUserArgumentResolver, RestAuthenticationEntryPoint, RestAccessDeniedHandler,
-│                  SecurityErrorWriter (package-private)
-├── controller/    AuthController, ProfileController, TeamController, InvitationController, AdminTeamController
-├── service/       AuthService, AuthResult, ProfileService, TeamService, TeamStatusFilter,
-│   │              TeamMembershipService, AdminTeamService
-│   ├── impl/      *ServiceImpl
-│   └── support/   TeamGuard
-├── repository/    UserRepository, OAuthAccountRepository, AdministrativeUnitRepository,
-│   │              TeamRepository, TeamMemberRepository, TeamCaptainHistoryRepository
-│   └── projection/ ProfileView, UserAuthView, WardView, TeamDetailView, TeamSummaryView,
-│                   CaptainTeamView, MemberView, CaptainHistoryView
-├── entity/        (đã có) user/, team/ …  + converter/SkillLevelsConverter
-├── validation/    OneOf, MinAge, ValidSkillLevels (+ *Validator)
-├── dto/request/   OAuthLoginRequest, SendOtpRequest, VerifyOtpRequest, RefreshTokenRequest,
-│                  ProfileUpdateRequest, CreateTeamRequest, UpdateTeamRequest, InviteMemberRequest,
-│                  TransferCaptainRequest, MarkInactiveRequest
-├── dto/response/  ApiResponse<T>, PageResponse<T>, PaginationMeta, AuthResponse, OtpSentResponse,
-│                  ProfileResponse, WardResponse, ProviderResponse, TeamResponse, TeamSummaryResponse,
-│                  AdminTeamSummaryResponse, InvitationResponse, MemberResponse, CaptainTransferResponse,
-│                  CaptainHistoryResponse
-├── mapper/        ProfileMapper, TeamMapper, MembershipMapper (MapStruct), MapperSupport
-├── exception/     ErrorCode, BusinessException, ErrorEnvelope, ErrorResponse, ValidationError,
-│                  GlobalExceptionHandler
-└── common/        OptimisticLockRetrier, SkillLevel, PageRequestFactory, DeletedUserMasking
+common/        com.phananh.arenaflow.common
+├── enums/          SkillLevel
+├── exception/      ErrorCode, BusinessException, ErrorEnvelope, ErrorResponse, ValidationError
+└── DeletedUserMasking
+
+domain/        com.phananh.arenaflow.domain
+├── entity/         (đã có) user/, team/ …  + converter/SkillLevelsConverter
+├── repository/     UserRepository, OAuthAccountRepository, AdministrativeUnitRepository,
+│                   TeamRepository, TeamMemberRepository, TeamCaptainHistoryRepository
+└── projection/     ProfileView, UserAuthView, WardView, TeamDetailView, TeamSummaryView,
+                    CaptainTeamView, MemberView, CaptainHistoryView
+
+application/   com.phananh.arenaflow.application
+├── service/        AuthService, AuthResult, ProfileService, TeamService, TeamStatusFilter,
+│   │               TeamMembershipService, AdminTeamService
+│   └── impl/       *ServiceImpl
+├── support/        TeamGuard, OptimisticLockRetrier, PageRequestFactory
+│   └── security/   JwtTokenService, JwtProperties
+├── validation/     OneOf, MinAge, ValidSkillLevels (+ *Validator)
+├── dto/request/    OAuthLoginRequest, SendOtpRequest, VerifyOtpRequest, RefreshTokenRequest,
+│                   ProfileUpdateRequest, CreateTeamRequest, UpdateTeamRequest, InviteMemberRequest,
+│                   TransferCaptainRequest, MarkInactiveRequest
+├── dto/response/   ApiResponse<T>, PageResponse<T>, PaginationMeta, AuthResponse, OtpSentResponse,
+│                   ProfileResponse, WardResponse, ProviderResponse, TeamResponse, TeamSummaryResponse,
+│                   AdminTeamSummaryResponse, InvitationResponse, MemberResponse, CaptainTransferResponse,
+│                   CaptainHistoryResponse
+└── mapper/         ProfileMapper, TeamMapper, MembershipMapper (MapStruct), MapperSupport
+
+api/           com.phananh.arenaflow  (ArenaFlowApplication; resources: application.properties, db/migration)
+└── api/
+    ├── auth/       AuthController
+    ├── profile/    ProfileController
+    ├── team/       TeamController, InvitationController, AdminTeamController
+    ├── config/     SecurityConfig (+ bean JwtDecoder, JwtAuthenticationConverter),
+    │               WebMvcConfig (đăng ký CurrentUserArgumentResolver), GlobalExceptionHandler
+    └── security/   AccessTokenTypeValidator, CurrentUser (annotation), CurrentUserArgumentResolver,
+                    RestAuthenticationEntryPoint, RestAccessDeniedHandler,
+                    SecurityErrorWriter (package-private)
 ```
 
-Thành phần trong `common/`, `dto/response/ApiResponse|PageResponse`, `exception/`, `mapper/MapperSupport`, `service/support/` là **dùng chung** → developer MUST chạy `reuse-scan` trước khi tạo.
+Thành phần trong `common/`, `application/dto/response/ApiResponse|PageResponse`, `application/mapper/MapperSupport`, `application/support/` là **dùng chung** → developer MUST chạy `reuse-scan` trước khi tạo.
 
 Không có `JpaConfig`: Spring Boot auto-config (JPA, Flyway, transaction) đủ dùng. Chỉ thêm khi cần cấu hình JPA tường minh (vd auditing, nhiều datasource).
 
@@ -82,7 +92,7 @@ Phân quyền captain/người được mời **làm trong service** (cần th�
 
 **Guard đội INACTIVE:** Các method `updateTeam`, `inviteMember`, `transferCaptain`, `acceptInvitation`, `rejectInvitation` MUST check `team.status = INACTIVE → TEAM_015` trước khi ghi.
 
-**`service/support/TeamGuard`** (`@Component`, deps `TeamRepository`, `TeamMemberRepository`) — một nguồn cho guard đội, dùng chung bởi `TeamServiceImpl`, `TeamMembershipServiceImpl` và `AdminTeamServiceImpl`:
+**`application/support/TeamGuard`** (`@Component`, deps `TeamRepository`, `TeamMemberRepository`) — một nguồn cho guard đội, dùng chung bởi `TeamServiceImpl`, `TeamMembershipServiceImpl` và `AdminTeamServiceImpl`:
 
 ```java
 Team findTeam(UUID teamId);                          // không có → TEAM_001; không kiểm trạng thái (admin)
@@ -154,7 +164,7 @@ Deps: `TeamRepository`, `TeamMemberRepository`, `OptimisticLockRetrier`, `TeamMa
 
 ## 5. Repository Layer
 
-Truy vấn danh sách/chi tiết có join dùng `@Query(nativeQuery = true)` trả **interface projection** (`repository/projection/`) — không nạp entity rồi lazy-load. SQL cụ thể: `Processing_Flow.md` §3.
+Truy vấn danh sách/chi tiết có join dùng `@Query(nativeQuery = true)` trả **interface projection** (`domain/projection/`) — không nạp entity rồi lazy-load. SQL cụ thể: `Processing_Flow.md` §3.
 
 ```java
 public interface UserRepository extends JpaRepository<User, UUID> {
@@ -275,15 +285,15 @@ String issueAccessToken(UUID userId, User.Role role);   // typ=access, exp = 360
 String issueRefreshToken(UUID userId);                  // typ=refresh, exp = 7 ngày
 UUID parseRefreshToken(String token);                   // sai chữ ký/hết hạn/typ≠refresh → AUTH_002
 ```
-Claims: `sub` = userId, `roles` = `["USER"]` hoặc `["ADMIN"]` (theo `security-backend.md` §1.2), `typ`, `iat`, `exp`. `JwtDecoder` của resource server có validator `security/AccessTokenTypeValidator` (`OAuth2TokenValidator<Jwt>`) từ chối `typ ≠ access` → refresh token không dùng được để gọi API (401).
+Claims: `sub` = userId, `roles` = `["USER"]` hoặc `["ADMIN"]` (theo `security-backend.md` §1.2), `typ`, `iat`, `exp`. `JwtDecoder` của resource server có validator `api/security/AccessTokenTypeValidator` (`OAuth2TokenValidator<Jwt>`) từ chối `typ ≠ access` → refresh token không dùng được để gọi API (401).
 
 ### 9.3. JwtProperties (`arenaflow.jwt.*`)
 `secret` (từ env `JWT_SECRET`, ≥256 bit — hằng `JwtProperties.MIN_SECRET_BYTES`, `JwtTokenService` dùng chung; base64; không commit giá trị thật) · `access-token-ttl = 1h` · `refresh-token-ttl = 7d`. `security-backend.md` đã đồng bộ (cập nhật từ 24h → 1h).
 
 ### 9.4. CurrentUser
-- `security/CurrentUser`: annotation `@Target(PARAMETER)`, `@Retention(RUNTIME)`.
-- `security/CurrentUserArgumentResolver` (`HandlerMethodArgumentResolver`): tham số `UUID` có `@CurrentUser` → `UUID.fromString(jwt.getSubject())`.
-- `config/WebMvcConfig` (`WebMvcConfigurer`) đăng ký resolver.
+- `api/security/CurrentUser`: annotation `@Target(PARAMETER)`, `@Retention(RUNTIME)`.
+- `api/security/CurrentUserArgumentResolver` (`HandlerMethodArgumentResolver`): tham số `UUID` có `@CurrentUser` → `UUID.fromString(jwt.getSubject())`.
+- `api/config/WebMvcConfig` (`WebMvcConfigurer`) đăng ký resolver.
 - Controller nhận `@CurrentUser UUID currentUserId`.
 
 ## 10. Exception Handling
@@ -321,6 +331,8 @@ Log `WARN` chỉ ghi mã lỗi/status + URI; log `ERROR` kèm exception (stack t
 
 ## 11. Dependencies
 
+> Từ v1.2 dependency chia theo module POM (ADR-0006): `common` (`spring-web` cho `HttpStatus`), `domain` (`data-jpa`, `jackson-databind`), `application` (`validation`, `spring-security-oauth2-jose`, `mapstruct`), `api` (webmvc, security, resource-server, flyway, PostgreSQL, actuator, springdoc, prometheus, devtools). Root POM giữ `mapstruct.version` + `annotationProcessorPaths`.
+
 | Dependency | Trạng thái |
 |---|---|
 | `spring-boot-starter-webmvc`, `-data-jpa`, `-security`, `-validation`, `-flyway`, `flyway-database-postgresql`, PostgreSQL driver, Lombok | Đã có trong `pom.xml` |
@@ -334,6 +346,6 @@ Log `WARN` chỉ ghi mã lỗi/status + URI; log `ERROR` kèm exception (stack t
 
 ## 12. Ghi chú thiết kế
 
-- **Base package & ID type:** Repo dùng `com.phananh.ArenaFlow` + UUID; `convention-backend.md` đã cập nhật qua `workflow-adapt` (2026-11-02, xem `decisions-log.md`).
+- **Base package & ID type:** Repo dùng `com.phananh.arenaflow` (đổi từ `com.phananh.ArenaFlow` ở v1.2, ADR-0006) + UUID; `convention-backend.md` đã cập nhật qua `workflow-adapt` (2026-11-02, xem `decisions-log.md`).
 - **TTL access token:** `security-backend.md` đã cập nhật từ 24h → 1h (theo ADR-0001).
 - **Enum `provider`:** DB lưu lowercase, API trả UPPERCASE — chuyển trong `ProfileMapper` (§8).
