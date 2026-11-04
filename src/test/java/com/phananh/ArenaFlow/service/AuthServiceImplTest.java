@@ -89,6 +89,18 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void oauthLoginNormalizesEmailBeforeLookupAndRegistration() {
+        when(oauthAccountRepository.findAuthView(any(), anyString())).thenReturn(Optional.empty());
+
+        service.loginWithOAuth(new OAuthLoginRequest("GOOGLE", "token", "  An@Example.COM "));
+
+        verify(oauthAccountRepository).findAuthView(OAuthAccount.Provider.google, "an@example.com");
+        ArgumentCaptor<OAuthAccount> account = ArgumentCaptor.forClass(OAuthAccount.class);
+        verify(oauthAccountRepository).saveAndFlush(account.capture());
+        assertThat(account.getValue().getProviderUserId()).isEqualTo("an@example.com");
+    }
+
+    @Test
     void oauthLoginRejectsDeletedAccountWithAuth003() {
         when(oauthAccountRepository.findAuthView(OAuthAccount.Provider.facebook, "a@example.com"))
                 .thenReturn(Optional.of(authView(UUID.randomUUID(), "USER", true)));

@@ -49,7 +49,10 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public AuthResult loginWithOAuth(OAuthLoginRequest request) {
         OAuthAccount.Provider provider = OAuthAccount.Provider.valueOf(request.provider().toLowerCase(Locale.ROOT));
-        return registerOrLogin(provider, request.email(), null);
+        // Email là khoá nhận diện tài khoản (provider_user_id): chữ thường để khác hoa/thường không tạo tài khoản mới.
+        // trim() là lớp phòng hờ — qua API, @Email đã từ chối khoảng trắng đầu/cuối.
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        return registerOrLogin(provider, email, null);
     }
 
     @Override
