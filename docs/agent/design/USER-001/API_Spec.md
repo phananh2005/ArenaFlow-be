@@ -434,7 +434,7 @@ Như §3.6 nhưng mọi field `No`; `teamName` nếu có thì không blank.
 
 | Mã | HTTP | Ngữ cảnh | Message |
 |---|---|---|---|
-| `VALIDATION_ERROR` | 400 | Bean Validation fail · JSON sai · sai kiểu path/query · lỗi 400 khác do framework phát hiện (thiếu query param bắt buộc → `validationErrors[].field` = tên tham số; thiếu header…) | "Dữ liệu không hợp lệ" + `validationErrors` |
+| `VALIDATION_ERROR` | 400 | Bean Validation fail · JSON sai · sai kiểu path/query · lỗi 400 khác do framework phát hiện (query param sai giá trị hoặc thiếu → `validationErrors[].field` = tên tham số, vd `page`; thiếu header…) | "Dữ liệu không hợp lệ" + `validationErrors` |
 | `AUTH_001` | 401 | Access token thiếu/sai/hết hạn | "Token không hợp lệ hoặc đã hết hạn" |
 | `AUTH_002` | 401 | Refresh token sai/hết hạn/sai loại | "Refresh token không hợp lệ hoặc đã hết hạn" |
 | `AUTH_003` | 403 | Đăng nhập/refresh bằng tài khoản đã xoá | "Tài khoản đã bị xoá" |

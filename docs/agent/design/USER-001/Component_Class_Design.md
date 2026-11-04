@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.ArenaFlow.entity.*`, ADR-0001/0002/0003/0004 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code, bugfix lỗi framework, ADR-0004, mã `SYS_*` — 36 mục, xem `CHANGELOG.md`) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code, bugfix lỗi framework, ADR-0004, mã `SYS_*` — 39 mục, xem `CHANGELOG.md`) |
 
 ## 1. Tổng quan kiến trúc
 
@@ -74,7 +74,7 @@ Mọi controller: `@RestController`, `@RequiredArgsConstructor`, `@Validated`; n
 | `InvitationController` | `/api/v1/invitations` | 2.13–2.14 | `TeamMembershipService` |
 | `AdminTeamController` | `/api/v1/admin/teams` | 2.19–2.21 | `AdminTeamService` |
 
-201 trả kèm header `Location` (`api-convention.md` §5). `AuthController` chọn 201/200 theo `AuthResult.isNewUser()`.
+Mọi handler trả `ResponseEntity<…>` (`convention-backend.md`): 200 → `ResponseEntity.ok(...)`, 201 trả kèm header `Location` (`api-convention.md` §5), 204 → `noContent()`. `AuthController` chọn 201/200 theo `AuthResult.isNewUser()`.
 
 ## 4. Service Layer
 
@@ -82,15 +82,16 @@ Phân quyền captain/người được mời **làm trong service** (cần th�
 
 **Guard đội INACTIVE:** Các method `updateTeam`, `inviteMember`, `transferCaptain`, `acceptInvitation`, `rejectInvitation` MUST check `team.status = INACTIVE → TEAM_015` trước khi ghi.
 
-**`service/support/TeamGuard`** (`@Component`, deps `TeamRepository`, `TeamMemberRepository`) — một nguồn cho guard đội, dùng chung bởi `TeamServiceImpl` và `TeamMembershipServiceImpl`:
+**`service/support/TeamGuard`** (`@Component`, deps `TeamRepository`, `TeamMemberRepository`) — một nguồn cho guard đội, dùng chung bởi `TeamServiceImpl`, `TeamMembershipServiceImpl` và `AdminTeamServiceImpl`:
 
 ```java
-Team activeTeam(UUID teamId);                        // không có → TEAM_001; INACTIVE → TEAM_015
+Team findTeam(UUID teamId);                          // không có → TEAM_001; không kiểm trạng thái (admin)
+Team activeTeam(UUID teamId);                        // findTeam + INACTIVE → TEAM_015
 void requireTeam(UUID teamId);                       // không có → TEAM_001 (endpoint đọc, rời đội)
 TeamMember requireCaptain(UUID teamId, UUID userId); // captain ACTIVE ≠ userId → TEAM_002
 ```
 
-`AdminTeamServiceImpl` không dùng `TeamGuard` (admin thao tác cả đội INACTIVE, quy tắc riêng TEAM_011/012/013).
+`AdminTeamServiceImpl` chỉ dùng `TeamGuard.findTeam` (admin thao tác cả đội INACTIVE, quy tắc riêng TEAM_011/012/013).
 
 ### 4.1. AuthService
 ```java
@@ -142,10 +143,11 @@ TeamResponse markInactive(UUID teamId, MarkInactiveRequest request);
 TeamResponse reactivate(UUID teamId);
 PageResponse<AdminTeamSummaryResponse> listTeams(TeamStatusFilter status, int page, int pageSize);
 ```
+Deps: `TeamRepository`, `TeamMemberRepository`, `OptimisticLockRetrier`, `TeamMapper`, `PageRequestFactory`, `TeamGuard`, `TeamService` (response chi tiết đội dùng lại `TeamService#getTeam`, không dựng song song).
 
 ### 4.6. Transaction trong ServiceImpl (lệch convention §9 — xem §10)
 - **Không** đặt `@Transactional` ở class level.
-- Method đọc: `@Transactional(readOnly = true)`.
+- Method đọc: `@Transactional(readOnly = true)`. Gọi lồng từ method ghi (vd `AdminTeamServiceImpl` → `TeamService#getTeam`) → tham gia transaction của retrier (REQUIRED), `readOnly` không áp.
 - Method ghi chạm `team`/`team_member` (`updateProfile` không thuộc nhóm này): **không** annotate; thân method gọi `optimisticLockRetrier.execute(() -> …)` — mỗi lần thử là 1 transaction mới.
 - `loginWithOAuth`, `verifyOtp`: **không** annotate; tạo tài khoản trong `transactionTemplate.execute(...)`, bắt `DataIntegrityViolationException` ngoài transaction đã rollback rồi đọc lại — ranh giới, nguồn đụng độ và các nhánh kết quả: `Processing_Flow.md` §4.
 - Method ghi còn lại (`updateProfile`, `createTeam`, `inviteMember`): `@Transactional`.
@@ -276,7 +278,7 @@ UUID parseRefreshToken(String token);                   // sai chữ ký/hết h
 Claims: `sub` = userId, `roles` = `["USER"]` hoặc `["ADMIN"]` (theo `security-backend.md` §1.2), `typ`, `iat`, `exp`. `JwtDecoder` của resource server có validator `security/AccessTokenTypeValidator` (`OAuth2TokenValidator<Jwt>`) từ chối `typ ≠ access` → refresh token không dùng được để gọi API (401).
 
 ### 9.3. JwtProperties (`arenaflow.jwt.*`)
-`secret` (từ env `JWT_SECRET`, ≥256 bit, base64; không commit giá trị thật) · `access-token-ttl = 1h` · `refresh-token-ttl = 7d`. `security-backend.md` đã đồng bộ (cập nhật từ 24h → 1h).
+`secret` (từ env `JWT_SECRET`, ≥256 bit — hằng `JwtProperties.MIN_SECRET_BYTES`, `JwtTokenService` dùng chung; base64; không commit giá trị thật) · `access-token-ttl = 1h` · `refresh-token-ttl = 7d`. `security-backend.md` đã đồng bộ (cập nhật từ 24h → 1h).
 
 ### 9.4. CurrentUser
 - `security/CurrentUser`: annotation `@Target(PARAMETER)`, `@Retention(RUNTIME)`.
@@ -294,7 +296,7 @@ Claims: `sub` = userId, `roles` = `["USER"]` hoặc `["ADMIN"]` (theo `security-
 | Exception | Kết quả | Log |
 |---|---|---|
 | `BusinessException` | status + mã theo `ErrorCode` | `WARN` (mã lỗi + URI) |
-| `MethodArgumentNotValidException`, `ConstraintViolationException`, `HandlerMethodValidationException` | 400 `VALIDATION_ERROR` | — |
+| `MethodArgumentNotValidException`, `ConstraintViolationException`, `HandlerMethodValidationException` | 400 `VALIDATION_ERROR`; `field` = tên field body / tên tham số client gửi (`ConstraintViolationException`: chỉ lấy node cuối của property path, bỏ tiền tố tên method — `listTeams.page` → `page`). Controller hiện có `@Validated` ở class → lỗi tham số đi qua `ConstraintViolationException`; nhánh `HandlerMethodValidationException` là lớp phòng hờ khi bỏ `@Validated` | — |
 | `HttpMessageNotReadableException` (JSON sai cú pháp) | 400 `VALIDATION_ERROR` | — |
 | `MethodArgumentTypeMismatchException` (UUID path sai, enum `status` sai) | 400 `VALIDATION_ERROR` | — |
 | `MissingServletRequestParameterException` | 400 `VALIDATION_ERROR`, `field` = tên tham số | — |
