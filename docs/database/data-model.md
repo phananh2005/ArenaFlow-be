@@ -2,7 +2,7 @@
 
 > Trạng thái: **Đặc tả nghiệp vụ hoàn chỉnh; sẵn sàng thiết kế schema**
 
-> Cập nhật: 2026-11-01
+> Cập nhật: 2026-11-01 (nội dung nghiệp vụ) · 2026-11-05 (ghi chú đường dẫn multi-module, §2)
 
 > **Phạm vi cốt lõi:** tạo kèo / ghép người chơi. Sân là địa điểm tham chiếu; ArenaFlow không quản lý vận hành, đặt sân hoặc thanh toán.
 
