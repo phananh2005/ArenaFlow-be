@@ -93,6 +93,15 @@ public class SecurityConfig {
 }
 ```
 
+**Endpoint public phải bỏ qua header Bearer.** Với `oauth2ResourceServer(jwt)`, filter Bearer
+xác minh token trước bước phân quyền → endpoint `permitAll` kèm token sai/hết hạn vẫn trả 401.
+MUST khai báo `BearerTokenResolver`: request khớp đường dẫn public (dùng chung hằng với
+`permitAll`) → trả `null`; còn lại → `DefaultBearerTokenResolver`. Mỗi đường dẫn public mới
+(vd `GET /api/v1/arenas/**`) MUST thêm vào matcher này và có test "kèm Bearer sai → không 401".
+NEVER đặt endpoint cần xác thực dưới đường dẫn đã bỏ qua Bearer.
+Ngoại lệ: endpoint vận hành theo ADR-0004 (health, API docs) giữ resolver mặc định.
+Tham chiếu: USER-001 `Component_Class_Design.md` §9.1.
+
 ### 2.2. Method Security
 
 ```java
@@ -440,6 +449,7 @@ jwt.secret=${JWT_SECRET}
 
 - [ ] Authentication dùng JWT, stateless
 - [ ] Authorization theo roles (USER, ADMIN)
+- [ ] Endpoint public (trừ endpoint vận hành ADR-0004) bỏ qua header Bearer qua `BearerTokenResolver`, có test "kèm Bearer sai → không 401"
 - [ ] Password dùng BCrypt (strength ≥ 10)
 - [ ] Request DTO có validation (`@NotBlank`, `@Pattern`, `@Email`, ...)
 - [ ] Không lộ sensitive data trong response/log
