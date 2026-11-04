@@ -2,7 +2,7 @@
 description: >
   Review nhanh code theo 5 chiều (Security, Performance, Correctness, Style,
   Reuse & Duplication) trong phiên, TRƯỚC khi commit. Kích hoạt khi implement xong, hoặc khi nghe
-  "review", "check code", "kiểm tra code". Review độc lập trước push →
+  "review", "check code", "kiểm tra code". Xong → review độc lập trước commit bằng
   agent code-reviewer.
 ---
 
@@ -31,4 +31,4 @@ description: >
 4. **Đề xuất sửa:** mỗi CRITICAL/MAJOR kèm đoạn code gợi ý + `file:line`.
 
 ## Liên kết
-- Review độc lập trước push → agent `code-reviewer`
+- Bước kế tiếp (vẫn trước commit) → agent `code-reviewer`

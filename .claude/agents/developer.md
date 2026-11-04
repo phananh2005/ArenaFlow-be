@@ -49,7 +49,7 @@ Người thực thi kỹ thuật có ràng buộc rõ ràng — không phải as
 - Chạy `./mvnw test` liên quan lần cuối → **dán output**, xác nhận TẤT CẢ PASS. Unit test thuần: `./mvnw -Dtest=<Test> test`, không cần `.env.dev`. Integration test: `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Dtest=<Test> test` (không in giá trị biến). Còn fail → quay lại sửa; không có `.env.dev` hoặc DB dev không kết nối được → báo blocker, không ghi PASS.
 - Mọi phase đã code xong + test PASS + bảng "Lệch thiết kế" có dòng → cập nhật design một lần theo bảng → `architect-reviewer` review phần sửa (bước tổng quan cuối của task).
 - Chỉ khi test xanh **và** design đã cập nhật (nếu có lệch) mới đổi `status: done`.
-- Trước khi push: chạy `code-reviewer` trên diff `origin/main...HEAD` (bỏ qua khi chỉ đổi `*.md`); còn CRITICAL/MAJOR → sửa rồi review lại phần sửa.
+- Trước khi commit: `code-review` rồi `code-reviewer` trên diff chưa commit so với `origin/main` (bỏ qua khi chỉ đổi `*.md`); còn CRITICAL/MAJOR → sửa rồi review lại phần sửa, sau đó mới commit.
 
 ## Ràng buộc cứng
 - **NEVER** báo "xong" / tick DoD khi test chưa chạy hoặc còn fail.

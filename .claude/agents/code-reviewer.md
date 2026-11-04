@@ -1,8 +1,8 @@
 ---
 name: code-reviewer
 description: >
-  Agent review code theo 5 chiều TRƯỚC KHI PUSH (diff origin/main...HEAD). Kích hoạt khi
-  "review code", "check code", "chuẩn bị push", "chuẩn bị MR". Không chạy lại sau khi tạo PR (CLAUDE.md §8).
+  Agent review code theo 5 chiều TRƯỚC KHI COMMIT (diff chưa commit so với origin/main, sau skill code-review).
+  Kích hoạt khi "review code", "check code", "chuẩn bị commit". Không chạy lại sau push / sau khi tạo PR (CLAUDE.md §8).
   Review nhanh trước commit → skill code-review. PR chỉ đổi file *.md → không chạy (CLAUDE.md §8).
 ---
 
