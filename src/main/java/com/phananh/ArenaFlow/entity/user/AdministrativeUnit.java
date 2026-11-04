@@ -75,6 +75,6 @@ public class AdministrativeUnit {
     }
 
     public enum Level {
-        province, district, ward
+        province, ward
     }
 }

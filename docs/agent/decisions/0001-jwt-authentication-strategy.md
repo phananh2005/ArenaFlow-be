@@ -1,0 +1,64 @@
+# ADR-0001: Xác thực bằng JWT HS256 stateless, access 1 giờ / refresh 7 ngày
+
+| | |
+|---|---|
+| **Trạng thái** | Accepted |
+| **Ngày** | 2026-11-02 |
+| **Người quyết định** | Product Owner (chốt tham số) · solution-architect (đề xuất) |
+| **Liên quan** | ADR-0002 · `docs/agent/design/USER-001/` · `docs/agent/security-backend.md` |
+| **Sửa đổi** | 2026-11-04 — ghi rõ rủi ro mạo danh do OAuth/OTP mock; cấm deploy ra môi trường truy cập từ ngoài khi còn mock |
+
+## Bối cảnh (Context)
+- REST API phục vụ web + mobile, cần xác thực stateless. Đăng nhập Google/Facebook/Phone OTP đều là **mock** trong MVP.
+- Phân quyền tối thiểu: `USER` / `ADMIN`. Chưa có microservice khác cần tự xác minh token.
+- `pom.xml` đã có `spring-boot-starter-security-oauth2-resource-server` (kèm Nimbus JOSE); `oauth2-authorization-server` đã gỡ (USER-001 không làm OAuth provider).
+- `security-backend.md` §1.2 đã cập nhật: access token 1 giờ (từ 24 giờ), claim `roles`.
+
+## Quyết định (Decision)
+Chúng tôi dùng **JWT ký HS256**, xác minh qua Spring Security Resource Server (`NimbusJwtDecoder.withSecretKey`), không lưu token phía server.
+
+| Tham số | Giá trị | Nguồn |
+|---|---|---|
+| Thuật toán | HS256, secret ≥256 bit, từ env `JWT_SECRET` (property `arenaflow.jwt.secret`) | User chốt |
+| Access token | 1 giờ; claims `sub`=userId (UUID), `roles`, `typ=access`, `iat`, `exp` | User chốt TTL |
+| Refresh token | 7 ngày; claims `sub`, `typ=refresh`; không rotate, không lưu | User chốt TTL |
+| Vai trò | Cột `"user".role` (`USER`/`ADMIN`) — không có bảng role riêng | User chốt |
+| Thư viện | Nimbus JOSE qua starter đã có | Đề xuất — chờ duyệt |
+
+Refresh (`POST /api/v1/auth/refresh`) đọc lại `role` và `deleted_at` từ DB → user đã xoá không lấy được token mới.
+
+**Phương án đã loại**
+- Session phía server (DB/Redis): stateful, cần hạ tầng thêm.
+- RS256: cần quản lý keypair, chưa có bên thứ ba cần public key.
+- Authorization server OAuth2 đầy đủ: quá nặng cho xác thực mock.
+- JJWT: phải thêm dependency trong khi Nimbus đã có sẵn.
+
+## Hệ quả (Consequences)
+
+**Tích cực**
+- Không trạng thái phía server, không thêm hạ tầng; tận dụng filter chuẩn của Spring Security.
+- Mỗi request xác thực không cần truy vấn DB.
+
+**Tiêu cực / đánh đổi**
+- Không thu hồi được token: access token của user vừa xoá tài khoản còn hiệu lực ≤1 giờ; refresh token bị lộ dùng được ≤7 ngày (trừ khi user bị xoá). **Chấp nhận cho MVP** — client tự xoá token local sau `DELETE /profile` thành công.
+- Lộ secret → giả mạo được mọi token; phải giữ secret ngoài Git và xoay vòng thủ công.
+
+**Cần theo dõi**
+- Cần đăng xuất/thu hồi tức thời, hoặc có service khác cần xác minh token → xem lại (blacklist, rotate refresh, RS256).
+- Thay OAuth/OTP mock bằng provider thật → ADR mới cho luồng xác minh provider.
+
+## Sửa đổi 2026-11-04 — Rủi ro mạo danh của OAuth/OTP mock
+
+**Bối cảnh.** Code review PR #8 chỉ ra: `POST /api/v1/auth/oauth` tin mọi `oauthToken`, `POST /api/v1/auth/verify-otp` tin mọi OTP 6 số. Ai biết email (Google/Facebook) hoặc số điện thoại của một tài khoản — kể cả ADMIN — đều nhận được access token mang quyền của tài khoản đó. Mock luôn bật, không có cờ tắt theo môi trường, chưa có rate limit.
+
+**Quyết định bổ sung:**
+- Chấp nhận rủi ro mạo danh cho MVP (user chọn phương án ghi rủi ro, 2026-11-04 — **PO xác nhận qua PR #8, 2026-11-04**) — giữ mock, không thêm cờ tắt.
+- **NEVER** deploy build khi xác thực OAuth/OTP mock còn hoạt động trên môi trường truy cập từ bên ngoài (internet, mạng có người dùng thật hoặc dữ liệu thật). Trong phiên bản hiện tại, mock luôn bật nên chỉ được chạy local/dev nội bộ với dữ liệu giả.
+- **NEVER** tạo tài khoản ADMIN có email/số điện thoại thật trên môi trường còn mock.
+- Trước khi deploy ra môi trường ngoài, MUST chọn một trong hai lối ra; lối nào cũng cần **ADR mới** và cập nhật `API_Spec.md` của chức năng liên quan:
+  1. Thay mock bằng xác minh provider thật (xem "Cần theo dõi").
+  2. Triển khai cơ chế tắt mock, mặc định tắt, và xác minh rằng mock không thể được kích hoạt ngoài ý muốn. Chỉ đặt biến môi trường không được xem là đã tắt mock nếu ứng dụng chưa hỗ trợ và kiểm tra cờ đó.
+
+**Phương án loại cho MVP hiện tại:** Cờ `AUTH_MOCK_ENABLED` mặc định tắt + mã lỗi mới ngay bây giờ — đổi API contract khi chưa cần (chưa có môi trường deploy ngoài). Phương án này vẫn là lối ra 2 ở trên khi có môi trường deploy ngoài.
+
+**Hệ quả:** Bảo mật xác thực của build hiện tại chỉ dựa vào việc không deploy ra ngoài — đây là ràng buộc vận hành, không phải kiểm soát kỹ thuật. Hoàn thành một trong hai lối ra ở trên là **điều kiện bắt buộc** trước deploy ngoài.

@@ -41,6 +41,10 @@ public class TeamMember {
     @Column(name = "left_at")
     private OffsetDateTime leftAt;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @PrePersist
     protected void onCreate() {
         if (invitedAt == null) {
@@ -114,11 +118,15 @@ public class TeamMember {
         this.leftAt = leftAt;
     }
 
+    public Long getVersion() {
+        return version;
+    }
+
     public enum Role {
         CAPTAIN, MEMBER
     }
 
     public enum Status {
-        PENDING, ACTIVE, LEFT
+        PENDING, ACTIVE, LEFT, REJECTED
     }
 }
