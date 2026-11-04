@@ -44,6 +44,11 @@
 | `POST /api/v1/bookings` | ✅ | ✅ | ❌ |
 | `PATCH /api/v1/bookings/{id}` | ✅ (own) | ✅ (all) | ❌ |
 | `DELETE /api/v1/bookings/{id}` | ✅ (own, pending) | ✅ (all) | ❌ |
+| `GET /actuator/health`, `GET /actuator/health/**` | ✅ | ✅ | ✅ — chỉ trạng thái tổng `UP`/`DOWN`; đường dẫn thành phần (vd `/health/db`) bị ẩn → 404 |
+| `GET /v3/api-docs/**`, `GET /swagger-ui/**`, `GET /swagger-ui.html` | ✅ | ✅ | ✅ khi `SPRINGDOC_ENABLED=true` (chỉ dev); **mặc định tắt** → 404 |
+| Actuator khác (`metrics`, `env`, `prometheus`…) | ❌ | ❌ | ❌ — chưa expose qua web; nếu expose phải cần token, NEVER `permitAll` |
+
+Endpoint vận hành public: ADR-0004 (`docs/agent/decisions/0004-public-operational-endpoints.md`). Không bật `management.endpoint.health.show-details` / `show-components` khi health còn public.
 
 **Roles:**
 - `USER` — Người dùng thường
@@ -71,6 +76,8 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/v1/auth/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/arenas/**").permitAll()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
@@ -85,6 +92,19 @@ public class SecurityConfig {
     }
 }
 ```
+
+**Endpoint public phải bỏ qua header Bearer.**
+- **Hành vi bắt buộc:** request tới endpoint public kèm `Authorization: Bearer <token sai/hết hạn>`
+  MUST được xử lý như request không có header — không trả 401.
+- **Vì sao dễ sai:** cơ chế xác thực có thể xác minh token ngay khi thấy header, trước bước
+  phân quyền → khai báo public thôi chưa đủ. Kiểm cơ chế đang dùng và cấu hình để bỏ qua header
+  trên đường dẫn public.
+- Danh sách đường dẫn bỏ qua header và danh sách public MUST dùng chung một nguồn, để hai danh
+  sách không lệch nhau.
+- Mỗi đường dẫn public mới (vd `GET /api/v1/arenas/**`) MUST có test "kèm Bearer sai → không 401".
+- NEVER đặt endpoint cần xác thực dưới đường dẫn đã bỏ qua header.
+- Ngoại lệ: endpoint vận hành theo ADR-0004 (health, API docs) giữ hành vi xác thực mặc định.
+- Ví dụ triển khai hiện tại: USER-001 `Component_Class_Design.md` §9.1.
 
 ### 2.2. Method Security
 
@@ -433,6 +453,7 @@ jwt.secret=${JWT_SECRET}
 
 - [ ] Authentication dùng JWT, stateless
 - [ ] Authorization theo roles (USER, ADMIN)
+- [ ] Endpoint public (trừ endpoint vận hành ADR-0004) bỏ qua header Bearer (token sai/hết hạn không gây 401), có test "kèm Bearer sai → không 401"
 - [ ] Password dùng BCrypt (strength ≥ 10)
 - [ ] Request DTO có validation (`@NotBlank`, `@Pattern`, `@Email`, ...)
 - [ ] Không lộ sensitive data trong response/log
