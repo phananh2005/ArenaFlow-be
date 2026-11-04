@@ -93,14 +93,18 @@ public class SecurityConfig {
 }
 ```
 
-**Endpoint public phải bỏ qua header Bearer.** Với `oauth2ResourceServer(jwt)`, filter Bearer
-xác minh token trước bước phân quyền → endpoint `permitAll` kèm token sai/hết hạn vẫn trả 401.
-MUST khai báo `BearerTokenResolver`: request khớp đường dẫn public (dùng chung hằng với
-`permitAll`) → trả `null`; còn lại → `DefaultBearerTokenResolver`. Mỗi đường dẫn public mới
-(vd `GET /api/v1/arenas/**`) MUST thêm vào matcher này và có test "kèm Bearer sai → không 401".
-NEVER đặt endpoint cần xác thực dưới đường dẫn đã bỏ qua Bearer.
-Ngoại lệ: endpoint vận hành theo ADR-0004 (health, API docs) giữ resolver mặc định.
-Tham chiếu: USER-001 `Component_Class_Design.md` §9.1.
+**Endpoint public phải bỏ qua header Bearer.**
+- **Hành vi bắt buộc:** request tới endpoint public kèm `Authorization: Bearer <token sai/hết hạn>`
+  MUST được xử lý như request không có header — không trả 401.
+- **Vì sao dễ sai:** cơ chế xác thực có thể xác minh token ngay khi thấy header, trước bước
+  phân quyền → khai báo public thôi chưa đủ. Kiểm cơ chế đang dùng và cấu hình để bỏ qua header
+  trên đường dẫn public.
+- Danh sách đường dẫn bỏ qua header và danh sách public MUST dùng chung một nguồn, để hai danh
+  sách không lệch nhau.
+- Mỗi đường dẫn public mới (vd `GET /api/v1/arenas/**`) MUST có test "kèm Bearer sai → không 401".
+- NEVER đặt endpoint cần xác thực dưới đường dẫn đã bỏ qua header.
+- Ngoại lệ: endpoint vận hành theo ADR-0004 (health, API docs) giữ hành vi xác thực mặc định.
+- Ví dụ triển khai hiện tại: USER-001 `Component_Class_Design.md` §9.1.
 
 ### 2.2. Method Security
 
@@ -449,7 +453,7 @@ jwt.secret=${JWT_SECRET}
 
 - [ ] Authentication dùng JWT, stateless
 - [ ] Authorization theo roles (USER, ADMIN)
-- [ ] Endpoint public (trừ endpoint vận hành ADR-0004) bỏ qua header Bearer qua `BearerTokenResolver`, có test "kèm Bearer sai → không 401"
+- [ ] Endpoint public (trừ endpoint vận hành ADR-0004) bỏ qua header Bearer (token sai/hết hạn không gây 401), có test "kèm Bearer sai → không 401"
 - [ ] Password dùng BCrypt (strength ≥ 10)
 - [ ] Request DTO có validation (`@NotBlank`, `@Pattern`, `@Email`, ...)
 - [ ] Không lộ sensitive data trong response/log
