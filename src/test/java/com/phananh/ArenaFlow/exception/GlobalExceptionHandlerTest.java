@@ -1,5 +1,6 @@
 package com.phananh.ArenaFlow.exception;
 
+import jakarta.validation.constraints.Min;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -123,6 +124,14 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void methodParameterValidationReportsParameterNameAsField() throws Exception {
+        mockMvc.perform(get("/test/min-param").param("page", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.error.validationErrors[0].field").value("page"));
+    }
+
+    @Test
     void otherFramework400IsValidationError() throws Exception {
         mockMvc.perform(get("/test/required-header"))
                 .andExpect(status().isBadRequest())
@@ -151,6 +160,11 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/test/status-499")
         void throwNonStandardStatus() {
             throw new ResponseStatusException(HttpStatusCode.valueOf(499));
+        }
+
+        /** Không có @Validated ở class → Spring MVC tự validate tham số → HandlerMethodValidationException. */
+        @GetMapping("/test/min-param")
+        void minParam(@RequestParam @Min(1) int page) {
         }
 
         @GetMapping("/test/required-param")

@@ -2,6 +2,7 @@ package com.phananh.ArenaFlow.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Path;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -50,8 +51,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorEnvelope> handleConstraintViolation(
             ConstraintViolationException exception, HttpServletRequest request) {
         List<ValidationError> errors = exception.getConstraintViolations().stream()
-                .map(violation -> new ValidationError(
-                        violation.getPropertyPath().toString(), violation.getMessage()))
+                .map(violation -> new ValidationError(fieldName(violation.getPropertyPath()), violation.getMessage()))
                 .toList();
         return validationResponse(request, errors);
     }
@@ -59,7 +59,21 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HandlerMethodValidationException.class)
     public ResponseEntity<ErrorEnvelope> handleHandlerMethodValidation(
             HandlerMethodValidationException exception, HttpServletRequest request) {
-        return validationResponse(request, List.of(new ValidationError("request", "Dữ liệu không hợp lệ")));
+        List<ValidationError> errors = exception.getParameterValidationResults().stream()
+                .flatMap(result -> result.getResolvableErrors().stream()
+                        .map(error -> new ValidationError(
+                                result.getMethodParameter().getParameterName(), error.getDefaultMessage())))
+                .toList();
+        return validationResponse(request, errors);
+    }
+
+    /** Path của violation tham số có dạng "<method>.<param>" → chỉ trả node cuối (tên field client gửi). */
+    private static String fieldName(Path propertyPath) {
+        String name = null;
+        for (Path.Node node : propertyPath) {
+            name = node.getName();
+        }
+        return name != null ? name : propertyPath.toString();
     }
 
     /** Body không phải JSON hợp lệ / sai kiểu field → 400 (không lộ chi tiết parser). */

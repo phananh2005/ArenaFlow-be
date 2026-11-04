@@ -73,9 +73,11 @@ class TeamControllerTest extends ApiIntegrationTest {
         mockMvc.perform(as(user, get("/api/v1/teams")).param("status", "BOGUS"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
         mockMvc.perform(as(user, get("/api/v1/teams")).param("page", "0"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.error.validationErrors[0].field").value("page"));
         mockMvc.perform(as(user, get("/api/v1/teams")).param("pageSize", "101"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.error.validationErrors[0].field").value("pageSize"));
     }
 
     @Test
