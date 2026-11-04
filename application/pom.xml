@@ -23,7 +23,9 @@
 			<artifactId>domain</artifactId>
 		</dependency>
 
-		<!-- Không kéo web/security vào tầng service: HTTP & Spring Security chỉ ở module api.
+		<!-- Không kéo webmvc/servlet/Spring Security web vào tầng service: chỉ ở module api.
+		     Lưu ý: spring-web (HttpStatus, ResponseEntity, RestClient…) vẫn tới qua common (ErrorCode dùng HttpStatus),
+		     nên Maven KHÔNG chặn import lớp spring-web ở đây — giữ bằng review (ADR-0006).
 		     Spring context, transaction, Spring Data, Jackson đến từ domain (starter-data-jpa, jackson-databind). -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
