@@ -92,7 +92,7 @@
 - Mô tả/Giới thiệu
 - Người tạo (User ID)
 - Ngày tạo
-- Trạng thái (active, INACTIVE)
+- Trạng thái (active, INACTIVE, đã giải tán — `USER-002`)
 - Trình độ (tối đa 3 trong 9 nhãn: Chill, Nhiệt tình, Máu lửa, Vui chơi, Rèn luyện, Thi đấu, Mới bắt đầu, Đã có kinh nghiệm, Lão làng)
 
 **Relationships:**
@@ -106,7 +106,7 @@
 - 1 Team có 1 Completion_Rate (đội) (1:1)
 - 1 Team có 1 Verification_Badge (đội) (0..1)
 
-**Lifecycle:** active → INACTIVE (chỉ admin đánh dấu, hoặc tự chuyển khi đội trưởng duy nhất xóa tài khoản)
+**Lifecycle:** **Sửa bởi `USER-002`:** active ⇄ INACTIVE (admin khoá / kích hoạt lại) → đã giải tán (đội trưởng, vĩnh viễn) — `USER-002/Business_Rules.md` §2
 
 ---
 
@@ -614,7 +614,7 @@ erDiagram
 | Entity | Khởi tạo | Terminal States | Có thể quay lại? |
 |---|---|---|---|
 | User | Đăng ký OAuth | soft-deleted | ✅ (khôi phục) |
-| Team | User tạo đội | INACTIVE | ❌ (chỉ admin kích hoạt lại) |
+| Team | User tạo đội | Đã giải tán (`USER-002`) | ❌ Đã giải tán · ✅ INACTIVE: admin kích hoạt lại |
 | Match | Đội trưởng tạo kèo | CANCELLED, EXPIRED, COMPLETED | ❌ |
 | Match_Request | Đội gửi request | REJECTED, WITHDRAWN, SUPERSEDED, EXPIRED | ❌ |
 | Pairing | Đội nhận bài đăng | CONFIRMED, SUPERSEDED, EXPIRED | ❌ |

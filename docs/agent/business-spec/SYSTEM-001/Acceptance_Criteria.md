@@ -31,7 +31,7 @@
 #### TEAM DOMAIN
 - [ ] Chuyển quyền đội trưởng bắt buộc nhận
 - [ ] Lịch sử thành viên và chuyển quyền được lưu
-- [ ] Xử lý xóa tài khoản đội trưởng đúng (phải chuyển quyền trước; nếu là người duy nhất thì đội tự INACTIVE)
+- [ ] Xử lý xóa tài khoản đội trưởng đúng (phải chuyển quyền hoặc giải tán đội trước, kể cả khi là người duy nhất — `USER-002` AC-U03-01..03)
 
 #### MATCH DOMAIN
 - [ ] Luồng A và B hoạt động độc lập
@@ -101,7 +101,7 @@
 
 ### AC-U03: User xóa tài khoản (soft-delete)
 
-**Given:** User đã đăng nhập; nếu là đội trưởng thì đã chuyển quyền hoặc là người duy nhất
+**Given:** User đã đăng nhập; không còn là đội trưởng của đội nào chưa giải tán (`USER-002` BR-T06 sửa)
 
 **When:** User xác nhận xóa tài khoản
 
@@ -109,7 +109,7 @@
 - Tài khoản chuyển soft-deleted
 - Lịch sử hiển thị "Người dùng đã xóa"
 - Điểm/đánh giá lịch sử của đội khác giữ nguyên
-- (Nếu đội trưởng duy nhất) Đội tự chuyển INACTIVE
+- Không đội nào tự đổi trạng thái (`USER-002` BR-T14)
 - User bị đăng xuất
 
 ---

@@ -71,7 +71,7 @@
 
 **Preconditions:**
 - User đã đăng nhập
-- Nếu User là đội trưởng: đã chuyển quyền cho thành viên khác hoặc là người duy nhất trong đội
+- Không còn là đội trưởng của đội nào chưa giải tán (đã chuyển quyền hoặc giải tán — **sửa bởi `USER-002`**, xem `USER-002/Use_Cases.md` UC-U03)
 
 **Main Flow:**
 1. User chọn "Xóa tài khoản"
@@ -89,13 +89,11 @@
 
 **Exception Flows:**
 
-**4a. User là đội trưởng và đội có thành viên khác:**
-- 4a1. Hệ thống hiển thị "Bạn phải chuyển quyền đội trưởng trước khi xóa tài khoản"
+**4a. User đang là đội trưởng của đội chưa giải tán** (kể cả khi là người duy nhất — **sửa bởi `USER-002`**):
+- 4a1. Hệ thống hiển thị "Bạn phải chuyển quyền đội trưởng hoặc giải tán đội trước khi xóa tài khoản"
 - 4a2. Use case kết thúc
 
-**4b. User là đội trưởng và là người duy nhất trong đội:**
-- 4b1. Hệ thống tự động chuyển đội sang INACTIVE
-- 4b2. Tiếp tục bước 5
+~~**4b. Người duy nhất → đội tự INACTIVE**~~ — bỏ (`USER-002` BC-T02 sửa).
 
 ---
 
@@ -232,6 +230,14 @@
 - Đội chuyển sang INACTIVE
 - Đội không thể tạo kèo mới
 - Lịch sử đội được giữ nguyên
+
+> **Sửa bởi `USER-002`:** admin không khoá được đội đã giải tán. Kích hoạt lại không áp dụng cho đội đã giải tán.
+
+---
+
+### UC-T06: Đội trưởng giải tán đội
+
+→ Định nghĩa tại `docs/agent/business-spec/USER-002/Use_Cases.md` (UC-T06).
 
 ---
 
