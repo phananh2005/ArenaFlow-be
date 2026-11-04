@@ -70,6 +70,6 @@ Chiều phụ thuộc: `api → application → domain → common`.
 ./mvnw -Dtest=TeamGuardTest test
 
 # Đóng gói và chạy ứng dụng
-./mvnw install -DskipTests
+./mvnw package -DskipTests
 java -jar api/target/api-0.0.1-SNAPSHOT.jar
 ```
