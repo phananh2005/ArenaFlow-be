@@ -3,15 +3,18 @@ package com.phananh.arenaflow.domain.repository;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.projection.MemberHistoryView;
 import com.phananh.arenaflow.domain.projection.MemberView;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.OffsetDateTime;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -56,13 +59,6 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
                                               @Param("statuses") Collection<String> statuses,
                                               Pageable pageable);
 
-    /** User còn là captain ACTIVE của ít nhất một đội (đội DISBANDED không còn row ACTIVE — BR-T10). */
-    @Query(value = """
-            SELECT EXISTS (SELECT 1 FROM team_member
-                           WHERE user_id = :userId AND role = 'CAPTAIN' AND status = 'ACTIVE')
-            """, nativeQuery = true)
-    boolean existsActiveCaptainByUserId(@Param("userId") UUID userId);
-
     /**
      * Giải tán đội: một câu cho mọi row còn lại — ACTIVE → LEFT, PENDING → REJECTED (không set left_at).
      * {@code left_at = GREATEST(:now, COALESCE(joined_at, invited_at))} giữ CHECK left_at ≥ joined_at khi accept commit
@@ -90,21 +86,29 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
     Optional<MemberView> findMemberViewById(@Param("memberId") UUID memberId);
 
     /**
-     * Xoá tài khoản: membership MEMBER ACTIVE → LEFT. Không bao giờ đụng row CAPTAIN (race R1, USER-002 Processing_Flow §4.2).
-     * Bulk update → tự tăng version.
+     * Xoá tài khoản — bước khoá (ADR-0007): nạp mọi membership của user có trạng thái trong {@code statuses} và giữ khoá
+     * dòng ({@code PESSIMISTIC_WRITE} → PostgreSQL {@code FOR NO KEY UPDATE}) tới hết transaction. Thao tác ghi khác trên các
+     * row này phải chờ: luồng ghi entity (accept, transfer, leave) sau khi xoá commit thấy {@code version} lệch → retry
+     * (ADR-0003); bulk {@link #disbandRemaining} đánh giá lại {@code WHERE} trên bản mới và bỏ qua row đã đóng.
+     * Sắp theo {@code id} để thứ tự khoá ổn định (tránh deadlock). Phải gọi trong transaction.
      */
-    @Modifying
-    @Query(value = """
-            UPDATE team_member SET status = 'LEFT', left_at = :now, version = version + 1
-            WHERE user_id = :userId AND status = 'ACTIVE' AND role = 'MEMBER'
-            """, nativeQuery = true)
-    int leaveAllActive(@Param("userId") UUID userId, @Param("now") OffsetDateTime now);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    List<TeamMember> findByUserIdAndStatusInOrderByIdAsc(UUID userId, Collection<TeamMember.Status> statuses);
 
-    /** Xoá tài khoản: PENDING → REJECTED. Bulk update → tự tăng version. */
-    @Modifying
+    /**
+     * Xoá tài khoản — một câu cho mọi membership mở của user (ADR-0007): MEMBER ACTIVE → LEFT, PENDING → REJECTED
+     * (không set left_at). Không đụng row CAPTAIN (lớp an toàn — caller đã từ chối captain trên dữ liệu đã khoá).
+     * {@code left_at = GREATEST(:now, COALESCE(joined_at, invited_at))} giữ CHECK left_at ≥ joined_at. Bulk update → tự
+     * tăng version; xoá persistence context sau khi chạy để entity đã nạp ở bước khoá không còn trạng thái cũ.
+     */
+    @Modifying(clearAutomatically = true)
     @Query(value = """
-            UPDATE team_member SET status = 'REJECTED', version = version + 1
-            WHERE user_id = :userId AND status = 'PENDING'
+            UPDATE team_member
+            SET status = CASE WHEN status = 'ACTIVE' THEN 'LEFT' ELSE 'REJECTED' END,
+                left_at = CASE WHEN status = 'ACTIVE' THEN GREATEST(:now, COALESCE(joined_at, invited_at)) ELSE left_at END,
+                version = version + 1
+            WHERE user_id = :userId
+              AND (status = 'PENDING' OR (status = 'ACTIVE' AND role = 'MEMBER'))
             """, nativeQuery = true)
-    int rejectAllPending(@Param("userId") UUID userId);
+    int leaveAndRejectAllOpen(@Param("userId") UUID userId, @Param("now") OffsetDateTime now);
 }

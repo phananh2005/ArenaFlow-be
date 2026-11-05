@@ -39,6 +39,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * kết quả cho phép; không bao giờ có lỗi ngoài {@link BusinessException} (≈ 500). Thống kê kết quả in ra stdout.
  * R1/R2 quét độ trễ luồng thứ hai (0 → thời gian 1 lần transfer) để chạm cả hai nhánh thắng; độ nhạy đã kiểm bằng
  * mutation (bỏ force-increment của invite → M1 fail; bỏ kiểm lại captain trong deleteAccount → R1 fail), 2026-11-05.
+ * ADR-0007 (2026-11-06): deleteAccount đổi sang khoá bi quan, bước kiểm lại đã bỏ. "Delete vs accept own invitation" Red
+ * thật trên luồng cũ (user đã xoá còn ACTIVE); "delete vs transfer away" nhạy qua mutation bỏ kiểm captain đầu tiên của
+ * luồng cũ (user đã xoá còn MEMBER ACTIVE).
  */
 class TeamDisbandRaceTest extends CommittedDataIntegrationTest {
 
@@ -201,6 +204,71 @@ class TeamDisbandRaceTest extends CommittedDataIntegrationTest {
         report("R1 delete account vs transfer", stats);
     }
 
+    /**
+     * ADR-0007 (G1/G2): user xoá tài khoản trong lúc chính user đó accept lời mời (thiết bị khác). Không được để user đã
+     * xoá còn ACTIVE/PENDING trong đội, không vi phạm CHECK left_at ≥ joined_at (≈ 500).
+     */
+    @Test
+    void deleteAccountVersusAcceptOwnInvitationNeverLeavesDeletedUserInTeam() throws Exception {
+        Map<String, Integer> stats = new TreeMap<>();
+        long acceptMillis = measureAcceptMillis();
+        for (int round = 0; round < ROUNDS; round++) {
+            long deleteDelay = acceptMillis * round / ROUNDS;
+            User captain = user("Race DA Captain " + round);
+            User invitee = user("Race DA Invitee " + round);
+            UUID teamId = team(captain);
+            UUID invitationId = invite(teamId, captain, invitee);
+
+            List<String> outcomes = race(() -> membershipService.acceptInvitation(invitationId, invitee.getId()),
+                    () -> {
+                        profileService.deleteAccount(invitee.getId());
+                        return null;
+                    }, deleteDelay);
+
+            record(stats, outcomes);
+            // accept/delete: accept thắng → delete chuyển member sang LEFT; delete thắng → lời mời REJECTED → TEAM_006.
+            assertThat(outcomes.get(0) + "/" + outcomes.get(1)).as("round %d", round).isIn("OK/OK", "TEAM_006/OK");
+            assertThat(isSoftDeleted(invitee)).as("delete OK → soft deleted, round %d", round).isTrue();
+            assertThat(openMembershipsOfDeletedUsers(teamId)).as("deleted user still ACTIVE/PENDING, round %d", round)
+                    .isZero();
+            assertThat(count("SELECT COUNT(*) FROM team_member WHERE team_id = ? AND status = 'LEFT' "
+                    + "AND left_at < joined_at", teamId)).as("left_at >= joined_at, round %d", round).isZero();
+        }
+        report("delete account vs accept own invitation", stats);
+    }
+
+    /**
+     * Race ngược chiều R1: captain U chuyển quyền cho X trong lúc U xoá tài khoản. Đội luôn đúng 1 captain ACTIVE và user
+     * đã xoá không còn là thành viên ACTIVE.
+     */
+    @Test
+    void deleteAccountVersusTransferAwayNeverLeavesDeletedUserInTeam() throws Exception {
+        Map<String, Integer> stats = new TreeMap<>();
+        long transferMillis = measureTransferMillis();
+        for (int round = 0; round < ROUNDS; round++) {
+            long deleteDelay = transferMillis * round / ROUNDS;
+            User captain = user("Race TA Captain " + round);
+            User successor = user("Race TA Successor " + round);
+            UUID teamId = team(captain);
+            join(teamId, captain, successor);
+
+            List<String> outcomes = race(() -> teamService.transferCaptain(teamId, captain.getId(),
+                            new TransferCaptainRequest(successor.getId(), null)),
+                    () -> {
+                        profileService.deleteAccount(captain.getId());
+                        return null;
+                    }, deleteDelay);
+
+            record(stats, outcomes);
+            // transfer/delete: transfer commit trước → U là MEMBER → xoá được (LEFT); U còn là captain → USER_003.
+            assertThat(outcomes.get(0) + "/" + outcomes.get(1)).as("round %d", round).isIn("OK/OK", "OK/USER_003");
+            assertThat(activeCaptains(teamId)).as("round %d", round).isEqualTo(1);
+            assertThat(openMembershipsOfDeletedUsers(teamId)).as("deleted user still ACTIVE/PENDING, round %d", round)
+                    .isZero();
+        }
+        report("delete account vs transfer away", stats);
+    }
+
     /** Đường HTTP thật (open-in-view: các lần thử của retrier dùng chung EntityManager của request). */
     @Test
     void doubleSubmitDisbandOverHttpReturns200And422Team016() throws Exception {
@@ -318,6 +386,30 @@ class TeamDisbandRaceTest extends CommittedDataIntegrationTest {
         long start = System.nanoTime();
         teamService.transferCaptain(teamId, member.getId(), new TransferCaptainRequest(captain.getId(), null));
         return Math.max(1, (System.nanoTime() - start) / 1_000_000);
+    }
+
+    /** Thời gian một lần acceptInvitation trên DB dev (khởi động + đo) — làm biên quét độ trễ. */
+    private long measureAcceptMillis() {
+        User captain = user("Race Timing Accept Captain");
+        User warmup = user("Race Timing Accept Warmup");
+        User invitee = user("Race Timing Accept Invitee");
+        UUID teamId = team(captain);
+        join(teamId, captain, warmup);
+        UUID invitationId = invite(teamId, captain, invitee);
+        long start = System.nanoTime();
+        membershipService.acceptInvitation(invitationId, invitee.getId());
+        return Math.max(1, (System.nanoTime() - start) / 1_000_000);
+    }
+
+    /** User đã bị soft delete — chặn hồi quy "delete trả OK mà không set deleted_at" làm bất biến bên dưới pass vô nghĩa. */
+    private boolean isSoftDeleted(User user) {
+        return count("SELECT COUNT(*) FROM \"user\" WHERE id = ? AND deleted_at IS NOT NULL", user.getId()) == 1;
+    }
+
+    /** Membership ACTIVE/PENDING của user đã soft delete trong đội — phải luôn = 0 sau xoá tài khoản. */
+    private int openMembershipsOfDeletedUsers(UUID teamId) {
+        return count("SELECT COUNT(*) FROM team_member m JOIN \"user\" u ON u.id = m.user_id WHERE m.team_id = ? "
+                + "AND m.status IN ('ACTIVE', 'PENDING') AND u.deleted_at IS NOT NULL", teamId);
     }
 
     private static String attempt(CyclicBarrier barrier, Callable<?> call, long delayMillis) throws Exception {

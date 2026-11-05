@@ -48,7 +48,7 @@ class NfsWriteQueryCountTest extends CommittedDataIntegrationTest {
     }
 
     @Test
-    void deleteAccountUsesFiveStatements() {
+    void deleteAccountUsesThreeStatements() {
         User captain = user("NFS Delete Captain");
         User member = user("NFS Delete Member");
         UUID joined = team(captain);
@@ -57,8 +57,8 @@ class NfsWriteQueryCountTest extends CommittedDataIntegrationTest {
         jdbcTemplate.update("INSERT INTO team_member (id, team_id, user_id, role, status) "
                 + "VALUES (gen_random_uuid(), ?, ?, 'MEMBER', 'PENDING')", inviting, member.getId());
 
-        // S captain, U rời đội (MEMBER), S captain (kiểm lại R1), U từ chối lời mời, U soft delete.
-        assertThat(measure(() -> profileService.deleteAccount(member.getId()))).isEqualTo(5);
+        // ADR-0007: S khoá membership mở (PESSIMISTIC_WRITE), U rời đội + từ chối lời mời (1 bulk), U soft delete.
+        assertThat(measure(() -> profileService.deleteAccount(member.getId()))).isEqualTo(3);
     }
 
     @Test

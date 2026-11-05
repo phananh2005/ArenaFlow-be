@@ -146,26 +146,44 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
     }
 
     @Test
-    void bulkLeaveAndRejectForDeletedUserBumpVersion() {
+    void leaveAndRejectAllOpenMovesMemberAndPendingButNeverCaptainOrOtherRows() {
         User owner = userRepository.save(newUser("Owner", null));
         User user = userRepository.save(newUser("Leaving User", null));
+        User other = userRepository.save(newUser("Other User", null));
         Team a = saveTeam("A", owner, List.of());
         Team b = saveTeam("B", owner, List.of());
+        Team captained = saveTeam("Captained", owner, List.of());
+        Team former = saveTeam("Former", owner, List.of());
         TeamMember active = saveMember(a, user, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+        // Accept commit sau thời điểm :now của xoá tài khoản → left_at phải lấy joined_at (CHECK left_at ≥ joined_at).
+        active.setJoinedAt(OffsetDateTime.now().plusHours(1));
         TeamMember pending = saveMember(b, user, TeamMember.Role.MEMBER, TeamMember.Status.PENDING);
+        TeamMember captainRow = saveMember(captained, user, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
+        TeamMember leftRow = saveMember(former, user, TeamMember.Role.MEMBER, TeamMember.Status.LEFT);
+        TeamMember othersRow = saveMember(a, other, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+        flushAndClear();
+        // setJoinedAt sau save → fixture đã UPDATE (version 0 → 1) trước bulk; so với giá trị ngay trước bulk.
+        long activeVersionBefore = teamMemberRepository.findById(active.getId()).orElseThrow().getVersion();
         flushAndClear();
 
-        assertThat(teamMemberRepository.leaveAllActive(user.getId(), OffsetDateTime.now())).isEqualTo(1);
-        assertThat(teamMemberRepository.rejectAllPending(user.getId())).isEqualTo(1);
+        assertThat(teamMemberRepository.leaveAndRejectAllOpen(user.getId(), OffsetDateTime.now())).isEqualTo(2);
         flushAndClear();
 
         TeamMember left = teamMemberRepository.findById(active.getId()).orElseThrow();
         assertThat(left.getStatus()).isEqualTo(TeamMember.Status.LEFT);
-        assertThat(left.getLeftAt()).isNotNull();
-        assertThat(left.getVersion()).isEqualTo(1L);
+        assertThat(left.getLeftAt()).isAtSameInstantAs(left.getJoinedAt());
+        assertThat(left.getVersion()).isEqualTo(activeVersionBefore + 1);
         TeamMember rejected = teamMemberRepository.findById(pending.getId()).orElseThrow();
         assertThat(rejected.getStatus()).isEqualTo(TeamMember.Status.REJECTED);
+        assertThat(rejected.getLeftAt()).isNull();
         assertThat(rejected.getVersion()).isEqualTo(1L);
+        TeamMember stillCaptain = teamMemberRepository.findById(captainRow.getId()).orElseThrow();
+        assertThat(stillCaptain.getStatus()).isEqualTo(TeamMember.Status.ACTIVE);
+        assertThat(stillCaptain.getVersion()).isZero();
+        assertThat(teamMemberRepository.findById(leftRow.getId()).orElseThrow().getVersion()).isZero();
+        TeamMember untouched = teamMemberRepository.findById(othersRow.getId()).orElseThrow();
+        assertThat(untouched.getStatus()).isEqualTo(TeamMember.Status.ACTIVE);
+        assertThat(untouched.getVersion()).isZero();
     }
 
     @Test
@@ -303,42 +321,30 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
     }
 
     @Test
-    void existsActiveCaptainByUserIdOnlyForActiveCaptainRows() {
-        User captain = userRepository.save(newUser("Exists Captain", null));
-        User formerCaptain = userRepository.save(newUser("Former Captain", null));
-        User member = userRepository.save(newUser("Exists Member", null));
-        Team team = saveTeam("Exists Team", captain, List.of());
-        saveMember(team, captain, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
-        saveMember(team, formerCaptain, TeamMember.Role.CAPTAIN, TeamMember.Status.LEFT);
-        saveMember(team, member, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+    void findsOpenMembershipsOfUserOrderedByIdInOneQuery() {
+        User owner = userRepository.save(newUser("Lock Owner", null));
+        User user = userRepository.save(newUser("Lock User", null));
+        User other = userRepository.save(newUser("Lock Other", null));
+        Team a = saveTeam("Lock A", owner, List.of());
+        Team b = saveTeam("Lock B", owner, List.of());
+        Team c = saveTeam("Lock C", owner, List.of());
+        Team d = saveTeam("Lock D", owner, List.of());
+        saveMember(a, user, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
+        saveMember(b, user, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+        saveMember(c, user, TeamMember.Role.MEMBER, TeamMember.Status.PENDING);
+        saveMember(d, user, TeamMember.Role.MEMBER, TeamMember.Status.LEFT);
+        saveMember(a, other, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
         flushAndClear();
+        // Thứ tự khoá phải là thứ tự uuid của PostgreSQL (so byte) — lấy từ DB, không dùng UUID.compareTo của Java.
+        List<UUID> expectedOrder = jdbcTemplate.queryForList("SELECT id FROM team_member WHERE user_id = ? "
+                + "AND status IN ('ACTIVE', 'PENDING') ORDER BY id", UUID.class, user.getId());
         Statistics statistics = resetStatistics();
 
-        assertThat(teamMemberRepository.existsActiveCaptainByUserId(captain.getId())).isTrue();
+        List<TeamMember> rows = teamMemberRepository.findByUserIdAndStatusInOrderByIdAsc(user.getId(),
+                List.of(TeamMember.Status.ACTIVE, TeamMember.Status.PENDING));
+
         assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
-        assertThat(teamMemberRepository.existsActiveCaptainByUserId(formerCaptain.getId())).isFalse();
-        assertThat(teamMemberRepository.existsActiveCaptainByUserId(member.getId())).isFalse();
-        assertThat(teamMemberRepository.existsActiveCaptainByUserId(UUID.randomUUID())).isFalse();
-    }
-
-    @Test
-    void leaveAllActiveNeverMovesCaptainRows() {
-        User owner = userRepository.save(newUser("Leave Owner", null));
-        User user = userRepository.save(newUser("Captain And Member", null));
-        Team captained = saveTeam("Captained", owner, List.of());
-        Team joined = saveTeam("Joined", owner, List.of());
-        TeamMember captainRow = saveMember(captained, user, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
-        TeamMember memberRow = saveMember(joined, user, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
-        flushAndClear();
-
-        assertThat(teamMemberRepository.leaveAllActive(user.getId(), OffsetDateTime.now())).isEqualTo(1);
-        flushAndClear();
-
-        TeamMember stillCaptain = teamMemberRepository.findById(captainRow.getId()).orElseThrow();
-        assertThat(stillCaptain.getStatus()).isEqualTo(TeamMember.Status.ACTIVE);
-        assertThat(stillCaptain.getVersion()).isZero();
-        assertThat(teamMemberRepository.findById(memberRow.getId()).orElseThrow().getStatus())
-                .isEqualTo(TeamMember.Status.LEFT);
+        assertThat(rows).extracting(TeamMember::getId).containsExactlyElementsOf(expectedOrder).hasSize(3);
     }
 
     @Test

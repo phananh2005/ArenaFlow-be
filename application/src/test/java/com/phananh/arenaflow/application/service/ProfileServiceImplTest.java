@@ -3,6 +3,7 @@ package com.phananh.arenaflow.application.service;
 import com.phananh.arenaflow.application.support.OptimisticLockRetrier;
 import com.phananh.arenaflow.application.dto.request.ProfileUpdateRequest;
 import com.phananh.arenaflow.application.dto.response.ProfileResponse;
+import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.entity.user.User;
 import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
@@ -21,20 +22,24 @@ import org.mockito.InOrder;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class ProfileServiceImplTest {
@@ -119,39 +124,41 @@ class ProfileServiceImplTest {
     }
 
     @Test
-    void deleteAccountRejectsActiveCaptainWithoutSideEffects() {
-        when(teamMemberRepository.existsActiveCaptainByUserId(userId)).thenReturn(true);
+    void deleteAccountRejectsActiveCaptainFoundInLockedRowsWithoutWrites() {
+        when(teamMemberRepository.findByUserIdAndStatusInOrderByIdAsc(eq(userId), argThat(ProfileServiceImplTest::isOpen)))
+                .thenReturn(List.of(membership(TeamMember.Role.MEMBER, TeamMember.Status.PENDING),
+                        membership(TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE)));
 
         assertError(() -> service.deleteAccount(userId), ErrorCode.USER_003);
 
-        verify(teamMemberRepository, never()).leaveAllActive(any(), any());
-        verify(teamMemberRepository, never()).rejectAllPending(any());
+        verify(teamMemberRepository, never()).leaveAndRejectAllOpen(any(), any());
         verify(userRepository, never()).softDelete(any(), any());
     }
 
     @Test
-    void deleteAccountLeavesRechecksCaptainRejectsAndSoftDeletesInOrder() {
-        when(teamMemberRepository.existsActiveCaptainByUserId(userId)).thenReturn(false);
+    void deleteAccountLocksOpenMembershipsThenLeavesAndRejectsThenSoftDeletesWithoutRecheck() {
+        when(teamMemberRepository.findByUserIdAndStatusInOrderByIdAsc(eq(userId), argThat(ProfileServiceImplTest::isOpen)))
+                .thenReturn(List.of(membership(TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE),
+                        membership(TeamMember.Role.MEMBER, TeamMember.Status.PENDING)));
 
         service.deleteAccount(userId);
 
+        // ADR-0007: Q1 khoá → kiểm trên dữ liệu đã khoá → Q2 bulk gộp → Q3 soft delete; không còn bước kiểm lại.
         InOrder order = inOrder(teamMemberRepository, userRepository);
-        order.verify(teamMemberRepository).existsActiveCaptainByUserId(userId);
-        order.verify(teamMemberRepository).leaveAllActive(eq(userId), any());
-        order.verify(teamMemberRepository).existsActiveCaptainByUserId(userId);
-        order.verify(teamMemberRepository).rejectAllPending(userId);
+        order.verify(teamMemberRepository).findByUserIdAndStatusInOrderByIdAsc(eq(userId), argThat(ProfileServiceImplTest::isOpen));
+        order.verify(teamMemberRepository).leaveAndRejectAllOpen(eq(userId), any());
         order.verify(userRepository).softDelete(eq(userId), any());
+        verifyNoMoreInteractions(teamMemberRepository);
     }
 
-    @Test
-    void deleteAccountThrowsUser003WhenBecameCaptainConcurrently() {
-        // R1: transfer-cho-user commit giữa Q1 và Q2 → Q3 thấy row CAPTAIN ACTIVE.
-        when(teamMemberRepository.existsActiveCaptainByUserId(userId)).thenReturn(false, true);
+    private static boolean isOpen(Collection<TeamMember.Status> statuses) {
+        return statuses != null && Set.copyOf(statuses).equals(Set.of(TeamMember.Status.ACTIVE, TeamMember.Status.PENDING));
+    }
 
-        assertError(() -> service.deleteAccount(userId), ErrorCode.USER_003);
-
-        verify(teamMemberRepository).leaveAllActive(eq(userId), any());
-        verify(teamMemberRepository, never()).rejectAllPending(any());
-        verify(userRepository, never()).softDelete(any(), any());
+    private static TeamMember membership(TeamMember.Role role, TeamMember.Status status) {
+        TeamMember member = new TeamMember();
+        member.setRole(role);
+        member.setStatus(status);
+        return member;
     }
 }

@@ -61,7 +61,7 @@ class ProfileServiceIntegrationTest {
     }
 
     @Test
-    void deleteAccountAfterDisbandLeavesRejectsSoftDeletesInFiveQueriesAndIsIdempotent() {
+    void deleteAccountAfterDisbandLeavesRejectsSoftDeletesInThreeQueriesAndIsIdempotent() {
         User captain = saveUser("Disbanding Captain");
         User owner = saveUser("Other Owner");
         Team own = saveTeam("Own", captain);
@@ -82,8 +82,8 @@ class ProfileServiceIntegrationTest {
 
         profileService.deleteAccount(captain.getId());
 
-        // NFS W6: S captain + U leave (MEMBER) + S captain (kiểm lại R1) + U reject + U soft delete = 5.
-        assertThat(statistics.getPrepareStatementCount()).isEqualTo(5);
+        // NFS W6 (ADR-0007): S khoá membership mở + U bulk rời đội/từ chối lời mời + U soft delete = 3.
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(3);
         entityManager.clear();
         assertThat(teamRepository.findById(own.getId()).orElseThrow().getStatus()).isEqualTo(Team.TeamStatus.DISBANDED);
         assertThat(teamMemberRepository.findById(membership.getId()).orElseThrow().getStatus())
