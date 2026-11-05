@@ -8,7 +8,7 @@
 | Quy ước áp dụng | `docs/agent/api-convention.md`, `docs/agent/security-backend.md` |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + delta V2/V3 (xem §5) · `docs/agent/non-functional-standards.md` |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (UC-U01..U03, UC-T01..T05, BR-U01..U06, BR-T01..T06) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (TEAM_015 thêm reject; bảng "Lỗi chung" `SYS_*` §4; endpoint Public bỏ qua header Bearer §2; `avatarUrl` chỉ http/https §3.5–3.7; chuẩn hoá email 2.1 — xem `CHANGELOG.md`) · developer · 2026-11-05 · v1.2 (không đổi nội dung — đồng bộ phiên bản với CCD, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) · developer · 2026-11-06 · v2.1 (`DELETE /profile` khoá bi quan có phạm vi — ADR-0007, contract không đổi) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (TEAM_015 thêm reject; bảng "Lỗi chung" `SYS_*` §4; endpoint Public bỏ qua header Bearer §2; `avatarUrl` chỉ http/https §3.5–3.7; chuẩn hoá email 2.1 — xem `CHANGELOG.md`) · developer · 2026-11-05 · v1.2 (không đổi nội dung — đồng bộ phiên bản với CCD, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) · developer · 2026-11-06 · v2.1 (`DELETE /profile` khoá bi quan có phạm vi — ADR-0007, contract không đổi) · developer · 2026-11-06 · v3.0 (MAJOR — 2.14 reject `200 + InvitationResponse` → `204`; bỏ header `Location` ở mọi 201 — `api-convention.md` §5, xem `CHANGELOG.md`) |
 
 ## 1. Tổng quan
 
@@ -44,7 +44,7 @@ Foundation module: xác thực mock (OAuth Google/Facebook, Phone OTP) + JWT, h�
 | 2.11 | `PATCH /api/v1/teams/{teamId}` | Captain | 200 |
 | 2.12 | `POST /api/v1/teams/{teamId}/invitations` | Captain | 201 |
 | 2.13 | `POST /api/v1/invitations/{invitationId}/accept` | Người được mời | 200 |
-| 2.14 | `POST /api/v1/invitations/{invitationId}/reject` | Người được mời | 200 |
+| 2.14 | `POST /api/v1/invitations/{invitationId}/reject` | Người được mời | 204 |
 | 2.15 | `POST /api/v1/teams/{teamId}/captain/transfer` | Captain | 200 |
 | 2.16 | `GET /api/v1/teams/{teamId}/captain/history` | User | 200 |
 | 2.17 | `GET /api/v1/teams/{teamId}/members` | User | 200 |
@@ -52,6 +52,8 @@ Foundation module: xác thực mock (OAuth Google/Facebook, Phone OTP) + JWT, h�
 | 2.19 | `PATCH /api/v1/admin/teams/{teamId}/mark-inactive` | Admin | 200 |
 | 2.20 | `PATCH /api/v1/admin/teams/{teamId}/reactivate` | Admin | 200 |
 | 2.21 | `GET /api/v1/admin/teams` | Admin | 200 |
+
+Mã thành công theo `api-convention.md` §5 (B1–B4 / N1); `201` **không** kèm header `Location` — client lấy id từ body.
 
 Mọi endpoint không Public: thiếu/sai/hết hạn access token → `401 AUTH_001`.
 
@@ -68,7 +70,7 @@ Endpoint Public `/api/v1/auth/**` (2.1–2.4) **bỏ qua header `Authorization`*
 { "provider": "GOOGLE", "oauthToken": "any-non-blank-token", "email": "user@example.com" }
 ```
 
-**Response 201 (tạo mới, header `Location: /api/v1/profile`) / 200 (đã có):** `AuthResponse` (§3.10), `isNewUser` = `true`/`false`.
+**Response 201 (tạo mới) / 200 (đã có):** `AuthResponse` (§3.10), `isNewUser` = `true`/`false`.
 
 **Lỗi:** `400 VALIDATION_ERROR` · `403 AUTH_003` (tài khoản đã bị xoá).
 
@@ -101,7 +103,7 @@ Endpoint Public `/api/v1/auth/**` (2.1–2.4) **bỏ qua header `Authorization`*
 
 **Request:** `{ "phone": "0987654321", "otp": "123456" }`
 
-**Response 201 (`Location: /api/v1/profile`) / 200:** `AuthResponse` (§3.10).
+**Response 201 (tạo mới) / 200 (đã có):** `AuthResponse` (§3.10).
 
 **Lỗi:** `400 VALIDATION_ERROR` · `403 AUTH_003`.
 
@@ -149,7 +151,7 @@ Endpoint Public `/api/v1/auth/**` (2.1–2.4) **bỏ qua header `Authorization`*
 
 **Response 204.**
 
-**Lỗi:** `422 USER_003` (còn là captain ACTIVE của một đội chưa giải tán) · `409 TEAM_014` (giữ khai báo để không đổi contract; từ v2.1 luồng khoá bi quan không còn phát sinh mã này — [Inference], xem `CHANGELOG.md` v2.1).
+**Lỗi:** `422 USER_003` (còn là captain ACTIVE của một đội chưa giải tán) · `409 TEAM_014` (giữ khai báo để không đổi contract; từ v2.1 luồng khoá bi quan không còn phát sinh mã này — [Inference], xem `CHANGELOG.md` v2.1; user chốt giữ — v3.0 #7).
 
 ---
 
@@ -159,7 +161,7 @@ Endpoint Public `/api/v1/auth/**` (2.1–2.4) **bỏ qua header `Authorization`*
 
 **Request:** `CreateTeamRequest` (§3.6).
 
-**Response 201 (`Location: /api/v1/teams/{teamId}`):** `TeamResponse` (§3.12).
+**Response 201:** `TeamResponse` (§3.12).
 
 **Lỗi:** `400 VALIDATION_ERROR` · `404 USER_001`.
 
@@ -203,7 +205,7 @@ Endpoint Public `/api/v1/auth/**` (2.1–2.4) **bỏ qua header `Authorization`*
 
 **Request:** `InviteMemberRequest` (§3.8).
 
-**Response 201 (`Location: /api/v1/invitations/{invitationId}`):** `InvitationResponse` (§3.15).
+**Response 201:** `InvitationResponse` (§3.15).
 
 **Lỗi:** `400 VALIDATION_ERROR` · `403 TEAM_002` · `404 TEAM_001` · `422 TEAM_015` (đội INACTIVE) · `404 USER_001` (người được mời không tồn tại/đã xoá) · `409 TEAM_003`.
 
@@ -225,7 +227,7 @@ Endpoint Public `/api/v1/auth/**` (2.1–2.4) **bỏ qua header `Authorization`*
 
 **Mô tả:** `PENDING` → `REJECTED` (giữ dòng làm lịch sử).
 
-**Response 200:** `InvitationResponse` (§3.15) với `status = REJECTED`.
+**Response 204:** không body (N1 — `api-convention.md` §5).
 
 **Lỗi:** `403 TEAM_005` · `404 TEAM_004` · `422 TEAM_015` (đội INACTIVE) · `409 TEAM_006` · `409 TEAM_014`.
 

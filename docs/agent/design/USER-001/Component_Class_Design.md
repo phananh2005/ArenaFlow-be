@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code, bugfix lỗi framework, ADR-0004, mã `SYS_*` — 39 mục, xem `CHANGELOG.md`) · developer · 2026-11-05 · v1.2 (Maven multi-module, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) · developer · 2026-11-06 · v2.1 (`DELETE /profile` khoá bi quan có phạm vi — ADR-0007, contract không đổi) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code, bugfix lỗi framework, ADR-0004, mã `SYS_*` — 39 mục, xem `CHANGELOG.md`) · developer · 2026-11-05 · v1.2 (Maven multi-module, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) · developer · 2026-11-06 · v2.1 (`DELETE /profile` khoá bi quan có phạm vi — ADR-0007, contract không đổi) · developer · 2026-11-06 · v3.0 (MAJOR — `rejectInvitation` → `void`; 201 không `Location` — xem `CHANGELOG.md`) |
 
 ## 1. Tổng quan kiến trúc
 
@@ -84,7 +84,7 @@ Mọi controller: `@RestController`, `@RequiredArgsConstructor`, `@Validated`; n
 | `InvitationController` | `/api/v1/invitations` | 2.13–2.14 | `TeamMembershipService` |
 | `AdminTeamController` | `/api/v1/admin/teams` | 2.19–2.21 | `AdminTeamService` |
 
-Mọi handler trả `ResponseEntity<…>` (`convention-backend.md`): 200 → `ResponseEntity.ok(...)`, 201 trả kèm header `Location` (`api-convention.md` §5), 204 → `noContent()`. `AuthController` chọn 201/200 theo `AuthResult.isNewUser()`.
+Mọi handler trả `ResponseEntity<…>` (`convention-backend.md`): 200 → `ResponseEntity.ok(...)`, 201 → `ResponseEntity.status(HttpStatus.CREATED).body(...)` (không header `Location`, `api-convention.md` §5), 204 → `noContent().build()`. `AuthController` chọn 201/200 theo `AuthResult.isNewUser()`.
 
 ## 4. Service Layer
 
@@ -141,7 +141,7 @@ Deps: `UserRepository`, `TeamRepository`, `TeamMemberRepository`, `TeamCaptainHi
 ```java
 InvitationResponse inviteMember(UUID teamId, UUID captainUserId, InviteMemberRequest request);
 MemberResponse acceptInvitation(UUID invitationId, UUID userId);
-InvitationResponse rejectInvitation(UUID invitationId, UUID userId);
+void rejectInvitation(UUID invitationId, UUID userId);
 PageResponse<MemberResponse> listMembers(UUID teamId, int page, int pageSize);
 void leaveTeam(UUID teamId, UUID userId);
 ```

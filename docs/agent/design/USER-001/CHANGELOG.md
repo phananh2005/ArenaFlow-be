@@ -1,5 +1,28 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v3.0] — 2026-11-06
+
+**Type:** MAJOR (đổi shape response: `POST /invitations/{id}/reject` `200 + InvitationResponse` → `204` không body; bỏ header `Location` ở mọi `201`) · **Tóm tắt:** Áp quy tắc mã thành công 2xx theo kết quả (B1–B4 / N1, `api-convention.md` §5 — user chốt 2026-11-06) cho USER-001; chốt giữ `TEAM_014`.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `API_Spec.md` §2 (bảng), §2.14 | Sửa | 2.14 `200` + `InvitationResponse` (`status = REJECTED`) → `204` không body | N1: kết quả suy ra từ việc request thành công; không có giá trị server sinh mà client cần (B3) |
+| 2 | `API_Spec.md` §2.1, §2.3, §2.8, §2.12 | Sửa | `201` kèm header `Location` → `201` không `Location` (client lấy id từ body) | Quy tắc user chốt; `Location` trỏ tới URI không phải lúc nào cũng là tài nguyên vừa tạo (2.1/2.3 trỏ `/profile`, 2.12 trỏ `/invitations/{id}` không có GET) |
+| 3 | `API_Spec.md` §2 (dưới bảng) | Thêm | — → ghi chú "Mã thành công theo `api-convention.md` §5; `201` không `Location`" | Nguồn quy tắc duy nhất |
+| 4 | `Component_Class_Design.md` §3 (controller) | Sửa | 201 "kèm header `Location`" → `ResponseEntity.status(HttpStatus.CREATED).body(...)` | Như #2 |
+| 5 | `Component_Class_Design.md` §4.4 | Sửa | `InvitationResponse rejectInvitation(...)` → `void rejectInvitation(...)` | Như #1 — service không dựng DTO không ai dùng (user chọn 2026-11-06) |
+| 6 | `Processing_Flow.md` §2 (sequence 2.1), §3 (2.14) | Sửa | `201 + Location` → `201`; 2.14 "response dùng tên đội từ team đã nạp" → "204 không body" | Như #1, #2. Số truy vấn 2.14 giữ 3 (S, S, U) |
+| 7 | `API_Spec.md` §2.7 (Lỗi) | Chốt `[cần xác nhận]` của v2.1 | Ghi chú `409 TEAM_014` trỏ "`CHANGELOG.md` v2.1" (còn "[cần xác nhận] xem xét bỏ ở lần MAJOR kế tiếp") → thêm "user chốt giữ — v3.0 #7"; **giữ** `409 TEAM_014` cho `DELETE /profile` | User chốt giữ 2026-11-06: mã vẫn dùng ở 9 thao tác ghi qua retrier (tính cả `disbandTeam` của USER-002; không tính `deleteAccount`) |
+| 8 | Header `API_Spec.md`, `Processing_Flow.md`, `Component_Class_Design.md` | Ghi nhận | v2.1 → v3.0 | design-standards §10 |
+
+### Ảnh hưởng
+- **Client:** 2.14 không còn đọc `data` sau khi từ chối; 2.1/2.3/2.8/2.12 không dùng header `Location` (id có trong body).
+- Endpoint, request, mã lỗi, DB schema, nghiệp vụ: không đổi. SRS: không ảnh hưởng (thuần kỹ thuật).
+- Tham chiếu: quy tắc §5 mới của `api-convention.md` đến từ nhánh `chore/agent-framework-success-status-codes` (PR agent-framework "success status codes") — khớp khi nhánh đó merge.
+- Kiểm chứng: `AuthControllerTest`, `TeamControllerTest` (`header().doesNotExist(LOCATION)`), `InvitationControllerTest` (204, body rỗng), `TeamMembershipServiceImplTest`, `NfsQueryCountTest` (2.14 = 3); full suite 212 PASS.
+
 ## [v2.1] — 2026-11-06
 
 **Type:** MINOR (không đổi endpoint, shape DTO hay mã lỗi; đổi cơ chế xử lý đồng thời bên trong `DELETE /profile`) · **Tóm tắt:** Đồng bộ với USER-002 v1.2 — `deleteAccount` dùng khoá bi quan có phạm vi (ADR-0007): khoá membership ACTIVE/PENDING → kiểm captain → một bulk UPDATE → soft delete (5 → 3 truy vấn).
