@@ -30,6 +30,17 @@ class UserRepositoryTest extends RepositoryIntegrationTest {
     private AdministrativeUnitRepository administrativeUnitRepository;
 
     @Test
+    void generatesTimeOrderedUuidVersion7Ids() {
+        User first = userRepository.save(newUser("Uuid First", null));
+        User second = userRepository.save(newUser("Uuid Second", null));
+        flushAndClear();
+
+        assertThat(first.getId().version()).isEqualTo(7);
+        assertThat(second.getId().version()).isEqualTo(7);
+        assertThat(second.getId().toString()).isGreaterThan(first.getId().toString());
+    }
+
+    @Test
     void findsOnlyNotDeletedUserById() {
         User active = userRepository.save(newUser("Active", null));
         User deleted = newUser("Deleted", null);
