@@ -5,9 +5,9 @@
 | Mã chức năng | `USER-002` |
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL |
-| Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6), ADR-0003 optimistic retry |
+| Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6), ADR-0003 optimistic retry, ADR-0007 (Proposed — ngoại lệ khoá bi quan cho `deleteAccount`) |
 | Ràng buộc dữ liệu | USER-001 V1/V2/V3 + delta `Component_Class_Design.md` §5 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) · developer · 2026-11-06 · v1.2 (`deleteAccount` khoá bi quan có phạm vi — ADR-0007) |
 
 ## 1. Tổng quan
 
@@ -43,7 +43,7 @@ Số query là mức dự kiến một lần thử; JWT xác thực không truy 
 | API | Guard/logic & DB work | Số truy vấn | Ngưỡng |
 |---|---|---:|---:|
 | `POST /teams/{teamId}/disband` | S team → S captain → U captain → U team → U bulk CASE → S projection (chi tiết §4.1) | 6 | W6 ✅ (bằng ngưỡng) |
-| `DELETE /profile` | S exists captain → U bulk member → S exists captain → U bulk pending → U user (chi tiết §4.2) | 5 | W6 ✅ |
+| `DELETE /profile` | S khoá membership ACTIVE/PENDING (`PESSIMISTIC_WRITE`) → U bulk member + pending (một `CASE`) → U user (chi tiết §4.2, ADR-0007) | 3 | W6 ✅ |
 | `GET /teams/{teamId}` | Q1 TeamDetailView join captain/user + disband actor/user + memberCount projection | 1 | D3 ✅ |
 | `GET /teams` | Q1 page summary projection (status filter, disband actor display); Q2 count | 2 | L4 ✅ |
 | `GET /admin/teams` | Như USER-001; projection thêm người giải tán (join user trong cùng query); mặc định `ALL` nên gồm cả đội `DISBANDED` | 2 | L4 ✅ |
@@ -74,14 +74,19 @@ Số query là mức dự kiến một lần thử; JWT xác thực không truy 
 
 ### 4.2. `deleteAccount`
 
-- Q1 `existsActiveCaptainByUserId` (chỉ đọc `team_member`, không join `team`): có → `422 USER_003`, không có side effect. Không cần lọc `team.status <> 'DISBANDED'` vì bất biến: đội `DISBANDED` không còn row ACTIVE nào (BR-T10).
-- Nếu guard qua: Q2 `leaveAllActive` thêm điều kiện `role = 'MEMBER'` để không bao giờ chuyển row CAPTAIN sang LEFT. Q3 gọi lại `existsActiveCaptainByUserId`: nếu transfer-cho-user commit giữa Q1 và Q2, PostgreSQL READ COMMITTED đánh giá lại WHERE ở Q2 nên bỏ qua row đã thành CAPTAIN, và Q3 thấy row đó → ném **`USER_003` ngay** (dữ liệu Q3 đọc đã commit; transaction rollback Q2, không cần retry). Nếu Q2 commit trước, transfer cập nhật row có `@Version` đã bị Q2 tăng → retry → `TEAM_007`.
-- Sau đó Q4 reject PENDING, Q5 soft-delete như USER-001. Bỏ nhánh tự INACTIVE đội solo (`markInactiveByIds`) theo BC-T02 sửa.
+**Khoá bi quan có phạm vi (v1.2, ADR-0007 Proposed — ngoại lệ của ADR-0003; chốt qua MR).** Lý do: các bước ghi là bulk UPDATE (chỉ tăng, không kiểm `version`), nên `@Version` không bảo vệ chính luồng này; bản v1.1 (kiểm → ghi có điều kiện → kiểm lại, 5 truy vấn) để hở race delete vs accept của chính user (đã tái hiện bằng test, ADR-0007 Bối cảnh).
+
+- Mỗi lần thử của retrier là một transaction (giữ để có transaction; luồng này không tự sinh optimistic conflict).
+- Q1 `findByUserIdAndStatusInOrderByIdAsc(userId, {ACTIVE, PENDING})` với `PESSIMISTIC_WRITE` (Hibernate 7.2 + PostgreSQL sinh `SELECT … FOR NO KEY UPDATE` — chặn mọi UPDATE khác trên các row này), sắp theo `id`. Khoá giữ tới hết transaction. Không cần lọc `team.status <> 'DISBANDED'` vì bất biến: đội `DISBANDED` không còn row ACTIVE/PENDING nào (BR-T10).
+- Kiểm trên dữ liệu đã khoá: có row `ACTIVE` + `CAPTAIN` → `422 USER_003`, rollback, không ghi gì.
+- Q2 `leaveAndRejectAllOpen(userId, now)`: một bulk `CASE` — MEMBER ACTIVE → LEFT (`left_at = GREATEST(:now, COALESCE(joined_at, invited_at))`), PENDING → REJECTED, `version + 1`; điều kiện `role = 'MEMBER'` cho nhánh ACTIVE giữ làm lớp an toàn (không bao giờ chuyển row CAPTAIN sang LEFT). `now` lấy **sau** Q1.
+- Q3 soft-delete như USER-001. Gọi lại khi đã xoá: không lỗi (idempotent). Bỏ nhánh tự INACTIVE đội solo (`markInactiveByIds`) theo BC-T02 sửa.
+- Thao tác song song cập nhật row đã khoá chờ tới khi transaction xoá kết thúc. Xoá commit → luồng ghi entity (accept, transfer cho/khỏi user, leave) thấy `version` đã tăng → retry (ADR-0003) → lỗi nghiệp vụ; bulk `disbandRemaining` của disband đánh giá lại `WHERE status IN ('ACTIVE','PENDING')` trên bản mới → bỏ qua row đã LEFT/REJECTED, disband vẫn thành công. Xoá rollback (`USER_003`) → bên kia tiếp tục bình thường.
 - Không chuyển status đội do xoá tài khoản.
 
 ## 5. Concurrency & locking
 
-Dùng `@Version` Team/TeamMember và retrier USER-001/ADR-0003; cập nhật bulk tự tăng version. Mỗi race dưới đây được tuần tự hoá bằng việc hai luồng cùng ghi một dòng có kiểm tra version.
+Dùng `@Version` Team/TeamMember và retrier USER-001/ADR-0003; cập nhật bulk tự tăng version. Mỗi race dưới đây được tuần tự hoá bằng việc hai luồng cùng ghi một dòng có kiểm tra version. **Ngoại lệ (v1.2, ADR-0007):** `deleteAccount` khoá trước mọi row ACTIVE/PENDING của user (`PESSIMISTIC_WRITE`, §4.2); các race của nó được tuần tự hoá bằng khoá dòng đó.
 
 **Mã lỗi bên thua — đọc lại trạng thái đã commit (bổ sung sau implement, chốt bởi user 2026-11-05):** với READ COMMITTED, request thua có thể đọc đội (Q1) **trước** khi disband commit nhưng đọc captain/member **sau** commit → guard thất bại với mã sai ngữ cảnh (đã tái hiện: transfer nhận `TEAM_007` ở test race R2). Các guard đọc captain/member sau Q1 dùng `TeamGuard#disbandedOr(teamId, fallback)`: đọc `team.status` bằng native query (`TeamRepository#findCurrentStatusById`, bỏ qua persistence context); `DISBANDED` → `TEAM_016`, ngược lại → `fallback`. Áp cho `requireCaptain` (`TEAM_002`: disband, update, invite, transfer), transfer `TEAM_007`, leave `TEAM_010`, reactivate `TEAM_013`. Chỉ thêm **1 truy vấn ở nhánh lỗi**; luồng thành công không đổi số truy vấn (§3).
 
@@ -95,10 +100,12 @@ Dùng `@Version` Team/TeamMember và retrier USER-001/ADR-0003; cập nhật bul
 | Leave vs disband | Leave thắng → member LEFT trước, disband Q5 bỏ qua row đó; disband thắng → leave không còn row ACTIVE (`TEAM_010`) → đọc lại trạng thái → `TEAM_016` |
 | Admin reactivate vs disband | Đội INACTIVE: disband thắng → reactivate không thấy captain (`TEAM_013`) → đọc lại trạng thái → `TEAM_016`; reactivate thắng → disband giải tán từ ACTIVE |
 | Delete captain vs accept invitation | Guard captain ownership ngăn xoá bất kể thứ tự; accept không được làm mất captain |
-| Delete account vs transfer-cho-chính-user (R1) | Transfer thắng → delete `USER_003`; delete thắng → transfer `TEAM_007`. Đội không bao giờ mất captain. Cơ chế: §4.2 Q2–Q3 |
+| Delete account vs transfer-cho-chính-user (R1) | Transfer thắng → Q1 chờ khoá, nhận row đã là CAPTAIN → delete `USER_003`; delete thắng → transfer chờ khoá, lệch version → retry → `TEAM_007`. Đội không bao giờ mất captain. Cơ chế: §4.2 Q1 (v1.2; v1.1 dùng kiểm lại Q3) |
+| Delete account vs captain chuyển quyền **đi** (v1.2) | U là captain, chuyển cho X trong lúc U xoá tài khoản. Transfer thắng → U thành MEMBER → delete xoá được (U LEFT); delete khoá trước → thấy U CAPTAIN → `USER_003`, rollback → transfer tiếp tục. Luôn đúng 1 captain; user đã xoá không còn ACTIVE. Cơ chế: §4.2 Q1 (v1.1 chỉ an toàn nhờ thứ tự Q1 trước Q2 — đã kiểm bằng mutation) |
+| Delete account vs accept lời mời của chính user (v1.2) | Accept thắng → delete chuyển row vừa ACTIVE sang LEFT (`left_at` theo `GREATEST`); delete khoá trước → accept chờ, lệch version → retry → `TEAM_006`. User đã xoá không còn ACTIVE/PENDING, không vi phạm CHECK. v1.1 hở: accept commit giữa Q2 và Q4 → user đã xoá còn ACTIVE (tái hiện bằng test 2026-11-06) |
 | Retry/replay disband | Chỉ trạng thái ACTIVE/INACTIVE được chuyển; lặp sau DISBANDED trả lỗi state, không ghi đè metadata |
 
-**Kiểm chứng bắt buộc khi implement (chốt bởi user, 2026-11-05):** integration test cho R1, R2, M1 (invite vs disband), double-submit disband (`TEAM_016`) và disband vs accept (assert `left_at >= joined_at`, không 500), viết Red trước để reproduce race, rồi mới sửa; thêm `NfsQueryCountTest` cho disband (= 6), delete account (= 5) và invite (= 6). Không dùng `SELECT … FOR UPDATE` (ADR-0003).
+**Kiểm chứng bắt buộc khi implement (chốt bởi user, 2026-11-05):** integration test cho R1, R2, M1 (invite vs disband), double-submit disband (`TEAM_016`) và disband vs accept (assert `left_at >= joined_at`, không 500), viết Red trước để reproduce race, rồi mới sửa; thêm `NfsQueryCountTest` cho disband (= 6), delete account (~~= 5~~ → **= 3** từ v1.2) và invite (= 6). Không dùng `SELECT … FOR UPDATE` (ADR-0003) — **ngoại trừ `deleteAccount` (ADR-0007, v1.2)**. **Cập nhật v1.2 (2026-11-06):** thêm race "chuyển quyền đi", "accept lời mời của chính user" và test khoá thật `AccountDeletionLockIntegrationTest`.
 
 - Test race và test đếm query cho invite phải chạy **không** `@Transactional` ở mức test (commit thật qua retrier). `NfsQueryCountTest` hiện có `@Transactional` mức class và chỉ `flush` (`NfsQueryCountTest.java:32`); bước tăng version của `OPTIMISTIC_FORCE_INCREMENT` chạy trước khi commit, không chạy khi flush, nên harness hiện tại sẽ đo thiếu. [Inference: theo hành vi Hibernate, test sẽ kiểm chứng.]
 - Conflict của `OPTIMISTIC_FORCE_INCREMENT` nổi lên lúc commit (ngoài lambda). Retrier phải nhận được `ObjectOptimisticLockingFailureException` ở đó để retry. [Unverified: Spring dịch lỗi commit sang `ObjectOptimisticLockingFailureException`; test M1 kiểm chứng, sai → dừng, báo.]

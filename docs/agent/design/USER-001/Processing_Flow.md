@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code: 2.1/2.3/2.6, §3 (2.11, 2.14), §4, §5) · developer · 2026-11-05 · v1.2 (không đổi nội dung — đồng bộ phiên bản với CCD, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code: 2.1/2.3/2.6, §3 (2.11, 2.14), §4, §5) · developer · 2026-11-05 · v1.2 (không đổi nội dung — đồng bộ phiên bản với CCD, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) · developer · 2026-11-06 · v2.1 (`DELETE /profile` khoá bi quan có phạm vi — ADR-0007, contract không đổi) |
 
 ## 1. Tổng quan luồng
 
@@ -74,22 +74,16 @@ sequenceDiagram
     participant TMR as TeamMemberRepository
     participant UR as UserRepository
 
-    Note over PS,UR: Luồng mới từ USER-002 (ADR-0005) — chi tiết: USER-002 Processing_Flow.md §4.2
+    Note over PS,UR: Luồng USER-002 (ADR-0005) + khoá bi quan có phạm vi (ADR-0007) — chi tiết: USER-002 Processing_Flow.md §4.2
     C->>PS: deleteAccount(userId)
     PS->>RT: execute(tx)
-    RT->>TMR: Q1 existsActiveCaptainByUserId(userId)
-    alt Còn là captain ACTIVE
-        RT-->>C: 422 USER_003 (không side effect)
+    RT->>TMR: Q1 findByUserIdAndStatusInOrderByIdAsc(userId, ACTIVE/PENDING) — PESSIMISTIC_WRITE, theo id
+    alt Có row ACTIVE + CAPTAIN (trên dữ liệu đã khoá)
+        RT-->>C: 422 USER_003 (rollback, không ghi gì)
     else
-        RT->>TMR: Q2 leaveAllActive(userId) — chỉ role MEMBER
-        RT->>TMR: Q3 existsActiveCaptainByUserId(userId) — race R1
-        alt Vừa được chuyển quyền
-            RT-->>C: 422 USER_003 (rollback Q2)
-        else
-            RT->>TMR: Q4 rejectAllPending(userId)
-            RT->>UR: Q5 softDelete(userId)
-            RT-->>C: 204
-        end
+        RT->>TMR: Q2 leaveAndRejectAllOpen(userId, now) — MEMBER ACTIVE → LEFT, PENDING → REJECTED
+        RT->>UR: Q3 softDelete(userId)
+        RT-->>C: 204
     end
 ```
 
@@ -132,7 +126,7 @@ Ký hiệu truy vấn: **S** = SELECT, **I** = INSERT, **U** = UPDATE. Loại: D
 | 2.4 | `POST /auth/refresh` | Parse refresh token (AUTH_002) → S user theo id (không có/đã xoá → AUTH_003) → cấp cặp token mới với `role` hiện tại | S | 1 / D3 ✅ |
 | 2.5 | `GET /profile` | S `ProfileView` (user LEFT JOIN ward LEFT JOIN province, `deleted_at IS NULL`) → USER_001 · S oauth_account theo user | S, S | 2 / D3 ✅ |
 | 2.6 | `PATCH /profile` | S user chưa xoá (USER_001) → nếu có `wardId`: S ward+province (USER_002) → áp field ≠ null → U user (`saveAndFlush`) → S `ProfileView` (response qua `ProfileMapper`, khớp DB — đọc lại có chủ đích, lệch NFS §3 đã duyệt: `Component_Class_Design.md` §10) → S oauth_account (response) | S, (S ward), U, S, S | 4–5 / W6 ✅ |
-| 2.7 | `DELETE /profile` | Xem §2.2 (luồng USER-002) · còn captain ACTIVE → `USER_003`, không đổi trạng thái đội · **membership MEMBER ACTIVE → LEFT, PENDING → REJECTED** · kiểm captain lần 2 sau khi rời đội (race R1) · `softDelete` chỉ khi `deleted_at IS NULL` → gọi lại vẫn 204 · Access token còn hiệu lực tối đa 1h (JWT stateless, grace period chấp nhận cho MVP) | S, U, S, U, U | 5 / W6 ✅ |
+| 2.7 | `DELETE /profile` | Xem §2.2 (luồng USER-002) · còn captain ACTIVE → `USER_003`, không đổi trạng thái đội · **membership MEMBER ACTIVE → LEFT, PENDING → REJECTED** · khoá membership ACTIVE/PENDING trước (`PESSIMISTIC_WRITE`, ADR-0007) rồi kiểm captain trên dữ liệu đã khoá · `softDelete` chỉ khi `deleted_at IS NULL` → gọi lại vẫn 204 · Access token còn hiệu lực tối đa 1h (JWT stateless, grace period chấp nhận cho MVP) | S (khoá), U, U | 3 / W6 ✅ |
 | 2.8 | `POST /teams` | S user chưa xoá (USER_001; lấy `displayName` làm `captainName`) → I team (`skill_levels` JSON) → I team_member (CAPTAIN, ACTIVE, `joined_at=now`) → I history (`from=null`) · response dựng từ dữ liệu đã có (`memberCount=1`) | S, I, I, I | 4 / W6 ✅ |
 | 2.9 | `GET /teams/{id}` | S `TeamDetailView` (team LEFT JOIN captain ACTIVE LEFT JOIN user, `memberCount` bằng subquery COUNT) → TEAM_001 | S | 1 / D3 ✅ |
 | 2.10 | `GET /teams` | S `TeamSummaryView` trang (join như 2.9, lọc status) · S COUNT | S, S | 2 / L4 ✅ |
@@ -165,7 +159,7 @@ Isolation: `READ_COMMITTED` (mặc định PostgreSQL). Không gọi dịch vụ
 
 - `@Version` trên `Team`, `TeamMember`. `User` không có version — cập nhật hồ sơ theo last-write-wins (chỉ chủ tài khoản sửa).
 - `OptimisticLockRetrier.execute(Supplier<T>)`: bắt `ObjectOptimisticLockingFailureException` → thử lại ngay, không backoff, **tối đa 3 lần thử** (1 lần đầu + 2 lần retry) → hết → `BusinessException(TEAM_014)`. Lỗi nghiệp vụ (`BusinessException`) không retry.
-- ~~**Tín hiệu "cập nhật thiếu dòng" của 2.7**~~ — bỏ ở USER-002: `deleteAccount` không còn `markInactiveByIds`; race với chuyển quyền (R1) xử lý bằng kiểm captain lần 2 (USER-002 `Processing_Flow.md` §4.2).
+- ~~**Tín hiệu "cập nhật thiếu dòng" của 2.7**~~ — bỏ ở USER-002: `deleteAccount` không còn `markInactiveByIds`; ~~race với chuyển quyền (R1) xử lý bằng kiểm captain lần 2~~ (v2.0). **v2.1:** race của xoá tài khoản xử lý bằng khoá bi quan có phạm vi — ngoại lệ của ADR-0003 do ADR-0007 (Proposed) đề xuất (USER-002 `Processing_Flow.md` §4.2).
 - Bulk update (2.7) tự `SET version = version + 1` để các transaction đang giữ bản cũ phát hiện xung đột.
 
 | Kịch bản song song | Kết quả |

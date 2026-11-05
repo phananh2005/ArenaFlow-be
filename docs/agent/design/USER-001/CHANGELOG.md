@@ -1,5 +1,23 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v2.1] — 2026-11-06
+
+**Type:** MINOR (không đổi endpoint, shape DTO hay mã lỗi; đổi cơ chế xử lý đồng thời bên trong `DELETE /profile`) · **Tóm tắt:** Đồng bộ với USER-002 v1.2 — `deleteAccount` dùng khoá bi quan có phạm vi (ADR-0007): khoá membership ACTIVE/PENDING → kiểm captain → một bulk UPDATE → soft delete (5 → 3 truy vấn).
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `Processing_Flow.md` §2.2 (sequence xoá tài khoản) | Sửa | `existsActiveCaptainByUserId` ×2 + `leaveAllActive` + `rejectAllPending` + `softDelete` → `findByUserIdAndStatusInOrderByIdAsc` (`PESSIMISTIC_WRITE`) + `leaveAndRejectAllOpen` + `softDelete` | ADR-0007; race delete vs accept của chính user tái hiện bằng test trên luồng cũ |
+| 2 | `Processing_Flow.md` §3 (2.7), §5 | Sửa | "kiểm captain lần 2 (R1)", `S, U, S, U, U` 5/W6 → khoá trước rồi kiểm, `S (khoá), U, U` 3/W6; ghi chú ngoại lệ ADR-0003 | Như #1 |
+| 3 | `Component_Class_Design.md` §5 (`TeamMemberRepository`) | Sửa | `leaveAllActive`, `rejectAllPending` → `findByUserIdAndStatusInOrderByIdAsc` (`@Lock(PESSIMISTIC_WRITE)`), `leaveAndRejectAllOpen` | Như #1 |
+| 4 | `API_Spec.md` §1 (quy ước chung), §2.7 (Lỗi) | Thêm ghi chú | "Ghi lên team/team_member có optimistic lock + tự retry" → thêm "trừ `DELETE /profile` (ADR-0007)"; `409 TEAM_014` của 2.7 thêm ghi chú không còn phát sinh | Nhất quán với #1; contract không đổi |
+| 5 | Header `API_Spec.md`, `Processing_Flow.md`, `Component_Class_Design.md` | Ghi nhận | v2.0 → v2.1 | design-standards §10 (version khớp header) |
+
+### Ảnh hưởng
+- API contract (`204`, `422 USER_003`, `409 TEAM_014`), DB schema, nghiệp vụ: không đổi. [Inference] `409 TEAM_014` của `DELETE /profile` **không phát sinh từ luồng hiện tại**: Q1 chỉ đọc entity (không sửa), Q2/Q3 là native bulk, `clearAutomatically` xoá persistence context — không bước nào để Hibernate kiểm `@Version`. Giữ khai báo để không đổi contract (bỏ mã lỗi = MAJOR theo design-standards §10); [cần xác nhận] xem xét bỏ ở lần MAJOR kế tiếp.
+- Kiểm chứng: xem USER-002 `CHANGELOG.md` v1.2.
+
 ## [v2.0] — 2026-11-05
 
 **Type:** MAJOR (phá vỡ hợp đồng: `DELETE /api/v1/profile` với captain duy nhất trước trả `204` nay trả `422 USER_003`; `USER_003` giữ mã nhưng đổi điều kiện + message; các endpoint ghi đội thêm mã lỗi `TEAM_016` — user chốt MAJOR 2026-11-05) · **Tóm tắt:** Đồng bộ USER-001 với USER-002 (giải tán đội, ADR-0005): bỏ nhánh "captain duy nhất xoá tài khoản → đội tự INACTIVE", thay thứ tự guard bằng USER-002 §2.1a, ghi chú repository/guard đổi.

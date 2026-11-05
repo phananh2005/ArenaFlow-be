@@ -1,5 +1,25 @@
 # CHANGELOG — USER-002 Giải tán đội & quy tắc xoá tài khoản đội trưởng
 
+## [v1.2] — 2026-11-06
+
+**Type:** MINOR (không đổi endpoint, shape DTO hay mã lỗi; đổi cơ chế xử lý đồng thời của `deleteAccount`) · **Tóm tắt:** `deleteAccount` chuyển sang khoá bi quan có phạm vi (ADR-0007, ngoại lệ của ADR-0003): khoá membership ACTIVE/PENDING của user (`PESSIMISTIC_WRITE`, theo id) → kiểm captain trên dữ liệu đã khoá → một bulk UPDATE gộp → soft delete; 5 → 3 truy vấn.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `Processing_Flow.md` §4.2 | Sửa | Q1 kiểm captain → Q2 `leaveAllActive` → Q3 kiểm lại (R1) → Q4 `rejectAllPending` → Q5 soft delete → Q1 khoá `PESSIMISTIC_WRITE` (PostgreSQL `FOR NO KEY UPDATE`) → kiểm captain trên dữ liệu đã khoá → Q2 `leaveAndRejectAllOpen` (CASE + `GREATEST`) → Q3 soft delete | Luồng cũ hở race delete vs accept của chính user (G1: user đã xoá còn ACTIVE — tái hiện bằng test 2026-11-06) và chỉ an toàn với race chuyển quyền đi nhờ thứ tự Q1 trước Q2 (chứng minh bằng mutation); khó suy luận, dễ hỏng khi sửa |
+| 2 | `Processing_Flow.md` §3 | Sửa | `DELETE /profile` 5 → 3 truy vấn (W6 ✅) | Như #1 |
+| 3 | `Processing_Flow.md` §5 | Sửa/Thêm | Đoạn mở đầu thêm ngoại lệ ADR-0007; dòng R1 đổi cơ chế sang khoá Q1; **thêm** "chuyển quyền đi" và "accept lời mời của chính user"; ghi chú "Kiểm chứng bắt buộc" cập nhật (delete = 3, test khoá thật) | Như #1 |
+| 4 | `Component_Class_Design.md` §4.3, §5.2 | Sửa | `existsActiveCaptainByUserId`, `leaveAllActive` (role MEMBER) → `findByUserIdAndStatusInOrderByIdAsc` (`@Lock(PESSIMISTIC_WRITE)`), `leaveAndRejectAllOpen`; bỏ 3 method cũ | Như #1 |
+| 5 | Header `API_Spec.md` (không đổi nội dung), `Processing_Flow.md`, `Component_Class_Design.md`; quy ước áp dụng `Processing_Flow.md` | Ghi nhận | v1.1 → v1.2; thêm ADR-0007 | design-standards §10 (version mới nhất khớp header — theo tiền lệ USER-001 v1.2) |
+
+### Ảnh hưởng
+- API contract (`204`, `422 USER_003`), DB schema (không migration), nghiệp vụ: không đổi.
+- Đồng bộ USER-001 → v2.1 (sequence, bảng 2.7, repository).
+- Kiểm chứng (2026-11-06, DB dev): `TeamDisbandRaceTest` thêm `deleteAccountVersusAcceptOwnInvitation…` (Red thật trên luồng cũ ở vòng 0) và `deleteAccountVersusTransferAway…` (độ nhạy bằng mutation bỏ Q1 cũ — fail vòng 6); sau sửa, cả hai cùng R1: mọi vòng PASS, có đủ hai kết cục cho phép (phân bố thay đổi theo timing — ví dụ một lần chạy: accept `{OK|OK=7, TEAM_006|OK=3}`, chuyển quyền đi `{OK|OK=6, OK|USER_003=4}`, R1 `{OK|USER_003=5, TEAM_007|OK=5}`); `AccountDeletionLockIntegrationTest` (NOWAIT → 55P03 khi đang khoá, lấy được sau commit); `NfsWriteQueryCountTest` delete = 3; full suite 212 test BUILD SUCCESS.
+- Rủi ro còn lại (ADR-0007 "Hệ quả"): lời mời được INSERT sau Q1 không bị khoá (user đã xoá có thể còn lời mời PENDING — lỗ có từ trước); deadlock hiếm khi ≥ 2 xoá tài khoản cùng lúc với ≥ 2 transfer/disband trên các đội có chung thành viên → PostgreSQL huỷ một bên (`40P01`) → 500 ở endpoint bên đó (retrier không bắt) [Inference]; không cấu hình `lock_timeout`.
+
 ## [v1.1] — 2026-11-05
 
 **Type:** MINOR (không đổi endpoint, shape DTO hay mã lỗi; làm rõ cơ chế để bên thua race nhận đúng `TEAM_016` như v1.0 đã cam kết) · **Tóm tắt:** Đồng bộ thiết kế với code sau implement (`fb6de5f`) theo bảng "Lệch thiết kế".

@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · PostgreSQL (Neon) · Flyway |
 | Quy ước áp dụng | `docs/agent/api-convention.md`, `docs/agent/security-backend.md` |
 | Ràng buộc dữ liệu | USER-001 schema V1/V2/V3; delta được mô tả tại `Component_Class_Design.md` §5 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) · developer · 2026-11-06 · v1.2 (không đổi nội dung — đồng bộ phiên bản với `deleteAccount` khoá bi quan, ADR-0007) |
 
 ## 1. Tổng quan
 

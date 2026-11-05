@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code, bugfix lỗi framework, ADR-0004, mã `SYS_*` — 39 mục, xem `CHANGELOG.md`) · developer · 2026-11-05 · v1.2 (Maven multi-module, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code, bugfix lỗi framework, ADR-0004, mã `SYS_*` — 39 mục, xem `CHANGELOG.md`) · developer · 2026-11-05 · v1.2 (Maven multi-module, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) · developer · 2026-11-06 · v2.1 (`DELETE /profile` khoá bi quan có phạm vi — ADR-0007, contract không đổi) |
 
 ## 1. Tổng quan kiến trúc
 
@@ -191,12 +191,13 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
     Optional<TeamMember> findByTeamIdAndUserIdAndStatus(UUID teamId, UUID userId, TeamMember.Status status);
     Optional<TeamMember> findByTeamIdAndRoleAndStatus(UUID teamId, TeamMember.Role role, TeamMember.Status status);
     boolean existsByTeamIdAndUserIdAndStatusIn(UUID teamId, UUID userId, Collection<TeamMember.Status> statuses);
-    // USER-002: findCaptainTeamsWithActiveCount → existsActiveCaptainByUserId; thêm disbandRemaining, findMemberHistory;
-    //           leaveAllActive chỉ chuyển role MEMBER (USER-002 CCD §5.2)
+    // USER-002: bỏ findCaptainTeamsWithActiveCount; thêm disbandRemaining, findMemberHistory (USER-002 CCD §5.2)
+    // USER-002 v1.2 (ADR-0007): leaveAllActive + rejectAllPending + existsActiveCaptainByUserId → 2 method dưới
     Page<MemberView> findActiveMembers(UUID teamId, Pageable pageable);
     Optional<MemberView> findMemberViewById(UUID memberId);             // native, join user (response 2.13)
-    @Modifying int leaveAllActive(UUID userId, OffsetDateTime now);      // ACTIVE → LEFT, version + 1
-    @Modifying int rejectAllPending(UUID userId);                        // PENDING → REJECTED, version + 1
+    @Lock(PESSIMISTIC_WRITE)
+    List<TeamMember> findByUserIdAndStatusInOrderByIdAsc(UUID userId, Collection<TeamMember.Status> statuses); // 2.7 khoá
+    @Modifying int leaveAndRejectAllOpen(UUID userId, OffsetDateTime now); // 2.7: MEMBER ACTIVE → LEFT, PENDING → REJECTED, version + 1
 }
 public interface TeamCaptainHistoryRepository extends JpaRepository<TeamCaptainHistory, UUID> {
     Page<CaptainHistoryView> findHistory(UUID teamId, Pageable pageable);

@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` · kiến trúc hiện hành theo USER-001 |
 | Ràng buộc dữ liệu | USER-001 schema V1/V2/V3; delta USER-002 dưới đây cần migration Flyway |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · đường dẫn package theo Maven multi-module (ADR-0006), không đổi nội dung thiết kế · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · đường dẫn package theo Maven multi-module (ADR-0006), không đổi nội dung thiết kế · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) · developer · 2026-11-06 · v1.2 (`deleteAccount` khoá bi quan có phạm vi — ADR-0007) |
 
 ## 1. Tổng quan kiến trúc
 
@@ -73,7 +73,7 @@ Thêm `PageResponse<MemberHistoryResponse> listMemberHistory(UUID teamId, Member
 
 ### 4.3. ProfileService
 
-`deleteAccount(UUID userId)` giữ signature. Luồng Q1–Q5 và cơ chế race R1: `Processing_Flow.md` §4.2. Không tự đổi trạng thái team.
+`deleteAccount(UUID userId)` giữ signature. Luồng Q1–Q3 (khoá bi quan có phạm vi, ADR-0007) và các race liên quan: `Processing_Flow.md` §4.2, §5. Không tự đổi trạng thái team.
 
 ## 5. Repository & Data Model
 
@@ -115,8 +115,9 @@ ALTER TABLE team ADD CONSTRAINT team_disband_consistency_check CHECK (
 - `TeamRepository.findForInviteById(id)` (mới): JPQL `SELECT t FROM Team t WHERE t.id = :id` với `@Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)`; chỉ dùng cho `inviteMember` (race M1).
 - Captain → LEFT và `Team` → DISBANDED đều qua entity + `saveAndFlush` (CAS `@Version`; `Team` có `@PreUpdate`), **không** thêm query viết tay. Kiểm tra quyền dùng `TeamGuard.requireCaptain` có sẵn.
 - `TeamMemberRepository.disbandRemaining(teamId, now)` (mới, `@Modifying` native): **một** bulk transition dùng `CASE`: `ACTIVE` → `LEFT` với `left_at = GREATEST(:now, COALESCE(joined_at, invited_at))`, `PENDING` → `REJECTED` (không set `left_at`), `version = version + 1`, điều kiện `team_id = :teamId AND status IN ('ACTIVE','PENDING')`. Gọi sau khi captain và team đã flush.
-- `TeamMemberRepository`: `existsActiveCaptainByUserId` (tồn tại row CAPTAIN ACTIVE của user) dùng cho guard và kiểm tra lại khi xoá account; thay `findCaptainTeamsWithActiveCount` của USER-001.
-- `TeamMemberRepository.leaveAllActive`: thêm điều kiện `role = 'MEMBER'` (race R1, `Processing_Flow.md` §4.2).
+- `TeamMemberRepository.findByUserIdAndStatusInOrderByIdAsc(userId, statuses)` (v1.2, ADR-0007): derived query với `@Lock(LockModeType.PESSIMISTIC_WRITE)` (PostgreSQL: `FOR NO KEY UPDATE`) trên mọi membership ACTIVE/PENDING của user, sắp theo `id` (thứ tự khoá ổn định); trả entity `TeamMember` sẵn có (không projection mới). Chỉ dùng cho `deleteAccount`; phải gọi trong transaction.
+- `TeamMemberRepository.leaveAndRejectAllOpen(userId, now)` (v1.2, ADR-0007, `@Modifying(clearAutomatically = true)` native): **một** bulk `CASE` theo mẫu `disbandRemaining`: MEMBER `ACTIVE` → `LEFT` với `left_at = GREATEST(:now, COALESCE(joined_at, invited_at))`, `PENDING` → `REJECTED` (không set `left_at`), `version = version + 1`, điều kiện `user_id = :userId AND (status = 'PENDING' OR (status = 'ACTIVE' AND role = 'MEMBER'))` — không đụng row CAPTAIN (lớp an toàn).
+- **Bỏ ở v1.2** (thay bằng hai method trên; chỉ `deleteAccount` dùng): `existsActiveCaptainByUserId`, `leaveAllActive`, `rejectAllPending` và test riêng của chúng trong `TeamRepositoryTest`.
 - **Xoá code chết** (BC-T02 sửa, đã kiểm tra chỉ `deleteAccount` dùng): `TeamRepository.markInactiveByIds`, `TeamMemberRepository.findCaptainTeamsWithActiveCount`, projection `CaptainTeamView`, hằng `ProfileServiceImpl.SOLE_CAPTAIN_DELETED_REASON`; cùng các test liên quan trong `ProfileServiceImplTest` và `TeamRepositoryTest`. Viết lại theo hành vi mới: `ProfileServiceIntegrationTest.deleteAccountInactivatesSoloTeamLeavesRejectsSoftDeletesAndIsIdempotent` (đang assert đội INACTIVE).
 - `TeamMemberRepository.findMemberHistory(teamId, statuses, pageable)`: native projection `MemberHistoryView` (cột của `MemberView` + `left_at`), `WHERE team_id = :teamId AND status IN (:statuses)`, `ORDER BY joined_at ASC, id ASC`, kèm `countQuery`. Phục vụ endpoint Admin `API_Spec.md` §2.4 (mọi trạng thái đội; `ACTIVE`/`LEFT`).
 
