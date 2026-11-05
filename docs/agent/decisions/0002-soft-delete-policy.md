@@ -5,7 +5,8 @@
 | **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-02 |
 | **Người quyết định** | Product Owner (chốt chính sách) · solution-architect (đề xuất cách thực hiện) |
-| **Liên quan** | ADR-0001 · UC-U03, BR-T06, AC-U03 · Use_Cases "Quyết định bổ sung" #5 (không hard-delete) · `docs/agent/design/USER-001/` · §Quyết định #4 đề xuất thay bởi [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) (Proposed) |
+| **Liên quan** | ADR-0001 · UC-U03, BR-T06, AC-U03 · Use_Cases "Quyết định bổ sung" #5 (không hard-delete) · `docs/agent/design/USER-001/` · §Quyết định #4 thay bởi [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) |
+| **Sửa đổi** | 2026-11-06 — §Quyết định #4 (captain duy nhất xoá tài khoản → đội tự `INACTIVE`) hết hiệu lực, thay bởi ADR-0005 |
 
 ## Bối cảnh (Context)
 - UC-U03/AC-U03: tài khoản soft-delete; lịch sử hiển thị "Người dùng đã xóa"; điểm/đánh giá của đội khác giữ nguyên; tài khoản "có thể khôi phục sau này"; captain duy nhất xoá → đội INACTIVE.
@@ -41,3 +42,8 @@ Chúng tôi soft-delete bằng `"user".deleted_at` và **không** xoá/ẩn danh
 **Cần theo dõi**
 - Yêu cầu pháp lý về xoá dữ liệu → ADR về purge/ẩn danh.
 - Khi làm chức năng khôi phục: quyết định có khôi phục membership/đội hay không.
+
+## Sửa đổi 2026-11-06 — §Quyết định #4 thay bởi ADR-0005
+
+- [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) (Accepted) thay §Quyết định #4: captain ACTIVE của bất kỳ đội chưa giải tán nào — kể cả người duy nhất — bị chặn xoá tài khoản (`422 USER_003`); hệ thống không tự chuyển đội sang `INACTIVE`. Đội có trạng thái cuối `DISBANDED`.
+- Các quyết định còn lại của ADR này (soft-delete, giữ hồ sơ và lịch sử, che danh tính khi hiển thị, không hard-delete) giữ nguyên.

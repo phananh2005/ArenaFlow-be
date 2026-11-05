@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Trạng thái** | Proposed |
+| **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-05 |
 | **Người quyết định** | Product Owner (chốt nghiệp vụ USER-002) · solution-architect (đề xuất cách thực hiện) |
 | **Liên quan** | Thay một phần [ADR-0002](0002-soft-delete-policy.md) §Quyết định #4 · ADR-0003 · `docs/agent/business-spec/USER-002/` (BR-T06 sửa, BR-T07..T14, BC-T02 sửa, BC-T06) · `docs/agent/design/USER-002/` |
