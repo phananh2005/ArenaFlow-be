@@ -3,6 +3,7 @@ package com.phananh.arenaflow.application.service.impl;
 import com.phananh.arenaflow.application.support.OptimisticLockRetrier;
 import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.dto.request.CreateTeamRequest;
+import com.phananh.arenaflow.application.dto.request.DisbandTeamRequest;
 import com.phananh.arenaflow.application.dto.request.TransferCaptainRequest;
 import com.phananh.arenaflow.application.dto.request.UpdateTeamRequest;
 import com.phananh.arenaflow.application.dto.response.CaptainHistoryResponse;
@@ -35,6 +36,9 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class TeamServiceImpl implements TeamService {
+
+    /** BR-T08: lý do khi client không gửi / gửi rỗng. */
+    static final String DEFAULT_DISBAND_REASON = "Đội trưởng giải tán đội";
 
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
@@ -74,7 +78,8 @@ public class TeamServiceImpl implements TeamService {
 
         return new TeamResponse(saved.getId(), saved.getName(), saved.getAvatarUrl(), saved.getDescription(),
                 saved.getSkillLevels(), saved.getStatus().name(), saved.getInactiveReason(), userId,
-                creator.getDisplayName(), 1, userId, saved.getCreatedAt(), saved.getUpdatedAt());
+                creator.getDisplayName(), 1, userId, saved.getCreatedAt(), saved.getUpdatedAt(),
+                null, null, null, null);
     }
 
     @Override
@@ -92,7 +97,10 @@ public class TeamServiceImpl implements TeamService {
                 teamMapper::toSummary, page, pageSize);
     }
 
-    /** (retry) S team → TEAM_001 → INACTIVE TEAM_015 → S captain → TEAM_002 → U team (@Version) → S detail. */
+    /**
+     * (retry) S team → TEAM_001 → DISBANDED TEAM_016 → INACTIVE TEAM_015 → S captain → TEAM_002 → U team (@Version)
+     * → S detail.
+     */
     @Override
     public TeamResponse updateTeam(UUID teamId, UUID userId, UpdateTeamRequest request) {
         return optimisticLockRetrier.execute(() -> {
@@ -115,7 +123,10 @@ public class TeamServiceImpl implements TeamService {
         });
     }
 
-    /** (retry) S team, S captain, S member mới, U ×2 (@Version), I history = 6 (W6). */
+    /**
+     * (retry) S team → TEAM_001/016/015 → S captain → TEAM_002 → TEAM_008 → S member mới → TEAM_007 → U ×2 (@Version)
+     * → I history = 6 (W6). Member mới vừa bị chuyển LEFT do đội bị giải tán song song → TEAM_016 (disbandedOr).
+     */
     @Override
     public CaptainTransferResponse transferCaptain(UUID teamId, UUID userId, TransferCaptainRequest request) {
         return optimisticLockRetrier.execute(() -> {
@@ -126,7 +137,7 @@ public class TeamServiceImpl implements TeamService {
             }
             TeamMember newCaptain = teamMemberRepository
                     .findByTeamIdAndUserIdAndStatus(teamId, request.newCaptainId(), TeamMember.Status.ACTIVE)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_007));
+                    .orElseThrow(() -> teamGuard.disbandedOr(teamId, ErrorCode.TEAM_007));
             oldCaptain.setRole(TeamMember.Role.MEMBER);
             newCaptain.setRole(TeamMember.Role.CAPTAIN);
             teamMemberRepository.saveAllAndFlush(List.of(oldCaptain, newCaptain));
@@ -143,6 +154,38 @@ public class TeamServiceImpl implements TeamService {
         teamGuard.requireTeam(teamId);
         return PageResponse.from(historyRepository.findHistory(teamId, pageRequestFactory.create(page, pageSize)),
                 teamMapper::toResponse, page, pageSize);
+    }
+
+    /**
+     * (retry) S team → TEAM_001/016 → S captain → TEAM_002 → U captain LEFT (@Version) → U team DISBANDED (@Version)
+     * → U còn lại (ACTIVE → LEFT, PENDING → REJECTED) → S detail = 6 (W6). Đội INACTIVE vẫn giải tán được (BR-T12),
+     * giữ nguyên inactive_reason. Mọi bước ghi lệch version → retry (USER-002 Processing_Flow §4.1).
+     */
+    @Override
+    public TeamResponse disbandTeam(UUID teamId, UUID captainUserId, DisbandTeamRequest request) {
+        String reason = disbandReason(request);
+        return optimisticLockRetrier.execute(() -> {
+            Team team = teamGuard.notDisbandedTeam(teamId);
+            TeamMember captain = teamGuard.requireCaptain(teamId, captainUserId);
+            OffsetDateTime now = OffsetDateTime.now();
+            captain.setStatus(TeamMember.Status.LEFT);
+            captain.setLeftAt(now);
+            teamMemberRepository.saveAndFlush(captain);
+
+            team.setStatus(Team.TeamStatus.DISBANDED);
+            team.setDisbandReason(reason);
+            team.setDisbandedAt(now);
+            team.setDisbandedBy(captainUserId);
+            teamRepository.saveAndFlush(team);
+
+            teamMemberRepository.disbandRemaining(teamId, now);
+            return getTeam(teamId);
+        });
+    }
+
+    private static String disbandReason(DisbandTeamRequest request) {
+        String reason = request == null || request.reason() == null ? "" : request.reason().trim();
+        return reason.isEmpty() ? DEFAULT_DISBAND_REASON : reason;
     }
 
     private static TeamCaptainHistory history(UUID teamId, UUID fromUserId, UUID toUserId, String reason,

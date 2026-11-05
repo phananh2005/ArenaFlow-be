@@ -32,4 +32,14 @@ class ErrorCodeTest {
         assertThat(ErrorCode.USER_001.getCode()).isEqualTo("USER_001");
         assertThat(ErrorCode.USER_001.getMessage()).isEqualTo("Không tìm thấy người dùng");
     }
+
+    @Test
+    void disbandedTeamAndCaptainAccountDeletionErrors() {
+        assertThat(ErrorCode.TEAM_016.getCode()).isEqualTo("TEAM_016");
+        assertThat(ErrorCode.TEAM_016.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(ErrorCode.TEAM_016.getMessage()).isEqualTo("Đội đã giải tán");
+        assertThat(ErrorCode.USER_003.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(ErrorCode.USER_003.getMessage())
+                .isEqualTo("Bạn phải chuyển quyền đội trưởng hoặc giải tán đội trước khi xóa tài khoản");
+    }
 }

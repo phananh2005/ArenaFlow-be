@@ -3,6 +3,7 @@ package com.phananh.arenaflow.application.service;
 import com.phananh.arenaflow.application.support.OptimisticLockRetrier;
 import com.phananh.arenaflow.application.dto.request.ProfileUpdateRequest;
 import com.phananh.arenaflow.application.dto.response.ProfileResponse;
+import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.entity.user.User;
 import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
@@ -10,19 +11,18 @@ import com.phananh.arenaflow.application.mapper.ProfileMapper;
 import com.phananh.arenaflow.domain.repository.AdministrativeUnitRepository;
 import com.phananh.arenaflow.domain.repository.OAuthAccountRepository;
 import com.phananh.arenaflow.domain.repository.TeamMemberRepository;
-import com.phananh.arenaflow.domain.repository.TeamRepository;
 import com.phananh.arenaflow.domain.repository.UserRepository;
-import com.phananh.arenaflow.domain.projection.CaptainTeamView;
 import com.phananh.arenaflow.domain.projection.ProfileView;
 import com.phananh.arenaflow.domain.projection.WardView;
 import com.phananh.arenaflow.application.service.impl.ProfileServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
+import org.mockito.InOrder;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,11 +33,13 @@ import java.util.function.Supplier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class ProfileServiceImplTest {
@@ -45,7 +47,6 @@ class ProfileServiceImplTest {
     private final UserRepository userRepository = mock(UserRepository.class);
     private final OAuthAccountRepository oauthAccountRepository = mock(OAuthAccountRepository.class);
     private final AdministrativeUnitRepository administrativeUnitRepository = mock(AdministrativeUnitRepository.class);
-    private final TeamRepository teamRepository = mock(TeamRepository.class);
     private final TeamMemberRepository teamMemberRepository = mock(TeamMemberRepository.class);
     private final OptimisticLockRetrier retrier = mock(OptimisticLockRetrier.class);
     private final ProfileMapper profileMapper = Mappers.getMapper(ProfileMapper.class);
@@ -58,17 +59,13 @@ class ProfileServiceImplTest {
     @SuppressWarnings("unchecked")
     void setUp() {
         service = new ProfileServiceImpl(userRepository, oauthAccountRepository, administrativeUnitRepository,
-                teamRepository, teamMemberRepository, retrier, profileMapper);
+                teamMemberRepository, retrier, profileMapper);
         when(retrier.execute(any())).thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(0)).get());
     }
 
     private ProfileView profileView(String displayName) {
         return projections.createProjection(ProfileView.class,
                 Map.of("userId", userId, "role", "USER", "displayName", displayName));
-    }
-
-    private CaptainTeamView captainTeam(UUID teamId, long activeCount) {
-        return projections.createProjection(CaptainTeamView.class, Map.of("teamId", teamId, "activeCount", activeCount));
     }
 
     private static void assertError(Runnable call, ErrorCode expected) {
@@ -127,46 +124,41 @@ class ProfileServiceImplTest {
     }
 
     @Test
-    void deleteAccountRejectsCaptainOfTeamWithOtherActiveMembers() {
-        when(teamMemberRepository.findCaptainTeamsWithActiveCount(userId))
-                .thenReturn(List.of(captainTeam(UUID.randomUUID(), 2)));
+    void deleteAccountRejectsActiveCaptainFoundInLockedRowsWithoutWrites() {
+        when(teamMemberRepository.findByUserIdAndStatusInOrderByIdAsc(eq(userId), argThat(ProfileServiceImplTest::isOpen)))
+                .thenReturn(List.of(membership(TeamMember.Role.MEMBER, TeamMember.Status.PENDING),
+                        membership(TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE)));
 
         assertError(() -> service.deleteAccount(userId), ErrorCode.USER_003);
+
+        verify(teamMemberRepository, never()).leaveAndRejectAllOpen(any(), any());
         verify(userRepository, never()).softDelete(any(), any());
     }
 
     @Test
-    void deleteAccountMarksSoloTeamsInactiveThenLeavesRejectsAndSoftDeletes() {
-        UUID soloTeam = UUID.randomUUID();
-        when(teamMemberRepository.findCaptainTeamsWithActiveCount(userId)).thenReturn(List.of(captainTeam(soloTeam, 1)));
-        when(teamRepository.markInactiveByIds(eq(Set.of(soloTeam)), eq("Đội trưởng duy nhất đã xoá tài khoản"), any()))
-                .thenReturn(1);
+    void deleteAccountLocksOpenMembershipsThenLeavesAndRejectsThenSoftDeletesWithoutRecheck() {
+        when(teamMemberRepository.findByUserIdAndStatusInOrderByIdAsc(eq(userId), argThat(ProfileServiceImplTest::isOpen)))
+                .thenReturn(List.of(membership(TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE),
+                        membership(TeamMember.Role.MEMBER, TeamMember.Status.PENDING)));
 
         service.deleteAccount(userId);
 
-        verify(teamMemberRepository).leaveAllActive(eq(userId), any());
-        verify(teamMemberRepository).rejectAllPending(userId);
-        verify(userRepository).softDelete(eq(userId), any());
+        // ADR-0007: Q1 khoá → kiểm trên dữ liệu đã khoá → Q2 bulk gộp → Q3 soft delete; không còn bước kiểm lại.
+        InOrder order = inOrder(teamMemberRepository, userRepository);
+        order.verify(teamMemberRepository).findByUserIdAndStatusInOrderByIdAsc(eq(userId), argThat(ProfileServiceImplTest::isOpen));
+        order.verify(teamMemberRepository).leaveAndRejectAllOpen(eq(userId), any());
+        order.verify(userRepository).softDelete(eq(userId), any());
+        verifyNoMoreInteractions(teamMemberRepository);
     }
 
-    @Test
-    void deleteAccountSignalsRetryWhenSomeoneJoinedSoloTeamConcurrently() {
-        UUID soloTeam = UUID.randomUUID();
-        when(teamMemberRepository.findCaptainTeamsWithActiveCount(userId)).thenReturn(List.of(captainTeam(soloTeam, 1)));
-        when(teamRepository.markInactiveByIds(anyCollection(), any(), any())).thenReturn(0);
-
-        assertThatThrownBy(() -> service.deleteAccount(userId))
-                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
-        verify(userRepository, never()).softDelete(any(), any());
+    private static boolean isOpen(Collection<TeamMember.Status> statuses) {
+        return statuses != null && Set.copyOf(statuses).equals(Set.of(TeamMember.Status.ACTIVE, TeamMember.Status.PENDING));
     }
 
-    @Test
-    void deleteAccountWithoutCaptainTeamsSkipsMarkInactive() {
-        when(teamMemberRepository.findCaptainTeamsWithActiveCount(userId)).thenReturn(List.of());
-
-        service.deleteAccount(userId);
-
-        verify(teamRepository, never()).markInactiveByIds(anyCollection(), any(), any());
-        verify(userRepository).softDelete(eq(userId), any());
+    private static TeamMember membership(TeamMember.Role role, TeamMember.Status status) {
+        TeamMember member = new TeamMember();
+        member.setRole(role);
+        member.setStatus(status);
+        return member;
     }
 }

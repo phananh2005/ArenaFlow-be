@@ -56,7 +56,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 - Soft-delete tài khoản (giữ mãi, có thể khôi phục)
 - Tạo đội, mời thành viên, chấp nhận lời mời
 - Chuyển quyền đội trưởng (bắt buộc nhận, tức thì, có lịch sử)
-- Xử lý xóa tài khoản đội trưởng (phải chuyển quyền trước; nếu là người duy nhất thì đội tự chuyển INACTIVE)
+- Xử lý xóa tài khoản đội trưởng (phải chuyển quyền hoặc giải tán đội trước, kể cả khi là người duy nhất — `USER-002`)
 - Quản lý trình độ đội (chọn tối đa 3 trong 9 nhãn)
 
 ### Match Management (Luồng A — đã có sân)
@@ -162,7 +162,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 
 ### Nghiệp vụ
 - Tên đội được phép trùng (không unique)
-- Chỉ admin đánh dấu đội INACTIVE (trừ trường hợp đội trưởng là người duy nhất xóa tài khoản)
+- Chỉ admin đánh dấu đội INACTIVE; đội trưởng giải tán đội (`USER-002`)
 - Chuyển đội trưởng: người được chọn bắt buộc nhận, không có quyền từ chối
 - Match CONFIRMED: không được sửa giờ/sân/trình độ
 - Hủy Match OPEN: phải từ chối mọi request PENDING trước

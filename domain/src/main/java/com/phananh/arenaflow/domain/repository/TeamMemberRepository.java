@@ -1,11 +1,13 @@
 package com.phananh.arenaflow.domain.repository;
 
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
-import com.phananh.arenaflow.domain.projection.CaptainTeamView;
+import com.phananh.arenaflow.domain.projection.MemberHistoryView;
 import com.phananh.arenaflow.domain.projection.MemberView;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -24,15 +26,6 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
 
     boolean existsByTeamIdAndUserIdAndStatusIn(UUID teamId, UUID userId, Collection<TeamMember.Status> statuses);
 
-    /** 1 truy vấn: các đội user đang là captain ACTIVE + số thành viên ACTIVE (subquery). */
-    @Query(value = """
-            SELECT m.team_id AS teamId,
-                   (SELECT COUNT(*) FROM team_member am WHERE am.team_id = m.team_id AND am.status = 'ACTIVE') AS activeCount
-            FROM team_member m
-            WHERE m.user_id = :userId AND m.role = 'CAPTAIN' AND m.status = 'ACTIVE'
-            """, nativeQuery = true)
-    List<CaptainTeamView> findCaptainTeamsWithActiveCount(@Param("userId") UUID userId);
-
     /** Sort cố định: captain trước, joined_at tăng dần, user_id. */
     @Query(value = """
             SELECT m.id AS memberId, m.team_id AS teamId, m.user_id AS userId,
@@ -47,6 +40,40 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
             nativeQuery = true)
     Page<MemberView> findActiveMembers(@Param("teamId") UUID teamId, Pageable pageable);
 
+    /**
+     * Lịch sử thành viên cho Admin (USER-002 API_Spec §2.4): {@code statuses} ⊆ {ACTIVE, LEFT}.
+     * Sort cố định: joined_at tăng dần, id.
+     */
+    @Query(value = """
+            SELECT m.id AS memberId, m.team_id AS teamId, m.user_id AS userId,
+                   u.display_name AS displayName, u.avatar_url AS avatarUrl, (u.deleted_at IS NOT NULL) AS userDeleted,
+                   m.role AS role, m.status AS status, m.joined_at AS joinedAt, m.left_at AS leftAt
+            FROM team_member m
+            JOIN "user" u ON u.id = m.user_id
+            WHERE m.team_id = :teamId AND m.status IN (:statuses)
+            ORDER BY m.joined_at ASC, m.id ASC
+            """,
+            countQuery = "SELECT COUNT(*) FROM team_member m WHERE m.team_id = :teamId AND m.status IN (:statuses)",
+            nativeQuery = true)
+    Page<MemberHistoryView> findMemberHistory(@Param("teamId") UUID teamId,
+                                              @Param("statuses") Collection<String> statuses,
+                                              Pageable pageable);
+
+    /**
+     * Giải tán đội: một câu cho mọi row còn lại — ACTIVE → LEFT, PENDING → REJECTED (không set left_at).
+     * {@code left_at = GREATEST(:now, COALESCE(joined_at, invited_at))} giữ CHECK left_at ≥ joined_at khi accept commit
+     * sau :now. Bulk update → tự tăng version. Gọi sau khi captain và team đã flush.
+     */
+    @Modifying
+    @Query(value = """
+            UPDATE team_member
+            SET status = CASE WHEN status = 'ACTIVE' THEN 'LEFT' ELSE 'REJECTED' END,
+                left_at = CASE WHEN status = 'ACTIVE' THEN GREATEST(:now, COALESCE(joined_at, invited_at)) ELSE left_at END,
+                version = version + 1
+            WHERE team_id = :teamId AND status IN ('ACTIVE', 'PENDING')
+            """, nativeQuery = true)
+    int disbandRemaining(@Param("teamId") UUID teamId, @Param("now") OffsetDateTime now);
+
     /** 1 dòng thành viên + user (response sau khi chấp nhận lời mời). */
     @Query(value = """
             SELECT m.id AS memberId, m.team_id AS teamId, m.user_id AS userId,
@@ -58,19 +85,30 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
             """, nativeQuery = true)
     Optional<MemberView> findMemberViewById(@Param("memberId") UUID memberId);
 
-    /** Xoá tài khoản: ACTIVE → LEFT. Bulk update → tự tăng version. */
-    @Modifying
-    @Query(value = """
-            UPDATE team_member SET status = 'LEFT', left_at = :now, version = version + 1
-            WHERE user_id = :userId AND status = 'ACTIVE'
-            """, nativeQuery = true)
-    int leaveAllActive(@Param("userId") UUID userId, @Param("now") OffsetDateTime now);
+    /**
+     * Xoá tài khoản — bước khoá (ADR-0007): nạp mọi membership của user có trạng thái trong {@code statuses} và giữ khoá
+     * dòng ({@code PESSIMISTIC_WRITE} → PostgreSQL {@code FOR NO KEY UPDATE}) tới hết transaction. Thao tác ghi khác trên các
+     * row này phải chờ: luồng ghi entity (accept, transfer, leave) sau khi xoá commit thấy {@code version} lệch → retry
+     * (ADR-0003); bulk {@link #disbandRemaining} đánh giá lại {@code WHERE} trên bản mới và bỏ qua row đã đóng.
+     * Sắp theo {@code id} để thứ tự khoá ổn định (tránh deadlock). Phải gọi trong transaction.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    List<TeamMember> findByUserIdAndStatusInOrderByIdAsc(UUID userId, Collection<TeamMember.Status> statuses);
 
-    /** Xoá tài khoản: PENDING → REJECTED. Bulk update → tự tăng version. */
-    @Modifying
+    /**
+     * Xoá tài khoản — một câu cho mọi membership mở của user (ADR-0007): MEMBER ACTIVE → LEFT, PENDING → REJECTED
+     * (không set left_at). Không đụng row CAPTAIN (lớp an toàn — caller đã từ chối captain trên dữ liệu đã khoá).
+     * {@code left_at = GREATEST(:now, COALESCE(joined_at, invited_at))} giữ CHECK left_at ≥ joined_at. Bulk update → tự
+     * tăng version; xoá persistence context sau khi chạy để entity đã nạp ở bước khoá không còn trạng thái cũ.
+     */
+    @Modifying(clearAutomatically = true)
     @Query(value = """
-            UPDATE team_member SET status = 'REJECTED', version = version + 1
-            WHERE user_id = :userId AND status = 'PENDING'
+            UPDATE team_member
+            SET status = CASE WHEN status = 'ACTIVE' THEN 'LEFT' ELSE 'REJECTED' END,
+                left_at = CASE WHEN status = 'ACTIVE' THEN GREATEST(:now, COALESCE(joined_at, invited_at)) ELSE left_at END,
+                version = version + 1
+            WHERE user_id = :userId
+              AND (status = 'PENDING' OR (status = 'ACTIVE' AND role = 'MEMBER'))
             """, nativeQuery = true)
-    int rejectAllPending(@Param("userId") UUID userId);
+    int leaveAndRejectAllOpen(@Param("userId") UUID userId, @Param("now") OffsetDateTime now);
 }

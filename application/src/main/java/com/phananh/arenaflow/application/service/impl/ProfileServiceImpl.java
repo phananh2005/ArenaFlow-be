@@ -3,7 +3,7 @@ package com.phananh.arenaflow.application.service.impl;
 import com.phananh.arenaflow.application.support.OptimisticLockRetrier;
 import com.phananh.arenaflow.application.dto.request.ProfileUpdateRequest;
 import com.phananh.arenaflow.application.dto.response.ProfileResponse;
-import com.phananh.arenaflow.domain.entity.team.Team;
+import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.entity.user.User;
 import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
@@ -11,32 +11,28 @@ import com.phananh.arenaflow.application.mapper.ProfileMapper;
 import com.phananh.arenaflow.domain.repository.AdministrativeUnitRepository;
 import com.phananh.arenaflow.domain.repository.OAuthAccountRepository;
 import com.phananh.arenaflow.domain.repository.TeamMemberRepository;
-import com.phananh.arenaflow.domain.repository.TeamRepository;
 import com.phananh.arenaflow.domain.repository.UserRepository;
-import com.phananh.arenaflow.domain.projection.CaptainTeamView;
 import com.phananh.arenaflow.domain.projection.ProfileView;
 import com.phananh.arenaflow.application.service.ProfileService;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class ProfileServiceImpl implements ProfileService {
 
-    static final String SOLE_CAPTAIN_DELETED_REASON = "Đội trưởng duy nhất đã xoá tài khoản";
+    /** Membership còn hiệu lực của user — đối tượng khoá và cập nhật khi xoá tài khoản. */
+    private static final List<TeamMember.Status> OPEN_MEMBERSHIP_STATUSES =
+            List.of(TeamMember.Status.ACTIVE, TeamMember.Status.PENDING);
 
     private final UserRepository userRepository;
     private final OAuthAccountRepository oauthAccountRepository;
     private final AdministrativeUnitRepository administrativeUnitRepository;
-    private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final OptimisticLockRetrier optimisticLockRetrier;
     private final ProfileMapper profileMapper;
@@ -61,27 +57,34 @@ public class ProfileServiceImpl implements ProfileService {
     }
 
     /**
-     * Xoá mềm (ADR-0002). Mỗi lần thử là 1 transaction do retrier mở; markInactive thiếu dòng (có người vừa vào
-     * đội) → ném ObjectOptimisticLockingFailureException để retrier thử lại → lần sau thấy activeCount > 1 → USER_003.
+     * Xoá mềm tài khoản (ADR-0002) với quy tắc captain phải chuyển quyền/giải tán trước (ADR-0005).
+     * <p>Khoá bi quan có phạm vi (ADR-0007), trong một transaction:
+     * <ol>
+     *   <li>Q1 khoá mọi membership ACTIVE/PENDING của user ({@code PESSIMISTIC_WRITE}, theo id) — thao tác song song trên các
+     *       row này (accept, transfer cho/khỏi user…) phải chờ tới khi transaction kết thúc.</li>
+     *   <li>Còn là captain ACTIVE trên dữ liệu đã khoá → {@code 422 USER_003}, rollback, không ghi gì.</li>
+     *   <li>Q2 một bulk UPDATE: MEMBER ACTIVE → LEFT, PENDING → REJECTED.</li>
+     *   <li>Q3 soft delete user.</li>
+     * </ol>
+     * 3 truy vấn (W6). Không đổi trạng thái đội. Gọi lại khi đã xoá: không lỗi (idempotent).
      */
     @Override
     public void deleteAccount(UUID userId) {
         optimisticLockRetrier.execute(() -> {
-            List<CaptainTeamView> captainTeams = teamMemberRepository.findCaptainTeamsWithActiveCount(userId);
-            if (captainTeams.stream().anyMatch(team -> team.getActiveCount() > 1)) {
+            List<TeamMember> openMemberships = teamMemberRepository.findByUserIdAndStatusInOrderByIdAsc(userId,
+                    OPEN_MEMBERSHIP_STATUSES);
+            if (openMemberships.stream().anyMatch(ProfileServiceImpl::isActiveCaptain)) {
                 throw new BusinessException(ErrorCode.USER_003);
             }
             OffsetDateTime now = OffsetDateTime.now();
-            Set<UUID> soloTeamIds = captainTeams.stream().map(CaptainTeamView::getTeamId).collect(Collectors.toSet());
-            if (!soloTeamIds.isEmpty()
-                    && teamRepository.markInactiveByIds(soloTeamIds, SOLE_CAPTAIN_DELETED_REASON, now) < soloTeamIds.size()) {
-                throw new ObjectOptimisticLockingFailureException(Team.class, soloTeamIds);
-            }
-            teamMemberRepository.leaveAllActive(userId, now);
-            teamMemberRepository.rejectAllPending(userId);
+            teamMemberRepository.leaveAndRejectAllOpen(userId, now);
             userRepository.softDelete(userId, now);
             return null;
         });
+    }
+
+    private static boolean isActiveCaptain(TeamMember membership) {
+        return membership.getStatus() == TeamMember.Status.ACTIVE && membership.getRole() == TeamMember.Role.CAPTAIN;
     }
 
     private ProfileResponse toResponse(UUID userId) {

@@ -33,13 +33,13 @@ Khảo sát ngày 2026-11-01:
 - Hệ thống hướng tới nhiều bộ môn; bóng đá là bộ môn đầu tiên. Admin bật/tắt bộ môn qua admin panel. Quy tắc bộ môn dùng chung trong MVP (danh mục vị trí, định dạng trận, trình độ áp dụng cho mọi môn); thiết kế cấu hình riêng theo môn để sau khi có yêu cầu môn thứ 2.
 - Chỉ có tài khoản cá nhân; một cá nhân có thể tạo hoặc tham gia nhiều đội. Quan hệ cá nhân–đội là nhiều-nhiều.
 - Hồ sơ đội gồm tên, người tạo, ngày tạo, avatar/logo và mô tả/giới thiệu. Tên đội được phép trùng.
-- Chỉ admin đánh dấu đội `INACTIVE` theo quy tắc thông thường.
+- Chỉ admin đánh dấu đội `INACTIVE` (khoá); đội trưởng có thể giải tán đội (`DISBANDED`, xem dưới).
 - MVP có một đội trưởng chính và thành viên. Đội trưởng mời; người được mời phải chấp nhận để trở thành thành viên. Giữ lịch sử thành viên, không xóa cứng quan hệ. Đội trưởng quản lý đội và đại diện đội trong kèo.
 - **Chuyển đội trưởng:** người đang là đội trưởng chọn thành viên đang hoạt động; người được chọn bắt buộc nhận (không có quyền từ chối). Hệ thống tự chuyển quyền ngay lập tức. Lưu lịch sử chuyển quyền.
 - **Xóa tài khoản đội trưởng:**
-  - Trước khi xóa tài khoản, đội trưởng phải chuyển quyền cho thành viên khác.
-  - Nếu đội không có thành viên khác (đội trưởng là người duy nhất), cho phép ngoại lệ: đội tự chuyển `INACTIVE` khi chủ xóa tài khoản, không cần admin thực hiện thủ công.
+  - Trước khi xóa tài khoản, đội trưởng phải chuyển quyền cho thành viên khác hoặc **giải tán đội** — kể cả khi là người duy nhất hoặc đội đang bị admin khoá; không còn ngoại lệ đội tự chuyển `INACTIVE` (USER-002, ADR-0005).
   - Không xóa cứng dữ liệu lịch sử. Sau soft-delete tài khoản, lịch sử hiển thị “Người dùng đã xóa”; điểm/đánh giá lịch sử của đội khác được giữ nguyên.
+- **Giải tán đội:** chỉ đội trưởng đang hoạt động; đội chuyển `DISBANDED` (trạng thái cuối, không kích hoạt lại), ghi lý do (≤ 100 ký tự, mặc định "Đội trưởng giải tán đội"), thời điểm và người giải tán; mọi thành viên → rời đội, lời mời đang chờ → bị từ chối; lý do khoá của admin (nếu có) giữ nguyên (USER-002).
 - **Hồ sơ cá nhân:** 1:1 với tài khoản; các trường gồm tên hiển thị, ảnh đại diện, tiểu sử, vị trí chơi ưa thích, ngày sinh, giới tính và khu vực (phường/xã).
 - **Đăng nhập:** Hỗ trợ OAuth với Google, Facebook và Phone number (OTP). Không có email/password truyền thống trong MVP.
 - **Soft-delete:** Tài khoản đã xóa tạm thời giữ mãi trong DB, có thể khôi phục. Hard-delete để sau khi có chính sách retention.

@@ -123,4 +123,12 @@ class RequestDtoValidationTest {
         assertThat(invalidFields(new MarkInactiveRequest(" "))).containsExactly("reason");
         assertThat(invalidFields(new MarkInactiveRequest("x".repeat(501)))).containsExactly("reason");
     }
+
+    @Test
+    void disbandTeamRequestReasonOptionalUpTo100Chars() {
+        assertThat(invalidFields(new DisbandTeamRequest(null))).isEmpty();
+        assertThat(invalidFields(new DisbandTeamRequest("   "))).isEmpty();
+        assertThat(invalidFields(new DisbandTeamRequest("x".repeat(100)))).isEmpty();
+        assertThat(invalidFields(new DisbandTeamRequest("x".repeat(101)))).containsExactly("reason");
+    }
 }

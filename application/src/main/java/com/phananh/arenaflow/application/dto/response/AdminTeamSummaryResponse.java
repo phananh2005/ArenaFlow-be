@@ -7,5 +7,5 @@ import java.util.UUID;
 /** TeamSummaryResponse + inactiveReason. */
 public record AdminTeamSummaryResponse(UUID teamId, String teamName, String avatarUrl, List<String> skillLevels,
                                        String status, String inactiveReason, String captainName, long memberCount,
-                                       OffsetDateTime createdAt) {
+                                       OffsetDateTime createdAt, String disbandedByName) {
 }

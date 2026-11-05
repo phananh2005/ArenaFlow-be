@@ -38,32 +38,37 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
     private final PageRequestFactory pageRequestFactory;
     private final TeamGuard teamGuard;
 
-    /** S team → TEAM_001/015 → S captain → TEAM_002 → S invitee → USER_001 → S tồn tại → TEAM_003 → I. */
+    /**
+     * (retry) S team (force increment) → TEAM_001/016/015 → S captain → TEAM_002 → S invitee → USER_001
+     * → S tồn tại → TEAM_003 → I → U team.version lúc commit = 6 (W6). Tăng version để invite không lọt vào đội
+     * vừa giải tán (race M1, USER-002 Processing_Flow §5); invite song song cùng đội có thể hết retry → TEAM_014.
+     */
     @Override
-    @Transactional
     public InvitationResponse inviteMember(UUID teamId, UUID captainUserId, InviteMemberRequest request) {
-        Team team = teamGuard.activeTeam(teamId);
-        teamGuard.requireCaptain(teamId, captainUserId);
-        if (userRepository.findByIdAndDeletedAtIsNull(request.userId()).isEmpty()) {
-            throw new BusinessException(ErrorCode.USER_001);
-        }
-        if (teamMemberRepository.existsByTeamIdAndUserIdAndStatusIn(teamId, request.userId(), OPEN_MEMBERSHIP)) {
-            throw new BusinessException(ErrorCode.TEAM_003);
-        }
-        TeamMember invitation = new TeamMember();
-        invitation.setTeamId(teamId);
-        invitation.setUserId(request.userId());
-        invitation.setRole(TeamMember.Role.MEMBER);
-        invitation.setStatus(TeamMember.Status.PENDING);
-        try {
-            return membershipMapper.toInvitation(teamMemberRepository.saveAndFlush(invitation), team.getName());
-        } catch (DataIntegrityViolationException concurrentInvite) {
-            // Unique (team_id, user_id) WHERE status IN ('PENDING','ACTIVE') — mời trùng song song.
-            throw new BusinessException(ErrorCode.TEAM_003);
-        }
+        return optimisticLockRetrier.execute(() -> {
+            Team team = teamGuard.activeTeamForInvite(teamId);
+            teamGuard.requireCaptain(teamId, captainUserId);
+            if (userRepository.findByIdAndDeletedAtIsNull(request.userId()).isEmpty()) {
+                throw new BusinessException(ErrorCode.USER_001);
+            }
+            if (teamMemberRepository.existsByTeamIdAndUserIdAndStatusIn(teamId, request.userId(), OPEN_MEMBERSHIP)) {
+                throw new BusinessException(ErrorCode.TEAM_003);
+            }
+            TeamMember invitation = new TeamMember();
+            invitation.setTeamId(teamId);
+            invitation.setUserId(request.userId());
+            invitation.setRole(TeamMember.Role.MEMBER);
+            invitation.setStatus(TeamMember.Status.PENDING);
+            try {
+                return membershipMapper.toInvitation(teamMemberRepository.saveAndFlush(invitation), team.getName());
+            } catch (DataIntegrityViolationException concurrentInvite) {
+                // Unique (team_id, user_id) WHERE status IN ('PENDING','ACTIVE') — mời trùng song song.
+                throw new BusinessException(ErrorCode.TEAM_003);
+            }
+        });
     }
 
-    /** (retry) S member → TEAM_004/005 → S team → TEAM_015 → TEAM_006 → U ACTIVE → S MemberView. */
+    /** (retry) S member → TEAM_004/005 → S team → TEAM_016/015 → TEAM_006 → U ACTIVE → S MemberView. */
     @Override
     public MemberResponse acceptInvitation(UUID invitationId, UUID userId) {
         return optimisticLockRetrier.execute(() -> {
@@ -97,14 +102,14 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
                 membershipMapper::toMember, page, pageSize);
     }
 
-    /** (retry) S team → TEAM_001 → S member ACTIVE → TEAM_010 → captain → TEAM_009 → U LEFT. */
+    /** (retry) S team → TEAM_001/016 (INACTIVE vẫn rời được) → S member ACTIVE → TEAM_010 → captain → TEAM_009 → U LEFT. */
     @Override
     public void leaveTeam(UUID teamId, UUID userId) {
         optimisticLockRetrier.execute(() -> {
-            teamGuard.requireTeam(teamId);
+            teamGuard.notDisbandedTeam(teamId);
             TeamMember member = teamMemberRepository
                     .findByTeamIdAndUserIdAndStatus(teamId, userId, TeamMember.Status.ACTIVE)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_010));
+                    .orElseThrow(() -> teamGuard.disbandedOr(teamId, ErrorCode.TEAM_010));
             if (member.getRole() == TeamMember.Role.CAPTAIN) {
                 throw new BusinessException(ErrorCode.TEAM_009);
             }

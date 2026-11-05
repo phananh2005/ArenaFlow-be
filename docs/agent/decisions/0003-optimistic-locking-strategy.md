@@ -5,7 +5,7 @@
 | **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-02 |
 | **Người quyết định** | Product Owner (chốt retry 3 lần → 409) · solution-architect (đề xuất cách thực hiện) |
-| **Liên quan** | `docs/agent/design/USER-001/Processing_Flow.md` §5 · `docs/agent/convention-backend.md` §9 |
+| **Liên quan** | `docs/agent/design/USER-001/Processing_Flow.md` §5 · `docs/agent/convention-backend.md` §9 · ngoại lệ có phạm vi cho `deleteAccount` (khoá bi quan) đề xuất ở [ADR-0007](0007-scoped-pessimistic-lock-for-account-deletion.md) (Proposed) |
 
 ## Bối cảnh (Context)
 - Các thao tác trên `team`/`team_member` có thể chạy song song: sửa đội, chuyển quyền captain, chấp nhận lời mời, rời đội, admin đổi trạng thái, xoá tài khoản captain. Lost update làm sai số captain/thành viên.

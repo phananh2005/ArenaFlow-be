@@ -10,6 +10,8 @@ import org.springframework.http.HttpHeaders;
 
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -149,5 +151,137 @@ class TeamControllerTest extends ApiIntegrationTest {
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.error.code").value("TEAM_009"));
         mockMvc.perform(as(captain, post(base + "/members/leave"))).andExpect(status().isNoContent());
+    }
+
+    // ---------- USER-002: giải tán đội ----------
+
+    @Test
+    void disbandTeamGuardsThenDisbandsWithDefaultReasonAndRejectsRepeatAndWrites() throws Exception {
+        User captain = saveUser("Disband Captain");
+        User member = saveUser("Disband Member");
+        Team team = saveTeam("Team Disband", captain);
+        saveMember(team, member, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+        flush();
+        String url = "/api/v1/teams/" + team.getId() + "/disband";
+
+        mockMvc.perform(post(url))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("AUTH_001"));
+        mockMvc.perform(as(captain, post("/api/v1/teams/" + UUID.randomUUID() + "/disband")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("TEAM_001"));
+        mockMvc.perform(as(member, post(url)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("TEAM_002"));
+        mockMvc.perform(as(captain, post(url)).content("{\"reason\":\"" + "x".repeat(101) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+
+        // Không body, không Content-Type → lý do mặc định.
+        mockMvc.perform(post(url).header(HttpHeaders.AUTHORIZATION, bearer(captain)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("DISBANDED"))
+                .andExpect(jsonPath("$.data.disbandReason").value("Đội trưởng giải tán đội"))
+                .andExpect(jsonPath("$.data.disbandedById").value(captain.getId().toString()))
+                .andExpect(jsonPath("$.data.disbandedByName").value("Disband Captain"))
+                .andExpect(jsonPath("$.data.disbandedAt").exists())
+                .andExpect(jsonPath("$.data.captainId").doesNotExist())
+                .andExpect(jsonPath("$.data.memberCount").value(0));
+
+        mockMvc.perform(as(captain, post(url)))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("TEAM_016"));
+        mockMvc.perform(as(captain, patch("/api/v1/teams/" + team.getId())).content("{\"teamName\":\"New\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("TEAM_016"));
+        mockMvc.perform(as(member, post("/api/v1/teams/" + team.getId() + "/members/leave")))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("TEAM_016"));
+        mockMvc.perform(get("/api/v1/teams").header(HttpHeaders.AUTHORIZATION, bearer(captain))
+                        .param("status", "DISBANDED").param("pageSize", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.teamId == '" + team.getId() + "')].disbandedByName")
+                        .value("Disband Captain"));
+    }
+
+    @Test
+    void disbandTeamAcceptsEmptyObjectAndTrimsReason() throws Exception {
+        User captain = saveUser("Trim Captain");
+        Team emptyBody = saveTeam("Team Empty Body", captain);
+        Team withReason = saveTeam("Team With Reason", captain);
+        flush();
+
+        mockMvc.perform(as(captain, post("/api/v1/teams/" + emptyBody.getId() + "/disband")).content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.disbandReason").value("Đội trưởng giải tán đội"));
+        mockMvc.perform(as(captain, post("/api/v1/teams/" + withReason.getId() + "/disband"))
+                        .content("{\"reason\":\"  Hết người chơi  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.disbandReason").value("Hết người chơi"));
+    }
+
+    /** AC-T06-01, -03, -05, -06 (USER-002 Acceptance_Criteria §2) qua HTTP trên một đội. */
+    @Test
+    void disbandedTeamMeetsAcceptanceCriteriaEndToEnd() throws Exception {
+        User captain = saveUser("AC Captain");
+        User member = saveUser("AC Member");
+        User invitee = saveUser("AC Invitee");
+        User outsider = saveUser("AC Outsider");
+        User admin = saveUser("AC Admin", User.Role.ADMIN);
+        Team team = saveTeam("Team AC", captain);
+        TeamMember activeMember = saveMember(team, member, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+        TeamMember invitation = saveMember(team, invitee, TeamMember.Role.MEMBER, TeamMember.Status.PENDING);
+        flush();
+        String teamUrl = "/api/v1/teams/" + team.getId();
+        mockMvc.perform(as(captain, post(teamUrl + "/captain/transfer"))
+                        .content("{\"newCaptainId\":\"" + member.getId() + "\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(as(member, post(teamUrl + "/captain/transfer"))
+                        .content("{\"newCaptainId\":\"" + captain.getId() + "\"}"))
+                .andExpect(status().isOk());
+
+        // AC-T06-03: thành viên thường và Admin (không phải captain) bị từ chối, đội không đổi.
+        mockMvc.perform(as(admin, post(teamUrl + "/disband")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("TEAM_002"));
+        mockMvc.perform(as(member, post(teamUrl + "/disband")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("TEAM_002"));
+
+        // AC-T06-01
+        mockMvc.perform(as(captain, post(teamUrl + "/disband"))).andExpect(status().isOk());
+        flush();
+        TeamMember leftMember = teamMemberRepository.findById(activeMember.getId()).orElseThrow();
+        assertThat(leftMember.getStatus()).isEqualTo(TeamMember.Status.LEFT);
+        assertThat(leftMember.getLeftAt()).isNotNull();
+        assertThat(teamMemberRepository.findById(invitation.getId()).orElseThrow().getStatus())
+                .isEqualTo(TeamMember.Status.REJECTED);
+
+        // AC-T06-05: mọi thao tác ghi → 422 TEAM_016.
+        mockMvc.perform(as(captain, post(teamUrl + "/invitations")).content("{\"userId\":\"" + outsider.getId() + "\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("TEAM_016"));
+        mockMvc.perform(as(invitee, post("/api/v1/invitations/" + invitation.getId() + "/accept")))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("TEAM_016"));
+        mockMvc.perform(as(invitee, post("/api/v1/invitations/" + invitation.getId() + "/reject")))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("TEAM_016"));
+        mockMvc.perform(as(captain, post(teamUrl + "/captain/transfer"))
+                        .content("{\"newCaptainId\":\"" + member.getId() + "\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("TEAM_016"));
+
+        // AC-T06-06: chi tiết + lịch sử đội trưởng xem được; danh sách mặc định (ACTIVE) không có đội.
+        mockMvc.perform(get(teamUrl).header(HttpHeaders.AUTHORIZATION, bearer(outsider)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("DISBANDED"))
+                .andExpect(jsonPath("$.data.disbandedByName").value("AC Captain"));
+        mockMvc.perform(get(teamUrl + "/captain/history").header(HttpHeaders.AUTHORIZATION, bearer(outsider)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pagination.totalItems").value(2)); // 2 lần chuyển quyền (fixture không ghi history tạo đội)
+        mockMvc.perform(get("/api/v1/teams").header(HttpHeaders.AUTHORIZATION, bearer(outsider)).param("pageSize", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.teamId == '" + team.getId() + "')]").isEmpty());
     }
 }

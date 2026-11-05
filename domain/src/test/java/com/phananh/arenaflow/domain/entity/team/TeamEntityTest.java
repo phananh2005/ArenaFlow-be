@@ -2,6 +2,7 @@ package com.phananh.arenaflow.domain.entity.team;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,5 +33,31 @@ class TeamEntityTest {
         team.setCreatedBy(creatorId);
 
         assertThat(team.getCreatedBy()).isEqualTo(creatorId);
+    }
+
+    @Test
+    void teamStatusIncludesDisbanded() {
+        assertThat(Team.TeamStatus.valueOf("DISBANDED")).isEqualTo(Team.TeamStatus.DISBANDED);
+        assertThat(Team.TeamStatus.values())
+                .containsExactly(Team.TeamStatus.ACTIVE, Team.TeamStatus.INACTIVE, Team.TeamStatus.DISBANDED);
+    }
+
+    @Test
+    void whenSetDisbandMetadata_thenGettersReturnValuesAndInactiveReasonIsKept() {
+        Team team = new Team();
+        team.setInactiveReason("Vi phạm quy định");
+        UUID captainId = UUID.randomUUID();
+        OffsetDateTime disbandedAt = OffsetDateTime.now();
+
+        team.setStatus(Team.TeamStatus.DISBANDED);
+        team.setDisbandReason("Đội trưởng giải tán đội");
+        team.setDisbandedAt(disbandedAt);
+        team.setDisbandedBy(captainId);
+
+        assertThat(team.getStatus()).isEqualTo(Team.TeamStatus.DISBANDED);
+        assertThat(team.getDisbandReason()).isEqualTo("Đội trưởng giải tán đội");
+        assertThat(team.getDisbandedAt()).isEqualTo(disbandedAt);
+        assertThat(team.getDisbandedBy()).isEqualTo(captainId);
+        assertThat(team.getInactiveReason()).isEqualTo("Vi phạm quy định");
     }
 }

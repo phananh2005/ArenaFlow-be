@@ -5,7 +5,7 @@
 | **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-02 |
 | **Người quyết định** | Product Owner (chốt chính sách) · solution-architect (đề xuất cách thực hiện) |
-| **Liên quan** | ADR-0001 · UC-U03, BR-T06, AC-U03 · Use_Cases "Quyết định bổ sung" #5 (không hard-delete) · `docs/agent/design/USER-001/` |
+| **Liên quan** | ADR-0001 · UC-U03, BR-T06, AC-U03 · Use_Cases "Quyết định bổ sung" #5 (không hard-delete) · `docs/agent/design/USER-001/` · §Quyết định #4 đề xuất thay bởi [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) (Proposed) |
 
 ## Bối cảnh (Context)
 - UC-U03/AC-U03: tài khoản soft-delete; lịch sử hiển thị "Người dùng đã xóa"; điểm/đánh giá của đội khác giữ nguyên; tài khoản "có thể khôi phục sau này"; captain duy nhất xoá → đội INACTIVE.

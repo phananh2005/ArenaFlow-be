@@ -21,7 +21,7 @@
 | BR-T03 | Đội trưởng chỉ có thể chuyển quyền cho thành viên đang active | Khi chuyển quyền đội trưởng |
 | BR-T04 | Người được mời phải chấp nhận lời mời để trở thành thành viên | Khi mời vào đội |
 | BR-T05 | Chuyển đội trưởng: người được chọn bắt buộc nhận (không có quyền từ chối) | Khi chuyển quyền |
-| BR-T06 | Trước khi xóa tài khoản, đội trưởng phải chuyển quyền cho thành viên khác (trừ trường hợp là người duy nhất) | Khi User xóa tài khoản |
+| BR-T06 | **Sửa bởi `USER-002`:** trước khi xóa tài khoản, đội trưởng phải chuyển quyền hoặc giải tán mọi đội chưa giải tán, kể cả khi là người duy nhất — chi tiết `USER-002/Business_Rules.md` | Khi User xóa tài khoản |
 | **MATCH** | | |
 | BR-M01 | Giờ đá phải trong tương lai (≥ thời điểm hiện tại + 1 giờ) | Khi tạo Match |
 | BR-M02 | Thời hạn bài đăng luồng A: `expires_at ≤ scheduled_start_time` (giờ bắt đầu trận). Không cho đổi ngày trận sau khi Match OPEN; muốn đổi phải hủy và tạo lại. | Khi tạo Match luồng A |
@@ -324,7 +324,7 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 | BC-U01 | User ≥13 tuổi mới được đăng ký |
 | BC-U02 | Soft-delete tài khoản: giữ mãi trong DB, có thể khôi phục; lịch sử hiển thị "Người dùng đã xóa" |
 | BC-T01 | Tên đội được phép trùng (không có unique constraint) |
-| BC-T02 | Chỉ admin đánh dấu đội INACTIVE (trừ trường hợp đội trưởng là người duy nhất xóa tài khoản → đội tự INACTIVE) |
+| BC-T02 | **Sửa bởi `USER-002`:** chỉ admin khoá đội (INACTIVE); đội trưởng giải tán đội (UC-T06); hệ thống không tự chuyển trạng thái đội — chi tiết `USER-002/Business_Rules.md` |
 | BC-T03 | Chuyển đội trưởng: người được chọn bắt buộc nhận, không có quyền từ chối |
 | BC-T04 | Lưu lịch sử thành viên; không xóa cứng quan hệ cá nhân–đội |
 | BC-T05 | Lưu lịch sử chuyển quyền đội trưởng |
@@ -375,7 +375,7 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 | Quản lý hồ sơ cá nhân | Xem/sửa hồ sơ của người khác |
 | Tạo đội (trở thành đội trưởng) | Tham gia đội mà chưa được mời |
 | Chấp nhận/Từ chối lời mời vào đội | Mời người khác vào đội (chỉ đội trưởng) |
-| Rời đội | Xóa đội (chỉ admin hoặc tự INACTIVE khi xóa tài khoản) |
+| Rời đội | Giải tán đội (chỉ đội trưởng — `USER-002`); xóa cứng đội |
 | Ứng tuyển mercenary | Duyệt ứng viên mercenary (chỉ đội trưởng) |
 | Đánh giá đội sau trận mercenary (1-5 sao) | Đánh giá đội khác khi không tham gia trận |
 | Report đội sau trận mercenary | Report đội khác khi không tham gia trận |
@@ -387,7 +387,7 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 |---|---|
 | Tất cả quyền của User | — |
 | Mời thành viên vào đội | Bắt buộc người khác tham gia (phải chấp nhận lời mời) |
-| Quản lý đội (sửa tên, avatar, trình độ) | Xóa đội (chỉ admin hoặc tự INACTIVE khi xóa tài khoản) |
+| Quản lý đội (sửa tên, avatar, trình độ); giải tán đội của mình (`USER-002` UC-T06) | Xóa cứng đội; kích hoạt lại đội đã giải tán |
 | Chuyển quyền đội trưởng cho thành viên khác | Chuyển cho người không phải thành viên |
 | Tạo kèo (luồng A hoặc B) | Tạo kèo cho đội khác |
 | Gửi Match Request cho kèo của đội khác | Chấp nhận request cho kèo của đội khác |
