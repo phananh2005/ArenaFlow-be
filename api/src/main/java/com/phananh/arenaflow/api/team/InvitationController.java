@@ -1,7 +1,6 @@
 package com.phananh.arenaflow.api.team;
 
 import com.phananh.arenaflow.application.dto.response.ApiResponse;
-import com.phananh.arenaflow.application.dto.response.InvitationResponse;
 import com.phananh.arenaflow.application.dto.response.MemberResponse;
 import com.phananh.arenaflow.api.security.CurrentUser;
 import com.phananh.arenaflow.application.service.TeamMembershipService;
@@ -30,7 +29,8 @@ public class InvitationController {
     }
 
     @PostMapping("/{invitationId}/reject")
-    public ResponseEntity<ApiResponse<InvitationResponse>> reject(@PathVariable UUID invitationId, @CurrentUser UUID currentUserId) {
-        return ResponseEntity.ok(ApiResponse.of(membershipService.rejectInvitation(invitationId, currentUserId)));
+    public ResponseEntity<Void> reject(@PathVariable UUID invitationId, @CurrentUser UUID currentUserId) {
+        membershipService.rejectInvitation(invitationId, currentUserId);
+        return ResponseEntity.noContent().build();
     }
 }

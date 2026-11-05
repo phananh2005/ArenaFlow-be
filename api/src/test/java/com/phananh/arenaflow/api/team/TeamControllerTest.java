@@ -12,7 +12,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -23,14 +22,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class TeamControllerTest extends ApiIntegrationTest {
 
     @Test
-    void createTeamReturns201WithLocationOr400() throws Exception {
+    void createTeamReturns201WithoutLocationOr400() throws Exception {
         User user = saveUser("Creator API");
         flush();
 
         mockMvc.perform(as(user, post("/api/v1/teams"))
                         .content("{\"teamName\":\"Team Alpha\",\"skillLevels\":[\"Chill\",\"Thi đấu\"]}"))
                 .andExpect(status().isCreated())
-                .andExpect(header().string(HttpHeaders.LOCATION, matchesPattern("/api/v1/teams/[0-9a-f-]{36}")))
+                .andExpect(header().doesNotExist(HttpHeaders.LOCATION))
                 .andExpect(jsonPath("$.data.teamName").value("Team Alpha"))
                 .andExpect(jsonPath("$.data.captainName").value("Creator API"))
                 .andExpect(jsonPath("$.data.memberCount").value(1))
@@ -100,7 +99,7 @@ class TeamControllerTest extends ApiIntegrationTest {
     }
 
     @Test
-    void inviteReturns201WithLocationThen409OnDuplicate() throws Exception {
+    void inviteReturns201WithoutLocationThen409OnDuplicate() throws Exception {
         User captain = saveUser("Captain I");
         User invitee = saveUser("Invitee I");
         Team team = saveTeam("Team Invite", captain);
@@ -109,7 +108,7 @@ class TeamControllerTest extends ApiIntegrationTest {
 
         mockMvc.perform(as(captain, post("/api/v1/teams/" + team.getId() + "/invitations")).content(body))
                 .andExpect(status().isCreated())
-                .andExpect(header().string(HttpHeaders.LOCATION, matchesPattern("/api/v1/invitations/[0-9a-f-]{36}")))
+                .andExpect(header().doesNotExist(HttpHeaders.LOCATION))
                 .andExpect(jsonPath("$.data.status").value("PENDING"))
                 .andExpect(jsonPath("$.data.teamName").value("Team Invite"));
         mockMvc.perform(as(captain, post("/api/v1/teams/" + team.getId() + "/invitations")).content(body))

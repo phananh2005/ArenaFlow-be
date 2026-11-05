@@ -13,7 +13,7 @@ public interface TeamMembershipService {
 
     MemberResponse acceptInvitation(UUID invitationId, UUID userId);
 
-    InvitationResponse rejectInvitation(UUID invitationId, UUID userId);
+    void rejectInvitation(UUID invitationId, UUID userId);
 
     PageResponse<MemberResponse> listMembers(UUID teamId, int page, int pageSize);
 

@@ -21,6 +21,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,7 +33,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.net.URI;
 import java.util.UUID;
 
 /** Quyền captain/thành viên kiểm trong service (thứ tự 404 → 403). */
@@ -48,8 +48,7 @@ public class TeamController {
     @PostMapping
     public ResponseEntity<ApiResponse<TeamResponse>> createTeam(@CurrentUser UUID currentUserId,
                                                                 @Valid @RequestBody CreateTeamRequest request) {
-        TeamResponse team = teamService.createTeam(currentUserId, request);
-        return ResponseEntity.created(URI.create("/api/v1/teams/" + team.teamId())).body(ApiResponse.of(team));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(teamService.createTeam(currentUserId, request)));
     }
 
     @GetMapping("/{teamId}")
@@ -75,9 +74,8 @@ public class TeamController {
     public ResponseEntity<ApiResponse<InvitationResponse>> inviteMember(@PathVariable UUID teamId,
                                                                         @CurrentUser UUID currentUserId,
                                                                         @Valid @RequestBody InviteMemberRequest request) {
-        InvitationResponse invitation = membershipService.inviteMember(teamId, currentUserId, request);
-        return ResponseEntity.created(URI.create("/api/v1/invitations/" + invitation.invitationId()))
-                .body(ApiResponse.of(invitation));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.of(membershipService.inviteMember(teamId, currentUserId, request)));
     }
 
     @PostMapping("/{teamId}/captain/transfer")

@@ -26,7 +26,7 @@ class AuthControllerTest extends ApiIntegrationTest {
 
         mockMvc.perform(json(post("/api/v1/auth/oauth"), oauthBody("GOOGLE", email)))
                 .andExpect(status().isCreated())
-                .andExpect(header().string(HttpHeaders.LOCATION, "/api/v1/profile"))
+                .andExpect(header().doesNotExist(HttpHeaders.LOCATION))
                 .andExpect(jsonPath("$.data.isNewUser").value(true))
                 .andExpect(jsonPath("$.data.role").value("USER"))
                 .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
@@ -78,7 +78,7 @@ class AuthControllerTest extends ApiIntegrationTest {
         String phone = "09" + String.format("%08d", Math.floorMod(UUID.randomUUID().hashCode(), 100_000_000));
         mockMvc.perform(json(post("/api/v1/auth/verify-otp"), "{\"phone\":\"" + phone + "\",\"otp\":\"123456\"}"))
                 .andExpect(status().isCreated())
-                .andExpect(header().string(HttpHeaders.LOCATION, "/api/v1/profile"))
+                .andExpect(header().doesNotExist(HttpHeaders.LOCATION))
                 .andExpect(jsonPath("$.data.isNewUser").value(true));
     }
 
