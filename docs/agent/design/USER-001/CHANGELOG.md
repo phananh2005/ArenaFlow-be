@@ -1,5 +1,25 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v2.0] — 2026-11-05
+
+**Type:** MAJOR (phá vỡ hợp đồng: `DELETE /api/v1/profile` với captain duy nhất trước trả `204` nay trả `422 USER_003`; `USER_003` giữ mã nhưng đổi điều kiện + message; các endpoint ghi đội thêm mã lỗi `TEAM_016` — user chốt MAJOR 2026-11-05) · **Tóm tắt:** Đồng bộ USER-001 với USER-002 (giải tán đội, ADR-0005): bỏ nhánh "captain duy nhất xoá tài khoản → đội tự INACTIVE", thay thứ tự guard bằng USER-002 §2.1a, ghi chú repository/guard đổi.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `API_Spec.md` §2.7, §4 (`USER_003`) | Sửa | Captain duy nhất → đội `INACTIVE`; `USER_003` khi còn thành viên khác → mọi captain ACTIVE (kể cả người duy nhất, đội INACTIVE) bị `USER_003`; message "…hoặc giải tán đội trước khi xóa tài khoản" | ADR-0005, USER-002 BR-T06/BC-T02 sửa |
+| 2 | `Processing_Flow.md` §1 | Sửa | Liệt kê thứ tự guard "Bean Validation (400) → JWT (401) → tồn tại → quyền → trạng thái" → chỉ còn con trỏ tới USER-002 `API_Spec.md` §2.1a (bỏ liệt kê, tránh trùng nguồn) | Thứ tự cũ sai (filter Security trả 401 trước; trạng thái đội kiểm trước quyền); USER-002 §2.1a là nguồn duy nhất theo từng endpoint |
+| 3 | `Processing_Flow.md` §2.2, §3 (2.7), §5 | Sửa | Sequence `findCaptainTeamsWithActiveCount` + `markInactiveByIds` → `existsActiveCaptainByUserId` ×2 + `leaveAllActive` (MEMBER) + `rejectAllPending` + `softDelete` (5 truy vấn); bỏ ghi chú "cập nhật thiếu dòng"; dòng race captain xoá tài khoản vs accept → luôn `USER_003` | Luồng USER-002 `Processing_Flow.md` §4.2 |
+| 4 | `Component_Class_Design.md` §2, §4 (TeamGuard, transaction), §5 | Sửa | Ghi chú bỏ `CaptainTeamView`, `markInactiveByIds`, `findCaptainTeamsWithActiveCount`; `findTeam` private; `activeTeam` thêm `TEAM_016`; `requireTeam` chỉ cho thao tác đọc; `requireCaptain` → `TEAM_016` khi đội vừa giải tán; admin dùng `notDisbandedTeam`; `inviteMember` bỏ `@Transactional`, chạy qua retrier | Code USER-002 (`fb6de5f`) |
+| 5 | `Processing_Flow.md` §3 (2.11–2.15, 2.18–2.20), §4 | Sửa | Thêm guard `TEAM_016` (và đọc lại trạng thái ở nhánh lỗi); 2.12 invite: 5 → 6 truy vấn (force increment `team.version` lúc commit), chuyển từ "ghi không retry" sang "ghi có retry" | USER-002 `Processing_Flow.md` §3, §5 |
+| 6 | `API_Spec.md` §4 | Thêm | Dòng `TEAM_016` (trỏ tới USER-002) + ghi chú các endpoint ghi có thêm `TEAM_016`, 2.12 thêm `TEAM_014` | Đồng bộ bảng mã lỗi |
+
+### Ảnh hưởng
+- API contract: `DELETE /api/v1/profile` từ chối thêm trường hợp captain duy nhất (trước đây 204) — thay đổi nghiệp vụ đã chốt ở USER-002/ADR-0005; message `USER_003` đổi.
+- DB schema: không đổi ở USER-001 (USER-002 thêm V4).
+- SRS: SYSTEM-001 `Use_Cases.md` UC-U03 4b đã gạch bỏ ở USER-002.
+
 ## [v1.2] — 2026-11-05
 
 **Type:** MINOR (cấu trúc mã nguồn, không đổi hợp đồng) · **Tóm tắt:** Tách repo thành Maven multi-module `common` / `domain` / `application` / `api` theo mẫu `vdbas_expenditure_service_be`, đổi base package `com.phananh.ArenaFlow` → `com.phananh.arenaflow` (ADR-0006). Không đổi endpoint, request/response, mã lỗi, DB schema hay nghiệp vụ.

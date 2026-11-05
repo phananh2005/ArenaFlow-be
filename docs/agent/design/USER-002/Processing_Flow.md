@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6), ADR-0003 optimistic retry |
 | Ràng buộc dữ liệu | USER-001 V1/V2/V3 + delta `Component_Class_Design.md` §5 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) |
 
 ## 1. Tổng quan
 
@@ -67,8 +67,8 @@ Số query là mức dự kiến một lần thử; JWT xác thực không truy 
 - Q4 chuẩn hoá reason (`trim()`, rỗng → `Đội trưởng giải tán đội`, BR-T08); gán `status=DISBANDED`, `disbandReason`, `disbandedAt`, `disbandedBy` trên entity `Team` đọc ở Q1, giữ nguyên `inactiveReason`; `saveAndFlush` → `UPDATE team ... WHERE id=? AND version=?`; 0 dòng → retry. `@PreUpdate` cập nhật `updated_at`.
 - Q5 chuyển mọi row ACTIVE/PENDING còn lại của đội trong một câu `UPDATE ... SET status = CASE ...`; với row ACTIVE ghi `left_at = GREATEST(:now, COALESCE(joined_at, invited_at))` để luôn thoả CHECK `left_at >= COALESCE(joined_at, invited_at)` khi một accept commit sau thời điểm `:now` (N1); row PENDING không set `left_at`. Q5 chạy sau khi Q3/Q4 đã flush nên không đụng row captain và không va chạm version với chính transaction. Q6 dựng response.
 - Kết quả theo tình huống:
-  - Đội trưởng bấm giải tán 2 lần chồng nhau: request sau qua được Q1/Q2 (request trước chưa commit), Q3 chờ khoá rồi cập nhật 0 dòng → retry → Q1 thấy `DISBANDED` → `422 TEAM_016`.
-  - Transfer commit trước (R2): Q3 cập nhật 0 dòng → retry → Q2 → `403 TEAM_002`. Disband commit trước: transfer flush row captain cũ lệch version → retry → `TEAM_016`.
+  - Đội trưởng bấm giải tán 2 lần chồng nhau: request sau qua được Q1/Q2 (request trước chưa commit), Q3 chờ khoá rồi cập nhật 0 dòng → retry → Q1 thấy `DISBANDED` → `422 TEAM_016`. Nếu request trước commit giữa Q1 và Q2 của request sau → Q2 không thấy captain ACTIVE → đọc lại trạng thái (§5) → `TEAM_016`.
+  - Transfer commit trước (R2): Q3 cập nhật 0 dòng → retry → Q2 → `403 TEAM_002`. Disband commit trước: transfer flush row captain cũ lệch version → retry → `TEAM_016`; hoặc transfer đọc đội trước commit nhưng đọc captain/member mới sau commit (đã LEFT) → đọc lại trạng thái (§5) → `TEAM_016` (đã tái hiện bằng test race).
   - Thành viên thường gọi disband: Q2 → `TEAM_002`, không ghi gì.
 - Ranh giới transaction bao gồm team, membership và invitation updates; mọi lỗi rollback cả ba nhóm. Không hard-delete history.
 
@@ -83,6 +83,8 @@ Số query là mức dự kiến một lần thử; JWT xác thực không truy 
 
 Dùng `@Version` Team/TeamMember và retrier USER-001/ADR-0003; cập nhật bulk tự tăng version. Mỗi race dưới đây được tuần tự hoá bằng việc hai luồng cùng ghi một dòng có kiểm tra version.
 
+**Mã lỗi bên thua — đọc lại trạng thái đã commit (bổ sung sau implement, chốt bởi user 2026-11-05):** với READ COMMITTED, request thua có thể đọc đội (Q1) **trước** khi disband commit nhưng đọc captain/member **sau** commit → guard thất bại với mã sai ngữ cảnh (đã tái hiện: transfer nhận `TEAM_007` ở test race R2). Các guard đọc captain/member sau Q1 dùng `TeamGuard#disbandedOr(teamId, fallback)`: đọc `team.status` bằng native query (`TeamRepository#findCurrentStatusById`, bỏ qua persistence context); `DISBANDED` → `TEAM_016`, ngược lại → `fallback`. Áp cho `requireCaptain` (`TEAM_002`: disband, update, invite, transfer), transfer `TEAM_007`, leave `TEAM_010`, reactivate `TEAM_013`. Chỉ thêm **1 truy vấn ở nhánh lỗi**; luồng thành công không đổi số truy vấn (§3).
+
 | Race | Kết quả bất biến |
 |---|---|
 | Disband vs accept invitation | Accept thắng → Q5 chuyển member mới sang LEFT, `left_at` theo công thức §4.1 Q5 (không vi phạm CHECK; có thể lớn hơn `disbanded_at` vài ms — test chỉ assert `left_at >= joined_at`, không assert `left_at == disbanded_at`); disband thắng → Q5 đã tăng version row lời mời → accept retry → `TEAM_016`. Không có ACTIVE member trên team đã disband |
@@ -90,6 +92,8 @@ Dùng `@Version` Team/TeamMember và retrier USER-001/ADR-0003; cập nhật bul
 | Disband vs disband (double-submit) | Request sau → `TEAM_016`. Cơ chế: §4.1 Q3 |
 | Disband vs admin lock | Cả hai CAS `team.version` (disband Q4, `markInactive`/`reactivate` `saveAndFlush`). Lock thắng → disband retry, giải tán từ INACTIVE, giữ `inactive_reason`; disband thắng → lock retry → `notDisbandedTeam` → `TEAM_016` |
 | Disband vs invite (M1) | Invite tăng `team.version` lúc commit (`OPTIMISTIC_FORCE_INCREMENT`), disband CAS `team.version` ở Q4. Disband thắng → invite lệch version, rollback cả INSERT → retry → `TEAM_016`; invite thắng → Q4 cập nhật 0 dòng → disband retry → Q5 chuyển lời mời mới sang REJECTED. Hệ quả phụ: các invite song song vào cùng một đội bị tuần tự hoá trên `team.version` và có thể nhận `409 TEAM_014` khi hết 3 lần thử. Đội `DISBANDED` không bao giờ còn lời mời PENDING |
+| Leave vs disband | Leave thắng → member LEFT trước, disband Q5 bỏ qua row đó; disband thắng → leave không còn row ACTIVE (`TEAM_010`) → đọc lại trạng thái → `TEAM_016` |
+| Admin reactivate vs disband | Đội INACTIVE: disband thắng → reactivate không thấy captain (`TEAM_013`) → đọc lại trạng thái → `TEAM_016`; reactivate thắng → disband giải tán từ ACTIVE |
 | Delete captain vs accept invitation | Guard captain ownership ngăn xoá bất kể thứ tự; accept không được làm mất captain |
 | Delete account vs transfer-cho-chính-user (R1) | Transfer thắng → delete `USER_003`; delete thắng → transfer `TEAM_007`. Đội không bao giờ mất captain. Cơ chế: §4.2 Q2–Q3 |
 | Retry/replay disband | Chỉ trạng thái ACTIVE/INACTIVE được chuyển; lặp sau DISBANDED trả lỗi state, không ghi đè metadata |

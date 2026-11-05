@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code, bugfix lỗi framework, ADR-0004, mã `SYS_*` — 39 mục, xem `CHANGELOG.md`) · developer · 2026-11-05 · v1.2 (Maven multi-module, ADR-0006) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code, bugfix lỗi framework, ADR-0004, mã `SYS_*` — 39 mục, xem `CHANGELOG.md`) · developer · 2026-11-05 · v1.2 (Maven multi-module, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) |
 
 ## 1. Tổng quan kiến trúc
 
@@ -28,7 +28,7 @@ domain/        com.phananh.arenaflow.domain
 ├── repository/     UserRepository, OAuthAccountRepository, AdministrativeUnitRepository,
 │                   TeamRepository, TeamMemberRepository, TeamCaptainHistoryRepository
 └── projection/     ProfileView, UserAuthView, WardView, TeamDetailView, TeamSummaryView,
-                    CaptainTeamView, MemberView, CaptainHistoryView
+                    MemberView, CaptainHistoryView (USER-002: bỏ CaptainTeamView, thêm MemberHistoryView)
 
 application/   com.phananh.arenaflow.application
 ├── service/        AuthService, AuthResult, ProfileService, TeamService, TeamStatusFilter,
@@ -90,18 +90,18 @@ Mọi handler trả `ResponseEntity<…>` (`convention-backend.md`): 200 → `Re
 
 Phân quyền captain/người được mời **làm trong service** (cần thứ tự guard 404 → 403, xem `Processing_Flow.md` §3), không dùng `@PreAuthorize` theo team. Admin chặn ở `SecurityConfig` (`/api/v1/admin/**` → `hasRole('ADMIN')`).
 
-**Guard đội INACTIVE:** Các method `updateTeam`, `inviteMember`, `transferCaptain`, `acceptInvitation`, `rejectInvitation` MUST check `team.status = INACTIVE → TEAM_015` trước khi ghi.
+**Guard đội INACTIVE:** Các method `updateTeam`, `inviteMember`, `transferCaptain`, `acceptInvitation`, `rejectInvitation` MUST check `team.status = INACTIVE → TEAM_015` trước khi ghi. Từ USER-002: `DISBANDED → TEAM_016` kiểm **trước** `TEAM_015` (USER-002 `API_Spec.md` §2.1a).
 
 **`application/support/TeamGuard`** (`@Component`, deps `TeamRepository`, `TeamMemberRepository`) — một nguồn cho guard đội, dùng chung bởi `TeamServiceImpl`, `TeamMembershipServiceImpl` và `AdminTeamServiceImpl`:
 
 ```java
-Team findTeam(UUID teamId);                          // không có → TEAM_001; không kiểm trạng thái (admin)
-Team activeTeam(UUID teamId);                        // findTeam + INACTIVE → TEAM_015
-void requireTeam(UUID teamId);                       // không có → TEAM_001 (endpoint đọc, rời đội)
-TeamMember requireCaptain(UUID teamId, UUID userId); // captain ACTIVE ≠ userId → TEAM_002
+Team findTeam(UUID teamId);                          // private từ USER-002; không có → TEAM_001, không kiểm trạng thái
+Team activeTeam(UUID teamId);                        // findTeam + DISBANDED → TEAM_016 + INACTIVE → TEAM_015 (USER-002)
+void requireTeam(UUID teamId);                       // không có → TEAM_001 (chỉ thao tác đọc; rời đội dùng notDisbandedTeam từ USER-002)
+TeamMember requireCaptain(UUID teamId, UUID userId); // captain ACTIVE ≠ userId → TEAM_002 (đội vừa giải tán → TEAM_016, USER-002 disbandedOr)
 ```
 
-`AdminTeamServiceImpl` chỉ dùng `TeamGuard.findTeam` (admin thao tác cả đội INACTIVE, quy tắc riêng TEAM_011/012/013).
+`AdminTeamServiceImpl` dùng `TeamGuard.notDisbandedTeam` (USER-002: admin thao tác cả đội INACTIVE nhưng đội DISBANDED → `TEAM_016`; quy tắc riêng TEAM_011/012/013 giữ nguyên). Guard mới của USER-002: USER-002 `Component_Class_Design.md` §4.1.
 
 ### 4.1. AuthService
 ```java
@@ -160,7 +160,7 @@ Deps: `TeamRepository`, `TeamMemberRepository`, `OptimisticLockRetrier`, `TeamMa
 - Method đọc: `@Transactional(readOnly = true)`. Gọi lồng từ method ghi (vd `AdminTeamServiceImpl` → `TeamService#getTeam`) → tham gia transaction của retrier (REQUIRED), `readOnly` không áp.
 - Method ghi chạm `team`/`team_member` (`updateProfile` không thuộc nhóm này): **không** annotate; thân method gọi `optimisticLockRetrier.execute(() -> …)` — mỗi lần thử là 1 transaction mới.
 - `loginWithOAuth`, `verifyOtp`: **không** annotate; tạo tài khoản trong `transactionTemplate.execute(...)`, bắt `DataIntegrityViolationException` ngoài transaction đã rollback rồi đọc lại — ranh giới, nguồn đụng độ và các nhánh kết quả: `Processing_Flow.md` §4.
-- Method ghi còn lại (`updateProfile`, `createTeam`, `inviteMember`): `@Transactional`.
+- Method ghi còn lại (`updateProfile`, `createTeam`): `@Transactional`. `inviteMember` chạy qua retrier từ USER-002 (race M1, `OPTIMISTIC_FORCE_INCREMENT`).
 
 ## 5. Repository Layer
 
@@ -185,13 +185,14 @@ public interface AdministrativeUnitRepository extends JpaRepository<Administrati
 public interface TeamRepository extends JpaRepository<Team, UUID> {
     Optional<TeamDetailView> findDetailById(UUID teamId);
     Page<TeamSummaryView> findSummaries(String status /* null = ALL */, Pageable pageable);
-    @Modifying int markInactiveByIds(Collection<UUID> ids, String reason, OffsetDateTime now); // version = version + 1
+    // USER-002: bỏ markInactiveByIds; thêm findForInviteById, findCurrentStatusById (USER-002 CCD §5.2)
 }
 public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
     Optional<TeamMember> findByTeamIdAndUserIdAndStatus(UUID teamId, UUID userId, TeamMember.Status status);
     Optional<TeamMember> findByTeamIdAndRoleAndStatus(UUID teamId, TeamMember.Role role, TeamMember.Status status);
     boolean existsByTeamIdAndUserIdAndStatusIn(UUID teamId, UUID userId, Collection<TeamMember.Status> statuses);
-    List<CaptainTeamView> findCaptainTeamsWithActiveCount(UUID userId); // 1 truy vấn, count bằng subquery
+    // USER-002: findCaptainTeamsWithActiveCount → existsActiveCaptainByUserId; thêm disbandRemaining, findMemberHistory;
+    //           leaveAllActive chỉ chuyển role MEMBER (USER-002 CCD §5.2)
     Page<MemberView> findActiveMembers(UUID teamId, Pageable pageable);
     Optional<MemberView> findMemberViewById(UUID memberId);             // native, join user (response 2.13)
     @Modifying int leaveAllActive(UUID userId, OffsetDateTime now);      // ACTIVE → LEFT, version + 1

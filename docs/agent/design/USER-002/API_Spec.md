@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · PostgreSQL (Neon) · Flyway |
 | Quy ước áp dụng | `docs/agent/api-convention.md`, `docs/agent/security-backend.md` |
 | Ràng buộc dữ liệu | USER-001 schema V1/V2/V3; delta được mô tả tại `Component_Class_Design.md` §5 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) |
 
 ## 1. Tổng quan
 
@@ -62,6 +62,8 @@ Chốt bởi user, 2026-11-05: kiểm tra `DISBANDED` → `422 TEAM_016` **ngay 
 | `POST /teams/{id}/members/leave` | `TEAM_001` → `TEAM_016` → `TEAM_010` → `TEAM_009` | **Không** chặn `INACTIVE`: thành viên vẫn rời được đội bị Admin khoá, như USER-001 (chốt bởi user, 2026-11-05) |
 | `PATCH /admin/teams/{id}/mark-inactive` | `TEAM_001` → `TEAM_016` → `TEAM_011` | |
 | `PATCH /admin/teams/{id}/reactivate` | `TEAM_001` → `TEAM_016` → `TEAM_012` → `TEAM_013` | |
+
+**Bên thua race luôn nhận `TEAM_016`:** nếu đội bị giải tán bởi request song song **sau** khi request này đã qua bước kiểm trạng thái, các guard phía sau (`TEAM_002`, `TEAM_007`, `TEAM_010`, `TEAM_013`) có thể thất bại vì captain/member vừa bị chuyển LEFT. Khi đó service đọc lại trạng thái đã commit của đội; đội `DISBANDED` → trả `422 TEAM_016` thay cho mã gốc (`Processing_Flow.md` §5). Đội chưa giải tán → giữ mã gốc.
 
 ### 2.2. Thay đổi response `TeamResponse`
 

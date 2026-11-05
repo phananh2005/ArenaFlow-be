@@ -2,7 +2,7 @@
 
 > Thiết kế schema PostgreSQL chi tiết từ đặc tả nghiệp vụ trong `data-model.md`
 
-> Cập nhật: 2026-11-01
+> Cập nhật: 2026-11-05 — bảng `team`, `team_member` đồng bộ tới V4 (USER-002); các bảng khác vẫn theo V1 (vd. `user.role`/`ward_id`, bỏ `team_tag` ở V2 chưa phản ánh)
 
 ## Conventions
 
@@ -118,7 +118,13 @@ Danh mục hành chính Việt Nam (tỉnh/quận/phường).
 | created_by | UUID | NOT NULL | FK → user, người tạo |
 | avatar_url | VARCHAR(500) | NULL | Logo đội |
 | description | TEXT | NULL | Mô tả/giới thiệu |
-| status | VARCHAR(20) | NOT NULL | ACTIVE, INACTIVE |
+| status | VARCHAR(20) | NOT NULL | ACTIVE, INACTIVE, DISBANDED (V4 — trạng thái cuối) |
+| skill_levels | TEXT | NOT NULL | JSON array nhãn, default `'[]'` (V2) |
+| inactive_reason | VARCHAR(500) | NULL | Lý do admin khoá (V2); giữ nguyên khi giải tán |
+| disband_reason | VARCHAR(100) | NULL | Lý do giải tán (V4); NOT NULL khi DISBANDED |
+| disbanded_at | TIMESTAMPTZ | NULL | Thời điểm giải tán (V4) |
+| disbanded_by | UUID | NULL | FK → user, người giải tán (V4) |
+| version | BIGINT | NOT NULL | Optimistic lock, default 0 (V2) |
 | reliability_score | INTEGER | NOT NULL | Điểm uy tín đội 0-100, default 80 |
 | total_matches_completed | INTEGER | NOT NULL | default 0 |
 | total_matches_confirmed | INTEGER | NOT NULL | default 0 |
@@ -134,13 +140,15 @@ Danh mục hành chính Việt Nam (tỉnh/quận/phường).
 **Indexes:**
 - PRIMARY KEY (id)
 - INDEX (created_by)
-- INDEX (status)
+- `idx_team_status_created` INDEX (status, created_at DESC) (V2, thay `idx_team_status`) -- danh sách đội lọc status, sort mới nhất
 
 **Foreign Keys:**
 - FOREIGN KEY (created_by) REFERENCES user(id) ON DELETE RESTRICT
+- FOREIGN KEY (disbanded_by) REFERENCES user(id) ON DELETE RESTRICT (V4)
 
 **Constraints:**
-- CHECK (status IN ('ACTIVE', 'INACTIVE'))
+- `team_status_check`: CHECK (status IN ('ACTIVE', 'INACTIVE', 'DISBANDED')) (V4)
+- `team_disband_consistency_check` (V4): `DISBANDED` ⇔ `disband_reason`, `disbanded_at`, `disbanded_by` đều NOT NULL; trạng thái khác ⇔ cả ba NULL
 - CHECK (reliability_score >= 0 AND reliability_score <= 100)
 
 ### 2.2 Bảng: team_member
@@ -153,14 +161,15 @@ Quan hệ nhiều-nhiều user-team với vai trò.
 | team_id | UUID | NOT NULL | FK → team |
 | user_id | UUID | NOT NULL | FK → user |
 | role | VARCHAR(20) | NOT NULL | CAPTAIN, MEMBER |
-| status | VARCHAR(20) | NOT NULL | PENDING, ACTIVE, LEFT |
+| status | VARCHAR(20) | NOT NULL | PENDING, ACTIVE, LEFT, REJECTED (V2) |
 | invited_at | TIMESTAMPTZ | NOT NULL | Thời gian mời |
 | joined_at | TIMESTAMPTZ | NULL | Thời gian chấp nhận |
 | left_at | TIMESTAMPTZ | NULL | Thời gian rời đội |
+| version | BIGINT | NOT NULL | Optimistic lock, default 0 (V2) |
 
 **Indexes:**
 - PRIMARY KEY (id)
-- UNIQUE (team_id, user_id, status) WHERE status = 'ACTIVE' -- một user chỉ có một membership active với một team
+- UNIQUE (team_id, user_id) WHERE status IN ('PENDING', 'ACTIVE') -- `idx_team_member_pending_or_active` (V2): tối đa một lời mời/membership mở cho mỗi user trong một team
 - INDEX (team_id, role, status) -- query captain/members
 - INDEX (user_id, status) -- query teams của user
 
@@ -170,7 +179,7 @@ Quan hệ nhiều-nhiều user-team với vai trò.
 
 **Constraints:**
 - CHECK (role IN ('CAPTAIN', 'MEMBER'))
-- CHECK (status IN ('PENDING', 'ACTIVE', 'LEFT'))
+- CHECK (status IN ('PENDING', 'ACTIVE', 'LEFT', 'REJECTED')) (V2)
 - CHECK (joined_at IS NULL OR joined_at >= invited_at)
 - CHECK (left_at IS NULL OR left_at >= COALESCE(joined_at, invited_at))
 

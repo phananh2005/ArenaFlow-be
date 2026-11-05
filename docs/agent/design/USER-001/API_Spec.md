@@ -8,7 +8,7 @@
 | Quy ước áp dụng | `docs/agent/api-convention.md`, `docs/agent/security-backend.md` |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + delta V2/V3 (xem §5) · `docs/agent/non-functional-standards.md` |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (UC-U01..U03, UC-T01..T05, BR-U01..U06, BR-T01..T06) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (TEAM_015 thêm reject; bảng "Lỗi chung" `SYS_*` §4; endpoint Public bỏ qua header Bearer §2; `avatarUrl` chỉ http/https §3.5–3.7; chuẩn hoá email 2.1 — xem `CHANGELOG.md`) · developer · 2026-11-05 · v1.2 (không đổi nội dung — đồng bộ phiên bản với CCD, ADR-0006) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (TEAM_015 thêm reject; bảng "Lỗi chung" `SYS_*` §4; endpoint Public bỏ qua header Bearer §2; `avatarUrl` chỉ http/https §3.5–3.7; chuẩn hoá email 2.1 — xem `CHANGELOG.md`) · developer · 2026-11-05 · v1.2 (không đổi nội dung — đồng bộ phiên bản với CCD, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) |
 
 ## 1. Tổng quan
 
@@ -145,11 +145,11 @@ Endpoint Public `/api/v1/auth/**` (2.1–2.4) **bỏ qua header `Authorization`*
 
 ### 2.7. DELETE /api/v1/profile
 
-**Mô tả:** Soft-delete tài khoản (UC-U03, BR-T06, ADR-0002). Captain là người duy nhất của đội → đội chuyển `INACTIVE`. Membership `ACTIVE` → `LEFT`, lời mời `PENDING` → `REJECTED` (`Processing_Flow.md` §9 #2). Xoá lần 2 → vẫn 204.
+**Mô tả:** Soft-delete tài khoản (UC-U03 sửa bởi USER-002, BR-T06, ADR-0002, ADR-0005). Còn là captain ACTIVE của bất kỳ đội nào (kể cả là người duy nhất, kể cả đội `INACTIVE`) → `422 USER_003`, không đổi gì; phải chuyển quyền hoặc giải tán đội trước (USER-002 `API_Spec.md` §2.5). Không đổi trạng thái đội. Membership `ACTIVE` → `LEFT`, lời mời `PENDING` → `REJECTED` (`Processing_Flow.md` §9 #2). Xoá lần 2 → vẫn 204.
 
 **Response 204.**
 
-**Lỗi:** `422 USER_003` (đang là captain của đội còn thành viên ACTIVE khác) · `409 TEAM_014`.
+**Lỗi:** `422 USER_003` (còn là captain ACTIVE của một đội chưa giải tán) · `409 TEAM_014`.
 
 ---
 
@@ -441,7 +441,7 @@ Như §3.6 nhưng mọi field `No`; `teamName` nếu có thì không blank.
 | `AUTH_004` | 403 | Không phải admin | "Cần quyền quản trị" |
 | `USER_001` | 404 | User không tồn tại/đã xoá | "Không tìm thấy người dùng" |
 | `USER_002` | 400 | `wardId` không tồn tại hoặc không phải phường/xã | "Khu vực không hợp lệ" |
-| `USER_003` | 422 | Captain còn thành viên khác khi xoá tài khoản | "Bạn phải chuyển quyền đội trưởng trước khi xoá tài khoản" |
+| `USER_003` | 422 | Còn là captain ACTIVE của đội chưa giải tán khi xoá tài khoản (mở rộng ở USER-002) | "Bạn phải chuyển quyền đội trưởng hoặc giải tán đội trước khi xóa tài khoản" |
 | `TEAM_001` | 404 | Đội không tồn tại | "Không tìm thấy đội" |
 | `TEAM_002` | 403 | Không phải captain ACTIVE của đội | "Chỉ đội trưởng được thực hiện" |
 | `TEAM_003` | 409 | Đã là thành viên hoặc đã có lời mời PENDING | "Người này đã là thành viên hoặc đã được mời" |
@@ -457,6 +457,7 @@ Như §3.6 nhưng mọi field `No`; `teamName` nếu có thì không blank.
 | `TEAM_013` | 422 | Reactivate đội không còn captain ACTIVE | "Đội không còn đội trưởng, không thể kích hoạt lại" |
 | `TEAM_014` | 409 | Xung đột cập nhật đồng thời sau khi hết retry | "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại" |
 | `TEAM_015` | 422 | Thao tác trên đội INACTIVE (sửa/mời/chuyển quyền/accept/reject) | "Đội đang tạm ngưng hoạt động" |
+| `TEAM_016` | 422 | Thao tác ghi trên đội đã giải tán — thêm ở USER-002 (USER-002 `API_Spec.md` §2.1a, §4) | "Đội đã giải tán" |
 
 UC-T04 luồng 2a ("Đội không có thành viên khác") được bao bởi `TEAM_007`/`TEAM_008`.
 
@@ -488,3 +489,4 @@ UC-T04 luồng 2a ("Đội không có thành viên khác") được bao bởi `T
 - **Domain mã lỗi `TEAM`:** Đã bổ sung vào `api-convention.md` §6 (cùng ARENA/BOOKING/USER/AUTH/PAYMENT).
 - **Idempotency-Key cho `POST /teams`:** Hoãn MVP — endpoint này không có khoá tự nhiên (tên đội được trùng), hỗ trợ `Idempotency-Key` cần bảng `idempotency_keys`. Ghi tech-debt.
 - **Đội INACTIVE:** Chặn sửa/mời/chuyển quyền/accept/reject lời mời → `422 TEAM_015 "Đội đang tạm ngưng hoạt động"`.
+- **Đội DISBANDED (từ USER-002):** các endpoint ghi 2.11–2.15, 2.18–2.20 trả thêm `422 TEAM_016`; 2.12 trả thêm `409 TEAM_014` (chạy qua retrier). Thứ tự guard: USER-002 `API_Spec.md` §2.1a.
