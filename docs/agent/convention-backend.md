@@ -126,6 +126,7 @@ public ResponseEntity<Void> deleteArena(@PathVariable UUID id) {
 
 **Quy tắc:**
 - Return `ResponseEntity<T>`
+- Mã thành công theo `api-convention.md` §5: `201` → `ResponseEntity.status(HttpStatus.CREATED).body(...)` (không dùng `created(uri)` — không trả `Location`); `200` → `ok(...)`; `204` → `noContent().build()`
 - Request body dùng DTO, có `@Valid`
 - Path variable/Request param có validation annotation
 - Không catch exception trong controller (để global handler xử lý)
