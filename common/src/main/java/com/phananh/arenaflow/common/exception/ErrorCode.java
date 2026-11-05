@@ -10,7 +10,7 @@ public enum ErrorCode {
     AUTH_004("AUTH_004", HttpStatus.FORBIDDEN, "Cần quyền quản trị"),
     USER_001("USER_001", HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"),
     USER_002("USER_002", HttpStatus.BAD_REQUEST, "Khu vực không hợp lệ"),
-    USER_003("USER_003", HttpStatus.UNPROCESSABLE_ENTITY, "Bạn phải chuyển quyền đội trưởng trước khi xoá tài khoản"),
+    USER_003("USER_003", HttpStatus.UNPROCESSABLE_ENTITY, "Bạn phải chuyển quyền đội trưởng hoặc giải tán đội trước khi xóa tài khoản"),
     TEAM_001("TEAM_001", HttpStatus.NOT_FOUND, "Không tìm thấy đội"),
     TEAM_002("TEAM_002", HttpStatus.FORBIDDEN, "Chỉ đội trưởng được thực hiện"),
     TEAM_003("TEAM_003", HttpStatus.CONFLICT, "Người này đã là thành viên hoặc đã được mời"),
@@ -26,6 +26,7 @@ public enum ErrorCode {
     TEAM_013("TEAM_013", HttpStatus.UNPROCESSABLE_ENTITY, "Đội không còn đội trưởng, không thể kích hoạt lại"),
     TEAM_014("TEAM_014", HttpStatus.CONFLICT, "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại"),
     TEAM_015("TEAM_015", HttpStatus.UNPROCESSABLE_ENTITY, "Đội đang tạm ngưng hoạt động"),
+    TEAM_016("TEAM_016", HttpStatus.UNPROCESSABLE_ENTITY, "Đội đã giải tán"),
     // Lỗi tầng HTTP/hệ thống (không gắn miền nghiệp vụ). SYS_004/SYS_005: response giữ status gốc của exception.
     SYS_001("SYS_001", HttpStatus.NOT_FOUND, "Không tìm thấy tài nguyên"),
     SYS_002("SYS_002", HttpStatus.METHOD_NOT_ALLOWED, "Phương thức không được hỗ trợ"),

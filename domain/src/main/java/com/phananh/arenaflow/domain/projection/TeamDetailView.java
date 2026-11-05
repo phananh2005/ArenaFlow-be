@@ -3,7 +3,7 @@ package com.phananh.arenaflow.domain.projection;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Chi tiết đội + captain ACTIVE (nullable) + số thành viên ACTIVE (subquery COUNT) — 1 truy vấn. */
+/** Chi tiết đội + captain ACTIVE (nullable) + số thành viên ACTIVE (subquery COUNT) + người giải tán — 1 truy vấn. */
 public interface TeamDetailView {
     UUID getTeamId();
     String getTeamName();
@@ -21,4 +21,10 @@ public interface TeamDetailView {
     UUID getCreatedBy();
     Instant getCreatedAt();
     Instant getUpdatedAt();
+    String getDisbandReason();
+    Instant getDisbandedAt();
+    UUID getDisbandedById();
+    String getDisbandedByName();
+    /** true khi người giải tán đã xoá tài khoản → mapper che tên (DeletedUserMasking). */
+    Boolean getDisbandedByDeleted();
 }

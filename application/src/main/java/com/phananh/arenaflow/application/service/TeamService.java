@@ -1,6 +1,7 @@
 package com.phananh.arenaflow.application.service;
 
 import com.phananh.arenaflow.application.dto.request.CreateTeamRequest;
+import com.phananh.arenaflow.application.dto.request.DisbandTeamRequest;
 import com.phananh.arenaflow.application.dto.request.TransferCaptainRequest;
 import com.phananh.arenaflow.application.dto.request.UpdateTeamRequest;
 import com.phananh.arenaflow.application.dto.response.CaptainHistoryResponse;
@@ -24,4 +25,7 @@ public interface TeamService {
     CaptainTransferResponse transferCaptain(UUID teamId, UUID userId, TransferCaptainRequest request);
 
     PageResponse<CaptainHistoryResponse> listCaptainHistory(UUID teamId, int page, int pageSize);
+
+    /** {@code request} null khi client không gửi body. */
+    TeamResponse disbandTeam(UUID teamId, UUID captainUserId, DisbandTeamRequest request);
 }

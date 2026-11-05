@@ -1,5 +1,7 @@
 package com.phananh.arenaflow.application.service;
 
+import com.phananh.arenaflow.common.exception.BusinessException;
+import com.phananh.arenaflow.common.exception.ErrorCode;
 import com.phananh.arenaflow.domain.entity.team.Team;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.entity.user.User;
@@ -16,13 +18,15 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Xoá tài khoản trên DB dev (.env.dev); rollback sau test. */
+/** Xoá tài khoản trên DB dev (.env.dev); rollback sau test. Quy tắc USER-002 (ADR-0005): captain phải chuyển quyền/giải tán trước. */
 @SpringBootTest(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
 @Transactional
 class ProfileServiceIntegrationTest {
 
     @Autowired private ProfileService profileService;
+    @Autowired private TeamService teamService;
     @Autowired private UserRepository userRepository;
     @Autowired private TeamRepository teamRepository;
     @Autowired private TeamMemberRepository teamMemberRepository;
@@ -30,7 +34,7 @@ class ProfileServiceIntegrationTest {
     @Autowired private EntityManagerFactory entityManagerFactory;
 
     @Test
-    void deleteAccountInactivatesSoloTeamLeavesRejectsSoftDeletesAndIsIdempotent() {
+    void deleteAccountRejectsSoleCaptainOfInactiveTeamWithoutSideEffects() {
         User captain = saveUser("Solo Captain");
         User owner = saveUser("Other Owner");
         Team solo = saveTeam("Solo", captain);
@@ -38,6 +42,39 @@ class ProfileServiceIntegrationTest {
         TeamMember captainMembership = saveMember(solo, captain, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
         saveMember(other, owner, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
         TeamMember invitation = saveMember(other, captain, TeamMember.Role.MEMBER, TeamMember.Status.PENDING);
+        solo.setStatus(Team.TeamStatus.INACTIVE);
+        solo.setInactiveReason("Admin khoá");
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThatThrownBy(() -> profileService.deleteAccount(captain.getId()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.USER_003));
+
+        entityManager.clear();
+        assertThat(teamRepository.findById(solo.getId()).orElseThrow().getStatus()).isEqualTo(Team.TeamStatus.INACTIVE);
+        assertThat(teamMemberRepository.findById(captainMembership.getId()).orElseThrow().getStatus())
+                .isEqualTo(TeamMember.Status.ACTIVE);
+        assertThat(teamMemberRepository.findById(invitation.getId()).orElseThrow().getStatus())
+                .isEqualTo(TeamMember.Status.PENDING);
+        assertThat(userRepository.findByIdAndDeletedAtIsNull(captain.getId())).isPresent();
+    }
+
+    @Test
+    void deleteAccountAfterDisbandLeavesRejectsSoftDeletesInFiveQueriesAndIsIdempotent() {
+        User captain = saveUser("Disbanding Captain");
+        User owner = saveUser("Other Owner");
+        Team own = saveTeam("Own", captain);
+        Team joined = saveTeam("Joined", owner);
+        Team inviting = saveTeam("Inviting", owner);
+        saveMember(own, captain, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
+        saveMember(joined, owner, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
+        saveMember(inviting, owner, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
+        TeamMember membership = saveMember(joined, captain, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+        TeamMember invitation = saveMember(inviting, captain, TeamMember.Role.MEMBER, TeamMember.Status.PENDING);
+        entityManager.flush();
+        entityManager.clear();
+        teamService.disbandTeam(own.getId(), captain.getId(), null);
         entityManager.flush();
         entityManager.clear();
         Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
@@ -45,18 +82,16 @@ class ProfileServiceIntegrationTest {
 
         profileService.deleteAccount(captain.getId());
 
-        // NFS W6: S captain teams + U team + U leave + U reject + U soft delete = 5.
-        assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(6);
+        // NFS W6: S captain + U leave (MEMBER) + S captain (kiểm lại R1) + U reject + U soft delete = 5.
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(5);
         entityManager.clear();
-        Team reloaded = teamRepository.findById(solo.getId()).orElseThrow();
-        assertThat(reloaded.getStatus()).isEqualTo(Team.TeamStatus.INACTIVE);
-        assertThat(reloaded.getInactiveReason()).isEqualTo("Đội trưởng duy nhất đã xoá tài khoản");
-        assertThat(teamMemberRepository.findById(captainMembership.getId()).orElseThrow().getStatus())
+        assertThat(teamRepository.findById(own.getId()).orElseThrow().getStatus()).isEqualTo(Team.TeamStatus.DISBANDED);
+        assertThat(teamMemberRepository.findById(membership.getId()).orElseThrow().getStatus())
                 .isEqualTo(TeamMember.Status.LEFT);
         assertThat(teamMemberRepository.findById(invitation.getId()).orElseThrow().getStatus())
                 .isEqualTo(TeamMember.Status.REJECTED);
         assertThat(userRepository.findByIdAndDeletedAtIsNull(captain.getId())).isEmpty();
-        assertThat(teamRepository.findById(other.getId()).orElseThrow().getStatus()).isEqualTo(Team.TeamStatus.ACTIVE);
+        assertThat(teamRepository.findById(joined.getId()).orElseThrow().getStatus()).isEqualTo(Team.TeamStatus.ACTIVE);
 
         profileService.deleteAccount(captain.getId()); // xoá lần 2 → không lỗi (204)
     }

@@ -3,6 +3,7 @@ package com.phananh.arenaflow.application.service;
 import com.phananh.arenaflow.application.support.OptimisticLockRetrier;
 import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.dto.request.CreateTeamRequest;
+import com.phananh.arenaflow.application.dto.request.DisbandTeamRequest;
 import com.phananh.arenaflow.application.dto.request.TransferCaptainRequest;
 import com.phananh.arenaflow.application.dto.request.UpdateTeamRequest;
 import com.phananh.arenaflow.application.dto.response.CaptainHistoryResponse;
@@ -30,6 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
@@ -46,6 +48,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -271,5 +274,89 @@ class TeamServiceImplTest {
 
         assertThat(page.data()).extracting(CaptainHistoryResponse::toUserName).containsExactly("A");
         assertThat(page.pagination().totalItems()).isEqualTo(1);
+    }
+
+    // ---------- USER-002: giải tán đội ----------
+
+    @Test
+    void statusFilterSupportsDisbanded() {
+        assertThat(TeamStatusFilter.valueOf("DISBANDED").toQueryValue()).isEqualTo("DISBANDED");
+        assertThat(TeamStatusFilter.ALL.toQueryValue()).isNull();
+    }
+
+    @Test
+    void disbandTeamGuardsTeam001ThenTeam016ThenTeam002() {
+        when(teamRepository.findById(teamId)).thenReturn(Optional.empty());
+        assertError(() -> service.disbandTeam(teamId, captainId, null), ErrorCode.TEAM_001);
+
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.DISBANDED)));
+        assertError(() -> service.disbandTeam(teamId, captainId, null), ErrorCode.TEAM_016);
+
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.ACTIVE)));
+        when(teamMemberRepository.findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE))
+                .thenReturn(Optional.of(member(captainId, TeamMember.Role.CAPTAIN)));
+        assertError(() -> service.disbandTeam(teamId, memberId, null), ErrorCode.TEAM_002);
+
+        verify(teamRepository, never()).saveAndFlush(any());
+        verify(teamMemberRepository, never()).saveAndFlush(any());
+        verify(teamMemberRepository, never()).disbandRemaining(any(), any());
+    }
+
+    @Test
+    void disbandTeamFromInactiveLeavesCaptainDisbandsTeamKeepsInactiveReasonThenClosesRemaining() {
+        Team team = team(Team.TeamStatus.INACTIVE);
+        team.setInactiveReason("Admin khoá");
+        TeamMember captain = member(captainId, TeamMember.Role.CAPTAIN);
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team));
+        when(teamMemberRepository.findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE))
+                .thenReturn(Optional.of(captain));
+        when(teamRepository.findDetailById(teamId)).thenReturn(Optional.of(detail("Old")));
+
+        TeamResponse response = service.disbandTeam(teamId, captainId, new DisbandTeamRequest("  Hết người chơi  "));
+
+        assertThat(captain.getStatus()).isEqualTo(TeamMember.Status.LEFT);
+        assertThat(captain.getLeftAt()).isNotNull();
+        assertThat(team.getStatus()).isEqualTo(Team.TeamStatus.DISBANDED);
+        assertThat(team.getDisbandReason()).isEqualTo("Hết người chơi");
+        assertThat(team.getDisbandedBy()).isEqualTo(captainId);
+        assertThat(team.getDisbandedAt()).isNotNull();
+        assertThat(team.getInactiveReason()).isEqualTo("Admin khoá");
+        InOrder order = inOrder(teamMemberRepository, teamRepository);
+        order.verify(teamMemberRepository).saveAndFlush(captain);
+        order.verify(teamRepository).saveAndFlush(team);
+        order.verify(teamMemberRepository).disbandRemaining(eq(teamId), any());
+        order.verify(teamRepository).findDetailById(teamId);
+        verify(retrier).execute(any());
+        assertThat(response.teamId()).isEqualTo(teamId);
+    }
+
+    @Test
+    void disbandTeamUsesDefaultReasonWhenBodyMissingReasonNullOrBlank() {
+        when(teamMemberRepository.findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE))
+                .thenAnswer(invocation -> Optional.of(member(captainId, TeamMember.Role.CAPTAIN)));
+        when(teamRepository.findDetailById(teamId)).thenReturn(Optional.of(detail("Old")));
+
+        for (DisbandTeamRequest request : new DisbandTeamRequest[]{null, new DisbandTeamRequest(null),
+                new DisbandTeamRequest("   ")}) {
+            Team team = team(Team.TeamStatus.ACTIVE);
+            when(teamRepository.findById(teamId)).thenReturn(Optional.of(team));
+
+            service.disbandTeam(teamId, captainId, request);
+
+            assertThat(team.getDisbandReason()).isEqualTo("Đội trưởng giải tán đội");
+        }
+    }
+
+    @Test
+    void transferCaptainReportsTeam016WhenNewCaptainLeftBecauseTeamWasDisbandedConcurrently() {
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.ACTIVE)));
+        when(teamMemberRepository.findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE))
+                .thenReturn(Optional.of(member(captainId, TeamMember.Role.CAPTAIN)));
+        when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(teamId, memberId, TeamMember.Status.ACTIVE))
+                .thenReturn(Optional.empty());
+        when(teamRepository.findCurrentStatusById(teamId)).thenReturn(Optional.of("DISBANDED"));
+
+        assertError(() -> service.transferCaptain(teamId, captainId, new TransferCaptainRequest(memberId, null)),
+                ErrorCode.TEAM_016);
     }
 }

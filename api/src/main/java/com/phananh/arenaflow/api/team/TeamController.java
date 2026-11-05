@@ -1,6 +1,7 @@
 package com.phananh.arenaflow.api.team;
 
 import com.phananh.arenaflow.application.dto.request.CreateTeamRequest;
+import com.phananh.arenaflow.application.dto.request.DisbandTeamRequest;
 import com.phananh.arenaflow.application.dto.request.InviteMemberRequest;
 import com.phananh.arenaflow.application.dto.request.TransferCaptainRequest;
 import com.phananh.arenaflow.application.dto.request.UpdateTeamRequest;
@@ -100,6 +101,13 @@ public class TeamController {
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize) {
         return ResponseEntity.ok(membershipService.listMembers(teamId, page, pageSize));
+    }
+
+    /** Body không bắt buộc (USER-002 API_Spec §2.1): không body / {} / reason null → lý do mặc định. */
+    @PostMapping("/{teamId}/disband")
+    public ResponseEntity<ApiResponse<TeamResponse>> disbandTeam(@PathVariable UUID teamId, @CurrentUser UUID currentUserId,
+                                                 @Valid @RequestBody(required = false) DisbandTeamRequest request) {
+        return ResponseEntity.ok(ApiResponse.of(teamService.disbandTeam(teamId, currentUserId, request)));
     }
 
     @PostMapping("/{teamId}/members/leave")

@@ -17,14 +17,20 @@ public interface TeamMapper {
 
     @Mapping(target = "captainName",
             expression = "java(MapperSupport.maskName(view.getCaptainName(), view.getCaptainDeleted()))")
+    @Mapping(target = "disbandedByName",
+            expression = "java(MapperSupport.maskName(view.getDisbandedByName(), view.getDisbandedByDeleted()))")
     TeamResponse toResponse(TeamDetailView view);
 
     @Mapping(target = "captainName",
             expression = "java(MapperSupport.maskName(view.getCaptainName(), view.getCaptainDeleted()))")
+    @Mapping(target = "disbandedByName",
+            expression = "java(MapperSupport.maskName(view.getDisbandedByName(), view.getDisbandedByDeleted()))")
     TeamSummaryResponse toSummary(TeamSummaryView view);
 
     @Mapping(target = "captainName",
             expression = "java(MapperSupport.maskName(view.getCaptainName(), view.getCaptainDeleted()))")
+    @Mapping(target = "disbandedByName",
+            expression = "java(MapperSupport.maskName(view.getDisbandedByName(), view.getDisbandedByDeleted()))")
     AdminTeamSummaryResponse toAdminSummary(TeamSummaryView view);
 
     @Mapping(target = "fromUserName",

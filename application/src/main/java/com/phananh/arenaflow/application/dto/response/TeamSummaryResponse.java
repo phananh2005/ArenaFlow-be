@@ -6,5 +6,6 @@ import java.util.UUID;
 
 /** Tóm tắt đội trong danh sách. */
 public record TeamSummaryResponse(UUID teamId, String teamName, String avatarUrl, List<String> skillLevels, String status,
-                                  String captainName, long memberCount, OffsetDateTime createdAt) {
+                                  String captainName, long memberCount, OffsetDateTime createdAt,
+                                  String disbandedByName) {
 }

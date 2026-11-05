@@ -40,6 +40,15 @@ public class Team {
     @Column(name = "inactive_reason", length = 500)
     private String inactiveReason;
 
+    @Column(name = "disband_reason", length = 100)
+    private String disbandReason;
+
+    @Column(name = "disbanded_at")
+    private OffsetDateTime disbandedAt;
+
+    @Column(name = "disbanded_by")
+    private UUID disbandedBy;
+
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
@@ -150,6 +159,30 @@ public class Team {
         this.inactiveReason = inactiveReason;
     }
 
+    public String getDisbandReason() {
+        return disbandReason;
+    }
+
+    public void setDisbandReason(String disbandReason) {
+        this.disbandReason = disbandReason;
+    }
+
+    public OffsetDateTime getDisbandedAt() {
+        return disbandedAt;
+    }
+
+    public void setDisbandedAt(OffsetDateTime disbandedAt) {
+        this.disbandedAt = disbandedAt;
+    }
+
+    public UUID getDisbandedBy() {
+        return disbandedBy;
+    }
+
+    public void setDisbandedBy(UUID disbandedBy) {
+        this.disbandedBy = disbandedBy;
+    }
+
     public Long getVersion() {
         return version;
     }
@@ -243,6 +276,6 @@ public class Team {
     }
 
     public enum TeamStatus {
-        ACTIVE, INACTIVE
+        ACTIVE, INACTIVE, DISBANDED
     }
 }

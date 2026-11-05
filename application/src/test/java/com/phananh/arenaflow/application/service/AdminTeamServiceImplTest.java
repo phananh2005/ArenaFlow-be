@@ -11,6 +11,9 @@ import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
 import com.phananh.arenaflow.application.mapper.TeamMapper;
+import com.phananh.arenaflow.application.mapper.MembershipMapper;
+import com.phananh.arenaflow.application.dto.response.MemberHistoryResponse;
+import com.phananh.arenaflow.domain.projection.MemberHistoryView;
 import com.phananh.arenaflow.domain.repository.TeamMemberRepository;
 import com.phananh.arenaflow.domain.repository.TeamRepository;
 import com.phananh.arenaflow.domain.projection.TeamDetailView;
@@ -34,6 +37,7 @@ import java.util.function.Supplier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -56,7 +60,8 @@ class AdminTeamServiceImplTest {
     @SuppressWarnings("unchecked")
     void setUp() {
         service = new AdminTeamServiceImpl(teamRepository, teamMemberRepository, retrier, teamMapper,
-                new PageRequestFactory(), new TeamGuard(teamRepository, teamMemberRepository), teamService);
+                Mappers.getMapper(MembershipMapper.class), new PageRequestFactory(),
+                new TeamGuard(teamRepository, teamMemberRepository), teamService);
         when(retrier.execute(any())).thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(0)).get());
         when(teamService.getTeam(teamId)).thenReturn(teamMapper.toResponse(projections.createProjection(
                 TeamDetailView.class, Map.of("teamId", teamId, "skillLevels", "[]", "memberCount", 1L))));
@@ -136,5 +141,54 @@ class AdminTeamServiceImplTest {
         PageResponse<AdminTeamSummaryResponse> page = service.listTeams(TeamStatusFilter.ALL, 1, 20);
 
         assertThat(page.data()).extracting(AdminTeamSummaryResponse::inactiveReason).containsExactly("Vi phạm");
+    }
+
+    @Test
+    void markInactiveAndReactivateRejectDisbandedTeamWithTeam016() {
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.DISBANDED)));
+
+        assertError(() -> service.markInactive(teamId, new MarkInactiveRequest("x")), ErrorCode.TEAM_016);
+        assertError(() -> service.reactivate(teamId), ErrorCode.TEAM_016);
+
+        verify(teamRepository, never()).saveAndFlush(any());
+        verify(teamMemberRepository, never()).findByTeamIdAndRoleAndStatus(any(), any(), any());
+    }
+
+    @Test
+    void memberHistoryStatusFilterMapsToQueryValues() {
+        assertThat(MemberHistoryStatusFilter.ALL.toQueryValues()).containsExactly("ACTIVE", "LEFT");
+        assertThat(MemberHistoryStatusFilter.ACTIVE.toQueryValues()).containsExactly("ACTIVE");
+        assertThat(MemberHistoryStatusFilter.LEFT.toQueryValues()).containsExactly("LEFT");
+    }
+
+    @Test
+    void listMemberHistoryRequiresTeamThenMapsPageWithStatusFilter() {
+        when(teamRepository.existsById(teamId)).thenReturn(false);
+        assertError(() -> service.listMemberHistory(teamId, MemberHistoryStatusFilter.ALL, 1, 20), ErrorCode.TEAM_001);
+
+        when(teamRepository.existsById(teamId)).thenReturn(true);
+        MemberHistoryView view = projections.createProjection(MemberHistoryView.class, Map.of(
+                "memberId", UUID.randomUUID(), "teamId", teamId, "userId", UUID.randomUUID(),
+                "displayName", "Left Member", "userDeleted", false, "role", "MEMBER", "status", "LEFT"));
+        when(teamMemberRepository.findMemberHistory(eq(teamId), eq(List.of("LEFT")), any()))
+                .thenReturn(new PageImpl<>(List.of(view), PageRequest.of(1, 1), 3));
+
+        PageResponse<MemberHistoryResponse> page = service.listMemberHistory(teamId, MemberHistoryStatusFilter.LEFT, 2, 1);
+
+        assertThat(page.data()).singleElement().satisfies(item -> {
+            assertThat(item.displayName()).isEqualTo("Left Member");
+            assertThat(item.status()).isEqualTo("LEFT");
+        });
+        assertThat(page.pagination().totalItems()).isEqualTo(3);
+    }
+
+    @Test
+    void reactivateReportsTeam016WhenCaptainLeftBecauseTeamWasDisbandedConcurrently() {
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.INACTIVE)));
+        when(teamMemberRepository.findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE))
+                .thenReturn(Optional.empty());
+        when(teamRepository.findCurrentStatusById(teamId)).thenReturn(Optional.of("DISBANDED"));
+
+        assertError(() -> service.reactivate(teamId), ErrorCode.TEAM_016);
     }
 }

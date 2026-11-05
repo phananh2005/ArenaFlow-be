@@ -5,7 +5,7 @@ import com.phananh.arenaflow.domain.entity.team.TeamCaptainHistory;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.entity.user.User;
 import com.phananh.arenaflow.domain.projection.CaptainHistoryView;
-import com.phananh.arenaflow.domain.projection.CaptainTeamView;
+import com.phananh.arenaflow.domain.projection.MemberHistoryView;
 import com.phananh.arenaflow.domain.projection.MemberView;
 import com.phananh.arenaflow.domain.projection.TeamDetailView;
 import com.phananh.arenaflow.domain.projection.TeamSummaryView;
@@ -18,7 +18,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 import static com.phananh.arenaflow.domain.repository.UserRepositoryTest.newUser;
@@ -97,31 +96,7 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
     }
 
     @Test
-    void marksInactiveOnlyTeamsWithExactlyOneActiveMemberAndBumpsVersion() {
-        User captain = userRepository.save(newUser("Solo Captain", null));
-        User other = userRepository.save(newUser("Other", null));
-        Team solo = saveTeam("Solo", captain, List.of());
-        Team crowded = saveTeam("Crowded", captain, List.of());
-        saveMember(solo, captain, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
-        saveMember(crowded, captain, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
-        saveMember(crowded, other, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
-        flushAndClear();
-
-        int updated = teamRepository.markInactiveByIds(
-                Set.of(solo.getId(), crowded.getId()), "Đội trưởng duy nhất đã xoá tài khoản", OffsetDateTime.now());
-
-        assertThat(updated).isEqualTo(1);
-        flushAndClear();
-        Team reloaded = teamRepository.findById(solo.getId()).orElseThrow();
-        assertThat(reloaded.getStatus()).isEqualTo(Team.TeamStatus.INACTIVE);
-        assertThat(reloaded.getInactiveReason()).isEqualTo("Đội trưởng duy nhất đã xoá tài khoản");
-        assertThat(reloaded.getVersion()).isEqualTo(1L);
-        assertThat(teamRepository.findById(crowded.getId()).orElseThrow().getStatus())
-                .isEqualTo(Team.TeamStatus.ACTIVE);
-    }
-
-    @Test
-    void membershipLookupsAndCaptainTeamsWithActiveCount() {
+    void membershipLookups() {
         User captain = userRepository.save(newUser("Cap", null));
         User member = userRepository.save(newUser("Mem", null));
         Team team = saveTeam("Lookup", captain, List.of());
@@ -136,14 +111,6 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
                 team.getId(), member.getId(), TeamMember.Status.PENDING)).isPresent();
         assertThat(teamMemberRepository.existsByTeamIdAndUserIdAndStatusIn(
                 team.getId(), member.getId(), List.of(TeamMember.Status.PENDING, TeamMember.Status.ACTIVE))).isTrue();
-
-        Statistics statistics = resetStatistics();
-        List<CaptainTeamView> captainTeams = teamMemberRepository.findCaptainTeamsWithActiveCount(captain.getId());
-        assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
-        assertThat(captainTeams).singleElement().satisfies(view -> {
-            assertThat(view.getTeamId()).isEqualTo(team.getId());
-            assertThat(view.getActiveCount()).isEqualTo(1L);
-        });
     }
 
     @Test
@@ -225,6 +192,212 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
         assertThat(latest.getToUserDeleted()).isTrue();
         assertThat(latest.getReason()).isEqualTo("Bận công tác");
         assertThat(page.getContent().get(1).getFromUserId()).isNull();
+    }
+
+    // ---------- USER-002: giải tán đội ----------
+
+    @Test
+    void findsDisbandedTeamDetailWithDisbanderAndDeletedFlagInOneQuery() {
+        User captain = newUser("Disbander", null);
+        captain.setDeletedAt(OffsetDateTime.now());
+        userRepository.save(captain);
+        Team team = saveDisbandedTeam("Disbanded Detail", captain, "Hết người chơi");
+        team.setInactiveReason("Admin khoá trước đó");
+        saveMember(team, captain, TeamMember.Role.CAPTAIN, TeamMember.Status.LEFT);
+        flushAndClear();
+        Statistics statistics = resetStatistics();
+
+        TeamDetailView detail = teamRepository.findDetailById(team.getId()).orElseThrow();
+
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
+        assertThat(detail.getStatus()).isEqualTo("DISBANDED");
+        assertThat(detail.getCaptainId()).isNull();
+        assertThat(detail.getMemberCount()).isZero();
+        assertThat(detail.getDisbandReason()).isEqualTo("Hết người chơi");
+        assertThat(detail.getDisbandedAt()).isNotNull();
+        assertThat(detail.getDisbandedById()).isEqualTo(captain.getId());
+        assertThat(detail.getDisbandedByName()).isEqualTo("Disbander");
+        assertThat(detail.getDisbandedByDeleted()).isTrue();
+        assertThat(detail.getInactiveReason()).isEqualTo("Admin khoá trước đó");
+    }
+
+    @Test
+    void activeTeamDetailHasNoDisbandMetadata() {
+        User captain = userRepository.save(newUser("Active Captain", null));
+        Team team = saveTeam("Not Disbanded", captain, List.of());
+        flushAndClear();
+
+        TeamDetailView detail = teamRepository.findDetailById(team.getId()).orElseThrow();
+
+        assertThat(detail.getDisbandReason()).isNull();
+        assertThat(detail.getDisbandedAt()).isNull();
+        assertThat(detail.getDisbandedById()).isNull();
+        assertThat(detail.getDisbandedByName()).isNull();
+        assertThat(detail.getDisbandedByDeleted()).isFalse();
+    }
+
+    @Test
+    void filtersSummariesByDisbandedWithDisbanderName() {
+        User captain = userRepository.save(newUser("Summary Disbander", null));
+        Team disbanded = saveDisbandedTeam("Disbanded Summary", captain, "Giải tán");
+        Team active = saveTeam("Active Summary", captain, List.of());
+        flushAndClear();
+        setCreatedAt(disbanded, "2100-02-01T00:00:00Z");
+        setCreatedAt(active, "2100-02-02T00:00:00Z");
+        Statistics statistics = resetStatistics();
+
+        Page<TeamSummaryView> page = teamRepository.findSummaries("DISBANDED", PageRequest.of(0, 1));
+
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(2);
+        assertThat(page.getContent()).singleElement().satisfies(view -> {
+            assertThat(view.getTeamId()).isEqualTo(disbanded.getId());
+            assertThat(view.getStatus()).isEqualTo("DISBANDED");
+            assertThat(view.getDisbandedByName()).isEqualTo("Summary Disbander");
+            assertThat(view.getDisbandedByDeleted()).isFalse();
+        });
+    }
+
+    @Test
+    void disbandRemainingLeavesActiveRejectsPendingKeepsOthersAndBumpsVersion() {
+        User captain = userRepository.save(newUser("Disband Captain", null));
+        User early = userRepository.save(newUser("Early Member", null));
+        User late = userRepository.save(newUser("Late Accepter", null));
+        User invitee = userRepository.save(newUser("Invitee", null));
+        User leaver = userRepository.save(newUser("Old Leaver", null));
+        Team team = saveTeam("Disband Remaining", captain, List.of());
+        Team other = saveTeam("Other Team", captain, List.of());
+        TeamMember captainRow = saveMember(team, captain, TeamMember.Role.CAPTAIN, TeamMember.Status.LEFT);
+        TeamMember earlyRow = saveMember(team, early, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+        TeamMember lateRow = saveMember(team, late, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+        TeamMember pendingRow = saveMember(team, invitee, TeamMember.Role.MEMBER, TeamMember.Status.PENDING);
+        TeamMember leftRow = saveMember(team, leaver, TeamMember.Role.MEMBER, TeamMember.Status.LEFT);
+        TeamMember otherRow = saveMember(other, early, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+        flushAndClear();
+        jdbcTemplate.update("UPDATE team_member SET joined_at = invited_at WHERE id IN (?, ?)", earlyRow.getId(), otherRow.getId());
+        // Accept commit sau thời điểm :now của disband (N1): joined_at ở tương lai -> left_at phải = joined_at.
+        jdbcTemplate.update("UPDATE team_member SET joined_at = invited_at + interval '1 hour' WHERE id = ?", lateRow.getId());
+        OffsetDateTime now = OffsetDateTime.now();
+        Statistics statistics = resetStatistics();
+
+        int updated = teamMemberRepository.disbandRemaining(team.getId(), now);
+
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
+        assertThat(updated).isEqualTo(3);
+        flushAndClear();
+        TeamMember earlyLeft = teamMemberRepository.findById(earlyRow.getId()).orElseThrow();
+        assertThat(earlyLeft.getStatus()).isEqualTo(TeamMember.Status.LEFT);
+        assertThat(earlyLeft.getLeftAt()).isAfterOrEqualTo(earlyLeft.getJoinedAt());
+        assertThat(earlyLeft.getVersion()).isEqualTo(1L);
+        TeamMember lateLeft = teamMemberRepository.findById(lateRow.getId()).orElseThrow();
+        assertThat(lateLeft.getStatus()).isEqualTo(TeamMember.Status.LEFT);
+        assertThat(lateLeft.getLeftAt().toInstant()).isEqualTo(lateLeft.getJoinedAt().toInstant());
+        TeamMember rejected = teamMemberRepository.findById(pendingRow.getId()).orElseThrow();
+        assertThat(rejected.getStatus()).isEqualTo(TeamMember.Status.REJECTED);
+        assertThat(rejected.getLeftAt()).isNull();
+        assertThat(rejected.getVersion()).isEqualTo(1L);
+        assertThat(teamMemberRepository.findById(leftRow.getId()).orElseThrow().getVersion()).isZero();
+        assertThat(teamMemberRepository.findById(captainRow.getId()).orElseThrow().getVersion()).isZero();
+        TeamMember untouched = teamMemberRepository.findById(otherRow.getId()).orElseThrow();
+        assertThat(untouched.getStatus()).isEqualTo(TeamMember.Status.ACTIVE);
+        assertThat(untouched.getVersion()).isZero();
+    }
+
+    @Test
+    void existsActiveCaptainByUserIdOnlyForActiveCaptainRows() {
+        User captain = userRepository.save(newUser("Exists Captain", null));
+        User formerCaptain = userRepository.save(newUser("Former Captain", null));
+        User member = userRepository.save(newUser("Exists Member", null));
+        Team team = saveTeam("Exists Team", captain, List.of());
+        saveMember(team, captain, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
+        saveMember(team, formerCaptain, TeamMember.Role.CAPTAIN, TeamMember.Status.LEFT);
+        saveMember(team, member, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+        flushAndClear();
+        Statistics statistics = resetStatistics();
+
+        assertThat(teamMemberRepository.existsActiveCaptainByUserId(captain.getId())).isTrue();
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
+        assertThat(teamMemberRepository.existsActiveCaptainByUserId(formerCaptain.getId())).isFalse();
+        assertThat(teamMemberRepository.existsActiveCaptainByUserId(member.getId())).isFalse();
+        assertThat(teamMemberRepository.existsActiveCaptainByUserId(UUID.randomUUID())).isFalse();
+    }
+
+    @Test
+    void leaveAllActiveNeverMovesCaptainRows() {
+        User owner = userRepository.save(newUser("Leave Owner", null));
+        User user = userRepository.save(newUser("Captain And Member", null));
+        Team captained = saveTeam("Captained", owner, List.of());
+        Team joined = saveTeam("Joined", owner, List.of());
+        TeamMember captainRow = saveMember(captained, user, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
+        TeamMember memberRow = saveMember(joined, user, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+        flushAndClear();
+
+        assertThat(teamMemberRepository.leaveAllActive(user.getId(), OffsetDateTime.now())).isEqualTo(1);
+        flushAndClear();
+
+        TeamMember stillCaptain = teamMemberRepository.findById(captainRow.getId()).orElseThrow();
+        assertThat(stillCaptain.getStatus()).isEqualTo(TeamMember.Status.ACTIVE);
+        assertThat(stillCaptain.getVersion()).isZero();
+        assertThat(teamMemberRepository.findById(memberRow.getId()).orElseThrow().getStatus())
+                .isEqualTo(TeamMember.Status.LEFT);
+    }
+
+    @Test
+    void findsMemberHistoryActiveAndLeftSortedByJoinedAtWithMaskingFlagAndLeftAt() {
+        User captain = userRepository.save(newUser("History Captain", null));
+        User leaver = userRepository.save(newUser("History Leaver", null));
+        User deleted = newUser("History Gone", null);
+        deleted.setDeletedAt(OffsetDateTime.now());
+        userRepository.save(deleted);
+        User invitee = userRepository.save(newUser("History Invitee", null));
+        User refuser = userRepository.save(newUser("History Refuser", null));
+        Team team = saveTeam("Member History", captain, List.of());
+        TeamMember captainRow = saveMember(team, captain, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
+        TeamMember leaverRow = saveMember(team, leaver, TeamMember.Role.MEMBER, TeamMember.Status.LEFT);
+        TeamMember deletedRow = saveMember(team, deleted, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+        saveMember(team, invitee, TeamMember.Role.MEMBER, TeamMember.Status.PENDING);
+        saveMember(team, refuser, TeamMember.Role.MEMBER, TeamMember.Status.REJECTED);
+        flushAndClear();
+        jdbcTemplate.update("UPDATE team_member SET joined_at = invited_at + interval '1 minute', "
+                + "left_at = invited_at + interval '10 minute' WHERE id = ?", leaverRow.getId());
+        jdbcTemplate.update("UPDATE team_member SET joined_at = invited_at + interval '2 minute' WHERE id = ?", deletedRow.getId());
+        jdbcTemplate.update("UPDATE team_member SET joined_at = invited_at + interval '3 minute' WHERE id = ?", captainRow.getId());
+        Statistics statistics = resetStatistics();
+
+        Page<MemberHistoryView> all = teamMemberRepository.findMemberHistory(
+                team.getId(), List.of("ACTIVE", "LEFT"), PageRequest.of(0, 10));
+
+        assertThat(statistics.getPrepareStatementCount()).isBetween(1L, 2L);
+        assertThat(all.getTotalElements()).isEqualTo(3);
+        assertThat(all.getContent()).extracting(MemberHistoryView::getUserId)
+                .containsExactly(leaver.getId(), deleted.getId(), captain.getId());
+        MemberHistoryView left = all.getContent().getFirst();
+        assertThat(left.getStatus()).isEqualTo("LEFT");
+        assertThat(left.getLeftAt()).isNotNull();
+        assertThat(left.getRole()).isEqualTo("MEMBER");
+        assertThat(all.getContent().get(1).getUserDeleted()).isTrue();
+        assertThat(all.getContent().get(2).getLeftAt()).isNull();
+        assertThat(all.getContent().get(2).getRole()).isEqualTo("CAPTAIN");
+
+        Page<MemberHistoryView> leftOnly = teamMemberRepository.findMemberHistory(
+                team.getId(), List.of("LEFT"), PageRequest.of(0, 10));
+        assertThat(leftOnly.getContent()).extracting(MemberHistoryView::getUserId).containsExactly(leaver.getId());
+
+        Page<MemberHistoryView> paged = teamMemberRepository.findMemberHistory(
+                team.getId(), List.of("ACTIVE", "LEFT"), PageRequest.of(1, 2));
+        assertThat(paged.getTotalElements()).isEqualTo(3);
+        assertThat(paged.getContent()).extracting(MemberHistoryView::getUserId).containsExactly(captain.getId());
+    }
+
+    private Team saveDisbandedTeam(String name, User disbander, String reason) {
+        Team team = new Team();
+        team.setName(name);
+        team.setCreatedBy(disbander.getId());
+        team.setSkillLevels(List.of());
+        team.setStatus(Team.TeamStatus.DISBANDED);
+        team.setDisbandReason(reason);
+        team.setDisbandedAt(OffsetDateTime.now());
+        team.setDisbandedBy(disbander.getId());
+        return teamRepository.save(team);
     }
 
     private Team saveTeam(String name, User creator, List<String> skillLevels) {

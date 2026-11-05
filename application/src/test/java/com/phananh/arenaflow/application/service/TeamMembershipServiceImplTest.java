@@ -91,6 +91,7 @@ class TeamMembershipServiceImplTest {
 
     private void givenActiveTeamWithCaptain() {
         when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.ACTIVE)));
+        when(teamRepository.findForInviteById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.ACTIVE)));
         when(teamMemberRepository.findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE))
                 .thenReturn(Optional.of(member(UUID.randomUUID(), captainId, TeamMember.Role.CAPTAIN,
                         TeamMember.Status.ACTIVE)));
@@ -104,10 +105,13 @@ class TeamMembershipServiceImplTest {
     @Test
     void inviteMemberGuardsInOrder() {
         InviteMemberRequest request = new InviteMemberRequest(inviteeId);
-        when(teamRepository.findById(teamId)).thenReturn(Optional.empty());
+        when(teamRepository.findForInviteById(teamId)).thenReturn(Optional.empty());
         assertError(() -> service.inviteMember(teamId, captainId, request), ErrorCode.TEAM_001);
 
-        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.INACTIVE)));
+        when(teamRepository.findForInviteById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.DISBANDED)));
+        assertError(() -> service.inviteMember(teamId, captainId, request), ErrorCode.TEAM_016);
+
+        when(teamRepository.findForInviteById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.INACTIVE)));
         assertError(() -> service.inviteMember(teamId, captainId, request), ErrorCode.TEAM_015);
 
         givenActiveTeamWithCaptain();
@@ -217,10 +221,14 @@ class TeamMembershipServiceImplTest {
 
     @Test
     void leaveTeamGuardsAndMarksLeft() {
-        when(teamRepository.existsById(teamId)).thenReturn(false);
+        when(teamRepository.findById(teamId)).thenReturn(Optional.empty());
         assertError(() -> service.leaveTeam(teamId, inviteeId), ErrorCode.TEAM_001);
 
-        when(teamRepository.existsById(teamId)).thenReturn(true);
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.DISBANDED)));
+        assertError(() -> service.leaveTeam(teamId, inviteeId), ErrorCode.TEAM_016);
+
+        // Đội INACTIVE vẫn rời được (API_Spec §2.1a, chốt bởi user 2026-11-05).
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.INACTIVE)));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(teamId, inviteeId, TeamMember.Status.ACTIVE))
                 .thenReturn(Optional.empty());
         assertError(() -> service.leaveTeam(teamId, inviteeId), ErrorCode.TEAM_010);
@@ -239,5 +247,40 @@ class TeamMembershipServiceImplTest {
         assertThat(active.getStatus()).isEqualTo(TeamMember.Status.LEFT);
         assertThat(active.getLeftAt()).isNotNull();
         verify(teamMemberRepository).saveAndFlush(active);
+    }
+
+    @Test
+    void inviteMemberRunsInsideRetrierAndReadsTeamWithForceIncrementLock() {
+        givenActiveTeamWithCaptain();
+        when(userRepository.findByIdAndDeletedAtIsNull(inviteeId)).thenReturn(Optional.of(new User()));
+        when(teamMemberRepository.saveAndFlush(any(TeamMember.class)))
+                .thenAnswer(invocation -> withId(invocation.getArgument(0), invitationId));
+
+        service.inviteMember(teamId, captainId, new InviteMemberRequest(inviteeId));
+
+        verify(retrier).execute(any());
+        verify(teamRepository).findForInviteById(teamId);
+        verify(teamRepository, never()).findById(any());
+    }
+
+    @Test
+    void acceptAndRejectRejectDisbandedTeamWithTeam016() {
+        when(teamMemberRepository.findById(invitationId)).thenReturn(Optional.of(
+                member(invitationId, inviteeId, TeamMember.Role.MEMBER, TeamMember.Status.PENDING)));
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.DISBANDED)));
+
+        assertError(() -> service.acceptInvitation(invitationId, inviteeId), ErrorCode.TEAM_016);
+        assertError(() -> service.rejectInvitation(invitationId, inviteeId), ErrorCode.TEAM_016);
+        verify(teamMemberRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void leaveTeamReportsTeam016WhenMembershipClosedBecauseTeamWasDisbandedConcurrently() {
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.ACTIVE)));
+        when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(teamId, inviteeId, TeamMember.Status.ACTIVE))
+                .thenReturn(Optional.empty());
+        when(teamRepository.findCurrentStatusById(teamId)).thenReturn(Optional.of("DISBANDED"));
+
+        assertError(() -> service.leaveTeam(teamId, inviteeId), ErrorCode.TEAM_016);
     }
 }

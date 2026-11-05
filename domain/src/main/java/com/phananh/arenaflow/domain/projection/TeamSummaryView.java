@@ -15,4 +15,6 @@ public interface TeamSummaryView {
     Boolean getCaptainDeleted();
     Long getMemberCount();
     Instant getCreatedAt();
+    String getDisbandedByName();
+    Boolean getDisbandedByDeleted();
 }
