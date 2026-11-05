@@ -35,6 +35,16 @@
 - Nạp sẵn quan hệ cần dùng trong một truy vấn (dùng `@EntityGraph` hoặc `JOIN FETCH`); chỉ lấy trường cần (projection/DTO); ghi nhiều bản ghi theo lô (`saveAll`).
 - Cột filter/sort/join của truy vấn danh sách có index — thêm qua migration Flyway có kiểm soát, nêu lý do.
 
+### 4.1 Ghi entity & flush
+- **MUST** mặc định để Hibernate ghi lúc commit: sửa entity đang managed (dirty checking) hoặc `save()` / `saveAll()`.
+- **NEVER** gọi `saveAndFlush` / `saveAllAndFlush` / `flush()` trừ khi có một trong các lý do:
+  1. Bước sau trong cùng transaction là native query, bulk `@Modifying` hoặc projection native cần thấy dữ liệu vừa ghi (vd. dựng response bằng `findDetailById` sau khi cập nhật entity).
+  2. Cần bắt lỗi ràng buộc DB (unique, FK, CHECK) ngay trong method để đổi thành mã lỗi nghiệp vụ (`try { saveAndFlush } catch (DataIntegrityViolationException)`).
+- **MUST** ghi comment một dòng nêu lý do ngay tại chỗ flush.
+- Ghi nhiều entity → một lần `saveAll` / flush; **NEVER** flush từng entity trong vòng lặp.
+- Optimistic lock (`@Version`) **không** cần flush: xung đột lúc commit vẫn ném ra trong `OptimisticLockRetrier` (ADR-0003).
+- Lý do: flush không đổi số câu SQL (ngưỡng §3 tính như nhau); flush sớm giữ khoá row đến hết transaction (tăng tranh chấp khi đồng thời) và tốn một lần dirty-check toàn persistence context mỗi lần gọi.
+
 ## 5. Ranh giới request đồng bộ
 - **NEVER** chạy tác vụ dài (gọi ngoài nhiều lần, file lớn, tính toàn bộ dữ liệu) trong request đồng bộ — tách bất đồng bộ/batch.
 - **NEVER** giữ transaction mở khi chờ I/O ngoài; gọi ngoài trong transaction phải có timeout.
