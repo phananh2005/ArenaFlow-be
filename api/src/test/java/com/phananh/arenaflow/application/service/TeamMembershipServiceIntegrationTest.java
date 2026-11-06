@@ -45,7 +45,7 @@ class TeamMembershipServiceIntegrationTest {
         statistics.clear();
         InvitationResponse invitation = membershipService.inviteMember(teamId, captain.getId(),
                 new InviteMemberRequest(invitee.getId()));
-        assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(6); // W6: S, S, S, S, I
+        assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(6); // S, S, S, S, I
         assertThat(invitation.status()).isEqualTo("PENDING");
         assertThatThrownBy(() -> membershipService.inviteMember(teamId, captain.getId(),
                 new InviteMemberRequest(invitee.getId())))
@@ -55,7 +55,7 @@ class TeamMembershipServiceIntegrationTest {
 
         statistics.clear();
         MemberResponse accepted = membershipService.acceptInvitation(invitation.invitationId(), invitee.getId());
-        assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(6); // W6: S, S, U, S
+        assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(6); // S, S, U, S
         assertThat(accepted.status()).isEqualTo("ACTIVE");
         assertThat(accepted.displayName()).isEqualTo("Invitee M");
         entityManager.clear();
@@ -65,7 +65,7 @@ class TeamMembershipServiceIntegrationTest {
 
         statistics.clear();
         membershipService.leaveTeam(teamId, invitee.getId());
-        assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(6); // W6: S, S, U
+        assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(6); // S, S, U
         entityManager.flush();
         entityManager.clear();
         assertThat(membershipService.listMembers(teamId, 1, 20).data())

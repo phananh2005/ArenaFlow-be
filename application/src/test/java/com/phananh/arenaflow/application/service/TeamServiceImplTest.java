@@ -276,7 +276,7 @@ class TeamServiceImplTest {
         assertThat(page.pagination().totalItems()).isEqualTo(1);
     }
 
-    // ---------- USER-002: giải tán đội ----------
+    // ---------- Giải tán đội ----------
 
     @Test
     void statusFilterSupportsDisbanded() {

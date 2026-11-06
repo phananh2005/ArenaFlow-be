@@ -195,7 +195,7 @@ class MapperTest {
         assertThat(response.joinedAt()).isEqualTo(CREATED_UTC);
     }
 
-    // ---------- USER-002 ----------
+    // ---------- Giải tán đội, lịch sử thành viên ----------
 
     @Test
     void teamMapperMapsDisbandMetadataAndMasksDeletedDisbander() {

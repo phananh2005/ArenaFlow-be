@@ -24,7 +24,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * NFS §3: đếm số câu SQL THẬT (Hibernate Statistics) cho các endpoint chưa đo ở test khác.
+ * Đếm số câu SQL THẬT (Hibernate Statistics) cho các endpoint chưa đo ở test khác.
  * Ngưỡng: D (chi tiết) ≤ 3, L (danh sách) ≤ 4, W (ghi) ≤ 6. Danh sách đo với trang đầy (pageSize = 1, ≥ 2 dòng)
  * để Spring Data không bỏ câu COUNT — đo trường hợp xấu nhất.
  */

@@ -45,7 +45,7 @@ class TeamServiceIntegrationTest {
                 new CreateTeamRequest("Team IT", null, null, List.of("Chill", "Thi đấu")));
         entityManager.flush();
 
-        assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(6); // W6: S, I, I, I
+        assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(6); // S, I, I, I
         assertThat(created.captainName()).isEqualTo("Captain IT");
         assertThat(created.memberCount()).isEqualTo(1);
 
@@ -62,7 +62,7 @@ class TeamServiceIntegrationTest {
 
         teamService.transferCaptain(created.teamId(), captain.getId(), new TransferCaptainRequest(member.getId(), "Bận"));
 
-        assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(6); // W6: S, S, S, U, U, I
+        assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(6); // S, S, S, U, U, I
         entityManager.flush();
         entityManager.clear();
         TeamResponse after = teamService.getTeam(created.teamId());

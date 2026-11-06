@@ -14,8 +14,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * NFS §3 cho luồng ghi USER-002, đo trên transaction commit thật (không {@code @Transactional}) để tính cả câu
- * UPDATE version lúc commit của OPTIMISTIC_FORCE_INCREMENT (Processing_Flow §3). Ngưỡng W6.
+ * Số câu SQL của luồng ghi (giải tán, xoá tài khoản, mời), đo trên transaction commit thật (không
+ * {@code @Transactional}) để tính cả câu UPDATE version lúc commit của OPTIMISTIC_FORCE_INCREMENT. Ngưỡng ghi ≤ 6.
  */
 class NfsWriteQueryCountTest extends CommittedDataIntegrationTest {
 
@@ -57,7 +57,7 @@ class NfsWriteQueryCountTest extends CommittedDataIntegrationTest {
         jdbcTemplate.update("INSERT INTO team_member (id, team_id, user_id, role, status) "
                 + "VALUES (gen_random_uuid(), ?, ?, 'MEMBER', 'PENDING')", inviting, member.getId());
 
-        // ADR-0007: S khoá membership mở (PESSIMISTIC_WRITE), U rời đội + từ chối lời mời (1 bulk), U soft delete.
+        // S khoá membership mở (PESSIMISTIC_WRITE), U rời đội + từ chối lời mời (1 bulk), U soft delete.
         assertThat(measure(() -> profileService.deleteAccount(member.getId()))).isEqualTo(3);
     }
 

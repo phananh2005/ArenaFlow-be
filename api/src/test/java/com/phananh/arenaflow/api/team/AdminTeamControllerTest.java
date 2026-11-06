@@ -64,7 +64,7 @@ class AdminTeamControllerTest extends ApiIntegrationTest {
                 .andExpect(jsonPath("$.error.code").value("TEAM_012"));
     }
 
-    // ---------- USER-002 ----------
+    // ---------- Giải tán đội, lịch sử thành viên ----------
 
     @Test
     void memberHistoryIsAdminOnlyValidatesStatusAndListsDisbandedTeamMembers() throws Exception {

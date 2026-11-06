@@ -143,7 +143,7 @@ class ProfileServiceImplTest {
 
         service.deleteAccount(userId);
 
-        // ADR-0007: Q1 khoá → kiểm trên dữ liệu đã khoá → Q2 bulk gộp → Q3 soft delete; không còn bước kiểm lại.
+        // Q1 khoá → kiểm trên dữ liệu đã khoá → Q2 bulk gộp → Q3 soft delete; không còn bước kiểm lại.
         InOrder order = inOrder(teamMemberRepository, userRepository);
         order.verify(teamMemberRepository).findByUserIdAndStatusInOrderByIdAsc(eq(userId), argThat(ProfileServiceImplTest::isOpen));
         order.verify(teamMemberRepository).leaveAndRejectAllOpen(eq(userId), any());

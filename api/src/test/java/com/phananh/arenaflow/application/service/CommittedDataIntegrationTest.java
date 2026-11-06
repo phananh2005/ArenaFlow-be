@@ -66,7 +66,7 @@ abstract class CommittedDataIntegrationTest {
         return jdbcTemplate.queryForObject("SELECT status FROM team WHERE id = ?", String.class, teamId);
     }
 
-    /** Số membership ACTIVE/PENDING của đội — phải = 0 khi đội DISBANDED (BR-T10). */
+    /** Số membership ACTIVE/PENDING của đội — phải = 0 khi đội DISBANDED. */
     protected int openMemberships(UUID teamId) {
         return count("SELECT COUNT(*) FROM team_member WHERE team_id = ? AND status IN ('ACTIVE', 'PENDING')", teamId);
     }
