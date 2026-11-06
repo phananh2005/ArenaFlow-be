@@ -22,11 +22,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 @ExtendWith(OutputCaptureExtension.class)
-class OptimisticLockRetrierTest {
+class ConcurrencyConflictRetrierTest {
 
     @Test
     void retriesOptimisticLockFailureUpToThreeAttempts() {
-        OptimisticLockRetrier retrier = new OptimisticLockRetrier(transactionTemplate());
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
         AtomicInteger attempts = new AtomicInteger();
 
         String result = retrier.execute(() -> {
@@ -42,7 +42,7 @@ class OptimisticLockRetrierTest {
 
     @Test
     void throwsTeam014AfterThreeOptimisticLockFailures() {
-        OptimisticLockRetrier retrier = new OptimisticLockRetrier(transactionTemplate());
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
         AtomicInteger attempts = new AtomicInteger();
 
         assertThatThrownBy(() -> retrier.execute(() -> {
@@ -56,7 +56,7 @@ class OptimisticLockRetrierTest {
 
     @Test
     void retriesDeadlockUpToThreeAttempts() {
-        OptimisticLockRetrier retrier = new OptimisticLockRetrier(transactionTemplate());
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
         AtomicInteger attempts = new AtomicInteger();
 
         String result = retrier.execute(() -> {
@@ -72,7 +72,7 @@ class OptimisticLockRetrierTest {
 
     @Test
     void throwsTeam014AfterThreeDeadlocks() {
-        OptimisticLockRetrier retrier = new OptimisticLockRetrier(transactionTemplate());
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
         AtomicInteger attempts = new AtomicInteger();
 
         assertThatThrownBy(() -> retrier.execute(() -> {
@@ -86,7 +86,7 @@ class OptimisticLockRetrierTest {
 
     @Test
     void doesNotRetryLockFailuresOtherThanDeadlockSuchAsNowait() {
-        OptimisticLockRetrier retrier = new OptimisticLockRetrier(transactionTemplate());
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
         AtomicInteger attempts = new AtomicInteger();
         PessimisticLockingFailureException lockNotAvailable = new PessimisticLockingFailureException(
                 "could not obtain lock", new SQLException("could not obtain lock on row", "55P03"));
@@ -101,7 +101,7 @@ class OptimisticLockRetrierTest {
 
     @Test
     void logsWarnWithSqlStateAndAttemptWhenRetryingDeadlock(CapturedOutput output) {
-        OptimisticLockRetrier retrier = new OptimisticLockRetrier(transactionTemplate());
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
         AtomicInteger attempts = new AtomicInteger();
 
         retrier.execute(() -> {
@@ -118,7 +118,7 @@ class OptimisticLockRetrierTest {
 
     @Test
     void logsGivingUpOnLastDeadlockAttempt(CapturedOutput output) {
-        OptimisticLockRetrier retrier = new OptimisticLockRetrier(transactionTemplate());
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
 
         assertThatThrownBy(() -> retrier.execute(() -> {
             throw deadlock();
@@ -141,7 +141,7 @@ class OptimisticLockRetrierTest {
 
     @Test
     void doesNotRetrySerializationFailure() {
-        OptimisticLockRetrier retrier = new OptimisticLockRetrier(transactionTemplate());
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
         AtomicInteger attempts = new AtomicInteger();
         PessimisticLockingFailureException serializationFailure = new PessimisticLockingFailureException(
                 "could not serialize access", new SQLException("could not serialize access", "40001"));
@@ -156,7 +156,7 @@ class OptimisticLockRetrierTest {
 
     @Test
     void doesNotRetryOtherFailures() {
-        OptimisticLockRetrier retrier = new OptimisticLockRetrier(transactionTemplate());
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
         AtomicInteger attempts = new AtomicInteger();
 
         assertThatThrownBy(() -> retrier.execute(() -> {

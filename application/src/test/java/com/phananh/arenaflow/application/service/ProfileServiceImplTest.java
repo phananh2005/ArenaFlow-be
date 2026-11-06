@@ -1,6 +1,6 @@
 package com.phananh.arenaflow.application.service;
 
-import com.phananh.arenaflow.application.support.OptimisticLockRetrier;
+import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
 import com.phananh.arenaflow.application.dto.request.ProfileUpdateRequest;
 import com.phananh.arenaflow.application.dto.response.ProfileResponse;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
@@ -48,7 +48,7 @@ class ProfileServiceImplTest {
     private final OAuthAccountRepository oauthAccountRepository = mock(OAuthAccountRepository.class);
     private final AdministrativeUnitRepository administrativeUnitRepository = mock(AdministrativeUnitRepository.class);
     private final TeamMemberRepository teamMemberRepository = mock(TeamMemberRepository.class);
-    private final OptimisticLockRetrier retrier = mock(OptimisticLockRetrier.class);
+    private final ConcurrencyConflictRetrier retrier = mock(ConcurrencyConflictRetrier.class);
     private final ProfileMapper profileMapper = Mappers.getMapper(ProfileMapper.class);
     private final SpelAwareProxyProjectionFactory projections = new SpelAwareProxyProjectionFactory();
     private final UUID userId = UUID.randomUUID();

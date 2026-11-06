@@ -1,6 +1,6 @@
 package com.phananh.arenaflow.application.service;
 
-import com.phananh.arenaflow.application.support.OptimisticLockRetrier;
+import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.entity.user.User;
 import com.phananh.arenaflow.domain.repository.TeamMemberRepository;
@@ -34,7 +34,7 @@ class RetrierDeadlockIntegrationTest extends CommittedDataIntegrationTest {
 
     @Autowired private TeamMemberRepository teamMemberRepository;
     @Autowired private TransactionTemplate transactionTemplate;
-    @Autowired private OptimisticLockRetrier retrier;
+    @Autowired private ConcurrencyConflictRetrier retrier;
 
     @Test
     void deadlockVictimSurfacesAsPessimisticLockingFailure() throws Exception {

@@ -1,6 +1,6 @@
 package com.phananh.arenaflow.application.service;
 
-import com.phananh.arenaflow.application.support.OptimisticLockRetrier;
+import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
 import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.dto.request.InviteMemberRequest;
 import com.phananh.arenaflow.application.dto.response.InvitationResponse;
@@ -49,7 +49,7 @@ class TeamMembershipServiceImplTest {
     private final UserRepository userRepository = mock(UserRepository.class);
     private final TeamRepository teamRepository = mock(TeamRepository.class);
     private final TeamMemberRepository teamMemberRepository = mock(TeamMemberRepository.class);
-    private final OptimisticLockRetrier retrier = mock(OptimisticLockRetrier.class);
+    private final ConcurrencyConflictRetrier retrier = mock(ConcurrencyConflictRetrier.class);
     private final MembershipMapper membershipMapper = Mappers.getMapper(MembershipMapper.class);
     private final SpelAwareProxyProjectionFactory projections = new SpelAwareProxyProjectionFactory();
 

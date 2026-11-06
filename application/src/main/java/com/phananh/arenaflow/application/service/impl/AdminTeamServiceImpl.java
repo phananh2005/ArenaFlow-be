@@ -1,6 +1,6 @@
 package com.phananh.arenaflow.application.service.impl;
 
-import com.phananh.arenaflow.application.support.OptimisticLockRetrier;
+import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
 import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.dto.request.MarkInactiveRequest;
 import com.phananh.arenaflow.application.dto.response.AdminTeamSummaryResponse;
@@ -32,7 +32,7 @@ public class AdminTeamServiceImpl implements AdminTeamService {
 
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
-    private final OptimisticLockRetrier optimisticLockRetrier;
+    private final ConcurrencyConflictRetrier concurrencyConflictRetrier;
     private final TeamMapper teamMapper;
     private final MembershipMapper membershipMapper;
     private final PageRequestFactory pageRequestFactory;
@@ -42,7 +42,7 @@ public class AdminTeamServiceImpl implements AdminTeamService {
     /** (retry) S team → TEAM_001 → TEAM_016 → đã INACTIVE TEAM_011 → U (@Version) → S detail. */
     @Override
     public TeamResponse markInactive(UUID teamId, MarkInactiveRequest request) {
-        return optimisticLockRetrier.execute(() -> {
+        return concurrencyConflictRetrier.execute(() -> {
             Team team = teamGuard.notDisbandedTeam(teamId);
             if (team.getStatus() == Team.TeamStatus.INACTIVE) {
                 throw new BusinessException(ErrorCode.TEAM_011);
@@ -57,7 +57,7 @@ public class AdminTeamServiceImpl implements AdminTeamService {
     /** (retry) S team → TEAM_001 → TEAM_016 → đang ACTIVE TEAM_012 → S captain ACTIVE → TEAM_013 → U → S detail. */
     @Override
     public TeamResponse reactivate(UUID teamId) {
-        return optimisticLockRetrier.execute(() -> {
+        return concurrencyConflictRetrier.execute(() -> {
             Team team = teamGuard.notDisbandedTeam(teamId);
             if (team.getStatus() == Team.TeamStatus.ACTIVE) {
                 throw new BusinessException(ErrorCode.TEAM_012);

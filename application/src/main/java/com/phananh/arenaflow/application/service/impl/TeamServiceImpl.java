@@ -1,6 +1,6 @@
 package com.phananh.arenaflow.application.service.impl;
 
-import com.phananh.arenaflow.application.support.OptimisticLockRetrier;
+import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
 import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.dto.request.CreateTeamRequest;
 import com.phananh.arenaflow.application.dto.request.DisbandTeamRequest;
@@ -44,7 +44,7 @@ public class TeamServiceImpl implements TeamService {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamCaptainHistoryRepository historyRepository;
-    private final OptimisticLockRetrier optimisticLockRetrier;
+    private final ConcurrencyConflictRetrier concurrencyConflictRetrier;
     private final TeamMapper teamMapper;
     private final PageRequestFactory pageRequestFactory;
     private final TeamGuard teamGuard;
@@ -103,7 +103,7 @@ public class TeamServiceImpl implements TeamService {
      */
     @Override
     public TeamResponse updateTeam(UUID teamId, UUID userId, UpdateTeamRequest request) {
-        return optimisticLockRetrier.execute(() -> {
+        return concurrencyConflictRetrier.execute(() -> {
             Team team = teamGuard.activeTeam(teamId);
             teamGuard.requireCaptain(teamId, userId);
             if (request.teamName() != null) {
@@ -129,7 +129,7 @@ public class TeamServiceImpl implements TeamService {
      */
     @Override
     public CaptainTransferResponse transferCaptain(UUID teamId, UUID userId, TransferCaptainRequest request) {
-        return optimisticLockRetrier.execute(() -> {
+        return concurrencyConflictRetrier.execute(() -> {
             teamGuard.activeTeam(teamId);
             TeamMember oldCaptain = teamGuard.requireCaptain(teamId, userId);
             if (request.newCaptainId().equals(userId)) {
@@ -164,7 +164,7 @@ public class TeamServiceImpl implements TeamService {
     @Override
     public TeamResponse disbandTeam(UUID teamId, UUID captainUserId, DisbandTeamRequest request) {
         String reason = disbandReason(request);
-        return optimisticLockRetrier.execute(() -> {
+        return concurrencyConflictRetrier.execute(() -> {
             Team team = teamGuard.notDisbandedTeam(teamId);
             TeamMember captain = teamGuard.requireCaptain(teamId, captainUserId);
             OffsetDateTime now = OffsetDateTime.now();
