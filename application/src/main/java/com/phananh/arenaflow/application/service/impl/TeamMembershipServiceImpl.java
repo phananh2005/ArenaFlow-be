@@ -1,6 +1,6 @@
 package com.phananh.arenaflow.application.service.impl;
 
-import com.phananh.arenaflow.application.support.OptimisticLockRetrier;
+import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
 import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.dto.request.InviteMemberRequest;
 import com.phananh.arenaflow.application.dto.response.InvitationResponse;
@@ -33,7 +33,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
 
     private final UserRepository userRepository;
     private final TeamMemberRepository teamMemberRepository;
-    private final OptimisticLockRetrier optimisticLockRetrier;
+    private final ConcurrencyConflictRetrier concurrencyConflictRetrier;
     private final MembershipMapper membershipMapper;
     private final PageRequestFactory pageRequestFactory;
     private final TeamGuard teamGuard;
@@ -45,7 +45,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
      */
     @Override
     public InvitationResponse inviteMember(UUID teamId, UUID captainUserId, InviteMemberRequest request) {
-        return optimisticLockRetrier.execute(() -> {
+        return concurrencyConflictRetrier.execute(() -> {
             Team team = teamGuard.activeTeamForInvite(teamId);
             teamGuard.requireCaptain(teamId, captainUserId);
             if (userRepository.findByIdAndDeletedAtIsNull(request.userId()).isEmpty()) {
@@ -71,7 +71,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
     /** (retry) S member → TEAM_004/005 → S team → TEAM_016/015 → TEAM_006 → U ACTIVE → S MemberView. */
     @Override
     public MemberResponse acceptInvitation(UUID invitationId, UUID userId) {
-        return optimisticLockRetrier.execute(() -> {
+        return concurrencyConflictRetrier.execute(() -> {
             TeamMember invitation = pendingInvitationOf(invitationId, userId);
             invitation.setStatus(TeamMember.Status.ACTIVE);
             invitation.setJoinedAt(OffsetDateTime.now());
@@ -84,7 +84,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
     /** (retry) guard như acceptInvitation → U REJECTED; không trả kết quả (controller trả 204). */
     @Override
     public void rejectInvitation(UUID invitationId, UUID userId) {
-        optimisticLockRetrier.execute(() -> {
+        concurrencyConflictRetrier.execute(() -> {
             TeamMember invitation = pendingInvitationOf(invitationId, userId);
             invitation.setStatus(TeamMember.Status.REJECTED);
             teamMemberRepository.saveAndFlush(invitation);
@@ -104,7 +104,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
     /** (retry) S team → TEAM_001/016 (INACTIVE vẫn rời được) → S member ACTIVE → TEAM_010 → captain → TEAM_009 → U LEFT. */
     @Override
     public void leaveTeam(UUID teamId, UUID userId) {
-        optimisticLockRetrier.execute(() -> {
+        concurrencyConflictRetrier.execute(() -> {
             teamGuard.notDisbandedTeam(teamId);
             TeamMember member = teamMemberRepository
                     .findByTeamIdAndUserIdAndStatus(teamId, userId, TeamMember.Status.ACTIVE)

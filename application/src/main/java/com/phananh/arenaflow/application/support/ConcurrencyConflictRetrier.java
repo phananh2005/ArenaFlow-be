@@ -13,14 +13,14 @@ import java.util.function.Supplier;
 
 @Slf4j
 @Component
-public class OptimisticLockRetrier {
+public class ConcurrencyConflictRetrier {
 
     private static final int MAX_ATTEMPTS = 3;
     private static final String DEADLOCK_DETECTED = "40P01";
 
     private final TransactionTemplate transactionTemplate;
 
-    public OptimisticLockRetrier(TransactionTemplate transactionTemplate) {
+    public ConcurrencyConflictRetrier(TransactionTemplate transactionTemplate) {
         this.transactionTemplate = transactionTemplate;
     }
 

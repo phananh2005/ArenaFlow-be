@@ -1,6 +1,6 @@
 package com.phananh.arenaflow.application.service.impl;
 
-import com.phananh.arenaflow.application.support.OptimisticLockRetrier;
+import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
 import com.phananh.arenaflow.application.dto.request.ProfileUpdateRequest;
 import com.phananh.arenaflow.application.dto.response.ProfileResponse;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
@@ -34,7 +34,7 @@ public class ProfileServiceImpl implements ProfileService {
     private final OAuthAccountRepository oauthAccountRepository;
     private final AdministrativeUnitRepository administrativeUnitRepository;
     private final TeamMemberRepository teamMemberRepository;
-    private final OptimisticLockRetrier optimisticLockRetrier;
+    private final ConcurrencyConflictRetrier concurrencyConflictRetrier;
     private final ProfileMapper profileMapper;
 
     @Override
@@ -74,7 +74,7 @@ public class ProfileServiceImpl implements ProfileService {
      */
     @Override
     public void deleteAccount(UUID userId) {
-        optimisticLockRetrier.execute(() -> {
+        concurrencyConflictRetrier.execute(() -> {
             List<TeamMember> openMemberships = teamMemberRepository.findByUserIdAndStatusInOrderByIdAsc(userId,
                     OPEN_MEMBERSHIP_STATUSES);
             if (openMemberships.stream().anyMatch(ProfileServiceImpl::isActiveCaptain)) {

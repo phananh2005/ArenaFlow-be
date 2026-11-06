@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.4** (developer · 2026-11-06) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.5** (developer · 2026-11-07) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -34,7 +34,7 @@ application/   com.phananh.arenaflow.application
 ├── service/        AuthService, AuthResult, ProfileService, TeamService, TeamStatusFilter,
 │   │               TeamMembershipService, AdminTeamService
 │   └── impl/       *ServiceImpl
-├── support/        TeamGuard, OptimisticLockRetrier, PageRequestFactory
+├── support/        TeamGuard, ConcurrencyConflictRetrier, PageRequestFactory
 │   └── security/   JwtTokenService, JwtProperties
 ├── validation/     OneOf, MinAge, ValidSkillLevels (+ *Validator)
 ├── dto/request/    OAuthLoginRequest, SendOtpRequest, VerifyOtpRequest, RefreshTokenRequest,
@@ -118,7 +118,7 @@ ProfileResponse getProfile(UUID userId);
 ProfileResponse updateProfile(UUID userId, ProfileUpdateRequest request);
 void deleteAccount(UUID userId);
 ```
-Deps: `UserRepository`, `OAuthAccountRepository`, `AdministrativeUnitRepository`, `TeamRepository`, `TeamMemberRepository`, `OptimisticLockRetrier`, `ProfileMapper`.
+Deps: `UserRepository`, `OAuthAccountRepository`, `AdministrativeUnitRepository`, `TeamRepository`, `TeamMemberRepository`, `ConcurrencyConflictRetrier`, `ProfileMapper`.
 
 ### 4.3. TeamService
 ```java
@@ -131,7 +131,7 @@ PageResponse<CaptainHistoryResponse> listCaptainHistory(UUID teamId, int page, i
 ```
 `TeamStatusFilter` = enum `ACTIVE | INACTIVE | ALL`; `toQueryValue()` trả `null` cho `ALL`, còn lại `name()` (tham số `status` của `TeamRepository.findSummaries`).
 
-Deps: `UserRepository`, `TeamRepository`, `TeamMemberRepository`, `TeamCaptainHistoryRepository`, `OptimisticLockRetrier`, `TeamMapper`, `PageRequestFactory`, `TeamGuard`.
+Deps: `UserRepository`, `TeamRepository`, `TeamMemberRepository`, `TeamCaptainHistoryRepository`, `ConcurrencyConflictRetrier`, `TeamMapper`, `PageRequestFactory`, `TeamGuard`.
 
 **Phân trang dùng chung** (cho `TeamService`, `TeamMembershipService`, `AdminTeamService`):
 - `PageRequestFactory` là `@Component`, inject vào service; dựng `Pageable` từ `page` (bắt đầu 1) + `pageSize`.
@@ -145,7 +145,7 @@ void rejectInvitation(UUID invitationId, UUID userId);
 PageResponse<MemberResponse> listMembers(UUID teamId, int page, int pageSize);
 void leaveTeam(UUID teamId, UUID userId);
 ```
-Deps: `UserRepository`, `TeamMemberRepository`, `OptimisticLockRetrier`, `MembershipMapper`, `PageRequestFactory`, `TeamGuard` (không inject `TeamRepository` trực tiếp).
+Deps: `UserRepository`, `TeamMemberRepository`, `ConcurrencyConflictRetrier`, `MembershipMapper`, `PageRequestFactory`, `TeamGuard` (không inject `TeamRepository` trực tiếp).
 
 ### 4.5. AdminTeamService
 ```java
@@ -153,12 +153,12 @@ TeamResponse markInactive(UUID teamId, MarkInactiveRequest request);
 TeamResponse reactivate(UUID teamId);
 PageResponse<AdminTeamSummaryResponse> listTeams(TeamStatusFilter status, int page, int pageSize);
 ```
-Deps: `TeamRepository`, `TeamMemberRepository`, `OptimisticLockRetrier`, `TeamMapper`, `PageRequestFactory`, `TeamGuard`, `TeamService` (response chi tiết đội dùng lại `TeamService#getTeam`, không dựng song song).
+Deps: `TeamRepository`, `TeamMemberRepository`, `ConcurrencyConflictRetrier`, `TeamMapper`, `PageRequestFactory`, `TeamGuard`, `TeamService` (response chi tiết đội dùng lại `TeamService#getTeam`, không dựng song song).
 
 ### 4.6. Transaction trong ServiceImpl (lệch convention §9 — xem §10)
 - **Không** đặt `@Transactional` ở class level.
 - Method đọc: `@Transactional(readOnly = true)`. Gọi lồng từ method ghi (vd `AdminTeamServiceImpl` → `TeamService#getTeam`) → tham gia transaction của retrier (REQUIRED), `readOnly` không áp.
-- Method ghi chạm `team`/`team_member` (`updateProfile` không thuộc nhóm này): **không** annotate; thân method gọi `optimisticLockRetrier.execute(() -> …)` — mỗi lần thử là 1 transaction mới.
+- Method ghi chạm `team`/`team_member` (`updateProfile` không thuộc nhóm này): **không** annotate; thân method gọi `concurrencyConflictRetrier.execute(() -> …)` — mỗi lần thử là 1 transaction mới.
 - `loginWithOAuth`, `verifyOtp`: **không** annotate; tạo tài khoản trong `transactionTemplate.execute(...)`, bắt `DataIntegrityViolationException` ngoài transaction đã rollback rồi đọc lại — ranh giới, nguồn đụng độ và các nhánh kết quả: `Processing_Flow.md` §4.
 - Method ghi còn lại (`updateProfile`, `createTeam`): `@Transactional`. `inviteMember` chạy qua retrier từ USER-002 (race M1, `OPTIMISTIC_FORCE_INCREMENT`).
 
@@ -326,7 +326,7 @@ Log `WARN` chỉ ghi mã lỗi/status + URI; log `ERROR` kèm exception (stack t
 | Convention | Thiết kế | Lý do |
 |---|---|---|
 | `convention-backend.md` §8: một exception class cho mỗi lỗi | `BusinessException` + `ErrorCode` | 22 mã lỗi → tránh 22 class + 22 handler trùng lặp |
-| §9: `@Transactional(readOnly = true)` ở class level | Annotate theo method; ghi có retry dùng `OptimisticLockRetrier` | Retry phải nằm **ngoài** transaction; class-level tx sẽ bọc cả vòng retry |
+| §9: `@Transactional(readOnly = true)` ở class level | Annotate theo method; ghi có retry dùng `ConcurrencyConflictRetrier` | Retry phải nằm **ngoài** transaction; class-level tx sẽ bọc cả vòng retry |
 | §10: `@SQLDelete` + `@Where` trên entity soft-delete | Lọc `deleted_at IS NULL` tường minh trong query | Lịch sử/thành viên phải join được user đã xoá để hiển thị "Người dùng đã xóa" |
 | `api-convention.md` §6: danh sách domain mã lỗi (`ARENA`, `BOOKING`, `USER`, `TEAM`, `AUTH`, `PAYMENT`) | Thêm domain `SYS` cho lỗi tầng HTTP/hệ thống (`SYS_001`–`SYS_005`) | Lỗi không gắn miền nghiệp vụ; giữ format `<DOMAIN>_<NUMBER>`. User chọn 2026-11-04. `[cần xác nhận]` bổ sung `SYS` vào `api-convention.md` trên nhánh `chore/agent-framework-*` riêng |
 | `non-functional-standards.md` §3: NEVER truy vấn lại dữ liệu đã nạp trong cùng request | 2.6 `PATCH /profile` đọc lại `ProfileView` sau U user (5/W6) | Response lấy đúng dữ liệu DB sau flush, dùng chung `ProfileMapper.toResponse(ProfileView, …)` với `GET /profile`. User chấp nhận 2026-11-04 |

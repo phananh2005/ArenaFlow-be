@@ -5,7 +5,7 @@
 | **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-05 |
 | **Người quyết định** | Chủ repo (phân tích: developer) |
-| **Liên quan** | ADR-0001 (`JwtTokenService`/`JwtProperties` chuyển module) · ADR-0003 (`OptimisticLockRetrier` chuyển module) · `docs/agent/design/USER-001/Component_Class_Design.md` §2 + `CHANGELOG.md` v1.2 · `docs/agent/convention-backend.md` §1 |
+| **Liên quan** | ADR-0001 (`JwtTokenService`/`JwtProperties` chuyển module) · ADR-0003 (`OptimisticLockRetrier` — nay `ConcurrencyConflictRetrier` — chuyển module) · `docs/agent/design/USER-001/Component_Class_Design.md` §2 + `CHANGELOG.md` v1.2 · `docs/agent/convention-backend.md` §1 |
 
 ## Bối cảnh (Context)
 Repo đang là một module Maven, package chia theo tầng (`controller/`, `service/`, `repository/`, `dto/`…). Mỗi package chứa lẫn auth, profile và team, nên khó đọc. Ranh giới giữa các tầng chỉ dựa vào quy ước: compiler không chặn được tầng dưới import tầng trên, ví dụ entity/repository import DTO hay service. Phía trước còn nhiều nhóm chức năng (match, venue, mercenary, rating, chat) đã có entity. Đổi cấu trúc khi mới có USER-001 tốn ít nhất, và USER-002 chưa bắt đầu code.

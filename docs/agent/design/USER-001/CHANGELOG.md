@@ -1,5 +1,21 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v3.5] — 2026-11-07
+
+**Type:** MINOR (chỉ đổi tên class; không đổi endpoint, DTO, mã lỗi, luồng) · **Tóm tắt:** `OptimisticLockRetrier` → `ConcurrencyConflictRetrier` — từ v3.4 class thử lại cả deadlock, tên cũ chỉ nói optimistic lock.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `Component_Class_Design.md` (cây package `support/`, Deps của 4 service, quy tắc method ghi, bảng lệch convention) | Sửa | `OptimisticLockRetrier` / `optimisticLockRetrier` → `ConcurrencyConflictRetrier` / `concurrencyConflictRetrier` | Tên khớp hành vi: thử lại xung đột đồng thời (version conflict, deadlock) |
+| 2 | `Processing_Flow.md` (participant sequence §2, §5 bảng transaction + quy tắc retry) | Sửa | như #1 | Như #1 |
+| 3 | Header `API_Spec.md`, `Processing_Flow.md`, `Component_Class_Design.md` | Ghi nhận | v3.4 → v3.5 | design-standards §10 |
+
+### Ảnh hưởng
+- Hành vi, contract, DB, nghiệp vụ, SRS: không đổi. Tên logger của dòng WARN deadlock đổi theo tên class; câu log giữ nguyên.
+- Các entry CHANGELOG cũ giữ tên cũ (không sửa entry cũ).
+
 ## [v3.4] — 2026-11-06
 
 **Type:** MINOR (không đổi endpoint, DTO hay mã lỗi; `409 TEAM_014` đã khai báo ở mọi endpoint dùng retrier) · **Tóm tắt:** `OptimisticLockRetrier` thử lại cả deadlock (`40P01`), ghi log `WARN` mỗi lần gặp; hết lượt → `409 TEAM_014` thay vì 500.

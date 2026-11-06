@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.4** (developer · 2026-11-06) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.5** (developer · 2026-11-07) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan luồng
 
@@ -70,7 +70,7 @@ sequenceDiagram
 sequenceDiagram
     participant C as Client
     participant PS as ProfileServiceImpl
-    participant RT as OptimisticLockRetrier
+    participant RT as ConcurrencyConflictRetrier
     participant TMR as TeamMemberRepository
     participant UR as UserRepository
 
@@ -93,7 +93,7 @@ sequenceDiagram
 sequenceDiagram
     participant C as Client
     participant TS as TeamServiceImpl
-    participant RT as OptimisticLockRetrier
+    participant RT as ConcurrencyConflictRetrier
     participant TR as TeamRepository
     participant TMR as TeamMemberRepository
     participant HR as TeamCaptainHistoryRepository
@@ -151,14 +151,14 @@ Ký hiệu truy vấn: **S** = SELECT, **I** = INSERT, **U** = UPDATE. Loại: D
 | Đọc (2.5, 2.9, 2.10, 2.16, 2.17, 2.21, 2.4) | `@Transactional(readOnly = true)` trên method service | — |
 | Đăng ký-hoặc-đăng nhập (2.1, 2.3) | Method service **không** có `@Transactional`; phần tạo tài khoản (I user, I oauth_account, U user) chạy trong `TransactionTemplate.execute` | Đụng độ unique (`oauth_account (provider, provider_user_id)`; 2.3 thêm `idx_user_phone_unique`) → transaction tạo tài khoản rollback → `DataIntegrityViolationException` bắt **ngoài** transaction đó → đọc lại bằng truy vấn riêng → 200 (đọc lại rỗng → ném lại exception → 500). Không dùng `@Transactional` cho cả method vì sau lỗi unique transaction bị rollback-only, không đọc lại được |
 | Ghi không retry (2.6, 2.8) | `@Transactional` trên method service | — |
-| Ghi có retry (2.7, 2.11, 2.12 — từ USER-002, 2.13, 2.14, 2.15, 2.18, 2.19, 2.20) | Mỗi lần thử = 1 transaction do `OptimisticLockRetrier` mở qua `TransactionTemplate` | Method service **không** có `@Transactional` |
+| Ghi có retry (2.7, 2.11, 2.12 — từ USER-002, 2.13, 2.14, 2.15, 2.18, 2.19, 2.20) | Mỗi lần thử = 1 transaction do `ConcurrencyConflictRetrier` mở qua `TransactionTemplate` | Method service **không** có `@Transactional` |
 
 Isolation: `READ_COMMITTED` (mặc định PostgreSQL). Không gọi dịch vụ ngoài trong transaction (OTP/OAuth đều mock).
 
 ## 5. Concurrency & Locking (ADR-0003)
 
 - `@Version` trên `Team`, `TeamMember`. `User` không có version — cập nhật hồ sơ theo last-write-wins (chỉ chủ tài khoản sửa).
-- `OptimisticLockRetrier.execute(Supplier<T>)`: bắt `ObjectOptimisticLockingFailureException`, hoặc `PessimisticLockingFailureException` có SQLState `40P01` (deadlock — ghi log `WARN` kèm SQLState và số lần thử) → thử lại ngay, không backoff, **tối đa 3 lần thử** (1 lần đầu + 2 lần retry) → hết → `BusinessException(TEAM_014)`. Lỗi nghiệp vụ (`BusinessException`) và lỗi khoá khác (NOWAIT `55P03`, lock timeout, serialization failure `40001`) không retry.
+- `ConcurrencyConflictRetrier.execute(Supplier<T>)`: bắt `ObjectOptimisticLockingFailureException`, hoặc `PessimisticLockingFailureException` có SQLState `40P01` (deadlock — ghi log `WARN` kèm SQLState và số lần thử) → thử lại ngay, không backoff, **tối đa 3 lần thử** (1 lần đầu + 2 lần retry) → hết → `BusinessException(TEAM_014)`. Lỗi nghiệp vụ (`BusinessException`) và lỗi khoá khác (NOWAIT `55P03`, lock timeout, serialization failure `40001`) không retry.
 - ~~**Tín hiệu "cập nhật thiếu dòng" của 2.7**~~ — bỏ ở USER-002: `deleteAccount` không còn `markInactiveByIds`; ~~race với chuyển quyền (R1) xử lý bằng kiểm captain lần 2~~ (v2.0). **v2.1:** race của xoá tài khoản xử lý bằng khoá bi quan có phạm vi — ngoại lệ của ADR-0003 theo ADR-0007 (USER-002 `Processing_Flow.md` §4.2).
 - Bulk update (2.7) tự `SET version = version + 1` để các transaction đang giữ bản cũ phát hiện xung đột.
 
