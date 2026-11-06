@@ -1,5 +1,18 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v3.3] — 2026-11-06
+
+**Type:** MINOR (chỉ đổi cách ghi phiên bản ở header; không đổi nội dung thiết kế) · **Tóm tắt:** Ô "Tác giả / Ngày / Phiên bản" của 3 tài liệu chỉ giữ baseline + phiên bản hiện tại + trỏ `CHANGELOG.md` (đồng bộ cách làm với USER-002 v1.4).
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | Header `API_Spec.md`, `Processing_Flow.md`, `Component_Class_Design.md` | Sửa | Liệt kê mọi mốc v1.0 → v3.2 kèm mô tả → baseline v1.0 + phiên bản hiện tại v3.3 + trỏ `CHANGELOG.md` | design-standards §8 (một thông tin = một nơi); §10 chỉ yêu cầu version header khớp entry mới nhất. Mọi mốc bị bỏ đã có entry v1.1–v3.2 trong file này |
+
+### Ảnh hưởng
+- API contract, DB schema, nghiệp vụ, SRS: không đổi.
+
 ## [v3.2] — 2026-11-06
 
 **Type:** MINOR (chỉ cập nhật trạng thái ADR được trỏ tới; không đổi endpoint, DTO, mã lỗi, luồng) · **Tóm tắt:** ADR-0007 đã `Accepted` (PR #19) — bỏ nhãn "Proposed" khi trỏ tới nó.
