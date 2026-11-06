@@ -5,7 +5,8 @@
 | **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-05 |
 | **Người quyết định** | Product Owner (chốt nghiệp vụ USER-002) · solution-architect (đề xuất cách thực hiện) |
-| **Liên quan** | Thay một phần [ADR-0002](0002-soft-delete-policy.md) §Quyết định #4 · ADR-0003 · `docs/agent/business-spec/USER-002/` (BR-T06 sửa, BR-T07..T14, BC-T02 sửa, BC-T06) · `docs/agent/design/USER-002/` |
+| **Liên quan** | Thay một phần [ADR-0002](0002-soft-delete-policy.md) §Quyết định #4 · ADR-0003 · `docs/agent/business-spec/USER-002/` (BR-T06 sửa, BR-T07..T14, BC-T02 sửa, BC-T06) · `docs/agent/design/USER-002/` · [ADR-0007](0007-scoped-pessimistic-lock-for-account-deletion.md) (cơ chế đồng thời của `deleteAccount`) |
+| **Sửa đổi** | 2026-11-06 — `deleteAccount` tuần tự hoá bằng khoá bi quan có phạm vi (ADR-0007), không phải optimistic lock; ADR-0002 được sửa bằng mục `Sửa đổi` thay vì `Superseded` |
 
 ## Bối cảnh (Context)
 - ADR-0002 #4: captain còn thành viên ACTIVE khác → chặn xoá (`422 USER_003`); captain duy nhất → hệ thống tự chuyển đội sang `INACTIVE`.
@@ -42,3 +43,8 @@ Chúng tôi sẽ:
 - Khi triển khai Match: quyết định xử lý kèo/trận đang mở của đội khi giải tán (spec USER-002 `[cần xác nhận]` #1).
 - Môi trường có dữ liệu đội `INACTIVE` do captain duy nhất xoá tài khoản (theo ADR-0002 #4 cũ) cần phương án xử lý dữ liệu riêng; tại 2026-11-05 DB dev không có dòng nào.
 - Khi ADR này `Accepted`: cập nhật ADR-0002 thành `Superseded (một phần, §Quyết định #4) by ADR-0005`.
+
+## Sửa đổi 2026-11-06 — Cơ chế đồng thời của `deleteAccount` (ADR-0007)
+
+- §Quyết định #4 ghi "các luồng ghi tranh chấp được tuần tự hoá bằng optimistic lock theo ADR-0003". Từ ADR-0007, riêng `deleteAccount` (guard captain khi xoá tài khoản) dùng **khoá bi quan có phạm vi**: khoá membership ACTIVE/PENDING của user theo `id`, kiểm captain trên dữ liệu đã khoá, rồi bulk UPDATE. Các luồng ghi khác (transfer, disband, accept, leave…) vẫn theo ADR-0003. Bất biến "mỗi đội chưa giải tán có đúng một captain ACTIVE" không đổi.
+- §Cần theo dõi "Khi ADR này `Accepted`: cập nhật ADR-0002 thành `Superseded (một phần)`" đã xử lý theo cách khác: ADR-0002 giữ `Accepted` và thêm mục `Sửa đổi 2026-11-06` (§Quyết định #4 thay bởi ADR này) — `decisions/README.md` không có hàng riêng cho thay thế một phần.

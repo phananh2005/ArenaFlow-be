@@ -6,6 +6,7 @@
 | **Ngày** | 2026-11-06 |
 | **Người quyết định** | Product Owner (chốt hướng khoá bi quan cho `deleteAccount`, 2026-11-06) · solution-architect (đề xuất cách thực hiện) |
 | **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) (đây là ngoại lệ có phạm vi, không thay thế) · [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) · `docs/agent/design/USER-002/Processing_Flow.md` §4.2, §5 |
+| **Sửa đổi** | 2026-11-06 — việc "thêm `Sửa đổi` vào ADR-0003" ở §Cần theo dõi đã xong |
 
 ## Bối cảnh (Context)
 
@@ -58,3 +59,8 @@ Tổng 3 truy vấn (W6 ✅). Luồng transfer/accept/leave/disband không đổ
 - Thêm luồng ghi nhiều row `team_member` theo user → kiểm thứ tự khoá với ADR này.
 - Cần chặn hẳn lời mời phantom → xem lại phương án khoá dòng `user`.
 - Khi ADR này `Accepted`: thêm hàng `Sửa đổi` + mục `## Sửa đổi` vào ADR-0003 trỏ tới ADR-0007 (ADR-0003 vẫn hiệu lực cho mọi thao tác khác).
+
+## Sửa đổi 2026-11-06 — Việc theo dõi đã hoàn tất
+
+- §Cần theo dõi "Khi ADR này `Accepted`: thêm hàng `Sửa đổi` + mục `## Sửa đổi` vào ADR-0003" đã xong: ADR-0003 có mục `Sửa đổi 2026-11-06 — Ngoại lệ có phạm vi cho xoá tài khoản (ADR-0007)` và mục `Sửa đổi 2026-11-06 — Phạm vi của "không deadlock"` (trỏ §Hệ quả của ADR này).
+- Các mục khác của §Cần theo dõi vẫn hiệu lực.
