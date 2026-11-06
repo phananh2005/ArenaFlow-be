@@ -82,7 +82,7 @@
 - Tài khoản được tạo với trạng thái active
 - Hồ sơ cá nhân 1:1 được tạo
 - User nhận notification chào mừng
-- User được chuyển đến màn hình hoàn thiện hồ sơ
+- User được chuyển đến màn hình sửa hồ sơ cá nhân (UC-U02); hồ sơ lưu theo AC-U02 (2026-11-06)
 
 ---
 

@@ -19,7 +19,7 @@
 2. Hệ thống redirect đến OAuth provider hoặc gửi OTP
 3. User xác thực thành công
 4. Hệ thống tạo tài khoản mới với hồ sơ 1:1
-5. Hệ thống chuyển User đến màn hình hoàn thiện hồ sơ
+5. Ứng dụng đưa User đến màn hình sửa hồ sơ cá nhân để hoàn thiện hồ sơ — dùng chính luồng UC-U02 (2026-11-06, xem "Quyết định bổ sung đã chốt" #8)
 
 **Postconditions:**
 - Tài khoản được tạo với trạng thái active
@@ -1044,3 +1044,4 @@
 5. **Hard-delete policy:** Giữ mãi, không hard-delete. Lịch sử luôn khả dụng.
 6. **Push notification:** FCM + APNs (miễn phí), push tất cả 11 loại. App xin quyền lúc cài; user chấp nhận → push, từ chối → in-app only.
 7. **Admin panel scope:** 4 chức năng cốt lõi trong MVP: bật/tắt bộ môn, xử lý tranh chấp report bùng, xem/xác minh report địa điểm, đánh dấu đội/venue INACTIVE.
+8. **Hoàn thiện hồ sơ sau đăng ký (2026-11-06):** Khi đăng ký thành công, hệ thống cho ứng dụng biết đây là tài khoản mới; ứng dụng tự đưa User đến màn hình sửa hồ sơ (UC-U02). Không có bước, trạng thái hay quy tắc "hồ sơ chưa hoàn thiện" riêng — lưu hồ sơ theo UC-U02 / BR-U03..U06. User đăng nhập lại vào tài khoản đã có (UC-U01 3a) đi thẳng màn hình chính.
