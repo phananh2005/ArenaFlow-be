@@ -24,6 +24,11 @@ Version: v1 (trong path, không dùng header)
 - **Danh từ**, không dùng động từ: `/arenas` ✅, `/getArenas` ❌
 - **Lowercase, gạch nối** cho multi-word: `/time-slots`, `/booking-history`
 - **Không** viết tắt trừ khi rất phổ biến: `/api` ✅, `/usr` ❌
+- **Ngoại lệ — endpoint hành động (action sub-resource):** thao tác nghiệp vụ đổi trạng thái có guard/side-effect riêng,
+  không diễn đạt tự nhiên bằng cập nhật field → `/{resource}/{id}/{dong-tu-kebab}`
+  (vd `/teams/{id}/disband`, `/invitations/{id}/accept`, `/admin/teams/{id}/mark-inactive`).
+  Nhóm `/auth/*` (`send-otp`, `verify-otp`, `refresh`, `oauth`) cũng theo dạng này.
+  `[cần xác nhận]` quy tắc chọn `POST` hay `PATCH` — repo đang dùng cả hai.
 
 ### 2.2. Hierarchical resources
 

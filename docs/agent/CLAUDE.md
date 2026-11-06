@@ -27,6 +27,7 @@ _(Chưa có file kiến trúc/thuật ngữ — thêm khi dự án phát triển
 | Rà quyết định kiến trúc | `docs/agent/decisions/` |
 | Tra cứu Neon project/schema | `docs/agent/external-knowledge.md` |
 | Làm việc với user/hồ sơ/đội/lời mời/xác thực (USER-001) | `docs/agent/design/USER-001/` |
+| Làm việc với giải tán đội / quy tắc xoá tài khoản đội trưởng / lịch sử thành viên (Admin) (USER-002) | `docs/agent/design/USER-002/` |
 
 ---
 
