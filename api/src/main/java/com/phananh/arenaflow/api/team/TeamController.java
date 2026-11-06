@@ -101,7 +101,7 @@ public class TeamController {
         return ResponseEntity.ok(membershipService.listMembers(teamId, page, pageSize));
     }
 
-    /** Body không bắt buộc (USER-002 API_Spec §2.1): không body / {} / reason null → lý do mặc định. */
+    /** Body không bắt buộc: không body / {} / reason null → lý do mặc định. */
     @PostMapping("/{teamId}/disband")
     public ResponseEntity<ApiResponse<TeamResponse>> disbandTeam(@PathVariable UUID teamId, @CurrentUser UUID currentUserId,
                                                  @Valid @RequestBody(required = false) DisbandTeamRequest request) {

@@ -7,7 +7,9 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * Entity đại diện cho team_member (quan hệ user-team)
+ * Entity đại diện cho team_member (quan hệ user-team).
+ * {@code version}: optimistic lock — ghi qua entity lệch version bị từ chối lúc flush/commit và được retry ở tầng
+ * service. Bulk UPDATE native không được kiểm version: phải tự tăng {@code version} để các ghi song song bị từ chối.
  */
 @Entity
 @Table(name = "team_member")

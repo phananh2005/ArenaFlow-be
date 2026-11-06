@@ -292,7 +292,7 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
         TeamMember otherRow = saveMember(other, early, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
         flushAndClear();
         jdbcTemplate.update("UPDATE team_member SET joined_at = invited_at WHERE id IN (?, ?)", earlyRow.getId(), otherRow.getId());
-        // Accept commit sau thời điểm :now của disband (N1): joined_at ở tương lai -> left_at phải = joined_at.
+        // Accept commit sau thời điểm :now của disband: joined_at ở tương lai -> left_at phải = joined_at.
         jdbcTemplate.update("UPDATE team_member SET joined_at = invited_at + interval '1 hour' WHERE id = ?", lateRow.getId());
         OffsetDateTime now = OffsetDateTime.now();
         Statistics statistics = resetStatistics();

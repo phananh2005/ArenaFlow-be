@@ -226,7 +226,7 @@ class TeamMembershipServiceImplTest {
         when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.DISBANDED)));
         assertError(() -> service.leaveTeam(teamId, inviteeId), ErrorCode.TEAM_016);
 
-        // Đội INACTIVE vẫn rời được (API_Spec §2.1a, chốt bởi user 2026-11-05).
+        // Đội INACTIVE vẫn rời được: tạm ngưng hoạt động không giữ chân thành viên.
         when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.INACTIVE)));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(teamId, inviteeId, TeamMember.Status.ACTIVE))
                 .thenReturn(Optional.empty());

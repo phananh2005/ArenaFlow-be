@@ -40,8 +40,8 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
 
     /**
      * (retry) S team (force increment) → TEAM_001/016/015 → S captain → TEAM_002 → S invitee → USER_001
-     * → S tồn tại → TEAM_003 → I → U team.version lúc commit = 6 (W6). Tăng version để invite không lọt vào đội
-     * vừa giải tán (race M1, USER-002 Processing_Flow §5); invite song song cùng đội có thể hết retry → TEAM_014.
+     * → S tồn tại → TEAM_003 → I → U team.version lúc commit: 6 truy vấn. Tăng version để invite không lọt vào đội
+     * vừa bị giải tán bởi transaction chạy song song; invite song song cùng đội có thể hết retry → TEAM_014.
      */
     @Override
     public InvitationResponse inviteMember(UUID teamId, UUID captainUserId, InviteMemberRequest request) {
@@ -81,7 +81,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
         });
     }
 
-    /** (retry) guard như acceptInvitation → U REJECTED; không trả body (204, N1 — `api-convention.md` §5). */
+    /** (retry) guard như acceptInvitation → U REJECTED; không trả kết quả (controller trả 204). */
     @Override
     public void rejectInvitation(UUID invitationId, UUID userId) {
         optimisticLockRetrier.execute(() -> {
@@ -92,6 +92,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
         });
     }
 
+    /** Đội không tồn tại → TEAM_001; đọc được ở mọi trạng thái đội. Chỉ thành viên ACTIVE, captain đứng đầu. */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<MemberResponse> listMembers(UUID teamId, int page, int pageSize) {
