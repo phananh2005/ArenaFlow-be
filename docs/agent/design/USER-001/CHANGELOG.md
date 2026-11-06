@@ -1,5 +1,20 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v3.2] — 2026-11-06
+
+**Type:** MINOR (chỉ cập nhật trạng thái ADR được trỏ tới; không đổi endpoint, DTO, mã lỗi, luồng) · **Tóm tắt:** ADR-0007 đã `Accepted` (PR #19) — bỏ nhãn "Proposed" khi trỏ tới nó.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `API_Spec.md` §1 (quy ước chung) | Sửa | "khoá bi quan có phạm vi (ADR-0007, Proposed)" → "(ADR-0007)" | ADR-0007 `Accepted` |
+| 2 | `Processing_Flow.md` §5 (ghi chú 2.7) | Sửa | "ngoại lệ của ADR-0003 do ADR-0007 (Proposed) đề xuất" → "ngoại lệ của ADR-0003 theo ADR-0007" | Như #1 |
+| 3 | Header `API_Spec.md`, `Processing_Flow.md`, `Component_Class_Design.md` | Ghi nhận | v3.1 → v3.2 | design-standards §10 (version khớp header) |
+
+### Ảnh hưởng
+- API contract, DB schema, nghiệp vụ, SRS: không đổi. Entry cũ nhắc "Proposed" (ADR-0004 ở v1.1) giữ nguyên theo §10.
+
 ## [v3.1] — 2026-11-06
 
 **Type:** MINOR (không đổi endpoint, shape DTO hay mã lỗi; id vẫn là chuỗi UUID) · **Tóm tắt:** Khoá chính sinh bằng UUID v7 (`@UuidGenerator(style = VERSION_7)`) thay UUID v1 (`TIME`) — ADR-0008.

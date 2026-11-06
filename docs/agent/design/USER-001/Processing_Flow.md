@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code: 2.1/2.3/2.6, §3 (2.11, 2.14), §4, §5) · developer · 2026-11-05 · v1.2 (không đổi nội dung — đồng bộ phiên bản với CCD, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) · developer · 2026-11-06 · v2.1 (`DELETE /profile` khoá bi quan có phạm vi — ADR-0007, contract không đổi) · developer · 2026-11-06 · v3.0 (MAJOR — sequence 2.1 bỏ `Location`; 2.14 trả 204 — xem `CHANGELOG.md`) · developer · 2026-11-06 · v3.1 (không đổi nội dung — đồng bộ phiên bản, ADR-0008) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code: 2.1/2.3/2.6, §3 (2.11, 2.14), §4, §5) · developer · 2026-11-05 · v1.2 (không đổi nội dung — đồng bộ phiên bản với CCD, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) · developer · 2026-11-06 · v2.1 (`DELETE /profile` khoá bi quan có phạm vi — ADR-0007, contract không đổi) · developer · 2026-11-06 · v3.0 (MAJOR — sequence 2.1 bỏ `Location`; 2.14 trả 204 — xem `CHANGELOG.md`) · developer · 2026-11-06 · v3.1 (không đổi nội dung — đồng bộ phiên bản, ADR-0008) · developer · 2026-11-06 · v3.2 (ADR-0007 đã Accepted — bỏ nhãn Proposed) |
 
 ## 1. Tổng quan luồng
 
@@ -159,7 +159,7 @@ Isolation: `READ_COMMITTED` (mặc định PostgreSQL). Không gọi dịch vụ
 
 - `@Version` trên `Team`, `TeamMember`. `User` không có version — cập nhật hồ sơ theo last-write-wins (chỉ chủ tài khoản sửa).
 - `OptimisticLockRetrier.execute(Supplier<T>)`: bắt `ObjectOptimisticLockingFailureException` → thử lại ngay, không backoff, **tối đa 3 lần thử** (1 lần đầu + 2 lần retry) → hết → `BusinessException(TEAM_014)`. Lỗi nghiệp vụ (`BusinessException`) không retry.
-- ~~**Tín hiệu "cập nhật thiếu dòng" của 2.7**~~ — bỏ ở USER-002: `deleteAccount` không còn `markInactiveByIds`; ~~race với chuyển quyền (R1) xử lý bằng kiểm captain lần 2~~ (v2.0). **v2.1:** race của xoá tài khoản xử lý bằng khoá bi quan có phạm vi — ngoại lệ của ADR-0003 do ADR-0007 (Proposed) đề xuất (USER-002 `Processing_Flow.md` §4.2).
+- ~~**Tín hiệu "cập nhật thiếu dòng" của 2.7**~~ — bỏ ở USER-002: `deleteAccount` không còn `markInactiveByIds`; ~~race với chuyển quyền (R1) xử lý bằng kiểm captain lần 2~~ (v2.0). **v2.1:** race của xoá tài khoản xử lý bằng khoá bi quan có phạm vi — ngoại lệ của ADR-0003 theo ADR-0007 (USER-002 `Processing_Flow.md` §4.2).
 - Bulk update (2.7) tự `SET version = version + 1` để các transaction đang giữ bản cũ phát hiện xung đột.
 
 | Kịch bản song song | Kết quả |

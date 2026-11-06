@@ -1,5 +1,24 @@
 # CHANGELOG — USER-002 Giải tán đội & quy tắc xoá tài khoản đội trưởng
 
+## [v1.3] — 2026-11-06
+
+**Type:** MINOR (chỉ cập nhật trạng thái ADR được trỏ tới; không đổi endpoint, DTO, mã lỗi, luồng) · **Tóm tắt:** ADR-0005 và ADR-0007 đã `Accepted` (PR #19) — bỏ nhãn "Proposed" khi trỏ tới chúng; cập nhật bảng đồng bộ CCD §10 theo những gì PR #19 đã làm với ADR-0002/0003.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `API_Spec.md` §2.5 (xoá tài khoản captain) | Sửa | "Quy tắc của ADR-0005 (Proposed)" → "Quy tắc của ADR-0005" | ADR-0005 `Accepted` |
+| 2 | `Processing_Flow.md` header "Quy ước áp dụng" | Sửa | "ADR-0007 (Proposed — ngoại lệ khoá bi quan …)" → "ADR-0007 (ngoại lệ khoá bi quan …)" | ADR-0007 `Accepted` |
+| 3 | `Processing_Flow.md` §4.2 (khoá bi quan có phạm vi) | Sửa | "ADR-0007 Proposed — ngoại lệ của ADR-0003; chốt qua MR" → "ADR-0007 — ngoại lệ của ADR-0003" | Như #2 |
+| 4 | `Component_Class_Design.md` §10 (hàng ADR-0002) | Sửa | "Khi ADR-0005 `Accepted` → `Superseded (một phần)`" · "qua MR" → ✅ PR #19: giữ `Accepted` + mục `Sửa đổi 2026-11-06` | PR #19 thay một phần §Quyết định #4 bằng mục `Sửa đổi` (`decisions/README.md` không có hàng cho thay thế một phần); tránh agent sau đổi trạng thái ADR-0002 sai |
+| 5 | `Component_Class_Design.md` §10 (hàng ADR-0003) | Sửa | "qua MR" → "Một phần": đã có Sửa đổi + liên kết ADR-0007; còn ghi chú deadlock khoá nhiều dòng + liên kết USER-002/ADR-0005 | Phản ánh đúng phần PR #19 đã làm |
+| 6 | Header `API_Spec.md`, `Processing_Flow.md`, `Component_Class_Design.md` | Ghi nhận | v1.2 → v1.3 | design-standards §10 (version khớp header) |
+
+### Ảnh hưởng
+- API contract, DB schema, nghiệp vụ, SRS: không đổi.
+- Còn mở: phần còn lại của ADR-0003 (xem #5) — sửa qua MR riêng.
+
 ## [v1.2] — 2026-11-06
 
 **Type:** MINOR (không đổi endpoint, shape DTO hay mã lỗi; đổi cơ chế xử lý đồng thời của `deleteAccount`) · **Tóm tắt:** `deleteAccount` chuyển sang khoá bi quan có phạm vi (ADR-0007, ngoại lệ của ADR-0003): khoá membership ACTIVE/PENDING của user (`PESSIMISTIC_WRITE`, theo id) → kiểm captain trên dữ liệu đã khoá → một bulk UPDATE gộp → soft delete; 5 → 3 truy vấn.

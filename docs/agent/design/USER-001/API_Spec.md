@@ -8,7 +8,7 @@
 | Quy ước áp dụng | `docs/agent/api-convention.md`, `docs/agent/security-backend.md` |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + delta V2/V3 (xem §5) · `docs/agent/non-functional-standards.md` |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (UC-U01..U03, UC-T01..T05, BR-U01..U06, BR-T01..T06) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (TEAM_015 thêm reject; bảng "Lỗi chung" `SYS_*` §4; endpoint Public bỏ qua header Bearer §2; `avatarUrl` chỉ http/https §3.5–3.7; chuẩn hoá email 2.1 — xem `CHANGELOG.md`) · developer · 2026-11-05 · v1.2 (không đổi nội dung — đồng bộ phiên bản với CCD, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) · developer · 2026-11-06 · v2.1 (`DELETE /profile` khoá bi quan có phạm vi — ADR-0007, contract không đổi) · developer · 2026-11-06 · v3.0 (MAJOR — 2.14 reject `200 + InvitationResponse` → `204`; bỏ header `Location` ở mọi 201 — `api-convention.md` §5, xem `CHANGELOG.md`) · developer · 2026-11-06 · v3.1 (ID sinh UUID v7 thay v1 — ADR-0008, contract không đổi) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (TEAM_015 thêm reject; bảng "Lỗi chung" `SYS_*` §4; endpoint Public bỏ qua header Bearer §2; `avatarUrl` chỉ http/https §3.5–3.7; chuẩn hoá email 2.1 — xem `CHANGELOG.md`) · developer · 2026-11-05 · v1.2 (không đổi nội dung — đồng bộ phiên bản với CCD, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) · developer · 2026-11-06 · v2.1 (`DELETE /profile` khoá bi quan có phạm vi — ADR-0007, contract không đổi) · developer · 2026-11-06 · v3.0 (MAJOR — 2.14 reject `200 + InvitationResponse` → `204`; bỏ header `Location` ở mọi 201 — `api-convention.md` §5, xem `CHANGELOG.md`) · developer · 2026-11-06 · v3.1 (ID sinh UUID v7 thay v1 — ADR-0008, contract không đổi) · developer · 2026-11-06 · v3.2 (ADR-0007 đã Accepted — bỏ nhãn Proposed) |
 
 ## 1. Tổng quan
 
@@ -24,7 +24,7 @@ Foundation module: xác thực mock (OAuth Google/Facebook, Phone OTP) + JWT, h�
 - Lỗi Bean Validation (định dạng, độ dài, enum, bắt buộc) → `400 VALIDATION_ERROR` kèm `validationErrors` (`api-convention.md` §11). Mã lỗi miền (§4) chỉ dùng cho quy tắc cần DB hoặc trạng thái.
 - **Giá trị enum trên API: UPPERCASE.** `provider` = `GOOGLE|FACEBOOK|PHONE`; `status` = `ACTIVE|INACTIVE|PENDING|LEFT|REJECTED`; `role` = `USER|ADMIN|CAPTAIN|MEMBER`; `gender` = `MALE|FEMALE|OTHER`.
 - Danh sách: `page` (≥1, mặc định 1), `pageSize` (1..100, mặc định 20); sort cố định ghi ở từng endpoint, chưa hỗ trợ tham số `sort`.
-- Ghi lên `team`/`team_member` có optimistic lock + tự retry; hết retry → `409 TEAM_014` (xem `Processing_Flow.md` §5). Trừ `DELETE /profile`: khoá bi quan có phạm vi (ADR-0007, Proposed).
+- Ghi lên `team`/`team_member` có optimistic lock + tự retry; hết retry → `409 TEAM_014` (xem `Processing_Flow.md` §5). Trừ `DELETE /profile`: khoá bi quan có phạm vi (ADR-0007).
 - **Đội INACTIVE:** chặn sửa/mời/chuyển quyền/accept/reject lời mời → `422 TEAM_015`.
 
 ## 2. Endpoints

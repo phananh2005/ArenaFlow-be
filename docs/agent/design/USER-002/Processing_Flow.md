@@ -5,9 +5,9 @@
 | Mã chức năng | `USER-002` |
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL |
-| Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6), ADR-0003 optimistic retry, ADR-0007 (Proposed — ngoại lệ khoá bi quan cho `deleteAccount`) |
+| Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6), ADR-0003 optimistic retry, ADR-0007 (ngoại lệ khoá bi quan cho `deleteAccount`) |
 | Ràng buộc dữ liệu | USER-001 V1/V2/V3 + delta `Component_Class_Design.md` §5 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) · developer · 2026-11-06 · v1.2 (`deleteAccount` khoá bi quan có phạm vi — ADR-0007) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) · developer · 2026-11-06 · v1.2 (`deleteAccount` khoá bi quan có phạm vi — ADR-0007) · developer · 2026-11-06 · v1.3 (ADR-0007 đã Accepted — bỏ nhãn Proposed) |
 
 ## 1. Tổng quan
 
@@ -74,7 +74,7 @@ Số query là mức dự kiến một lần thử; JWT xác thực không truy 
 
 ### 4.2. `deleteAccount`
 
-**Khoá bi quan có phạm vi (v1.2, ADR-0007 Proposed — ngoại lệ của ADR-0003; chốt qua MR).** Lý do: các bước ghi là bulk UPDATE (chỉ tăng, không kiểm `version`), nên `@Version` không bảo vệ chính luồng này; bản v1.1 (kiểm → ghi có điều kiện → kiểm lại, 5 truy vấn) để hở race delete vs accept của chính user (đã tái hiện bằng test, ADR-0007 Bối cảnh).
+**Khoá bi quan có phạm vi (v1.2, ADR-0007 — ngoại lệ của ADR-0003).** Lý do: các bước ghi là bulk UPDATE (chỉ tăng, không kiểm `version`), nên `@Version` không bảo vệ chính luồng này; bản v1.1 (kiểm → ghi có điều kiện → kiểm lại, 5 truy vấn) để hở race delete vs accept của chính user (đã tái hiện bằng test, ADR-0007 Bối cảnh).
 
 - Mỗi lần thử của retrier là một transaction (giữ để có transaction; luồng này không tự sinh optimistic conflict).
 - Q1 `findByUserIdAndStatusInOrderByIdAsc(userId, {ACTIVE, PENDING})` với `PESSIMISTIC_WRITE` (Hibernate 7.2 + PostgreSQL sinh `SELECT … FOR NO KEY UPDATE` — chặn mọi UPDATE khác trên các row này), sắp theo `id`. Khoá giữ tới hết transaction. Không cần lọc `team.status <> 'DISBANDED'` vì bất biến: đội `DISBANDED` không còn row ACTIVE/PENDING nào (BR-T10).

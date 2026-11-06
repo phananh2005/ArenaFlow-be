@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · PostgreSQL (Neon) · Flyway |
 | Quy ước áp dụng | `docs/agent/api-convention.md`, `docs/agent/security-backend.md` |
 | Ràng buộc dữ liệu | USER-001 schema V1/V2/V3; delta được mô tả tại `Component_Class_Design.md` §5 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) · developer · 2026-11-06 · v1.2 (không đổi nội dung — đồng bộ phiên bản với `deleteAccount` khoá bi quan, ADR-0007) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) · developer · 2026-11-06 · v1.2 (không đổi nội dung — đồng bộ phiên bản với `deleteAccount` khoá bi quan, ADR-0007) · developer · 2026-11-06 · v1.3 (ADR-0005 đã Accepted — bỏ nhãn Proposed) |
 
 ## 1. Tổng quan
 
@@ -108,7 +108,7 @@ Với đội `DISBANDED`, mọi member đã rời nên `captainId`/`captainName`
 
 ### 2.5. Xoá tài khoản captain
 
-Quy tắc của [ADR-0005](../../decisions/0005-captain-must-hand-over-before-account-deletion.md) (Proposed). `DELETE /api/v1/profile` vẫn trả `204` khi thành công. Nếu user còn captain ACTIVE của bất kỳ đội nào chưa `DISBANDED`, trả `422 USER_003`; không thay đổi đội, membership, invitation hoặc tài khoản. Sau khi qua guard, hành vi USER-001 giữ nguyên: membership ACTIVE → LEFT; invitation PENDING gửi tới user → REJECTED; không tự đổi trạng thái đội.
+Quy tắc của [ADR-0005](../../decisions/0005-captain-must-hand-over-before-account-deletion.md). `DELETE /api/v1/profile` vẫn trả `204` khi thành công. Nếu user còn captain ACTIVE của bất kỳ đội nào chưa `DISBANDED`, trả `422 USER_003`; không thay đổi đội, membership, invitation hoặc tài khoản. Sau khi qua guard, hành vi USER-001 giữ nguyên: membership ACTIVE → LEFT; invitation PENDING gửi tới user → REJECTED; không tự đổi trạng thái đội.
 
 **Mã lỗi:** tái dùng `USER_003` (422) với phạm vi mở rộng: áp dụng cho mọi đội chưa `DISBANDED` mà user là captain ACTIVE, kể cả khi là người duy nhất trong đội và đội đang `INACTIVE`. Message đổi thành “Bạn phải chuyển quyền đội trưởng hoặc giải tán đội trước khi xóa tài khoản” (UC-U03 4a1). Giữ mã để client đang bắt `USER_003` không phải đổi.
 
