@@ -1,5 +1,10 @@
 package com.phananh.arenaflow.application.support.security;
 
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.MACSigner;
+import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import com.phananh.arenaflow.application.support.security.JwtProperties;
 import com.phananh.arenaflow.domain.entity.user.User;
@@ -9,7 +14,9 @@ import org.junit.jupiter.api.Test;
 
 import java.text.ParseException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
+import java.util.Date;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,6 +66,22 @@ class JwtTokenServiceTest {
 
         assertThat(service.parseRefreshToken(refreshToken)).isEqualTo(userId);
         assertThatThrownBy(() -> service.parseRefreshToken(service.issueAccessToken(userId, User.Role.USER)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_002));
+    }
+
+    @Test
+    void rejectsSignedRefreshTokenWithoutSubjectAsAuth002() throws JOSEException {
+        Instant now = Instant.now();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .claim("typ", "refresh")
+                .issueTime(Date.from(now))
+                .expirationTime(Date.from(now.plus(Duration.ofDays(1))))
+                .build();
+        SignedJWT token = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
+        token.sign(new MACSigner(SECRET));
+
+        assertThatThrownBy(() -> service.parseRefreshToken(token.serialize()))
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_002));
     }
