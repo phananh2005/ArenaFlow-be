@@ -15,7 +15,7 @@ public class MercenaryApplication {
 
     @Id
     @GeneratedValue
-    @UuidGenerator(style = UuidGenerator.Style.TIME)
+    @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
 
     @Column(name = "recruitment_id", nullable = false)

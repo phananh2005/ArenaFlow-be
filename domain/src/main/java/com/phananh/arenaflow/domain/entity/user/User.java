@@ -18,7 +18,7 @@ public class User {
 
     @Id
     @GeneratedValue
-    @UuidGenerator(style = UuidGenerator.Style.TIME)
+    @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
 
     @Column(name = "display_name", nullable = false, length = 100)

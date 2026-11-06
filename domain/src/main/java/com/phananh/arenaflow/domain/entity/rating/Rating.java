@@ -16,7 +16,7 @@ public class Rating {
 
     @Id
     @GeneratedValue
-    @UuidGenerator(style = UuidGenerator.Style.TIME)
+    @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
 
     @Column(name = "match_id", nullable = false)

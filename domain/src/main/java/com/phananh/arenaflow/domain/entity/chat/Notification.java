@@ -15,7 +15,7 @@ public class Notification {
 
     @Id
     @GeneratedValue
-    @UuidGenerator(style = UuidGenerator.Style.TIME)
+    @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
 
     @Column(name = "recipient_user_id", nullable = false)
