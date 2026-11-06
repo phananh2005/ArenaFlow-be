@@ -1,5 +1,20 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v3.1] — 2026-11-06
+
+**Type:** MINOR (không đổi endpoint, shape DTO hay mã lỗi; id vẫn là chuỗi UUID) · **Tóm tắt:** Khoá chính sinh bằng UUID v7 (`@UuidGenerator(style = VERSION_7)`) thay UUID v1 (`TIME`) — ADR-0008.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `API_Spec.md` §1 (quy ước chung) | Sửa | entity dùng `@UuidGenerator(style = TIME)` → `@UuidGenerator(style = VERSION_7)` (UUID v7); id đã có giữ dạng v1 | ADR-0008 (giới hạn thứ tự xem mục Hệ quả của ADR); khớp `docs/database/schema-design.md` |
+| 2 | Header `API_Spec.md`, `Processing_Flow.md`, `Component_Class_Design.md` | Ghi nhận | v3.0 → v3.1 | design-standards §10 (version khớp header) |
+
+### Ảnh hưởng
+- API contract, DB schema (cột `uuid`, không `DEFAULT`), dữ liệu đã có, nghiệp vụ: không đổi. SRS: không ảnh hưởng (thuần kỹ thuật).
+- Kiểm chứng: `EntityIdGenerationTest` (mọi `@Entity` dùng `VERSION_7`), `UserRepositoryTest#generatesTimeOrderedUuidVersion7Ids` (`version() == 7`).
+
 ## [v3.0] — 2026-11-06
 
 **Type:** MAJOR (đổi shape response: `POST /invitations/{id}/reject` `200 + InvitationResponse` → `204` không body; bỏ header `Location` ở mọi `201`) · **Tóm tắt:** Áp quy tắc mã thành công 2xx theo kết quả (B1–B4 / N1, `api-convention.md` §5 — user chốt 2026-11-06) cho USER-001; chốt giữ `TEAM_014`.
