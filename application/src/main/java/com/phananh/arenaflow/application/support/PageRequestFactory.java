@@ -7,6 +7,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class PageRequestFactory {
 
+    /**
+     * Nhận page đánh số từ 1, chuyển sang chỉ số Spring Data từ 0; pageSize từ 1 đến 100; ngoài khoảng
+     * → IllegalArgumentException.
+     */
     public Pageable create(int page, int pageSize) {
         if (page < 1) {
             throw new IllegalArgumentException("page must be at least 1");

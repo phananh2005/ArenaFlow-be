@@ -41,8 +41,8 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
     Page<MemberView> findActiveMembers(@Param("teamId") UUID teamId, Pageable pageable);
 
     /**
-     * Lịch sử thành viên cho Admin (USER-002 API_Spec §2.4): {@code statuses} ⊆ {ACTIVE, LEFT}.
-     * Sort cố định: joined_at tăng dần, id.
+     * Lịch sử thành viên cho Admin, không lọc theo trạng thái đội: {@code statuses} ⊆ {ACTIVE, LEFT} (caller không
+     * truyền PENDING/REJECTED). Kèm cờ user đã xoá để mapper che tên/avatar. Sort cố định: joined_at tăng dần, id.
      */
     @Query(value = """
             SELECT m.id AS memberId, m.team_id AS teamId, m.user_id AS userId,
@@ -86,17 +86,17 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
     Optional<MemberView> findMemberViewById(@Param("memberId") UUID memberId);
 
     /**
-     * Xoá tài khoản — bước khoá (ADR-0007): nạp mọi membership của user có trạng thái trong {@code statuses} và giữ khoá
-     * dòng ({@code PESSIMISTIC_WRITE} → PostgreSQL {@code FOR NO KEY UPDATE}) tới hết transaction. Thao tác ghi khác trên các
-     * row này phải chờ: luồng ghi entity (accept, transfer, leave) sau khi xoá commit thấy {@code version} lệch → retry
-     * (ADR-0003); bulk {@link #disbandRemaining} đánh giá lại {@code WHERE} trên bản mới và bỏ qua row đã đóng.
-     * Sắp theo {@code id} để thứ tự khoá ổn định (tránh deadlock). Phải gọi trong transaction.
+     * Xoá tài khoản — bước khoá: nạp mọi membership của user có trạng thái trong {@code statuses} và giữ khoá dòng
+     * ({@code PESSIMISTIC_WRITE} → PostgreSQL {@code FOR NO KEY UPDATE}) tới hết transaction. Thao tác ghi khác trên
+     * các row này phải chờ: luồng ghi entity (accept, transfer, leave) sau khi xoá commit thấy {@code version} lệch →
+     * retry; bulk {@link #disbandRemaining} đánh giá lại {@code WHERE} trên bản mới và bỏ qua row đã đóng. Sắp theo
+     * {@code id} để thứ tự khoá ổn định (tránh deadlock). Phải gọi trong transaction.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<TeamMember> findByUserIdAndStatusInOrderByIdAsc(UUID userId, Collection<TeamMember.Status> statuses);
 
     /**
-     * Xoá tài khoản — một câu cho mọi membership mở của user (ADR-0007): MEMBER ACTIVE → LEFT, PENDING → REJECTED
+     * Xoá tài khoản — một câu cho mọi membership mở của user: MEMBER ACTIVE → LEFT, PENDING → REJECTED
      * (không set left_at). Không đụng row CAPTAIN (lớp an toàn — caller đã từ chối captain trên dữ liệu đã khoá).
      * {@code left_at = GREATEST(:now, COALESCE(joined_at, invited_at))} giữ CHECK left_at ≥ joined_at. Bulk update → tự
      * tăng version; xoá persistence context sau khi chạy để entity đã nạp ở bước khoá không còn trạng thái cũ.

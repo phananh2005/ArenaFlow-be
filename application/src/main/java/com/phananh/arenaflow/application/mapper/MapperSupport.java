@@ -28,10 +28,14 @@ public final class MapperSupport {
         return SKILL_LEVELS.convertToEntityAttribute(json);
     }
 
+    /**
+     * Tên hiển thị qua {@link DeletedUserMasking}: user đã xoá → "Người dùng đã xóa"; {@code deleted} null = chưa xoá.
+     */
     public static String maskName(String displayName, Boolean deleted) {
         return DeletedUserMasking.mask(displayName, null, Boolean.TRUE.equals(deleted)).displayName();
     }
 
+    /** Avatar qua {@link DeletedUserMasking}: user đã xoá → null; {@code deleted} null = chưa xoá. */
     public static String maskAvatar(String avatarUrl, Boolean deleted) {
         return DeletedUserMasking.mask(null, avatarUrl, Boolean.TRUE.equals(deleted)).avatarUrl();
     }

@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 import java.util.UUID;
 
 /**
- * Guard dùng chung cho thao tác trên đội — một nguồn cho thứ tự kiểm tra (USER-002 API_Spec §2.1a):
+ * Guard dùng chung cho thao tác trên đội — một nguồn cho thứ tự kiểm tra:
  * tồn tại (TEAM_001) → đội DISBANDED (TEAM_016) → đội INACTIVE (TEAM_015) → caller là captain ACTIVE (TEAM_002).
  */
 @Component
@@ -37,7 +37,7 @@ public class TeamGuard {
 
     /**
      * Như {@link #activeTeam(UUID)} nhưng đọc đội kèm OPTIMISTIC_FORCE_INCREMENT: {@code team.version} tăng lúc commit,
-     * nên invite xung đột với disband/invite khác trên cùng đội (race M1). Chỉ dùng cho mời thành viên.
+     * nên invite xung đột với disband/invite khác trên cùng đội. Chỉ dùng cho mời thành viên.
      */
     public Team activeTeamForInvite(UUID teamId) {
         Team team = teamRepository.findForInviteById(teamId)
@@ -74,9 +74,9 @@ public class TeamGuard {
     }
 
     /**
-     * Lỗi cho guard thất bại SAU khi đã đọc đội ở Q1: nếu đội vừa bị giải tán bởi transaction khác (commit chen giữa các
-     * câu đọc, READ COMMITTED) thì báo TEAM_016 thay cho {@code fallback} (TEAM_002/007/010/013). Thêm 1 câu đọc chỉ ở
-     * nhánh lỗi. USER-002 Processing_Flow §5.
+     * Lỗi cho guard thất bại SAU khi đã đọc đội ở Q1: nếu đội vừa bị giải tán bởi transaction khác (commit chen giữa
+     * các câu đọc, READ COMMITTED) thì báo TEAM_016 thay cho {@code fallback} (TEAM_002/007/010/013). Thêm 1 câu đọc
+     * chỉ ở nhánh lỗi.
      */
     public BusinessException disbandedOr(UUID teamId, ErrorCode fallback) {
         boolean disbanded = teamRepository.findCurrentStatusById(teamId)

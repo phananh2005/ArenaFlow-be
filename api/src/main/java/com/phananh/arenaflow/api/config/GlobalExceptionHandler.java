@@ -35,6 +35,9 @@ public class GlobalExceptionHandler {
 
     private static final String PENDING_OR_ACTIVE_UNIQUE_INDEX = "idx_team_member_pending_or_active";
 
+    /**
+     * Giữ status/mã lỗi nghiệp vụ và details; chỉ log mã lỗi cùng path, không ghi details có thể chứa dữ liệu nhạy cảm.
+     */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorEnvelope> handleBusinessException(
             BusinessException exception, HttpServletRequest request) {
@@ -104,6 +107,7 @@ public class GlobalExceptionHandler {
                 List.of(new ValidationError(exception.getParameterName(), "Tham số bắt buộc")));
     }
 
+    /** Vi phạm unique index lời mời/thành viên PENDING-ACTIVE → 409 TEAM_003; còn lại → 500 SYS_005. */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorEnvelope> handleDataIntegrityViolation(
             DataIntegrityViolationException exception, HttpServletRequest request) {
@@ -157,6 +161,7 @@ public class GlobalExceptionHandler {
                 .body(new ErrorEnvelope(ErrorResponse.from(errorCode, null, request.getRequestURI())));
     }
 
+    /** Chỉ trích xuất tên constraint để log an toàn, không log message SQL có thể chứa PII. */
     private static String constraintName(DataIntegrityViolationException exception) {
         String name = exception.getCause() instanceof org.hibernate.exception.ConstraintViolationException violation
                 ? violation.getConstraintName()

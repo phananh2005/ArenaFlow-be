@@ -15,24 +15,31 @@ import org.mapstruct.ReportingPolicy;
         unmappedTargetPolicy = ReportingPolicy.ERROR)
 public interface TeamMapper {
 
+    /**
+     * Che tên captain và người giải tán nếu họ đã xoá tài khoản (id giữ nguyên). Đội không còn captain ACTIVE
+     * (vd DISBANDED) → captainId/captainName null.
+     */
     @Mapping(target = "captainName",
             expression = "java(MapperSupport.maskName(view.getCaptainName(), view.getCaptainDeleted()))")
     @Mapping(target = "disbandedByName",
             expression = "java(MapperSupport.maskName(view.getDisbandedByName(), view.getDisbandedByDeleted()))")
     TeamResponse toResponse(TeamDetailView view);
 
+    /** Như {@link #toResponse(TeamDetailView)}: che tên captain/người giải tán đã xoá tài khoản. */
     @Mapping(target = "captainName",
             expression = "java(MapperSupport.maskName(view.getCaptainName(), view.getCaptainDeleted()))")
     @Mapping(target = "disbandedByName",
             expression = "java(MapperSupport.maskName(view.getDisbandedByName(), view.getDisbandedByDeleted()))")
     TeamSummaryResponse toSummary(TeamSummaryView view);
 
+    /** Như {@link #toSummary} nhưng kèm inactiveReason (danh sách đội của Admin). */
     @Mapping(target = "captainName",
             expression = "java(MapperSupport.maskName(view.getCaptainName(), view.getCaptainDeleted()))")
     @Mapping(target = "disbandedByName",
             expression = "java(MapperSupport.maskName(view.getDisbandedByName(), view.getDisbandedByDeleted()))")
     AdminTeamSummaryResponse toAdminSummary(TeamSummaryView view);
 
+    /** Che tên người chuyển/nhận quyền đã xoá tài khoản; fromUserId null = lần tạo đội. */
     @Mapping(target = "fromUserName",
             expression = "java(MapperSupport.maskName(view.getFromUserName(), view.getFromUserDeleted()))")
     @Mapping(target = "toUserName",

@@ -9,6 +9,7 @@ public class BusinessException extends RuntimeException {
         this(errorCode, null);
     }
 
+    /** {@code details} (có thể null) trả nguyên ở field {@code details} của envelope lỗi; message lấy từ errorCode. */
     public BusinessException(ErrorCode errorCode, String details) {
         super(errorCode.getMessage());
         this.errorCode = errorCode;

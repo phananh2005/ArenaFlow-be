@@ -13,7 +13,9 @@ import org.springframework.web.method.support.ModelAndViewContainer;
 
 import java.util.UUID;
 
-/** Resolve {@code @CurrentUser UUID} từ {@code Jwt.getSubject()}; không có JWT hợp lệ → AUTH_001. */
+/**
+ * Resolve {@code @CurrentUser UUID} từ {@code Jwt.getSubject()}; không có JWT hoặc subject không phải UUID → AUTH_001.
+ */
 public class CurrentUserArgumentResolver implements HandlerMethodArgumentResolver {
 
     @Override

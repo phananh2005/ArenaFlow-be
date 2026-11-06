@@ -74,12 +74,14 @@ public class AuthServiceImpl implements AuthService {
         return issueTokens(userId, user.getRole(), false);
     }
 
+    /** Dùng provider + providerUserId làm khoá nhận diện; không có liên kết thì tạo user mới. */
     private AuthResult registerOrLogin(OAuthAccount.Provider provider, String providerUserId, String phoneNumber) {
         return oauthAccountRepository.findAuthView(provider, providerUserId)
                 .map(this::loginExisting)
                 .orElseGet(() -> register(provider, providerUserId, phoneNumber));
     }
 
+    /** User đã xoá bị từ chối bằng AUTH_003; ngược lại phát token theo role hiện tại. */
     private AuthResult loginExisting(UserAuthView account) {
         if (Boolean.TRUE.equals(account.getDeleted())) {
             throw new BusinessException(ErrorCode.AUTH_003);
@@ -88,6 +90,7 @@ public class AuthServiceImpl implements AuthService {
         return new AuthResult(body, false);
     }
 
+    /** Đăng ký trong transaction riêng; unique conflict do request song song → đọc lại tài khoản thắng. */
     private AuthResult register(OAuthAccount.Provider provider, String providerUserId, String phoneNumber) {
         try {
             UUID userId = transactionTemplate.execute(status -> createAccount(provider, providerUserId, phoneNumber));
@@ -100,6 +103,7 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
+    /** Tạo user + liên kết OAuth; dựng tên mặc định có hậu tố từ UUID sau khi user được persist. */
     private UUID createAccount(OAuthAccount.Provider provider, String providerUserId, String phoneNumber) {
         User user = new User();
         user.setDisplayName(DEFAULT_NAME_PREFIX.trim());
@@ -117,6 +121,7 @@ public class AuthServiceImpl implements AuthService {
         return saved.getId();
     }
 
+    /** Phát access/refresh token cùng role hiện tại và TTL access token tính bằng giây. */
     private AuthResponse issueTokens(UUID userId, User.Role role, boolean isNewUser) {
         return new AuthResponse(userId, role.name(), isNewUser,
                 jwtTokenService.issueAccessToken(userId, role),

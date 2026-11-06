@@ -22,12 +22,14 @@ public interface MembershipMapper {
     @Mapping(target = "teamName", source = "teamName")
     InvitationResponse toInvitation(TeamMember member, String teamName);
 
+    /** Thành viên đã xoá tài khoản: tên → "Người dùng đã xóa", avatar → null; userId giữ nguyên. */
     @Mapping(target = "displayName",
             expression = "java(MapperSupport.maskName(view.getDisplayName(), view.getUserDeleted()))")
     @Mapping(target = "avatarUrl",
             expression = "java(MapperSupport.maskAvatar(view.getAvatarUrl(), view.getUserDeleted()))")
     MemberResponse toMember(MemberView view);
 
+    /** Như {@link #toMember}: che tên/avatar của user đã xoá; leftAt null khi membership còn ACTIVE. */
     @Mapping(target = "displayName",
             expression = "java(MapperSupport.maskName(view.getDisplayName(), view.getUserDeleted()))")
     @Mapping(target = "avatarUrl",

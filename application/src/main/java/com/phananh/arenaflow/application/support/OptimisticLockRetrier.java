@@ -19,6 +19,11 @@ public class OptimisticLockRetrier {
         this.transactionTemplate = transactionTemplate;
     }
 
+    /**
+     * Mỗi lần thử bọc trong {@link TransactionTemplate} (propagation REQUIRED): tối đa 3 lần khi optimistic lock xung
+     * đột, hết lượt → TEAM_014. Caller không được mở transaction sẵn, nếu không các lần thử dùng chung transaction đã
+     * hỏng.
+     */
     public <T> T execute(Supplier<T> operation) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {

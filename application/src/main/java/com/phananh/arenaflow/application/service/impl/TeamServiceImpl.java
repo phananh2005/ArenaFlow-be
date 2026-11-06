@@ -37,7 +37,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class TeamServiceImpl implements TeamService {
 
-    /** BR-T08: lý do khi client không gửi / gửi rỗng. */
+    /** Lý do giải tán mặc định khi client không gửi hoặc gửi rỗng. */
     static final String DEFAULT_DISBAND_REASON = "Đội trưởng giải tán đội";
 
     private final UserRepository userRepository;
@@ -125,7 +125,7 @@ public class TeamServiceImpl implements TeamService {
 
     /**
      * (retry) S team → TEAM_001/016/015 → S captain → TEAM_002 → TEAM_008 → S member mới → TEAM_007 → U ×2 (@Version)
-     * → I history = 6 (W6). Member mới vừa bị chuyển LEFT do đội bị giải tán song song → TEAM_016 (disbandedOr).
+     * → I history: 6 truy vấn. Member mới vừa bị chuyển LEFT do đội bị giải tán song song → TEAM_016 (disbandedOr).
      */
     @Override
     public CaptainTransferResponse transferCaptain(UUID teamId, UUID userId, TransferCaptainRequest request) {
@@ -158,8 +158,8 @@ public class TeamServiceImpl implements TeamService {
 
     /**
      * (retry) S team → TEAM_001/016 → S captain → TEAM_002 → U captain LEFT (@Version) → U team DISBANDED (@Version)
-     * → U còn lại (ACTIVE → LEFT, PENDING → REJECTED) → S detail = 6 (W6). Đội INACTIVE vẫn giải tán được (BR-T12),
-     * giữ nguyên inactive_reason. Mọi bước ghi lệch version → retry (USER-002 Processing_Flow §4.1).
+     * → U còn lại (ACTIVE → LEFT, PENDING → REJECTED) → S detail: 6 truy vấn. Đội INACTIVE vẫn giải tán được,
+     * giữ nguyên inactive_reason. Mọi bước ghi lệch version → retry.
      */
     @Override
     public TeamResponse disbandTeam(UUID teamId, UUID captainUserId, DisbandTeamRequest request) {

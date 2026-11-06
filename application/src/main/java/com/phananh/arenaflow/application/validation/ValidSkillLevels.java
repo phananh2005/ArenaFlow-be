@@ -9,7 +9,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/** Tối đa 3 nhãn trình độ, không trùng, thuộc {@code SkillLevel.labels()} (BR-T02); null = hợp lệ. */
+/** Tối đa 3 nhãn trình độ, không trùng, thuộc {@code SkillLevel.labels()}; null = hợp lệ. */
 @Documented
 @Constraint(validatedBy = ValidSkillLevelsValidator.class)
 @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.RECORD_COMPONENT})

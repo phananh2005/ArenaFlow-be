@@ -81,7 +81,7 @@ public class AdminTeamServiceImpl implements AdminTeamService {
                 teamMapper::toAdminSummary, page, pageSize);
     }
 
-    /** S tồn tại → TEAM_001 → S trang + COUNT = 3 (L4). */
+    /** S tồn tại → TEAM_001 → S trang + COUNT: 3 truy vấn. */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<MemberHistoryResponse> listMemberHistory(UUID teamId, MemberHistoryStatusFilter status,
