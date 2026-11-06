@@ -231,7 +231,7 @@ public class Arena extends BaseEntity {
     
     @Id
     @GeneratedValue
-    @UuidGenerator(style = UuidGenerator.Style.VERSION_7)  // ADR-0008: mọi id UUID dùng v7
+    @UuidGenerator(style = UuidGenerator.Style.VERSION_7)  // mọi id UUID dùng v7
     private UUID id;
     
     @Column(name = "arena_name", nullable = false, length = 100)
