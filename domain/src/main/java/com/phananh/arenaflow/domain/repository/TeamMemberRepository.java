@@ -26,7 +26,9 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
 
     boolean existsByTeamIdAndUserIdAndStatusIn(UUID teamId, UUID userId, Collection<TeamMember.Status> statuses);
 
-    /** Sort cố định: captain trước, joined_at tăng dần, user_id. */
+    /**
+     * Thành viên ACTIVE kèm cờ user đã xoá để mapper che tên/avatar. Sort cố định: captain trước, joined_at, user_id.
+     */
     @Query(value = """
             SELECT m.id AS memberId, m.team_id AS teamId, m.user_id AS userId,
                    u.display_name AS displayName, u.avatar_url AS avatarUrl, (u.deleted_at IS NOT NULL) AS userDeleted,

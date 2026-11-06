@@ -283,6 +283,10 @@ public class User {
         return deletedAt != null;
     }
 
+    /**
+     * Chỉ gán deletedAt trên instance (không động tới membership). Luồng xoá tài khoản không dùng method này mà dùng
+     * {@code UserRepository.softDelete} (native, idempotent).
+     */
     public void softDelete() {
         this.deletedAt = OffsetDateTime.now();
     }

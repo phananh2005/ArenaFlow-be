@@ -152,7 +152,7 @@ class TeamControllerTest extends ApiIntegrationTest {
         mockMvc.perform(as(captain, post(base + "/members/leave"))).andExpect(status().isNoContent());
     }
 
-    // ---------- USER-002: giải tán đội ----------
+    // ---------- Giải tán đội ----------
 
     @Test
     void disbandTeamGuardsThenDisbandsWithDefaultReasonAndRejectsRepeatAndWrites() throws Exception {
@@ -219,7 +219,10 @@ class TeamControllerTest extends ApiIntegrationTest {
                 .andExpect(jsonPath("$.data.disbandReason").value("Hết người chơi"));
     }
 
-    /** AC-T06-01, -03, -05, -06 (USER-002 Acceptance_Criteria §2) qua HTTP trên một đội. */
+    /**
+     * Đội đã giải tán, kiểm qua HTTP trên một đội: chỉ captain giải tán được; sau đó mọi thao tác ghi → 422 TEAM_016;
+     * chi tiết và lịch sử captain vẫn xem được.
+     */
     @Test
     void disbandedTeamMeetsAcceptanceCriteriaEndToEnd() throws Exception {
         User captain = saveUser("AC Captain");
@@ -239,7 +242,7 @@ class TeamControllerTest extends ApiIntegrationTest {
                         .content("{\"newCaptainId\":\"" + captain.getId() + "\"}"))
                 .andExpect(status().isOk());
 
-        // AC-T06-03: thành viên thường và Admin (không phải captain) bị từ chối, đội không đổi.
+        // Thành viên thường và Admin (không phải captain) bị từ chối, đội không đổi.
         mockMvc.perform(as(admin, post(teamUrl + "/disband")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("TEAM_002"));
@@ -247,7 +250,7 @@ class TeamControllerTest extends ApiIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("TEAM_002"));
 
-        // AC-T06-01
+        // Captain giải tán → 200.
         mockMvc.perform(as(captain, post(teamUrl + "/disband"))).andExpect(status().isOk());
         flush();
         TeamMember leftMember = teamMemberRepository.findById(activeMember.getId()).orElseThrow();
@@ -256,7 +259,7 @@ class TeamControllerTest extends ApiIntegrationTest {
         assertThat(teamMemberRepository.findById(invitation.getId()).orElseThrow().getStatus())
                 .isEqualTo(TeamMember.Status.REJECTED);
 
-        // AC-T06-05: mọi thao tác ghi → 422 TEAM_016.
+        // Mọi thao tác ghi → 422 TEAM_016.
         mockMvc.perform(as(captain, post(teamUrl + "/invitations")).content("{\"userId\":\"" + outsider.getId() + "\"}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.error.code").value("TEAM_016"));
@@ -271,7 +274,7 @@ class TeamControllerTest extends ApiIntegrationTest {
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.error.code").value("TEAM_016"));
 
-        // AC-T06-06: chi tiết + lịch sử đội trưởng xem được; danh sách mặc định (ACTIVE) không có đội.
+        // Chi tiết + lịch sử đội trưởng xem được; danh sách mặc định (ACTIVE) không có đội.
         mockMvc.perform(get(teamUrl).header(HttpHeaders.AUTHORIZATION, bearer(outsider)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("DISBANDED"))

@@ -17,7 +17,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Mọi entity có id UUID do Hibernate sinh phải dùng UUID v7 (ADR-0008). */
+/** Mọi entity có id UUID do Hibernate sinh phải dùng UUID v7. */
 class EntityIdGenerationTest {
 
     private static final String ENTITY_PACKAGE = "com.phananh.arenaflow.domain.entity";

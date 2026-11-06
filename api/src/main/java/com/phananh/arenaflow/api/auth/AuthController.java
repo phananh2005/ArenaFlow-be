@@ -48,7 +48,7 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.of(authService.refresh(request)));
     }
 
-    /** Tạo mới → 201 (không `Location`, `api-convention.md` §5); đã có → 200. */
+    /** Tạo mới → 201 (không header {@code Location}); đã có → 200. */
     private static ResponseEntity<ApiResponse<AuthResponse>> toResponse(AuthResult result) {
         ApiResponse<AuthResponse> body = ApiResponse.of(result.body());
         return result.isNewUser() ? ResponseEntity.status(HttpStatus.CREATED).body(body) : ResponseEntity.ok(body);

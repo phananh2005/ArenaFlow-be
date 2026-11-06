@@ -10,7 +10,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Entity đại diện cho team (đội)
+ * Entity đại diện cho team (đội).
+ * {@code version}: optimistic lock — ghi đồng thời lệch version bị từ chối lúc flush/commit và được retry ở tầng
+ * service.
  */
 @Entity
 @Table(name = "team")
