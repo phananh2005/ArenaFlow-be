@@ -75,29 +75,35 @@ class NfsQueryCountTest {
 
     @Test
     void readEndpointsStayWithinDetailAndListLimits() {
-        assertThat(measure(() -> profileService.getProfile(captain.getId()))).as("2.5").isLessThanOrEqualTo(D);
-        assertThat(measure(() -> teamService.listCaptainHistory(teamId, 1, 1))).as("2.16").isLessThanOrEqualTo(L);
-        assertThat(measure(() -> membershipService.listMembers(teamId, 1, 1))).as("2.17").isLessThanOrEqualTo(L);
-        assertThat(measure(() -> adminTeamService.listTeams(TeamStatusFilter.ALL, 1, 1))).as("2.21")
-                .isLessThanOrEqualTo(L);
+        assertThat(measure(() -> profileService.getProfile(captain.getId())))
+                .as("GET /api/v1/profile").isLessThanOrEqualTo(D);
+        assertThat(measure(() -> teamService.listCaptainHistory(teamId, 1, 1)))
+                .as("GET /api/v1/teams/{teamId}/captain/history").isLessThanOrEqualTo(L);
+        assertThat(measure(() -> membershipService.listMembers(teamId, 1, 1)))
+                .as("GET /api/v1/teams/{teamId}/members").isLessThanOrEqualTo(L);
+        assertThat(measure(() -> adminTeamService.listTeams(TeamStatusFilter.ALL, 1, 1)))
+                .as("GET /api/v1/admin/teams").isLessThanOrEqualTo(L);
     }
 
     @Test
     void writeEndpointsStayWithinWriteLimit() {
         assertThat(measure(() -> profileService.updateProfile(captain.getId(), new ProfileUpdateRequest(
-                "Renamed", null, null, null, null, null, BEN_NGHE_WARD)))).as("2.6").isLessThanOrEqualTo(W);
+                "Renamed", null, null, null, null, null, BEN_NGHE_WARD))))
+                .as("PATCH /api/v1/profile").isLessThanOrEqualTo(W);
         assertThat(measure(() -> teamService.updateTeam(teamId, captain.getId(),
-                new UpdateTeamRequest("NFS Renamed", null, null, List.of("Chill"))))).as("2.11").isEqualTo(4);
+                new UpdateTeamRequest("NFS Renamed", null, null, List.of("Chill")))))
+                .as("PATCH /api/v1/teams/{teamId}").isEqualTo(4);
 
         User invitee = saveUser("NFS Invitee");
         UUID invitation = membershipService.inviteMember(teamId, captain.getId(),
                 new InviteMemberRequest(invitee.getId())).invitationId();
-        assertThat(measure(() -> membershipService.rejectInvitation(invitation, invitee.getId()))).as("2.14")
-                .isEqualTo(3);
+        assertThat(measure(() -> membershipService.rejectInvitation(invitation, invitee.getId())))
+                .as("POST /api/v1/invitations/{invitationId}/reject").isEqualTo(3);
 
         assertThat(measure(() -> adminTeamService.markInactive(teamId, new MarkInactiveRequest("NFS"))))
-                .as("2.19").isEqualTo(3);
-        assertThat(measure(() -> adminTeamService.reactivate(teamId))).as("2.20").isEqualTo(4);
+                .as("PATCH /api/v1/admin/teams/{teamId}/mark-inactive").isEqualTo(3);
+        assertThat(measure(() -> adminTeamService.reactivate(teamId)))
+                .as("PATCH /api/v1/admin/teams/{teamId}/reactivate").isEqualTo(4);
     }
 
     private User saveUser(String name) {
