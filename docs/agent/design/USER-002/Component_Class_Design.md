@@ -7,11 +7,11 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` · kiến trúc hiện hành theo USER-001 |
 | Ràng buộc dữ liệu | USER-001 schema V1/V2/V3; delta USER-002 dưới đây cần migration Flyway |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.5** (developer · 2026-11-06) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.6** (developer · 2026-11-07) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
-Mở rộng module USER-001 theo layered Controller → Service → Repository → Entity, đặt trong các module Maven `api` → `application` → `domain` (ADR-0006). Tái dùng `TeamController`, `ProfileController`, `TeamService`, `ProfileService`, `TeamRepository`, `TeamMemberRepository`, `TeamGuard`, `OptimisticLockRetrier`, `TeamMapper`, DTO/envelope/error handling hiện có. Không tạo service/component dùng chung mới.
+Mở rộng module USER-001 theo layered Controller → Service → Repository → Entity, đặt trong các module Maven `api` → `application` → `domain` (ADR-0006). Tái dùng `TeamController`, `ProfileController`, `TeamService`, `ProfileService`, `TeamRepository`, `TeamMemberRepository`, `TeamGuard`, `ConcurrencyConflictRetrier`, `TeamMapper`, DTO/envelope/error handling hiện có. Không tạo service/component dùng chung mới.
 
 ## 2. Package Structure (delta)
 
@@ -34,7 +34,7 @@ domain/        com.phananh.arenaflow.domain
 └── entity/team/     Team (thêm lifecycle/disband fields), TeamMember (giữ model)
 ```
 
-Tái dùng không đổi vị trí: `TeamGuard`, `OptimisticLockRetrier` (`application/support/`), `ProfileController` (`api/profile/`). Test cần Spring context (migration, integration, đếm query) đặt ở module `api`, giữ package của lớp được kiểm.
+Tái dùng không đổi vị trí: `TeamGuard`, `ConcurrencyConflictRetrier` (`application/support/`), `ProfileController` (`api/profile/`). Test cần Spring context (migration, integration, đếm query) đặt ở module `api`, giữ package của lớp được kiểm.
 
 ## 3. Controller Layer
 
@@ -64,7 +64,7 @@ Mở rộng filter trạng thái hỗ trợ `DISBANDED`, không đổi `ACTIVE` 
 - `notDisbandedTeam(teamId)` (mới): `findById` → `TEAM_001` → `DISBANDED` (`TEAM_016`); không chặn `INACTIVE`. Dùng cho disband, leave (thay `requireTeam`, vẫn 1 query), admin mark-inactive/reactivate.
 - `disbandedOr(teamId, fallback)` (mới, bổ sung sau implement — `Processing_Flow.md` §5): guard thất bại **sau** Q1 đọc lại trạng thái đã commit; `DISBANDED` → `TEAM_016`, ngược lại `fallback`. Dùng trong `requireCaptain` (`TEAM_002`) và tại `transferCaptain` (`TEAM_007`), `leaveTeam` (`TEAM_010`), admin `reactivate` (`TEAM_013`). `findTeam` chuyển `private` để mọi thao tác ghi bắt buộc qua `activeTeam`/`notDisbandedTeam`.
 - `inviteMember`, `leaveTeam` nằm ở `TeamMembershipService(Impl)` (tách từ USER-001), không phải `TeamService`; thay đổi áp tại đó.
-- `inviteMember`: chuyển sang chạy trong `OptimisticLockRetrier` (bỏ `@Transactional` ở method theo ADR-0003). Đọc team bằng `teamGuard.activeTeamForInvite(teamId)` (mới, chốt bởi user 2026-11-05): gọi `TeamRepository.findForInviteById` có `@Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)` rồi áp cùng kiểm tra trạng thái với `activeTeam()` (`TEAM_001 → TEAM_016 → TEAM_015`, tách `requireActiveState` dùng chung). `team.version` tăng trước khi commit. Không inject `EntityManager` vào service; JPA giữ ở tầng repository. Race M1: `Processing_Flow.md` §5. Giữ xử lý `DataIntegrityViolationException` → `TEAM_003`; thêm khả năng `409 TEAM_014` khi hết retry.
+- `inviteMember`: chuyển sang chạy trong `ConcurrencyConflictRetrier` (bỏ `@Transactional` ở method theo ADR-0003). Đọc team bằng `teamGuard.activeTeamForInvite(teamId)` (mới, chốt bởi user 2026-11-05): gọi `TeamRepository.findForInviteById` có `@Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)` rồi áp cùng kiểm tra trạng thái với `activeTeam()` (`TEAM_001 → TEAM_016 → TEAM_015`, tách `requireActiveState` dùng chung). `team.version` tăng trước khi commit. Không inject `EntityManager` vào service; JPA giữ ở tầng repository. Race M1: `Processing_Flow.md` §5. Giữ xử lý `DataIntegrityViolationException` → `TEAM_003`; thêm khả năng `409 TEAM_014` khi hết retry.
 - `disbandTeam`: `notDisbandedTeam` → `requireCaptain` (SELECT, `TEAM_002`) → captain entity LEFT + `saveAndFlush` → team entity DISBANDED + `saveAndFlush` → `disbandRemaining` → projection. Chi tiết: `Processing_Flow.md` §4.1.
 
 ### 4.2. AdminTeamService

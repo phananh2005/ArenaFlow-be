@@ -1,5 +1,20 @@
 # CHANGELOG — USER-002 Giải tán đội & quy tắc xoá tài khoản đội trưởng
 
+## [v1.6] — 2026-11-07
+
+**Type:** MINOR (chỉ đổi tên class; không đổi endpoint, DTO, mã lỗi, luồng) · **Tóm tắt:** Đồng bộ USER-001 v3.5 — `OptimisticLockRetrier` → `ConcurrencyConflictRetrier`.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `Component_Class_Design.md` (§1, §2 thành phần tái dùng, §4.1 `inviteMember`) | Sửa | `OptimisticLockRetrier` → `ConcurrencyConflictRetrier` | USER-001 v3.5 #1 |
+| 2 | `Processing_Flow.md` (§1, §2 participant sequence) | Sửa | như #1 | USER-001 v3.5 #1 |
+| 3 | Header `API_Spec.md`, `Processing_Flow.md`, `Component_Class_Design.md` | Ghi nhận | v1.5 → v1.6 | design-standards §10 |
+
+### Ảnh hưởng
+- Hành vi, contract, DB, nghiệp vụ, SRS: không đổi.
+
 ## [v1.5] — 2026-11-06
 
 **Type:** MINOR (không đổi endpoint, DTO hay mã lỗi) · **Tóm tắt:** Đồng bộ với USER-001 v3.4 — retrier thử lại cả deadlock (`40P01`), hết lượt → `TEAM_014` thay vì 500.
