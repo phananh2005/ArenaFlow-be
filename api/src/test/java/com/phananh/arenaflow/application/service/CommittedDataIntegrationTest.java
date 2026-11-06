@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -21,6 +22,9 @@ import java.util.UUID;
 @SpringBootTest(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
 abstract class CommittedDataIntegrationTest {
 
+    /** Cleanup không chờ khoá vô hạn khi luồng race còn giữ khoá (vd kết nối DB bị kẹt) → test fail thay vì treo. */
+    private static final int CLEANUP_QUERY_TIMEOUT_SECONDS = 30;
+
     @Autowired protected TeamService teamService;
     @Autowired protected TeamMembershipService membershipService;
     @Autowired protected AdminTeamService adminTeamService;
@@ -31,10 +35,27 @@ abstract class CommittedDataIntegrationTest {
     private final List<UUID> createdUsers = new ArrayList<>();
     private final List<UUID> createdTeams = new ArrayList<>();
 
+    /** Xoá từng row; một row lỗi (vd hết timeout) không chặn các row còn lại, lỗi đầu tiên ném ra ở cuối. */
     @AfterEach
     void deleteCommittedFixtures() {
-        createdTeams.forEach(teamId -> jdbcTemplate.update("DELETE FROM team WHERE id = ?", teamId));
-        createdUsers.forEach(userId -> jdbcTemplate.update("DELETE FROM \"user\" WHERE id = ?", userId));
+        JdbcTemplate cleanup = new JdbcTemplate(jdbcTemplate.getDataSource());
+        cleanup.setQueryTimeout(CLEANUP_QUERY_TIMEOUT_SECONDS);
+        List<RuntimeException> failures = new ArrayList<>();
+        createdTeams.forEach(teamId -> deleteQuietly(cleanup, "DELETE FROM team WHERE id = ?", teamId, failures));
+        createdUsers.forEach(userId -> deleteQuietly(cleanup, "DELETE FROM \"user\" WHERE id = ?", userId, failures));
+        if (!failures.isEmpty()) {
+            RuntimeException first = failures.get(0);
+            failures.subList(1, failures.size()).forEach(first::addSuppressed);
+            throw first;
+        }
+    }
+
+    private static void deleteQuietly(JdbcTemplate cleanup, String sql, UUID id, List<RuntimeException> failures) {
+        try {
+            cleanup.update(sql, id);
+        } catch (RuntimeException exception) {
+            failures.add(exception);
+        }
     }
 
     protected User user(String displayName) {
@@ -74,6 +95,16 @@ abstract class CommittedDataIntegrationTest {
     protected int activeCaptains(UUID teamId) {
         return count("SELECT COUNT(*) FROM team_member WHERE team_id = ? AND role = 'CAPTAIN' AND status = 'ACTIVE'",
                 teamId);
+    }
+
+    /** SQLState của {@link SQLException} đầu tiên trong chuỗi cause; không có → null. */
+    protected static String sqlState(Throwable exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sql) {
+                return sql.getSQLState();
+            }
+        }
+        return null;
     }
 
     protected int count(String sql, Object... args) {

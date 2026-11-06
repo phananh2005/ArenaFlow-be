@@ -92,7 +92,9 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
      * ({@code PESSIMISTIC_WRITE} → PostgreSQL {@code FOR NO KEY UPDATE}) tới hết transaction. Thao tác ghi khác trên
      * các row này phải chờ: luồng ghi entity (accept, transfer, leave) sau khi xoá commit thấy {@code version} lệch →
      * retry; bulk {@link #disbandRemaining} đánh giá lại {@code WHERE} trên bản mới và bỏ qua row đã đóng. Sắp theo
-     * {@code id} để thứ tự khoá ổn định (tránh deadlock). Phải gọi trong transaction.
+     * {@code id} để thứ tự khoá ổn định trong phạm vi một user. Vẫn có thể deadlock với transaction khác khoá các row
+     * theo thứ tự khác (vd chuyển quyền/giải tán trên đội có chung thành viên) — caller chạy qua retrier để thử lại.
+     * Phải gọi trong transaction.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<TeamMember> findByUserIdAndStatusInOrderByIdAsc(UUID userId, Collection<TeamMember.Status> statuses);

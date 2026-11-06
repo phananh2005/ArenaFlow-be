@@ -13,7 +13,7 @@ public interface AdminTeamService {
 
     /**
      * Chuyển đội ACTIVE → INACTIVE, lưu lý do đã trim. Thứ tự lỗi: TEAM_001 → TEAM_016 (đã giải tán) → TEAM_011
-     * (đã INACTIVE). Chạy qua retrier: xung đột version hết lượt thử → 409 TEAM_014.
+     * (đã INACTIVE). Chạy qua retrier: xung đột version hoặc deadlock hết lượt thử → 409 TEAM_014.
      */
     TeamResponse markInactive(UUID teamId, MarkInactiveRequest request);
 

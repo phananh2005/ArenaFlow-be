@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -55,7 +54,7 @@ class AccountDeletionLockIntegrationTest extends CommittedDataIntegrationTest {
 
             assertThatThrownBy(() -> jdbcTemplate.queryForList(TRY_LOCK, rowId))
                     .isInstanceOf(DataAccessException.class)
-                    .satisfies(exception -> assertThat(sqlState((DataAccessException) exception))
+                    .satisfies(exception -> assertThat(sqlState(exception))
                             .isEqualTo(LOCK_NOT_AVAILABLE));
 
             release.countDown();
@@ -65,10 +64,6 @@ class AccountDeletionLockIntegrationTest extends CommittedDataIntegrationTest {
             release.countDown();
             executor.shutdownNow();
         }
-    }
-
-    private static String sqlState(DataAccessException exception) {
-        return exception.getMostSpecificCause() instanceof SQLException sql ? sql.getSQLState() : null;
     }
 
     private static void awaitQuietly(CountDownLatch latch) {
