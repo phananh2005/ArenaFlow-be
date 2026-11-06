@@ -75,6 +75,14 @@ Resource: `api/src/main/resources/` (`application.properties`, `db/migration/` F
 - **Constants**: `UPPER_SNAKE_CASE`: `MAX_BOOKING_PER_USER`, `DEFAULT_PAGE_SIZE`
 - **Boolean**: prefix `is`, `has`, `can`: `isActive`, `hasDiscount`, `canBook`
 
+### 2.4. Comment & Javadoc
+
+- Javadoc **tiếng Việt**, giải thích **tại sao / hợp đồng**, không lặp lại code.
+- **Bắt buộc** cho method `public`/`protected` có hợp đồng hoặc ngữ nghĩa không hiển nhiên từ tên: service (quyền, thứ tự guard, mã lỗi, retry/transaction, số truy vấn khi đáng kể), guard, mapper có xử lý đặc biệt (che tên user đã xoá…), repository có `@Query` (native, bulk `@Modifying`, `@Lock`, projection), component hạ tầng (retrier, JWT, security handler).
+- **Bắt buộc** cho method `private` có logic không hiển nhiên (điều kiện nghiệp vụ, thứ tự kiểm, xử lý race).
+- **Bỏ qua** khi tên đã đủ nghĩa: derived query (`findByIdAndDeletedAtIsNull`), getter/setter/accessor, DTO record, projection, controller handler chỉ uỷ quyền service.
+- **NEVER** trỏ sang bất kỳ tài liệu nào trong comment: ADR (`ADR-0007`), đường dẫn/mục tài liệu thiết kế/spec (`USER-002 API_Spec §2.4`), mã neo nghiệp vụ/thiết kế (`BR-T12`, `W6`, `L4`, `race M1`). Viết mô tả tự đủ nghĩa thay thế (vd `(W6)` → "6 truy vấn") — người đọc (dev/AI) không phải mở tài liệu khác. Mã lỗi (`TEAM_014`) được dùng vì là enum trong code.
+
 ---
 
 ## 3. Controller Layer
@@ -536,6 +544,7 @@ class ArenaRepositoryTest {
 
 - [ ] Đặt đúng module & package (`api/<nhóm>` controller, `application/service/impl`, `application/dto/request|response`, `domain/repository`, `domain/entity`); không import ngược tầng
 - [ ] Class naming đúng pattern
+- [ ] Javadoc tiếng Việt theo §2.4 (có cho method có hợp đồng không hiển nhiên; không cho method tự mô tả; không trỏ tài liệu/ADR)
 - [ ] Controller chỉ xử lý HTTP, không có business logic
 - [ ] Service có `@Transactional`, method ghi bỏ `readOnly`
 - [ ] Entity có `@Entity`, column name snake_case, có BaseEntity
