@@ -43,7 +43,7 @@ POST   /api/v1/arenas/{arenaId}/reviews              # Tạo review cho sân
 | POST | Tạo resource mới | ❌ | ✅ | ✅ (created resource) |
 | PUT | Replace toàn bộ resource | ✅ | ✅ (full) | ✅ (updated resource) |
 | PATCH | Update một phần resource | ❌ | ✅ (partial) | ✅ (updated resource) |
-| DELETE | Xóa resource | ✅ | ❌ | ❌ hoặc 204 No Content |
+| DELETE | Xóa resource | ✅ | ❌ | ❌ (204 No Content — §5) |
 
 **Lưu ý:**
 - POST `/bookings` → tạo booking mới
@@ -124,9 +124,38 @@ Accept: application/json
 ## 5. HTTP Status Codes
 
 ### Success (2xx)
-- `200 OK` — GET/PUT/PATCH thành công
-- `201 Created` — POST tạo mới thành công (kèm `Location` header)
-- `204 No Content` — DELETE thành công, không trả body
+
+Mã thành công chọn theo **kết quả** của thao tác, không theo HTTP method:
+
+| Mã | Khi nào | Body |
+|---|---|---|
+| `201 Created` | Request **tạo ra tài nguyên mới** (kể cả đăng ký-hoặc-đăng nhập khi lần đầu tạo user) | Có — tài nguyên vừa tạo. **Không** trả header `Location` (client lấy id từ body) |
+| `200 OK` | Thành công và **có body** theo tiêu chí bên dưới | Có — bọc trong `data` |
+| `204 No Content` | Thành công và **không có body** theo tiêu chí bên dưới | Không |
+
+**Phải trả body (`200`/`201`) khi thoả ít nhất một tiêu chí:**
+- **B1 — Đọc:** mọi `GET`.
+- **B2 — Tạo mới:** client cần id, timestamp và giá trị server sinh ra của tài nguyên vừa tạo.
+- **B3 — Có giá trị do server tạo/ghi nhận mà client không tự biết trước:** id, token, thời điểm (`…At`), người thực hiện (`…ById` / `…ByName`), trạng thái hoặc trường tính ở server. Giá trị client đã gửi lên hoặc suy ra được từ việc request thành công (vd. `status = REJECTED` sau khi từ chối) **không tính**.
+- **B4 — Cập nhật tài nguyên client còn hiển thị:** trả bản đầy đủ sau cập nhật để client không phải `GET` lại.
+
+**Không trả body (`204`) khi:**
+- **N1 — Client rời khỏi tài nguyên:** kết quả suy ra hoàn toàn từ việc request thành công (xoá, rời đội, từ chối lời mời…) và không có giá trị nào thoả B3.
+
+**Áp dụng cho endpoint hiện có** (cập nhật bảng khi thêm endpoint):
+
+| Endpoint | Mã | Tiêu chí |
+|---|---|---|
+| Mọi `GET` | 200 | B1 |
+| `POST /auth/oauth`, `POST /auth/verify-otp` | 201 khi tạo user mới / 200 khi user đã có | B2 / B3 (token) |
+| `POST /auth/send-otp`, `POST /auth/refresh` | 200 | B3 (`expiresIn`, token) |
+| `PATCH /profile`, `PATCH /teams/{id}`, `PATCH /admin/teams/{id}/mark-inactive`, `…/reactivate` | 200 | B4 |
+| `POST /teams`, `POST /teams/{id}/invitations` | 201 | B2 |
+| `POST /invitations/{id}/accept` | 200 | B3 (`joinedAt`, thông tin đội) |
+| `POST /teams/{id}/captain/transfer` | 200 | B3 (`transferredAt`), B4 (vai trò trong danh sách thành viên) |
+| `POST /teams/{id}/disband` | 200 | B3 (`disbandedAt`, `disbandedByName`), B4 (đội giải tán vẫn xem được) |
+| `POST /invitations/{id}/reject` | 204 | N1 |
+| `POST /teams/{id}/members/leave`, `DELETE /profile` | 204 | N1 |
 
 ### Client Error (4xx)
 - `400 Bad Request` — request không hợp lệ (validation fail)
@@ -302,4 +331,5 @@ Cùng key → trả về resource đã tạo trước đó (không tạo duplica
 - [ ] Error có `code` + `message` + `timestamp` + `path`
 - [ ] Pagination có `page`, `pageSize`, `totalPages`, `totalItems`
 - [ ] Auth dùng `Authorization: Bearer <token>`
-- [ ] Status code đúng (200/201/204/400/401/403/404/409/500)
+- [ ] Status code đúng (200/201/204/400/401/403/404/409/500); mã thành công theo tiêu chí B1–B4 / N1 (§5), có dòng trong bảng "Áp dụng cho endpoint hiện có"
+- [ ] `201` không kèm header `Location`
