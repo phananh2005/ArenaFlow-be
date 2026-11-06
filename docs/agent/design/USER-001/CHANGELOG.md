@@ -1,5 +1,25 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v3.4] — 2026-11-06
+
+**Type:** MINOR (không đổi endpoint, DTO hay mã lỗi; `409 TEAM_014` đã khai báo ở mọi endpoint dùng retrier) · **Tóm tắt:** `OptimisticLockRetrier` thử lại cả deadlock (`40P01`), ghi log `WARN` mỗi lần gặp; hết lượt → `409 TEAM_014` thay vì 500.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `Processing_Flow.md` §5 (retrier) | Sửa | chỉ bắt `ObjectOptimisticLockingFailureException` → thêm `PessimisticLockingFailureException` có SQLState `40P01` (log `WARN` kèm SQLState + số lần thử); NOWAIT `55P03`, lock timeout, `40001` không retry | Bên bị PostgreSQL huỷ do deadlock trước đây trả 500; [Inference] thử lại thường thành công (bên kia đã xong) — kiểm chứng: `RetrierDeadlockIntegrationTest` |
+| 2 | `API_Spec.md` §1 (quy ước chung) | Sửa | "tự retry" → "tự retry (cả khi PostgreSQL huỷ do deadlock)" | Như #1 |
+| 3 | `API_Spec.md` §2.7 (Lỗi) | Sửa | `409 TEAM_014` "giữ khai báo… luồng khoá bi quan không còn phát sinh mã này" → phát sinh khi deadlock lặp lại đủ 3 lần thử | Như #1 — ghi chú cũ hết đúng |
+| 4 | Header `API_Spec.md`, `Processing_Flow.md`, `Component_Class_Design.md` | Ghi nhận | v3.3 → v3.4 | design-standards §10 |
+| 5 | `Processing_Flow.md` §2.3 (sequence chuyển quyền, endpoint 2.15) | Sửa | `alt ObjectOptimisticLockingFailureException` → `alt xung đột version / deadlock (xem §5)` | Khớp §5 |
+| 6 | `API_Spec.md` §1 (quy ước chung) | Sửa | "Trừ `DELETE /profile`: khoá bi quan có phạm vi" → "khoá bi quan … nhưng vẫn chạy qua retrier" | Câu cũ dễ hiểu là 2.7 không retry/không có `TEAM_014`, mâu thuẫn §2.7 |
+
+### Ảnh hưởng
+- Hành vi: deadlock → tự thử lại; lặp lại đủ 3 lần → `409 TEAM_014` (trước: 500). Contract không đổi (mã đã khai báo).
+- DB schema, nghiệp vụ, SRS: không đổi.
+- Kiểm chứng: `OptimisticLockRetrierTest` (retry deadlock, TEAM_014 khi hết lượt, log WARN kèm `40P01`, NOWAIT/`40001` không retry), `RetrierDeadlockIntegrationTest` (deadlock thật trên PostgreSQL → `CannotAcquireLockException` SQLState `40P01`; retrier cho cả hai thao tác thành công).
+
 ## [v3.3] — 2026-11-06
 
 **Type:** MINOR (chỉ đổi cách ghi phiên bản ở header; không đổi nội dung thiết kế) · **Tóm tắt:** Ô "Tác giả / Ngày / Phiên bản" của 3 tài liệu chỉ giữ baseline + phiên bản hiện tại + trỏ `CHANGELOG.md` (đồng bộ cách làm với USER-002 v1.4).

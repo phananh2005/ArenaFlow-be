@@ -9,7 +9,10 @@ import com.phananh.arenaflow.domain.entity.user.User;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -43,6 +46,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * thật trên luồng cũ (user đã xoá còn ACTIVE); "delete vs transfer away" nhạy qua mutation bỏ kiểm captain đầu tiên của
  * luồng cũ (user đã xoá còn MEMBER ACTIVE).
  */
+@ExtendWith(OutputCaptureExtension.class)
 class TeamDisbandRaceTest extends CommittedDataIntegrationTest {
 
     private static final int ROUNDS = 10;
@@ -83,7 +87,7 @@ class TeamDisbandRaceTest extends CommittedDataIntegrationTest {
     }
 
     @Test
-    void disbandVersusTransferCaptainR2() throws Exception {
+    void disbandVersusTransferCaptainR2(CapturedOutput output) throws Exception {
         Map<String, Integer> stats = new TreeMap<>();
         long transferMillis = measureTransferMillis();
         for (int round = 0; round < ROUNDS; round++) {
@@ -110,6 +114,9 @@ class TeamDisbandRaceTest extends CommittedDataIntegrationTest {
             }
         }
         report("R2 disband vs transfer", stats);
+        // Transfer và disband phải khoá row captain cũ trước row member. Đảo thứ tự → deadlock; retrier thử lại nên
+        // kết quả vẫn hợp lệ, dấu vết duy nhất là log 40P01 → coi là lỗi.
+        assertThat(output.getAll()).as("deadlock trong R2: thứ tự khoá transfer/disband bị đảo").doesNotContain("40P01");
     }
 
     @Test

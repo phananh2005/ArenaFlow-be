@@ -6,7 +6,7 @@
 | **Ngày** | 2026-11-02 |
 | **Người quyết định** | Product Owner (chốt retry 3 lần → 409) · solution-architect (đề xuất cách thực hiện) |
 | **Liên quan** | `docs/agent/design/USER-001/Processing_Flow.md` §5 · `docs/agent/convention-backend.md` §9 · ngoại lệ có phạm vi cho `deleteAccount` (khoá bi quan): [ADR-0007](0007-scoped-pessimistic-lock-for-account-deletion.md) · `docs/agent/design/USER-002/Processing_Flow.md` §4–§5 (disband, transfer, thứ tự khoá) · [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) |
-| **Sửa đổi** | 2026-11-06 — `deleteAccount` là ngoại lệ có phạm vi: bất biến giữ bằng khoá bi quan theo ADR-0007, không dựa vào kiểm `@Version` · 2026-11-06 — phạm vi của "không deadlock" ở Hệ quả (chỉ đúng cho bước đọc) |
+| **Sửa đổi** | 2026-11-06 — `deleteAccount` là ngoại lệ có phạm vi: bất biến giữ bằng khoá bi quan theo ADR-0007, không dựa vào kiểm `@Version` · 2026-11-06 — phạm vi của "không deadlock" ở Hệ quả (chỉ đúng cho bước đọc) · 2026-11-06 — retrier thử lại cả deadlock (`40P01`) |
 
 ## Bối cảnh (Context)
 - Các thao tác trên `team`/`team_member` có thể chạy song song: sửa đội, chuyển quyền captain, chấp nhận lời mời, rời đội, admin đổi trạng thái, xoá tài khoản captain. Lost update làm sai số captain/thành viên.
@@ -57,3 +57,9 @@ Chúng tôi dùng **JPA `@Version`** trên `Team` và `TeamMember` (cột `versi
 - Từ ADR-0007, `deleteAccount` khoá bi quan theo `id` → có thể khép vòng chờ với transfer/disband trên các đội có chung thành viên: xem [ADR-0007](0007-scoped-pessimistic-lock-for-account-deletion.md) §Hệ quả (không chép lại ở đây; kịch bản suy ra từ đọc code, chưa tái hiện).
 - Deadlock (`40P01`) không được `OptimisticLockRetrier` bắt (chỉ bắt `ObjectOptimisticLockingFailureException`) → bên bị PostgreSQL huỷ trả 500. Theo dõi theo ADR-0007 §Cần theo dõi.
 - Quyết định của ADR này không đổi.
+
+## Sửa đổi 2026-11-06 — Retrier thử lại cả deadlock
+
+- Bổ sung cho §Quyết định (retry tối đa 3 lần → `409 TEAM_014`): `OptimisticLockRetrier` thử lại cả `PessimisticLockingFailureException` có SQLState `40P01` (deadlock) — PostgreSQL huỷ một bên; [Inference] transaction thử lại thường thành công vì bên kia đã xong (kiểm chứng bằng một kịch bản integration). Mỗi lần gặp deadlock retrier ghi log `WARN` kèm SQLState và số lần thử. Lỗi khoá khác (NOWAIT `55P03`, lock timeout, serialization failure `40001`) ném nguyên, không thử lại.
+- Thay câu "Deadlock (`40P01`) không được `OptimisticLockRetrier` bắt … → 500" ở mục Sửa đổi "Phạm vi của 'không deadlock'": nay deadlock lặp lại đủ 3 lần thử → `409 TEAM_014`.
+- Kiểm chứng trên PostgreSQL: deadlock thật được Spring dịch thành `CannotAcquireLockException` (SQLState `40P01`).

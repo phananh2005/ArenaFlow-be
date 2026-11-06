@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.3** (developer · 2026-11-06) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.4** (developer · 2026-11-06) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan luồng
 
@@ -108,7 +108,7 @@ sequenceDiagram
     Note right of RT: không có → TEAM_007
     RT->>TMR: flush: captain cũ role=MEMBER, captain mới role=CAPTAIN (@Version)
     RT->>HR: save(TeamCaptainHistory from, to, reason)
-    alt ObjectOptimisticLockingFailureException
+    alt xung đột version / deadlock (xem §5)
         RT->>RT: thử lại (tối đa 3 lần) → hết → TEAM_014
     end
     RT-->>C: 200 CaptainTransferResponse
@@ -158,7 +158,7 @@ Isolation: `READ_COMMITTED` (mặc định PostgreSQL). Không gọi dịch vụ
 ## 5. Concurrency & Locking (ADR-0003)
 
 - `@Version` trên `Team`, `TeamMember`. `User` không có version — cập nhật hồ sơ theo last-write-wins (chỉ chủ tài khoản sửa).
-- `OptimisticLockRetrier.execute(Supplier<T>)`: bắt `ObjectOptimisticLockingFailureException` → thử lại ngay, không backoff, **tối đa 3 lần thử** (1 lần đầu + 2 lần retry) → hết → `BusinessException(TEAM_014)`. Lỗi nghiệp vụ (`BusinessException`) không retry.
+- `OptimisticLockRetrier.execute(Supplier<T>)`: bắt `ObjectOptimisticLockingFailureException`, hoặc `PessimisticLockingFailureException` có SQLState `40P01` (deadlock — ghi log `WARN` kèm SQLState và số lần thử) → thử lại ngay, không backoff, **tối đa 3 lần thử** (1 lần đầu + 2 lần retry) → hết → `BusinessException(TEAM_014)`. Lỗi nghiệp vụ (`BusinessException`) và lỗi khoá khác (NOWAIT `55P03`, lock timeout, serialization failure `40001`) không retry.
 - ~~**Tín hiệu "cập nhật thiếu dòng" của 2.7**~~ — bỏ ở USER-002: `deleteAccount` không còn `markInactiveByIds`; ~~race với chuyển quyền (R1) xử lý bằng kiểm captain lần 2~~ (v2.0). **v2.1:** race của xoá tài khoản xử lý bằng khoá bi quan có phạm vi — ngoại lệ của ADR-0003 theo ADR-0007 (USER-002 `Processing_Flow.md` §4.2).
 - Bulk update (2.7) tự `SET version = version + 1` để các transaction đang giữ bản cũ phát hiện xung đột.
 
