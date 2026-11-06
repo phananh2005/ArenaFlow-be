@@ -1,5 +1,21 @@
 # CHANGELOG — USER-002 Giải tán đội & quy tắc xoá tài khoản đội trưởng
 
+## [v1.4] — 2026-11-06
+
+**Type:** MINOR (chỉ cập nhật bảng đồng bộ tài liệu; không đổi endpoint, DTO, mã lỗi, luồng) · **Tóm tắt:** ADR-0003 đã có mục `Sửa đổi` về phạm vi "không deadlock" và liên kết USER-002/ADR-0005 (PR #34) — đánh dấu hoàn tất ở CCD §10; ghi rõ 2 hàng §10 còn chưa làm; header chỉ giữ baseline + phiên bản hiện tại.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `Component_Class_Design.md` §10 (hàng ADR-0003) | Sửa | "Một phần — còn ghi chú deadlock + liên kết USER-002/ADR-0005, qua MR" → ✅ PR #19 + PR #34 | PR #34 đã thêm `Sửa đổi 2026-11-06 — Phạm vi của "không deadlock"` và liên kết ở "Liên quan" |
+| 2 | `Component_Class_Design.md` §10 (hàng `docs/agent/CLAUDE.md` §2, `api-convention.md` §2.1) | Sửa | cột cuối chỉ ghi tên nhánh → "Chưa — qua `chore/agent-framework-*`" | Hai việc này thực tế chưa làm; tránh hiểu nhầm là đã xong |
+| 3 | Header `API_Spec.md`, `Processing_Flow.md`, `Component_Class_Design.md` | Sửa | Ô "Tác giả / Ngày / Phiên bản" liệt kê mọi mốc kèm mô tả → baseline v1.0 + phiên bản hiện tại v1.4 + trỏ `CHANGELOG.md` | design-standards §8 (một thông tin = một nơi); §10 chỉ yêu cầu version header khớp entry mới nhất |
+
+### Ảnh hưởng
+- API contract, DB schema, nghiệp vụ, SRS: không đổi. Mục "Còn mở" của v1.3 đã xong.
+- §10 còn 2 hàng chưa làm: `docs/agent/CLAUDE.md` §2 (điều hướng USER-002), `api-convention.md` §2.1 (ngoại lệ endpoint hành động) — qua `chore/agent-framework-*`.
+
 ## [v1.3] — 2026-11-06
 
 **Type:** MINOR (chỉ cập nhật trạng thái ADR được trỏ tới; không đổi endpoint, DTO, mã lỗi, luồng) · **Tóm tắt:** ADR-0005 và ADR-0007 đã `Accepted` (PR #19) — bỏ nhãn "Proposed" khi trỏ tới chúng; cập nhật bảng đồng bộ CCD §10 theo những gì PR #19 đã làm với ADR-0002/0003.
