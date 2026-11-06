@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Trạng thái** | Proposed |
+| **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-05 |
 | **Người quyết định** | Chủ repo (phân tích: developer) |
 | **Liên quan** | ADR-0001 (`JwtTokenService`/`JwtProperties` chuyển module) · ADR-0003 (`OptimisticLockRetrier` chuyển module) · `docs/agent/design/USER-001/Component_Class_Design.md` §2 + `CHANGELOG.md` v1.2 · `docs/agent/convention-backend.md` §1 |

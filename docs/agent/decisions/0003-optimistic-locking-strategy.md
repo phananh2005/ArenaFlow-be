@@ -5,7 +5,8 @@
 | **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-02 |
 | **Người quyết định** | Product Owner (chốt retry 3 lần → 409) · solution-architect (đề xuất cách thực hiện) |
-| **Liên quan** | `docs/agent/design/USER-001/Processing_Flow.md` §5 · `docs/agent/convention-backend.md` §9 · ngoại lệ có phạm vi cho `deleteAccount` (khoá bi quan) đề xuất ở [ADR-0007](0007-scoped-pessimistic-lock-for-account-deletion.md) (Proposed) |
+| **Liên quan** | `docs/agent/design/USER-001/Processing_Flow.md` §5 · `docs/agent/convention-backend.md` §9 · ngoại lệ có phạm vi cho `deleteAccount` (khoá bi quan): [ADR-0007](0007-scoped-pessimistic-lock-for-account-deletion.md) |
+| **Sửa đổi** | 2026-11-06 — `deleteAccount` là ngoại lệ có phạm vi: bất biến giữ bằng khoá bi quan theo ADR-0007, không dựa vào kiểm `@Version` |
 
 ## Bối cảnh (Context)
 - Các thao tác trên `team`/`team_member` có thể chạy song song: sửa đội, chuyển quyền captain, chấp nhận lời mời, rời đội, admin đổi trạng thái, xoá tài khoản captain. Lost update làm sai số captain/thành viên.
@@ -43,3 +44,9 @@ Chúng tôi dùng **JPA `@Version`** trên `Team` và `TeamMember` (cột `versi
 **Cần theo dõi**
 - Tỷ lệ `TEAM_014` tăng → xem lại (backoff, pessimistic lock cho thao tác nóng).
 - Khi thêm notification: dùng sự kiện sau commit (`@TransactionalEventListener(AFTER_COMMIT)`).
+
+## Sửa đổi 2026-11-06 — Ngoại lệ có phạm vi cho xoá tài khoản (ADR-0007)
+
+- `DELETE /api/v1/profile` (`ProfileServiceImpl.deleteAccount`) không dựa vào `@Version` để giữ bất biến: khoá `PESSIMISTIC_WRITE` các row `team_member` ACTIVE/PENDING của user (theo `id`), kiểm captain trên dữ liệu đã khoá, rồi bulk UPDATE — xem [ADR-0007](0007-scoped-pessimistic-lock-for-account-deletion.md) (Accepted). Hàm vẫn chạy qua `OptimisticLockRetrier` (mỗi lần thử một transaction mới, `TransactionTemplate`).
+- Lý do: các bước ghi của hàm là bulk UPDATE, chỉ tăng `version` mà không kiểm, nên `@Version` không bảo vệ bất biến nhiều dòng của chính hàm này.
+- Mọi luồng ghi khác trên `team` / `team_member` giữ nguyên quyết định của ADR này (`@Version`, tối đa 3 lần thử → `409 TEAM_014`).

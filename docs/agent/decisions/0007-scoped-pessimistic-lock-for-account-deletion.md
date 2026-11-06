@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Trạng thái** | Proposed |
+| **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-06 |
 | **Người quyết định** | Product Owner (chốt hướng khoá bi quan cho `deleteAccount`, 2026-11-06) · solution-architect (đề xuất cách thực hiện) |
 | **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) (đây là ngoại lệ có phạm vi, không thay thế) · [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) · `docs/agent/design/USER-002/Processing_Flow.md` §4.2, §5 |
