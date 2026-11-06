@@ -134,7 +134,7 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
 
         Page<MemberView> page = teamMemberRepository.findActiveMembers(team.getId(), PageRequest.of(0, 10));
 
-        // data + count; Spring Data bỏ COUNT khi trang đầu chưa đầy → 1 hoặc 2 câu (NFS: ≤ ngưỡng).
+        // data + count; Spring Data bỏ COUNT khi trang đầu chưa đầy → 1 hoặc 2 câu (≤ ngưỡng danh sách).
         assertThat(statistics.getPrepareStatementCount()).isBetween(1L, 2L);
         assertThat(page.getTotalElements()).isEqualTo(3);
         assertThat(page.getContent()).extracting(MemberView::getUserId)
@@ -212,7 +212,7 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
         assertThat(page.getContent().get(1).getFromUserId()).isNull();
     }
 
-    // ---------- USER-002: giải tán đội ----------
+    // ---------- Giải tán đội, xoá tài khoản, lịch sử thành viên ----------
 
     @Test
     void findsDisbandedTeamDetailWithDisbanderAndDeletedFlagInOneQuery() {

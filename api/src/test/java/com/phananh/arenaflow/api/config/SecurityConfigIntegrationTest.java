@@ -98,7 +98,7 @@ class SecurityConfigIntegrationTest {
 
     /**
      * /actuator/health/** public (không 401) nhưng thành phần bị ẩn theo mặc định Spring Boot → 404,
-     * không lộ trạng thái DB (ADR-0004). permitAll dành cho probe liveness/readiness khi được bật.
+     * không lộ trạng thái DB. permitAll dành cho probe liveness/readiness khi được bật.
      */
     @Test
     void healthComponentPathIsPublicButHidden() throws Exception {
@@ -107,7 +107,7 @@ class SecurityConfigIntegrationTest {
                 .andExpect(jsonPath("$.status").doesNotExist());
     }
 
-    /** ADR-0004: API docs mặc định TẮT (fail-closed) — chỉ bật khi SPRINGDOC_ENABLED=true (dev). */
+    /** API docs mặc định TẮT (fail-closed) — chỉ bật khi SPRINGDOC_ENABLED=true (dev). */
     @Test
     void apiDocsAreDisabledByDefault() throws Exception {
         mockMvc.perform(get("/v3/api-docs")).andExpect(status().isNotFound());

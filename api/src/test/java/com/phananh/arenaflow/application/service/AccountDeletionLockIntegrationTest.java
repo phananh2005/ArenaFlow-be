@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * ADR-0007: bước khoá của xoá tài khoản ({@code findByUserIdAndStatusInOrderByIdAsc}) phải giữ khoá dòng thật đến hết
+ * Bước khoá của xoá tài khoản ({@code findByUserIdAndStatusInOrderByIdAsc}) phải giữ khoá dòng thật đến hết
  * transaction — kết nối khác không lấy được khoá cùng row ({@code FOR UPDATE NOWAIT} → SQLState 55P03) cho tới khi commit.
  */
 class AccountDeletionLockIntegrationTest extends CommittedDataIntegrationTest {

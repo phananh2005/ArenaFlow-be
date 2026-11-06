@@ -34,12 +34,12 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 /**
- * Race USER-002 (Processing_Flow §5, "Kiểm chứng bắt buộc"): 2 luồng xuất phát cùng lúc qua {@link CyclicBarrier},
+ * Race giữa các thao tác ghi trên đội: 2 luồng xuất phát cùng lúc qua {@link CyclicBarrier},
  * lặp {@value #ROUNDS} vòng, mỗi vòng fixture mới. Không tất định → assert BẤT BIẾN dữ liệu sau mỗi vòng và tập
  * kết quả cho phép; không bao giờ có lỗi ngoài {@link BusinessException} (≈ 500). Thống kê kết quả in ra stdout.
  * R1/R2 quét độ trễ luồng thứ hai (0 → thời gian 1 lần transfer) để chạm cả hai nhánh thắng; độ nhạy đã kiểm bằng
  * mutation (bỏ force-increment của invite → M1 fail; bỏ kiểm lại captain trong deleteAccount → R1 fail), 2026-11-05.
- * ADR-0007 (2026-11-06): deleteAccount đổi sang khoá bi quan, bước kiểm lại đã bỏ. "Delete vs accept own invitation" Red
+ * 2026-11-06: deleteAccount đổi sang khoá bi quan, bước kiểm lại đã bỏ. "Delete vs accept own invitation" Red
  * thật trên luồng cũ (user đã xoá còn ACTIVE); "delete vs transfer away" nhạy qua mutation bỏ kiểm captain đầu tiên của
  * luồng cũ (user đã xoá còn MEMBER ACTIVE).
  */
@@ -205,7 +205,7 @@ class TeamDisbandRaceTest extends CommittedDataIntegrationTest {
     }
 
     /**
-     * ADR-0007 (G1/G2): user xoá tài khoản trong lúc chính user đó accept lời mời (thiết bị khác). Không được để user đã
+     * User xoá tài khoản trong lúc chính user đó accept lời mời (thiết bị khác). Không được để user đã
      * xoá còn ACTIVE/PENDING trong đội, không vi phạm CHECK left_at ≥ joined_at (≈ 500).
      */
     @Test

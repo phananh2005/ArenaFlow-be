@@ -12,7 +12,7 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** ADR-0004: SPRINGDOC_ENABLED=true (dev) → OpenAPI + Swagger UI bật và public (không cần token). */
+/** SPRINGDOC_ENABLED=true (dev) → OpenAPI + Swagger UI bật và public (không cần token). */
 @SpringBootTest(properties = "SPRINGDOC_ENABLED=true")
 class ApiDocsEnabledIntegrationTest {
 

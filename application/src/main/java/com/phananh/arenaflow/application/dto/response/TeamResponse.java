@@ -6,7 +6,7 @@ import java.util.UUID;
 
 /**
  * captainId/captainName null khi đội không còn captain ACTIVE; tên user đã xoá đã được che.
- * Các field disband* null khi đội chưa giải tán (USER-002 API_Spec §2.2).
+ * Các field disband* null khi đội chưa giải tán.
  */
 public record TeamResponse(UUID teamId, String teamName, String avatarUrl, String description, List<String> skillLevels,
                            String status, String inactiveReason, UUID captainId, String captainName, long memberCount,

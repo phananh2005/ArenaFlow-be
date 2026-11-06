@@ -20,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Xoá tài khoản trên DB dev (.env.dev); rollback sau test. Quy tắc USER-002 (ADR-0005): captain phải chuyển quyền/giải tán trước. */
+/** Xoá tài khoản trên DB dev (.env.dev); rollback sau test. Captain phải chuyển quyền/giải tán trước. */
 @SpringBootTest(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
 @Transactional
 class ProfileServiceIntegrationTest {
@@ -82,7 +82,7 @@ class ProfileServiceIntegrationTest {
 
         profileService.deleteAccount(captain.getId());
 
-        // NFS W6 (ADR-0007): S khoá membership mở + U bulk rời đội/từ chối lời mời + U soft delete = 3.
+        // Ngưỡng ghi ≤ 6: S khoá membership mở + U bulk rời đội/từ chối lời mời + U soft delete = 3.
         assertThat(statistics.getPrepareStatementCount()).isEqualTo(3);
         entityManager.clear();
         assertThat(teamRepository.findById(own.getId()).orElseThrow().getStatus()).isEqualTo(Team.TeamStatus.DISBANDED);

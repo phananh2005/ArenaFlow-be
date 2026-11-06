@@ -34,7 +34,7 @@ class AuthServiceIntegrationTest {
 
         AuthResult first = authService.loginWithOAuth(new OAuthLoginRequest("GOOGLE", "token", email));
 
-        // NFS W6: S tài khoản + I user + I oauth_account (+ U tên mặc định) ≤ 6.
+        // Ngưỡng ghi ≤ 6 câu: S tài khoản + I user + I oauth_account (+ U tên mặc định).
         assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(6);
         assertThat(first.isNewUser()).isTrue();
         entityManager.flush();
