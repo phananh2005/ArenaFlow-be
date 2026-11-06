@@ -23,7 +23,7 @@ kỹ thuật dùng chung nhiều cụm. Bố cục đang dùng ghi ở `design/R
 file đó để biết đặt thư mục mới ở đâu, không đoán.
 
 **Tham chiếu tài liệu thiết kế phải chịu được việc di chuyển thư mục:**
-- **NEVER** ghi đường dẫn tài liệu thiết kế vào comment code — tài liệu trỏ tới code, không ngược lại.
+- **NEVER** trỏ sang bất kỳ tài liệu nào trong comment code: đường dẫn/mục tài liệu thiết kế/spec, ADR, mã neo nghiệp vụ/thiết kế (`BR-*`, `W6`, `L4`…) — tài liệu trỏ tới code, không ngược lại (chi tiết: `convention-backend.md` §2.4).
 - Khi di chuyển/đổi tên thư mục thiết kế: grep mọi chỗ trỏ tới (knowledge, ADR, hub, `architecture.md`) và sửa trong cùng thay đổi.
 
 ## 3. Header chuẩn
