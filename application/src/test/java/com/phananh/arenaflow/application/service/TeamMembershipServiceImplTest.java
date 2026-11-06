@@ -159,6 +159,7 @@ class TeamMembershipServiceImplTest {
         when(teamMemberRepository.findById(invitationId)).thenReturn(Optional.of(
                 member(invitationId, inviteeId, TeamMember.Role.MEMBER, TeamMember.Status.PENDING)));
         assertError(() -> service.acceptInvitation(invitationId, captainId), ErrorCode.TEAM_005);
+        assertError(() -> service.rejectInvitation(invitationId, captainId), ErrorCode.TEAM_005);
 
         when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.INACTIVE)));
         assertError(() -> service.acceptInvitation(invitationId, inviteeId), ErrorCode.TEAM_015);
@@ -190,17 +191,15 @@ class TeamMembershipServiceImplTest {
     }
 
     @Test
-    void rejectMarksRejectedAndReturnsInvitation() {
+    void rejectMarksRejected() {
         TeamMember invitation = member(invitationId, inviteeId, TeamMember.Role.MEMBER, TeamMember.Status.PENDING);
         when(teamMemberRepository.findById(invitationId)).thenReturn(Optional.of(invitation));
         when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.ACTIVE)));
 
-        InvitationResponse response = service.rejectInvitation(invitationId, inviteeId);
+        service.rejectInvitation(invitationId, inviteeId);
 
         assertThat(invitation.getStatus()).isEqualTo(TeamMember.Status.REJECTED);
         verify(teamMemberRepository).saveAndFlush(invitation);
-        assertThat(response.status()).isEqualTo("REJECTED");
-        assertThat(response.teamName()).isEqualTo("Team Alpha");
     }
 
     @Test

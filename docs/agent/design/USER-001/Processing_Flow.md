@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code: 2.1/2.3/2.6, §3 (2.11, 2.14), §4, §5) · developer · 2026-11-05 · v1.2 (không đổi nội dung — đồng bộ phiên bản với CCD, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) · developer · 2026-11-06 · v2.1 (`DELETE /profile` khoá bi quan có phạm vi — ADR-0007, contract không đổi) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · developer · 2026-11-04 · v1.1 (đồng bộ với code: 2.1/2.3/2.6, §3 (2.11, 2.14), §4, §5) · developer · 2026-11-05 · v1.2 (không đổi nội dung — đồng bộ phiên bản với CCD, ADR-0006) · developer · 2026-11-05 · v2.0 (MAJOR — USER-002: bỏ đội tự INACTIVE khi captain duy nhất xoá tài khoản, `USER_003` mở rộng, thứ tự guard theo USER-002 §2.1a — xem `CHANGELOG.md`) · developer · 2026-11-06 · v2.1 (`DELETE /profile` khoá bi quan có phạm vi — ADR-0007, contract không đổi) · developer · 2026-11-06 · v3.0 (MAJOR — sequence 2.1 bỏ `Location`; 2.14 trả 204 — xem `CHANGELOG.md`) |
 
 ## 1. Tổng quan luồng
 
@@ -59,7 +59,7 @@ sequenceDiagram
             end
         else
             AS->>JW: issue tokens
-            AC-->>C: 201 + Location
+            AC-->>C: 201
         end
     end
 ```
@@ -133,7 +133,7 @@ Ký hiệu truy vấn: **S** = SELECT, **I** = INSERT, **U** = UPDATE. Loại: D
 | 2.11 | `PATCH /teams/{id}` | *(retry)* S team (TEAM_001) → **DISBANDED (TEAM_016) → INACTIVE (TEAM_015)** → S captain ACTIVE, so `userId` (TEAM_002; đội vừa giải tán → TEAM_016) → áp field → U team (`@Version`) → S `TeamDetailView` (response) | S, S, U, S (đo: `NfsQueryCountTest`) | 4 / W6 ✅ |
 | 2.12 | `POST /teams/{id}/invitations` | *(retry, từ USER-002)* S team kèm `OPTIMISTIC_FORCE_INCREMENT` (TEAM_001) → **DISBANDED (TEAM_016) → INACTIVE (TEAM_015)** → S captain (TEAM_002; đội vừa giải tán → TEAM_016) → S user mời chưa xoá (USER_001) → S tồn tại PENDING/ACTIVE (TEAM_003) → I team_member PENDING (`saveAndFlush`; vi phạm unique → TEAM_003) → U `team.version` lúc commit (lệch version → retry, hết retry → TEAM_014) | S, S, S, S, I, U (đo: `NfsWriteQueryCountTest`) | 6 / W6 ✅ (bằng ngưỡng) |
 | 2.13 | `POST /invitations/{id}/accept` | *(retry)* S team_member theo id (TEAM_004) → `userId` ≠ caller (TEAM_005) → S team → **DISBANDED (TEAM_016) → INACTIVE (TEAM_015)** → member.status ≠ PENDING (TEAM_006) → U status=ACTIVE, `joined_at=now` (`@Version`) → S `MemberView` (response) | S, S, U, S | 4 / W6 ✅ |
-| 2.14 | `POST /invitations/{id}/reject` | *(retry)* S team_member theo id (TEAM_004) → `userId` ≠ caller (TEAM_005) → S team → **DISBANDED (TEAM_016) → INACTIVE (TEAM_015)** → member.status ≠ PENDING (TEAM_006) → U status=REJECTED → response dùng tên đội từ team đã nạp (không SELECT thêm) | S, S, U (đo: `NfsQueryCountTest`) | 3 / W6 ✅ |
+| 2.14 | `POST /invitations/{id}/reject` | *(retry)* S team_member theo id (TEAM_004) → `userId` ≠ caller (TEAM_005) → S team → **DISBANDED (TEAM_016) → INACTIVE (TEAM_015)** → member.status ≠ PENDING (TEAM_006) → U status=REJECTED → 204 không body | S, S, U (đo: `NfsQueryCountTest`) | 3 / W6 ✅ |
 | 2.15 | `POST /teams/{id}/captain/transfer` | Xem §2.3 · **sau S team: DISBANDED (TEAM_016) → INACTIVE (TEAM_015)** · captain/member mới không thấy vì đội vừa giải tán → đọc lại trạng thái → TEAM_016 (USER-002) | S, S, S, U, U, I | 6 / W6 ✅ (bằng ngưỡng) |
 | 2.16 | `GET /teams/{id}/captain/history` | S tồn tại team (TEAM_001) → S trang history (LEFT JOIN user from/to, che tên đã xoá) → S COUNT | S, S, S | 3 / L4 ✅ |
 | 2.17 | `GET /teams/{id}/members` | S tồn tại team (TEAM_001) → S trang member ACTIVE JOIN user → S COUNT | S, S, S | 3 / L4 ✅ |

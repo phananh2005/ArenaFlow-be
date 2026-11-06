@@ -11,6 +11,7 @@ import com.phananh.arenaflow.application.service.AuthResult;
 import com.phananh.arenaflow.application.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,16 +19,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.net.URI;
-
 /** Public (SecurityConfig permitAll `/api/v1/auth/**`). */
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 @Validated
 public class AuthController {
-
-    private static final URI PROFILE_LOCATION = URI.create("/api/v1/profile");
 
     private final AuthService authService;
 
@@ -51,9 +48,9 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.of(authService.refresh(request)));
     }
 
-    /** Tạo mới → 201 + Location hồ sơ; đã có → 200. */
+    /** Tạo mới → 201 (không `Location`, `api-convention.md` §5); đã có → 200. */
     private static ResponseEntity<ApiResponse<AuthResponse>> toResponse(AuthResult result) {
         ApiResponse<AuthResponse> body = ApiResponse.of(result.body());
-        return result.isNewUser() ? ResponseEntity.created(PROFILE_LOCATION).body(body) : ResponseEntity.ok(body);
+        return result.isNewUser() ? ResponseEntity.status(HttpStatus.CREATED).body(body) : ResponseEntity.ok(body);
     }
 }

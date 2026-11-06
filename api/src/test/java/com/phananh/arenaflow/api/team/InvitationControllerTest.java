@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -39,7 +40,7 @@ class InvitationControllerTest extends ApiIntegrationTest {
     }
 
     @Test
-    void rejectAndUnknownInvitation() throws Exception {
+    void rejectReturns204AndUnknownInvitation404() throws Exception {
         User captain = saveUser("Captain Rej");
         User invitee = saveUser("Invitee Rej");
         Team team = saveTeam("Team Rej", captain);
@@ -47,9 +48,8 @@ class InvitationControllerTest extends ApiIntegrationTest {
         flush();
 
         mockMvc.perform(as(invitee, post("/api/v1/invitations/" + invitation.getId() + "/reject")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("REJECTED"))
-                .andExpect(jsonPath("$.data.teamName").value("Team Rej"));
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
         mockMvc.perform(as(invitee, post("/api/v1/invitations/" + UUID.randomUUID() + "/reject")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("TEAM_004"));

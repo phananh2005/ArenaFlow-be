@@ -81,16 +81,14 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
         });
     }
 
-    /** (retry) guard như acceptInvitation → U REJECTED; tên đội lấy từ team đã đọc. */
+    /** (retry) guard như acceptInvitation → U REJECTED; không trả body (204, N1 — `api-convention.md` §5). */
     @Override
-    public InvitationResponse rejectInvitation(UUID invitationId, UUID userId) {
-        return optimisticLockRetrier.execute(() -> {
-            TeamMember invitation = teamMemberRepository.findById(invitationId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_004));
-            Team team = guardInvitation(invitation, userId);
+    public void rejectInvitation(UUID invitationId, UUID userId) {
+        optimisticLockRetrier.execute(() -> {
+            TeamMember invitation = pendingInvitationOf(invitationId, userId);
             invitation.setStatus(TeamMember.Status.REJECTED);
             teamMemberRepository.saveAndFlush(invitation);
-            return membershipMapper.toInvitation(invitation, team.getName());
+            return null;
         });
     }
 
@@ -120,21 +118,17 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
         });
     }
 
+    /** S member (TEAM_004) → người được mời (TEAM_005) → S team (TEAM_016/015) → còn PENDING (TEAM_006). */
     private TeamMember pendingInvitationOf(UUID invitationId, UUID userId) {
         TeamMember invitation = teamMemberRepository.findById(invitationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_004));
-        guardInvitation(invitation, userId);
-        return invitation;
-    }
-
-    private Team guardInvitation(TeamMember invitation, UUID userId) {
         if (!invitation.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.TEAM_005);
         }
-        Team team = teamGuard.activeTeam(invitation.getTeamId());
+        teamGuard.activeTeam(invitation.getTeamId());
         if (invitation.getStatus() != TeamMember.Status.PENDING) {
             throw new BusinessException(ErrorCode.TEAM_006);
         }
-        return team;
+        return invitation;
     }
 }
