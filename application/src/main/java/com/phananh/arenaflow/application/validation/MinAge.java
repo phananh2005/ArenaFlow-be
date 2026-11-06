@@ -9,7 +9,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/** Ngày sinh phải đủ {@code value} tuổi tính đến hôm nay (BR-U04); null = hợp lệ. */
+/** Ngày sinh phải đủ {@code value} tuổi tính đến hôm nay; null = hợp lệ. */
 @Documented
 @Constraint(validatedBy = MinAgeValidator.class)
 @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.RECORD_COMPONENT})

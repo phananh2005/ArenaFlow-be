@@ -16,7 +16,7 @@ import java.util.UUID;
 
 public interface TeamRepository extends JpaRepository<Team, UUID> {
 
-    /** Đọc đội để mời thành viên; {@code version} tăng lúc commit để tuần tự hoá với disband/invite (race M1, ADR-0003). */
+    /** Đọc đội để mời thành viên; {@code version} tăng lúc commit để tuần tự hoá với disband/invite. */
     @Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)
     @Query("SELECT t FROM Team t WHERE t.id = :id")
     Optional<Team> findForInviteById(@Param("id") UUID id);
@@ -28,6 +28,11 @@ public interface TeamRepository extends JpaRepository<Team, UUID> {
     @Query(value = "SELECT status FROM team WHERE id = :id", nativeQuery = true)
     Optional<String> findCurrentStatusById(@Param("id") UUID id);
 
+    /**
+     * Chi tiết đội trong một câu: captain ACTIVE (LEFT JOIN — null khi đội không còn captain, vd đã giải tán), người
+     * giải tán, cờ user đã xoá của cả hai (để che tên) và memberCount đếm thành viên ACTIVE. Không lọc theo trạng thái
+     * đội.
+     */
     @Query(value = """
             SELECT t.id AS teamId, t.name AS teamName, t.avatar_url AS avatarUrl, t.description AS description,
                    t.skill_levels AS skillLevels, t.status AS status, t.inactive_reason AS inactiveReason,

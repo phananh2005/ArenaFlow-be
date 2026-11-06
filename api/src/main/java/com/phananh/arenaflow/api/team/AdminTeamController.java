@@ -53,7 +53,6 @@ public class AdminTeamController {
         return ResponseEntity.ok(adminTeamService.listTeams(status, page, pageSize));
     }
 
-    /** Lịch sử thành viên ACTIVE/LEFT của đội ở mọi trạng thái; sort cố định joined_at, id (USER-002 API_Spec §2.4). */
     @GetMapping("/{teamId}/members")
     public ResponseEntity<PageResponse<MemberHistoryResponse>> listMemberHistory(
             @PathVariable UUID teamId,

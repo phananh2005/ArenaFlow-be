@@ -15,6 +15,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByIdAndDeletedAtIsNull(UUID id);
 
+    /**
+     * Hồ sơ + phường/xã + tỉnh trong một câu; user đã xoá mềm → empty. Không có ward → các field ward/province null.
+     */
     @Query(value = """
             SELECT u.id AS userId, u.role AS role, u.phone_number AS phoneNumber,
                    u.display_name AS displayName, u.avatar_url AS avatarUrl, u.bio AS bio,

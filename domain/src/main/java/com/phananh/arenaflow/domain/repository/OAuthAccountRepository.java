@@ -12,10 +12,15 @@ import java.util.UUID;
 
 public interface OAuthAccountRepository extends JpaRepository<OAuthAccount, UUID> {
 
+    /** Bọc {@link #findAuthViewByProviderName}: cột provider lưu tên enum (chữ thường: google/facebook/phone). */
     default Optional<UserAuthView> findAuthView(OAuthAccount.Provider provider, String providerUserId) {
         return findAuthViewByProviderName(provider.name(), providerUserId);
     }
 
+    /**
+     * Một câu join user cho luồng đăng nhập. KHÔNG lọc user đã xoá: trả cờ {@code deleted} để caller báo AUTH_003 thay
+     * vì coi như chưa đăng ký và tạo tài khoản mới.
+     */
     @Query(value = """
             SELECT u.id AS userId, u.role AS role, (u.deleted_at IS NOT NULL) AS deleted
             FROM oauth_account a

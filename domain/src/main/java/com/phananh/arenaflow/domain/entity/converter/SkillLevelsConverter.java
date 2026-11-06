@@ -14,6 +14,10 @@ public class SkillLevelsConverter implements AttributeConverter<List<String>, St
     private static final JsonMapper JSON_MAPPER = JsonMapper.builder().build();
     private static final TypeReference<List<String>> SKILL_LEVELS_TYPE = new TypeReference<>() {};
 
+    /**
+     * null → {@code "[]"}: cột skill_levels luôn là mảng JSON, không lưu null. Lỗi serialize →
+     * IllegalArgumentException.
+     */
     @Override
     public String convertToDatabaseColumn(List<String> attribute) {
         try {
@@ -23,6 +27,10 @@ public class SkillLevelsConverter implements AttributeConverter<List<String>, St
         }
     }
 
+    /**
+     * null/chuỗi trắng → list rỗng (không null). Dùng được ngoài JPA để đọc JSON thô từ projection native.
+     * JSON hỏng → IllegalArgumentException.
+     */
     @Override
     public List<String> convertToEntityAttribute(String databaseValue) {
         if (databaseValue == null || databaseValue.isBlank()) {

@@ -70,6 +70,7 @@ public class SecurityConfig {
         return request -> publicAuth.matches(request) ? null : delegate.resolve(request);
     }
 
+    /** Decoder HS256 dùng secret ứng dụng và chỉ chấp nhận access token theo validator bổ sung. */
     @Bean
     public JwtDecoder jwtDecoder(JwtProperties properties) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder
@@ -81,6 +82,7 @@ public class SecurityConfig {
         return decoder;
     }
 
+    /** Ánh xạ claim {@code roles} thành authorities có tiền tố {@code ROLE_} để dùng với {@code hasRole}. */
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter authorities = new JwtGrantedAuthoritiesConverter();

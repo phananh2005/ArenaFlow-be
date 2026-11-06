@@ -42,14 +42,17 @@ public class JwtTokenService {
         this.refreshTokenTtl = refreshTokenTtl;
     }
 
+    /** Tạo access token HS256 với claim typ=access và role của user. */
     public String issueAccessToken(UUID userId, User.Role role) {
         return issueToken(userId, "access", List.of(role.name()), accessTokenTtl);
     }
 
+    /** Tạo refresh token HS256 với claim typ=refresh và {@code roles} rỗng (role đọc lại từ DB khi refresh). */
     public String issueRefreshToken(UUID userId) {
         return issueToken(userId, "refresh", List.of(), refreshTokenTtl);
     }
 
+    /** Xác minh chữ ký, type, expiry và subject UUID; token sai/hết hạn → AUTH_002. */
     public UUID parseRefreshToken(String token) {
         try {
             SignedJWT signedJwt = SignedJWT.parse(token);

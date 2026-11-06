@@ -43,6 +43,10 @@ public class ProfileServiceImpl implements ProfileService {
         return toResponse(userId);
     }
 
+    /**
+     * Cập nhật từng phần: field null giữ nguyên (không xoá được field về null), displayName được trim. User không tồn
+     * tại hoặc đã xoá → USER_001; wardId không phải phường/xã → USER_002.
+     */
     @Override
     @Transactional
     public ProfileResponse updateProfile(UUID userId, ProfileUpdateRequest request) {
@@ -57,8 +61,8 @@ public class ProfileServiceImpl implements ProfileService {
     }
 
     /**
-     * Xoá mềm tài khoản (ADR-0002) với quy tắc captain phải chuyển quyền/giải tán trước (ADR-0005).
-     * <p>Khoá bi quan có phạm vi (ADR-0007), trong một transaction:
+     * Xoá mềm tài khoản; captain ACTIVE phải chuyển quyền hoặc giải tán đội trước.
+     * <p>Khoá bi quan chỉ trên membership của user, trong một transaction:
      * <ol>
      *   <li>Q1 khoá mọi membership ACTIVE/PENDING của user ({@code PESSIMISTIC_WRITE}, theo id) — thao tác song song trên các
      *       row này (accept, transfer cho/khỏi user…) phải chờ tới khi transaction kết thúc.</li>
@@ -66,7 +70,7 @@ public class ProfileServiceImpl implements ProfileService {
      *   <li>Q2 một bulk UPDATE: MEMBER ACTIVE → LEFT, PENDING → REJECTED.</li>
      *   <li>Q3 soft delete user.</li>
      * </ol>
-     * 3 truy vấn (W6). Không đổi trạng thái đội. Gọi lại khi đã xoá: không lỗi (idempotent).
+     * 3 truy vấn. Không đổi trạng thái đội. Gọi lại khi đã xoá: không lỗi (idempotent).
      */
     @Override
     public void deleteAccount(UUID userId) {
@@ -87,6 +91,7 @@ public class ProfileServiceImpl implements ProfileService {
         return membership.getStatus() == TeamMember.Status.ACTIVE && membership.getRole() == TeamMember.Role.CAPTAIN;
     }
 
+    /** Đọc profile projection và danh sách provider; không tìm thấy user chưa xoá → USER_001. */
     private ProfileResponse toResponse(UUID userId) {
         ProfileView view = userRepository.findProfileViewById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_001));
