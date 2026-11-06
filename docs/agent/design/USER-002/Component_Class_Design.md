@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` · kiến trúc hiện hành theo USER-001 |
 | Ràng buộc dữ liệu | USER-001 schema V1/V2/V3; delta USER-002 dưới đây cần migration Flyway |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · đường dẫn package theo Maven multi-module (ADR-0006), không đổi nội dung thiết kế · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) · developer · 2026-11-06 · v1.2 (`deleteAccount` khoá bi quan có phạm vi — ADR-0007) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · developer · 2026-11-05 · đường dẫn package theo Maven multi-module (ADR-0006), không đổi nội dung thiết kế · developer · 2026-11-05 · v1.1 (đồng bộ với code sau implement: `TeamGuard#disbandedOr`, vị trí `inviteMember`/`leaveTeam` — xem `CHANGELOG.md`) · developer · 2026-11-06 · v1.2 (`deleteAccount` khoá bi quan có phạm vi — ADR-0007) · developer · 2026-11-06 · v1.3 (§10 cập nhật trạng thái đồng bộ ADR-0002/0003 sau PR #19) |
 
 ## 1. Tổng quan kiến trúc
 
@@ -163,5 +163,5 @@ Cập nhật sau khi mọi phase code xong và test PASS (CLAUDE.md §8), ghi v�
 | `docs/database/data-model.md` · `schema.dbml` · `schema-design.md` | Ngoại lệ tự INACTIVE; CHECK `team.status` chỉ ACTIVE/INACTIVE; thiếu cột disband | `feature/USER-002-*` — ✅ (bảng `team`, `team_member` tới V4) |
 | `docs/agent/CLAUDE.md` §2 | Thêm dòng điều hướng USER-002 | `chore/agent-framework-*` |
 | `docs/agent/api-convention.md` §2.1 | Ngoại lệ endpoint hành động (action sub-resource), qua `workflow-adapt` | `chore/agent-framework-*` |
-| `docs/agent/decisions/0002-*.md` | Khi ADR-0005 `Accepted` → `Superseded (một phần) by ADR-0005` | qua MR |
-| `docs/agent/decisions/0003-*.md` | Hệ quả "không deadlock" chưa tính trường hợp nhiều dòng `team_member` bị khoá theo thứ tự khác nhau (`Processing_Flow.md` §5); thêm mục Sửa đổi + liên kết USER-002/ADR-0005 ở "Liên quan" | qua MR |
+| `docs/agent/decisions/0002-*.md` | §Quyết định #4 (captain duy nhất xoá tài khoản → đội tự `INACTIVE`) thay bởi ADR-0005 | ✅ PR #19 — giữ `Accepted` + hàng/mục `Sửa đổi 2026-11-06`, không chuyển `Superseded` (thay một phần §Quyết định #4; `decisions/README.md` không có hàng cho thay thế một phần nên PR #19 dùng `Sửa đổi`) |
+| `docs/agent/decisions/0003-*.md` | Hệ quả "không deadlock" chưa tính trường hợp nhiều dòng `team_member` bị khoá theo thứ tự khác nhau (`Processing_Flow.md` §5); thêm mục Sửa đổi + liên kết USER-002/ADR-0005 ở "Liên quan" | Một phần — PR #19 đã thêm `Sửa đổi 2026-11-06` + liên kết ADR-0007. Còn: ghi chú deadlock khi khoá nhiều dòng (rủi ro đã ghi ở ADR-0007 Hệ quả — ADR-0003 chỉ cần trỏ tới) và liên kết USER-002/ADR-0005 — thêm qua mục `Sửa đổi` (không viết lại Hệ quả), qua MR |
