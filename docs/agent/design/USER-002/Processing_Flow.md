@@ -7,11 +7,11 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6), ADR-0003 optimistic retry, ADR-0007 (ngoại lệ khoá bi quan cho `deleteAccount`) |
 | Ràng buộc dữ liệu | USER-001 V1/V2/V3 + delta `Component_Class_Design.md` §5 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.4** (developer · 2026-11-06) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.5** (developer · 2026-11-06) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
-Các luồng ghi dùng `OptimisticLockRetrier` hiện hữu: mỗi lần thử là transaction mới, tối đa 3 lần thử; retry lại toàn bộ lần thử khi optimistic conflict, hết retry → `TEAM_014`. Transaction theo READ_COMMITTED. Không gọi service ngoài, không notification. Thứ tự guard theo từng endpoint: xem `API_Spec.md` §2.1a (nguồn duy nhất).
+Các luồng ghi dùng `OptimisticLockRetrier` hiện hữu (quy tắc retry: USER-001 `Processing_Flow.md` §5). Transaction theo READ_COMMITTED. Không gọi service ngoài, không notification. Thứ tự guard theo từng endpoint: xem `API_Spec.md` §2.1a (nguồn duy nhất).
 
 ## 2. Sequence — giải tán đội
 
@@ -76,7 +76,7 @@ Số query là mức dự kiến một lần thử; JWT xác thực không truy 
 
 **Khoá bi quan có phạm vi (v1.2, ADR-0007 — ngoại lệ của ADR-0003).** Lý do: các bước ghi là bulk UPDATE (chỉ tăng, không kiểm `version`), nên `@Version` không bảo vệ chính luồng này; bản v1.1 (kiểm → ghi có điều kiện → kiểm lại, 5 truy vấn) để hở race delete vs accept của chính user (đã tái hiện bằng test, ADR-0007 Bối cảnh).
 
-- Mỗi lần thử của retrier là một transaction (giữ để có transaction; luồng này không tự sinh optimistic conflict).
+- Mỗi lần thử của retrier là một transaction. Luồng này không tự sinh optimistic conflict, nhưng có thể bị PostgreSQL huỷ do deadlock → retrier thử lại (USER-001 `Processing_Flow.md` §5), lặp lại đủ 3 lần → `TEAM_014`.
 - Q1 `findByUserIdAndStatusInOrderByIdAsc(userId, {ACTIVE, PENDING})` với `PESSIMISTIC_WRITE` (Hibernate 7.2 + PostgreSQL sinh `SELECT … FOR NO KEY UPDATE` — chặn mọi UPDATE khác trên các row này), sắp theo `id`. Khoá giữ tới hết transaction. Không cần lọc `team.status <> 'DISBANDED'` vì bất biến: đội `DISBANDED` không còn row ACTIVE/PENDING nào (BR-T10).
 - Kiểm trên dữ liệu đã khoá: có row `ACTIVE` + `CAPTAIN` → `422 USER_003`, rollback, không ghi gì.
 - Q2 `leaveAndRejectAllOpen(userId, now)`: một bulk `CASE` — MEMBER ACTIVE → LEFT (`left_at = GREATEST(:now, COALESCE(joined_at, invited_at))`), PENDING → REJECTED, `version + 1`; điều kiện `role = 'MEMBER'` cho nhánh ACTIVE giữ làm lớp an toàn (không bao giờ chuyển row CAPTAIN sang LEFT). `now` lấy **sau** Q1.
@@ -109,7 +109,7 @@ Dùng `@Version` Team/TeamMember và retrier USER-001/ADR-0003; cập nhật bul
 
 - Test race và test đếm query cho invite phải chạy **không** `@Transactional` ở mức test (commit thật qua retrier). `NfsQueryCountTest` hiện có `@Transactional` mức class và chỉ `flush` (`NfsQueryCountTest.java:32`); bước tăng version của `OPTIMISTIC_FORCE_INCREMENT` chạy trước khi commit, không chạy khi flush, nên harness hiện tại sẽ đo thiếu. [Inference: theo hành vi Hibernate, test sẽ kiểm chứng.]
 - Conflict của `OPTIMISTIC_FORCE_INCREMENT` nổi lên lúc commit (ngoài lambda). Retrier phải nhận được `ObjectOptimisticLockingFailureException` ở đó để retry. [Unverified: Spring dịch lỗi commit sang `ObjectOptimisticLockingFailureException`; test M1 kiểm chứng, sai → dừng, báo.]
-- Giả định không deadlock R2: `transferCaptain` flush captain cũ trước captain mới (thứ tự nạp entity; `hibernate.order_updates` chưa bật), cùng thứ tự khoá với disband (captain cũ ở Q3 → các row khác ở Q5). Nếu đảo thứ tự có thể deadlock `40P01` → không được retry → 500. Test R2 kiểm chứng; phát hiện deadlock → dừng, báo. [Inference]
+- Giả định không deadlock R2: `transferCaptain` flush captain cũ trước captain mới, cùng thứ tự khoá với disband (captain cũ ở Q3 → các row khác ở Q5). [Inference] Thứ tự flush theo thứ tự nạp entity (`hibernate.order_updates` chưa bật). Đảo thứ tự → deadlock `40P01` (đã kiểm bằng mutation flush captain mới trước, 2026-11-06) → bên bị huỷ được retrier thử lại (USER-001 `Processing_Flow.md` §5); lặp lại đủ 3 lần → `TEAM_014`. Vì retrier che deadlock (kết quả nghiệp vụ vẫn hợp lệ), test R2 assert output **không** chứa `40P01` → đảo thứ tự khoá làm R2 fail (cùng mutation trên).
 - `spring.jpa.open-in-view` chưa cấu hình nên mặc định bật: trong một request HTTP, mọi lần thử của retrier dùng chung một `EntityManager` gắn theo request (Spring `clear()` khi rollback). Hành vi có từ USER-001. Ngoài test race ở tầng service, thêm **1 test double-submit disband qua MockMvc** để kiểm chứng retry vẫn trả `TEAM_016` trên đường HTTP thật. [Inference]
 
 ## 6. Idempotency
@@ -125,7 +125,7 @@ Dùng `@Version` Team/TeamMember và retrier USER-001/ADR-0003; cập nhật bul
 | Caller không phải captain ACTIVE | 403 `TEAM_002` |
 | Team đã disbanded / mutation bị chặn | 422 `TEAM_016` |
 | Captain xoá tài khoản khi còn team chưa disbanded | 422 `USER_003` (phạm vi mở rộng) |
-| Hết retry optimistic conflict | 409 `TEAM_014` |
+| Hết retry (optimistic conflict hoặc deadlock — USER-001 `Processing_Flow.md` §5) | 409 `TEAM_014` |
 
 ## 8. Performance / index
 

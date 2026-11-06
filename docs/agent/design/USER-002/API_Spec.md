@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · PostgreSQL (Neon) · Flyway |
 | Quy ước áp dụng | `docs/agent/api-convention.md`, `docs/agent/security-backend.md` |
 | Ràng buộc dữ liệu | USER-001 schema V1/V2/V3; delta được mô tả tại `Component_Class_Design.md` §5 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.4** (developer · 2026-11-06) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.5** (developer · 2026-11-06) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -131,7 +131,7 @@ Quy tắc của [ADR-0005](../../decisions/0005-captain-must-hand-over-before-ac
 | Thao tác ghi bất kỳ trên đội đã giải tán; giải tán lần nữa; admin lock/reactivate | 422 | **Mới** `TEAM_016` — “Đội đã giải tán”. Một mã dùng chung cho mọi thao tác, kể cả kích hoạt lại; nhất quán quy ước 422 của `TEAM_015` |
 | Xoá tài khoản khi caller còn captain đội chưa giải tán | 422 | **Sửa** `USER_003` — “Bạn phải chuyển quyền đội trưởng hoặc giải tán đội trước khi xóa tài khoản”; điều kiện mở rộng theo §2.5 |
 | Request reason vượt 100 ký tự | 400 | `VALIDATION_ERROR` theo convention |
-| Xung đột optimistic lock hết retry | 409 | `TEAM_014` (tái dùng USER-001) |
+| Xung đột optimistic lock hoặc deadlock hết retry | 409 | `TEAM_014` (tái dùng USER-001) |
 
 Đã soát registry `ErrorCode` hiện hành: `TEAM_001`…`TEAM_015`, `USER_001`…`USER_003`; `TEAM_016` chưa dùng.
 

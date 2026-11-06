@@ -1,5 +1,24 @@
 # CHANGELOG — USER-002 Giải tán đội & quy tắc xoá tài khoản đội trưởng
 
+## [v1.5] — 2026-11-06
+
+**Type:** MINOR (không đổi endpoint, DTO hay mã lỗi) · **Tóm tắt:** Đồng bộ với USER-001 v3.4 — retrier thử lại cả deadlock (`40P01`), hết lượt → `TEAM_014` thay vì 500.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `Processing_Flow.md` §1 (tổng quan retrier) | Sửa | mô tả quy tắc retry (chỉ optimistic conflict) → trỏ USER-001 `Processing_Flow.md` §5 | Một nguồn cho quy tắc retry (design-standards §8) |
+| 2 | `Processing_Flow.md` §5 (giả định không deadlock R2) | Sửa | "deadlock `40P01` → không được retry → 500" → "bên bị huỷ được retrier thử lại; lặp lại đủ 3 lần → `TEAM_014`"; "Test R2 … phát hiện deadlock → dừng, báo" → test R2 fail khi output có `40P01` (retrier che deadlock, log là tín hiệu duy nhất) | USER-001 v3.4 #1; giữ khả năng phát hiện đảo thứ tự khoá |
+| 3 | Header `API_Spec.md`, `Processing_Flow.md`, `Component_Class_Design.md` | Ghi nhận | v1.4 → v1.5 | design-standards §10 |
+| 4 | `Processing_Flow.md` §4.2 (`deleteAccount`) | Sửa | "luồng này không tự sinh optimistic conflict" → thêm: có thể bị huỷ do deadlock → retrier thử lại, hết lượt `TEAM_014` | USER-001 v3.4 #1 |
+| 5 | `Processing_Flow.md` §7 (bảng lỗi) | Sửa | "Hết retry optimistic conflict" → "Hết retry (optimistic conflict hoặc deadlock)" | Như #4 |
+| 6 | `API_Spec.md` §4 (bảng lỗi) | Sửa | "Xung đột optimistic lock hết retry" → "… hoặc deadlock hết retry" | Như #4 |
+
+### Ảnh hưởng
+- Disband/transfer/xoá tài khoản gặp deadlock: 500 → tự thử lại, hết lượt `409 TEAM_014` (đã khai báo: USER-002 §2.1, USER-001 §2.7/§2.15). Contract, DB, nghiệp vụ, SRS: không đổi.
+- Kiểm chứng: `TeamDisbandRaceTest` R2 assert không có `40P01` (mutation đảo thứ tự flush → R2 fail).
+
 ## [v1.4] — 2026-11-06
 
 **Type:** MINOR (chỉ cập nhật bảng đồng bộ tài liệu; không đổi endpoint, DTO, mã lỗi, luồng) · **Tóm tắt:** ADR-0003 đã có mục `Sửa đổi` về phạm vi "không deadlock" và liên kết USER-002/ADR-0005 (PR #34) — đánh dấu hoàn tất ở CCD §10; ghi rõ 2 hàng §10 còn chưa làm; header chỉ giữ baseline + phiên bản hiện tại.

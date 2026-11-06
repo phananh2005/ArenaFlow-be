@@ -6,7 +6,7 @@
 | **Ngày** | 2026-11-06 |
 | **Người quyết định** | Product Owner (chốt hướng khoá bi quan cho `deleteAccount`, 2026-11-06) · solution-architect (đề xuất cách thực hiện) |
 | **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) (đây là ngoại lệ có phạm vi, không thay thế) · [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) · `docs/agent/design/USER-002/Processing_Flow.md` §4.2, §5 |
-| **Sửa đổi** | 2026-11-06 — việc "thêm `Sửa đổi` vào ADR-0003" ở §Cần theo dõi đã xong |
+| **Sửa đổi** | 2026-11-06 — việc "thêm `Sửa đổi` vào ADR-0003" ở §Cần theo dõi đã xong · 2026-11-06 — retrier thử lại deadlock (`40P01`) |
 
 ## Bối cảnh (Context)
 
@@ -64,3 +64,8 @@ Tổng 3 truy vấn (W6 ✅). Luồng transfer/accept/leave/disband không đổ
 
 - §Cần theo dõi "Khi ADR này `Accepted`: thêm hàng `Sửa đổi` + mục `## Sửa đổi` vào ADR-0003" đã xong: ADR-0003 có mục `Sửa đổi 2026-11-06 — Ngoại lệ có phạm vi cho xoá tài khoản (ADR-0007)` và mục `Sửa đổi 2026-11-06 — Phạm vi của "không deadlock"` (trỏ §Hệ quả của ADR này).
 - Các mục khác của §Cần theo dõi vẫn hiệu lực.
+
+## Sửa đổi 2026-11-06 — Retrier thử lại deadlock
+
+- §Hệ quả "Deadlock vẫn có thể xảy ra … → **500 ở endpoint của bên bị huỷ** … vì retrier chỉ bắt `ObjectOptimisticLockingFailureException`" và §Cần theo dõi "… cho retrier bắt `PessimisticLockingFailureException`": đã làm có giới hạn — retrier chỉ thử lại khi SQLState là `40P01` (deadlock); bên bị huỷ ở `DELETE /profile`, transfer hoặc disband nay được thử lại, lặp lại đủ 3 lần → `409 TEAM_014` thay vì 500. Xem ADR-0003 mục `Sửa đổi 2026-11-06 — Retrier thử lại cả deadlock`.
+- Tín hiệu theo dõi "log có `40P01`": nay là log `WARN` của retrier ("Deadlock (SQLState 40P01) on attempt n/3"), không còn ERROR/500. Phần còn lại của mục đó (cân nhắc `lock_timeout`, xem lại thứ tự khoá khi tín hiệu này xuất hiện) vẫn hiệu lực.
