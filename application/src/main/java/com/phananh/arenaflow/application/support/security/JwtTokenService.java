@@ -52,7 +52,7 @@ public class JwtTokenService {
         return issueToken(userId, "refresh", List.of(), refreshTokenTtl);
     }
 
-    /** Xác minh chữ ký, type, expiry và subject UUID; token sai/hết hạn → AUTH_002. */
+    /** Xác minh chữ ký, type, expiry và subject UUID; token sai/hết hạn/thiếu subject → AUTH_002. */
     public UUID parseRefreshToken(String token) {
         try {
             SignedJWT signedJwt = SignedJWT.parse(token);
@@ -62,7 +62,8 @@ public class JwtTokenService {
             JWTClaimsSet claims = signedJwt.getJWTClaimsSet();
             if (!"refresh".equals(claims.getStringClaim("typ"))
                     || claims.getExpirationTime() == null
-                    || !claims.getExpirationTime().toInstant().isAfter(Instant.now())) {
+                    || !claims.getExpirationTime().toInstant().isAfter(Instant.now())
+                    || claims.getSubject() == null) {
                 throw new ParseException("Invalid refresh token", 0);
             }
             return UUID.fromString(claims.getSubject());
