@@ -224,7 +224,7 @@ class TeamControllerTest extends ApiIntegrationTest {
      * chi tiết và lịch sử captain vẫn xem được.
      */
     @Test
-    void disbandedTeamMeetsAcceptanceCriteriaEndToEnd() throws Exception {
+    void disbandedTeamBlocksWritesButStaysReadableEndToEnd() throws Exception {
         User captain = saveUser("AC Captain");
         User member = saveUser("AC Member");
         User invitee = saveUser("AC Invitee");
