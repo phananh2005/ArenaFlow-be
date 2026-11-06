@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Trạng thái** | Proposed |
+| **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-06 |
 | **Người quyết định** | Chủ repo (chốt backlog 2026-11-06) · developer (đề xuất cách thực hiện) |
 | **Liên quan** | `docs/database/schema-design.md` (ID: UUID v7 sinh ở Java) · `docs/agent/convention-backend.md` (ví dụ entity) · `docs/agent/design/USER-001/API_Spec.md` §1 |
