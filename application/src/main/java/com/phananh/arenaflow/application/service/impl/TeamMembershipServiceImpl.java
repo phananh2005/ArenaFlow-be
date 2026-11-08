@@ -54,12 +54,14 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
             if (teamMemberRepository.existsByTeamIdAndUserIdAndStatusIn(teamId, request.userId(), OPEN_MEMBERSHIP)) {
                 throw new BusinessException(ErrorCode.TEAM_003);
             }
-            TeamMember invitation = new TeamMember();
-            invitation.setTeamId(teamId);
-            invitation.setUserId(request.userId());
-            invitation.setRole(TeamMember.Role.MEMBER);
-            invitation.setStatus(TeamMember.Status.PENDING);
+            TeamMember invitation = TeamMember.builder()
+                    .teamId(teamId)
+                    .userId(request.userId())
+                    .role(TeamMember.Role.MEMBER)
+                    .status(TeamMember.Status.PENDING)
+                    .build();
             try {
+                // Flush ngay để bắt vi phạm unique trong try (mời trùng song song) thay vì lúc commit.
                 return membershipMapper.toInvitation(teamMemberRepository.saveAndFlush(invitation), team.getName());
             } catch (DataIntegrityViolationException concurrentInvite) {
                 // Unique (team_id, user_id) WHERE status IN ('PENDING','ACTIVE') — mời trùng song song.
@@ -75,7 +77,8 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
             TeamMember invitation = pendingInvitationOf(invitationId, userId);
             invitation.setStatus(TeamMember.Status.ACTIVE);
             invitation.setJoinedAt(OffsetDateTime.now());
-            teamMemberRepository.saveAndFlush(invitation);
+            teamMemberRepository.save(invitation);
+            // Hibernate tự flush thay đổi trên trước native query đọc lại response.
             return teamMemberRepository.findMemberViewById(invitationId).map(membershipMapper::toMember)
                     .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_004));
         });
@@ -87,7 +90,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
         concurrencyConflictRetrier.execute(() -> {
             TeamMember invitation = pendingInvitationOf(invitationId, userId);
             invitation.setStatus(TeamMember.Status.REJECTED);
-            teamMemberRepository.saveAndFlush(invitation);
+            teamMemberRepository.save(invitation);
             return null;
         });
     }
@@ -114,7 +117,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
             }
             member.setStatus(TeamMember.Status.LEFT);
             member.setLeftAt(OffsetDateTime.now());
-            teamMemberRepository.saveAndFlush(member);
+            teamMemberRepository.save(member);
             return null;
         });
     }

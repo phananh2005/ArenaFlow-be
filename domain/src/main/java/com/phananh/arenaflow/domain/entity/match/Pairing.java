@@ -1,6 +1,12 @@
 package com.phananh.arenaflow.domain.entity.match;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.OffsetDateTime;
@@ -11,6 +17,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "pairing")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
 public class Pairing {
 
     @Id
@@ -38,73 +49,12 @@ public class Pairing {
     private OffsetDateTime finalConfirmedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
+    @Setter(AccessLevel.NONE)
     private OffsetDateTime createdAt;
 
     @PrePersist
     protected void onCreate() {
         createdAt = OffsetDateTime.now();
-    }
-
-    // Getters and Setters
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public UUID getMatchId() {
-        return matchId;
-    }
-
-    public void setMatchId(UUID matchId) {
-        this.matchId = matchId;
-    }
-
-    public UUID getInterestedTeamId() {
-        return interestedTeamId;
-    }
-
-    public void setInterestedTeamId(UUID interestedTeamId) {
-        this.interestedTeamId = interestedTeamId;
-    }
-
-    public Status getStatus() {
-        return status;
-    }
-
-    public void setStatus(Status status) {
-        this.status = status;
-    }
-
-    public OffsetDateTime getAuthorConfirmedAt() {
-        return authorConfirmedAt;
-    }
-
-    public void setAuthorConfirmedAt(OffsetDateTime authorConfirmedAt) {
-        this.authorConfirmedAt = authorConfirmedAt;
-    }
-
-    public OffsetDateTime getInterestedConfirmedAt() {
-        return interestedConfirmedAt;
-    }
-
-    public void setInterestedConfirmedAt(OffsetDateTime interestedConfirmedAt) {
-        this.interestedConfirmedAt = interestedConfirmedAt;
-    }
-
-    public OffsetDateTime getFinalConfirmedAt() {
-        return finalConfirmedAt;
-    }
-
-    public void setFinalConfirmedAt(OffsetDateTime finalConfirmedAt) {
-        this.finalConfirmedAt = finalConfirmedAt;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
     }
 
     public enum Status {

@@ -23,17 +23,20 @@ class MemberViewByIdRepositoryTest extends RepositoryIntegrationTest {
     @Test
     void findsMemberViewByIdInOneQuery() {
         User user = userRepository.save(newUser("Joined", null));
-        Team team = new Team();
-        team.setName("View");
-        team.setCreatedBy(user.getId());
+        Team team = Team.builder()
+                .name("View")
+                .createdBy(user.getId())
+                .build();
         teamRepository.save(team);
-        TeamMember member = new TeamMember();
-        member.setTeamId(team.getId());
-        member.setUserId(user.getId());
-        member.setRole(TeamMember.Role.MEMBER);
-        member.setStatus(TeamMember.Status.ACTIVE);
-        member.setInvitedAt(OffsetDateTime.now());
-        member.setJoinedAt(member.getInvitedAt());
+        OffsetDateTime invitedAt = OffsetDateTime.now();
+        TeamMember member = TeamMember.builder()
+                .teamId(team.getId())
+                .userId(user.getId())
+                .role(TeamMember.Role.MEMBER)
+                .status(TeamMember.Status.ACTIVE)
+                .invitedAt(invitedAt)
+                .joinedAt(invitedAt)
+                .build();
         teamMemberRepository.save(member);
         flushAndClear();
         Statistics statistics = resetStatistics();

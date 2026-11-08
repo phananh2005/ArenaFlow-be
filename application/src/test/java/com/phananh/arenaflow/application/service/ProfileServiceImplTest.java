@@ -88,9 +88,10 @@ class ProfileServiceImplTest {
 
     @Test
     void updateProfileAppliesOnlyNonNullFieldsAndReturnsFreshView() {
-        User user = new User();
-        user.setDisplayName("Old");
-        user.setBio("keep me");
+        User user = User.builder()
+                .displayName("Old")
+                .bio("keep me")
+                .build();
         UUID wardId = UUID.randomUUID();
         when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(user));
         when(administrativeUnitRepository.findWardWithProvince(wardId))
@@ -108,7 +109,7 @@ class ProfileServiceImplTest {
         assertThat(user.getGender()).isEqualTo("MALE");
         assertThat(user.getWardId()).isEqualTo(wardId);
         assertThat(response.displayName()).isEqualTo("New");
-        verify(userRepository).saveAndFlush(user);
+        verify(userRepository).save(user);
     }
 
     @Test
@@ -117,10 +118,10 @@ class ProfileServiceImplTest {
         ProfileUpdateRequest request = new ProfileUpdateRequest(null, null, null, null, null, null, UUID.randomUUID());
         assertError(() -> service.updateProfile(userId, request), ErrorCode.USER_001);
 
-        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(new User()));
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(User.builder().build()));
         when(administrativeUnitRepository.findWardWithProvince(any())).thenReturn(Optional.empty());
         assertError(() -> service.updateProfile(userId, request), ErrorCode.USER_002);
-        verify(userRepository, never()).saveAndFlush(any());
+        verify(userRepository, never()).save(any());
     }
 
     @Test
@@ -156,9 +157,10 @@ class ProfileServiceImplTest {
     }
 
     private static TeamMember membership(TeamMember.Role role, TeamMember.Status status) {
-        TeamMember member = new TeamMember();
-        member.setRole(role);
-        member.setStatus(status);
+        TeamMember member = TeamMember.builder()
+                .role(role)
+                .status(status)
+                .build();
         return member;
     }
 }

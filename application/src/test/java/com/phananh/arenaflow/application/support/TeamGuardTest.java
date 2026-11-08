@@ -27,8 +27,9 @@ class TeamGuardTest {
     private final UUID teamId = UUID.randomUUID();
 
     private Team team(Team.TeamStatus status) {
-        Team team = new Team();
-        team.setStatus(status);
+        Team team = Team.builder()
+                .status(status)
+                .build();
         return team;
     }
 

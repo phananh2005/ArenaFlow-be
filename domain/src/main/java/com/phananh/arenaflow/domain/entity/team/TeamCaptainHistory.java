@@ -1,6 +1,12 @@
 package com.phananh.arenaflow.domain.entity.team;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.OffsetDateTime;
@@ -11,6 +17,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "team_captain_history")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
 public class TeamCaptainHistory {
 
     @Id
@@ -38,55 +49,5 @@ public class TeamCaptainHistory {
         if (transferredAt == null) {
             transferredAt = OffsetDateTime.now();
         }
-    }
-
-    // Getters and Setters
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public UUID getTeamId() {
-        return teamId;
-    }
-
-    public void setTeamId(UUID teamId) {
-        this.teamId = teamId;
-    }
-
-    public UUID getFromUserId() {
-        return fromUserId;
-    }
-
-    public void setFromUserId(UUID fromUserId) {
-        this.fromUserId = fromUserId;
-    }
-
-    public UUID getToUserId() {
-        return toUserId;
-    }
-
-    public void setToUserId(UUID toUserId) {
-        this.toUserId = toUserId;
-    }
-
-    public OffsetDateTime getTransferredAt() {
-        return transferredAt;
-    }
-
-    public void setTransferredAt(OffsetDateTime transferredAt) {
-        this.transferredAt = transferredAt;
-    }
-
-    public String getReason() {
-        return reason;
-    }
-
-    public void setReason(String reason) {
-        this.reason = reason;
     }
 }

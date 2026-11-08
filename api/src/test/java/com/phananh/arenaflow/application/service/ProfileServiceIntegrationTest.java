@@ -97,24 +97,27 @@ class ProfileServiceIntegrationTest {
     }
 
     private User saveUser(String name) {
-        User user = new User();
-        user.setDisplayName(name);
+        User user = User.builder()
+                .displayName(name)
+                .build();
         return userRepository.save(user);
     }
 
     private Team saveTeam(String name, User creator) {
-        Team team = new Team();
-        team.setName(name);
-        team.setCreatedBy(creator.getId());
+        Team team = Team.builder()
+                .name(name)
+                .createdBy(creator.getId())
+                .build();
         return teamRepository.save(team);
     }
 
     private TeamMember saveMember(Team team, User user, TeamMember.Role role, TeamMember.Status status) {
-        TeamMember member = new TeamMember();
-        member.setTeamId(team.getId());
-        member.setUserId(user.getId());
-        member.setRole(role);
-        member.setStatus(status);
+        TeamMember member = TeamMember.builder()
+                .teamId(team.getId())
+                .userId(user.getId())
+                .role(role)
+                .status(status)
+                .build();
         return teamMemberRepository.save(member);
     }
 }

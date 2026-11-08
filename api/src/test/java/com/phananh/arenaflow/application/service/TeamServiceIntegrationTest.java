@@ -49,12 +49,13 @@ class TeamServiceIntegrationTest {
         assertThat(created.captainName()).isEqualTo("Captain IT");
         assertThat(created.memberCount()).isEqualTo(1);
 
-        TeamMember joined = new TeamMember();
-        joined.setTeamId(created.teamId());
-        joined.setUserId(member.getId());
-        joined.setRole(TeamMember.Role.MEMBER);
-        joined.setStatus(TeamMember.Status.ACTIVE);
-        joined.setJoinedAt(OffsetDateTime.now().plusSeconds(1));
+        TeamMember joined = TeamMember.builder()
+                .teamId(created.teamId())
+                .userId(member.getId())
+                .role(TeamMember.Role.MEMBER)
+                .status(TeamMember.Status.ACTIVE)
+                .joinedAt(OffsetDateTime.now().plusSeconds(1))
+                .build();
         teamMemberRepository.save(joined);
         entityManager.flush();
         entityManager.clear();
@@ -74,8 +75,9 @@ class TeamServiceIntegrationTest {
     }
 
     private User saveUser(String name) {
-        User user = new User();
-        user.setDisplayName(name);
+        User user = User.builder()
+                .displayName(name)
+                .build();
         return userRepository.save(user);
     }
 }

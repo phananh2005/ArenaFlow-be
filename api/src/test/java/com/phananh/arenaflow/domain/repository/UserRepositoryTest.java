@@ -103,10 +103,11 @@ class UserRepositoryTest extends RepositoryIntegrationTest {
     @Test
     void findsAuthViewByProviderWithDeletedFlagInOneQuery() {
         User user = userRepository.save(newUser("Oauth User", null));
-        OAuthAccount account = new OAuthAccount();
-        account.setUserId(user.getId());
-        account.setProvider(OAuthAccount.Provider.google);
-        account.setProviderUserId("oauth-" + user.getId() + "@example.com");
+        OAuthAccount account = OAuthAccount.builder()
+                .userId(user.getId())
+                .provider(OAuthAccount.Provider.google)
+                .providerUserId("oauth-" + user.getId() + "@example.com")
+                .build();
         oauthAccountRepository.save(account);
         flushAndClear();
         Statistics statistics = resetStatistics();
@@ -139,9 +140,10 @@ class UserRepositoryTest extends RepositoryIntegrationTest {
     }
 
     static User newUser(String displayName, UUID wardId) {
-        User user = new User();
-        user.setDisplayName(displayName);
-        user.setWardId(wardId);
+        User user = User.builder()
+                .displayName(displayName)
+                .wardId(wardId)
+                .build();
         return user;
     }
 }

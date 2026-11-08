@@ -1,6 +1,12 @@
 package com.phananh.arenaflow.domain.entity.match;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.OffsetDateTime;
@@ -11,6 +17,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "match_time_option")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
 public class MatchTimeOption {
 
     @Id
@@ -28,48 +39,11 @@ public class MatchTimeOption {
     private OffsetDateTime proposedEndTime;
 
     @Column(name = "created_at", nullable = false, updatable = false)
+    @Setter(AccessLevel.NONE)
     private OffsetDateTime createdAt;
 
     @PrePersist
     protected void onCreate() {
         createdAt = OffsetDateTime.now();
-    }
-
-    // Getters and Setters
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public UUID getMatchId() {
-        return matchId;
-    }
-
-    public void setMatchId(UUID matchId) {
-        this.matchId = matchId;
-    }
-
-    public OffsetDateTime getProposedStartTime() {
-        return proposedStartTime;
-    }
-
-    public void setProposedStartTime(OffsetDateTime proposedStartTime) {
-        this.proposedStartTime = proposedStartTime;
-    }
-
-    public OffsetDateTime getProposedEndTime() {
-        return proposedEndTime;
-    }
-
-    public void setProposedEndTime(OffsetDateTime proposedEndTime) {
-        this.proposedEndTime = proposedEndTime;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
     }
 }

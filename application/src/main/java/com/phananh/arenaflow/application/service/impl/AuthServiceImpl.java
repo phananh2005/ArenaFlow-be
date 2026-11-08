@@ -105,18 +105,20 @@ public class AuthServiceImpl implements AuthService {
 
     /** Tạo user + liên kết OAuth; dựng tên mặc định có hậu tố từ UUID sau khi user được persist. */
     private UUID createAccount(OAuthAccount.Provider provider, String providerUserId, String phoneNumber) {
-        User user = new User();
-        user.setDisplayName(DEFAULT_NAME_PREFIX.trim());
-        user.setPhoneNumber(phoneNumber);
-        User saved = userRepository.save(user);
+        User saved = userRepository.save(User.builder()
+                .displayName(DEFAULT_NAME_PREFIX.trim())
+                .phoneNumber(phoneNumber)
+                .build());
         // id chỉ có sau persist → tên mặc định "User " + 6 ký tự cuối userId.
         String id = saved.getId().toString();
         saved.setDisplayName(DEFAULT_NAME_PREFIX + id.substring(id.length() - DEFAULT_NAME_SUFFIX_LENGTH));
 
-        OAuthAccount account = new OAuthAccount();
-        account.setUserId(saved.getId());
-        account.setProvider(provider);
-        account.setProviderUserId(providerUserId);
+        OAuthAccount account = OAuthAccount.builder()
+                .userId(saved.getId())
+                .provider(provider)
+                .providerUserId(providerUserId)
+                .build();
+        // Flush để vi phạm unique (đăng ký song song) ném ra ngay tại bước ghi này, không dồn tới lúc commit.
         oauthAccountRepository.saveAndFlush(account);
         return saved.getId();
     }

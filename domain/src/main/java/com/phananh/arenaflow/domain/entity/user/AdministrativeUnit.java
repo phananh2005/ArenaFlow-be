@@ -1,6 +1,12 @@
 package com.phananh.arenaflow.domain.entity.user;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.OffsetDateTime;
@@ -11,6 +17,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "administrative_unit")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
 public class AdministrativeUnit {
 
     @Id
@@ -29,49 +40,12 @@ public class AdministrativeUnit {
     private UUID parentId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
+    @Setter(AccessLevel.NONE)
     private OffsetDateTime createdAt;
 
     @PrePersist
     protected void onCreate() {
         createdAt = OffsetDateTime.now();
-    }
-
-    // Getters and Setters
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public Level getLevel() {
-        return level;
-    }
-
-    public void setLevel(Level level) {
-        this.level = level;
-    }
-
-    public UUID getParentId() {
-        return parentId;
-    }
-
-    public void setParentId(UUID parentId) {
-        this.parentId = parentId;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
     }
 
     public enum Level {

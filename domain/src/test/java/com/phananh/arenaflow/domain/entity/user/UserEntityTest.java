@@ -10,8 +10,9 @@ class UserEntityTest {
 
     @Test
     void whenCreateUser_thenIdFieldTypeIsUUID() {
-        User user = new User();
-        user.setDisplayName("Test User");
+        User user = User.builder()
+                .displayName("Test User")
+                .build();
 
         // This test verifies that the id field is of type UUID
         // Will fail at compile time if id is not UUID type
@@ -26,7 +27,7 @@ class UserEntityTest {
 
     @Test
     void whenSetWardId_thenAcceptsUUID() {
-        User user = new User();
+        User user = User.builder().build();
         UUID wardId = UUID.randomUUID();
 
         user.setWardId(wardId);

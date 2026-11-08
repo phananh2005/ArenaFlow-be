@@ -1,6 +1,12 @@
 package com.phananh.arenaflow.domain.entity.match;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.math.BigDecimal;
@@ -12,6 +18,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "match")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
 public class Match {
 
     @Id
@@ -94,9 +105,11 @@ public class Match {
     private OffsetDateTime cancelledAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
+    @Setter(AccessLevel.NONE)
     private OffsetDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
+    @Setter(AccessLevel.NONE)
     private OffsetDateTime updatedAt;
 
     @PrePersist
@@ -108,216 +121,6 @@ public class Match {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = OffsetDateTime.now();
-    }
-
-    // Getters and Setters
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public Type getType() {
-        return type;
-    }
-
-    public void setType(Type type) {
-        this.type = type;
-    }
-
-    public UUID getAuthorTeamId() {
-        return authorTeamId;
-    }
-
-    public void setAuthorTeamId(UUID authorTeamId) {
-        this.authorTeamId = authorTeamId;
-    }
-
-    public Status getStatus() {
-        return status;
-    }
-
-    public void setStatus(Status status) {
-        this.status = status;
-    }
-
-    public UUID getSportId() {
-        return sportId;
-    }
-
-    public void setSportId(UUID sportId) {
-        this.sportId = sportId;
-    }
-
-    public String getFormat() {
-        return format;
-    }
-
-    public void setFormat(String format) {
-        this.format = format;
-    }
-
-    public String getAgeNote() {
-        return ageNote;
-    }
-
-    public void setAgeNote(String ageNote) {
-        this.ageNote = ageNote;
-    }
-
-    public String getMatchNature() {
-        return matchNature;
-    }
-
-    public void setMatchNature(String matchNature) {
-        this.matchNature = matchNature;
-    }
-
-    public UUID getVenueId() {
-        return venueId;
-    }
-
-    public void setVenueId(UUID venueId) {
-        this.venueId = venueId;
-    }
-
-    public OffsetDateTime getMatchStartTime() {
-        return matchStartTime;
-    }
-
-    public void setMatchStartTime(OffsetDateTime matchStartTime) {
-        this.matchStartTime = matchStartTime;
-    }
-
-    public OffsetDateTime getMatchEndTime() {
-        return matchEndTime;
-    }
-
-    public void setMatchEndTime(OffsetDateTime matchEndTime) {
-        this.matchEndTime = matchEndTime;
-    }
-
-    public OffsetDateTime getExpiresAt() {
-        return expiresAt;
-    }
-
-    public void setExpiresAt(OffsetDateTime expiresAt) {
-        this.expiresAt = expiresAt;
-    }
-
-    public BigDecimal getSearchLat() {
-        return searchLat;
-    }
-
-    public void setSearchLat(BigDecimal searchLat) {
-        this.searchLat = searchLat;
-    }
-
-    public BigDecimal getSearchLng() {
-        return searchLng;
-    }
-
-    public void setSearchLng(BigDecimal searchLng) {
-        this.searchLng = searchLng;
-    }
-
-    public BigDecimal getSearchRadiusKm() {
-        return searchRadiusKm;
-    }
-
-    public void setSearchRadiusKm(BigDecimal searchRadiusKm) {
-        this.searchRadiusKm = searchRadiusKm;
-    }
-
-    public String getCostType() {
-        return costType;
-    }
-
-    public void setCostType(String costType) {
-        this.costType = costType;
-    }
-
-    public String getCostSplit() {
-        return costSplit;
-    }
-
-    public void setCostSplit(String costSplit) {
-        this.costSplit = costSplit;
-    }
-
-    public Long getCostVenueAmount() {
-        return costVenueAmount;
-    }
-
-    public void setCostVenueAmount(Long costVenueAmount) {
-        this.costVenueAmount = costVenueAmount;
-    }
-
-    public Long getCostDrinksAmount() {
-        return costDrinksAmount;
-    }
-
-    public void setCostDrinksAmount(Long costDrinksAmount) {
-        this.costDrinksAmount = costDrinksAmount;
-    }
-
-    public String getCostDepositHolder() {
-        return costDepositHolder;
-    }
-
-    public void setCostDepositHolder(String costDepositHolder) {
-        this.costDepositHolder = costDepositHolder;
-    }
-
-    public UUID getConfirmedOpponentTeamId() {
-        return confirmedOpponentTeamId;
-    }
-
-    public void setConfirmedOpponentTeamId(UUID confirmedOpponentTeamId) {
-        this.confirmedOpponentTeamId = confirmedOpponentTeamId;
-    }
-
-    public UUID getConfirmedVenueId() {
-        return confirmedVenueId;
-    }
-
-    public void setConfirmedVenueId(UUID confirmedVenueId) {
-        this.confirmedVenueId = confirmedVenueId;
-    }
-
-    public OffsetDateTime getConfirmedMatchTime() {
-        return confirmedMatchTime;
-    }
-
-    public void setConfirmedMatchTime(OffsetDateTime confirmedMatchTime) {
-        this.confirmedMatchTime = confirmedMatchTime;
-    }
-
-    public UUID getCancelledByTeamId() {
-        return cancelledByTeamId;
-    }
-
-    public void setCancelledByTeamId(UUID cancelledByTeamId) {
-        this.cancelledByTeamId = cancelledByTeamId;
-    }
-
-    public OffsetDateTime getCancelledAt() {
-        return cancelledAt;
-    }
-
-    public void setCancelledAt(OffsetDateTime cancelledAt) {
-        this.cancelledAt = cancelledAt;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
     }
 
     public enum Type {

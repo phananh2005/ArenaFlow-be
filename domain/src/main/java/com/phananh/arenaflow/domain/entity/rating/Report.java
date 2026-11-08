@@ -1,6 +1,12 @@
 package com.phananh.arenaflow.domain.entity.rating;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.OffsetDateTime;
@@ -11,6 +17,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "report")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
 public class Report {
 
     @Id
@@ -50,97 +61,12 @@ public class Report {
     private OffsetDateTime adminReviewedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
+    @Setter(AccessLevel.NONE)
     private OffsetDateTime createdAt;
 
     @PrePersist
     protected void onCreate() {
         createdAt = OffsetDateTime.now();
-    }
-
-    // Getters and Setters
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public UUID getMatchId() {
-        return matchId;
-    }
-
-    public void setMatchId(UUID matchId) {
-        this.matchId = matchId;
-    }
-
-    public ReporterType getReporterType() {
-        return reporterType;
-    }
-
-    public void setReporterType(ReporterType reporterType) {
-        this.reporterType = reporterType;
-    }
-
-    public UUID getReporterId() {
-        return reporterId;
-    }
-
-    public void setReporterId(UUID reporterId) {
-        this.reporterId = reporterId;
-    }
-
-    public ReportedType getReportedType() {
-        return reportedType;
-    }
-
-    public void setReportedType(ReportedType reportedType) {
-        this.reportedType = reportedType;
-    }
-
-    public UUID getReportedId() {
-        return reportedId;
-    }
-
-    public void setReportedId(UUID reportedId) {
-        this.reportedId = reportedId;
-    }
-
-    public ReportType getReportType() {
-        return reportType;
-    }
-
-    public void setReportType(ReportType reportType) {
-        this.reportType = reportType;
-    }
-
-    public String getReason() {
-        return reason;
-    }
-
-    public void setReason(String reason) {
-        this.reason = reason;
-    }
-
-    public Status getStatus() {
-        return status;
-    }
-
-    public void setStatus(Status status) {
-        this.status = status;
-    }
-
-    public OffsetDateTime getAdminReviewedAt() {
-        return adminReviewedAt;
-    }
-
-    public void setAdminReviewedAt(OffsetDateTime adminReviewedAt) {
-        this.adminReviewedAt = adminReviewedAt;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
     }
 
     public enum ReporterType {

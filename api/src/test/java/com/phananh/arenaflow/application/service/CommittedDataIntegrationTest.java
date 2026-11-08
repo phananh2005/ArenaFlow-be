@@ -59,8 +59,9 @@ abstract class CommittedDataIntegrationTest {
     }
 
     protected User user(String displayName) {
-        User user = new User();
-        user.setDisplayName(displayName);
+        User user = User.builder()
+                .displayName(displayName)
+                .build();
         User saved = userRepository.save(user);
         createdUsers.add(saved.getId());
         return saved;

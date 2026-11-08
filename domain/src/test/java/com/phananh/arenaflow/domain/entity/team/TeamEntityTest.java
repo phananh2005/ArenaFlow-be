@@ -11,8 +11,9 @@ class TeamEntityTest {
 
     @Test
     void whenCreateTeam_thenIdFieldTypeIsUUID() {
-        Team team = new Team();
-        team.setName("Test Team");
+        Team team = Team.builder()
+                .name("Test Team")
+                .build();
 
         // This test verifies that the id field is of type UUID
         // Will fail at compile time if id is not UUID type
@@ -27,7 +28,7 @@ class TeamEntityTest {
 
     @Test
     void whenSetCreatedBy_thenAcceptsUUID() {
-        Team team = new Team();
+        Team team = Team.builder().build();
         UUID creatorId = UUID.randomUUID();
 
         team.setCreatedBy(creatorId);
@@ -44,8 +45,9 @@ class TeamEntityTest {
 
     @Test
     void whenSetDisbandMetadata_thenGettersReturnValuesAndInactiveReasonIsKept() {
-        Team team = new Team();
-        team.setInactiveReason("Vi phạm quy định");
+        Team team = Team.builder()
+                .inactiveReason("Vi phạm quy định")
+                .build();
         UUID captainId = UUID.randomUUID();
         OffsetDateTime disbandedAt = OffsetDateTime.now();
 

@@ -49,7 +49,8 @@ public class AdminTeamServiceImpl implements AdminTeamService {
             }
             team.setStatus(Team.TeamStatus.INACTIVE);
             team.setInactiveReason(request.reason().trim());
-            teamRepository.saveAndFlush(team);
+            teamRepository.save(team);
+            // Hibernate tự flush thay đổi trên trước native query đọc lại response.
             return teamService.getTeam(teamId);
         });
     }
@@ -68,7 +69,8 @@ public class AdminTeamServiceImpl implements AdminTeamService {
             }
             team.setStatus(Team.TeamStatus.ACTIVE);
             team.setInactiveReason(null);
-            teamRepository.saveAndFlush(team);
+            teamRepository.save(team);
+            // Hibernate tự flush thay đổi trên trước native query đọc lại response.
             return teamService.getTeam(teamId);
         });
     }
