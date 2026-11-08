@@ -1,5 +1,21 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v3.6] — 2026-11-09
+
+**Type:** MINOR (không đổi endpoint, DTO, mã lỗi, số truy vấn) · **Tóm tắt:** Bỏ flush thừa theo quy tắc "một lần flush mỗi lượt ghi" — ghi entity bằng `save`/`saveAll`, Hibernate tự flush trước native query hoặc lúc commit.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `Processing_Flow.md` §2.3 sequence (endpoint 2.15, chuyển quyền) | Sửa | "flush: captain cũ…, captain mới…" → `saveAll` (ghi lúc commit) | Không có query nào sau bước ghi cần thấy dữ liệu; xung đột version vẫn ném ra lúc commit trong retrier |
+| 2 | `Processing_Flow.md` §3 bảng, dòng 2.6 (`PATCH /profile`) | Sửa | U user (`saveAndFlush`) → `save`; Hibernate tự flush trước native S `ProfileView` | Auto-flush trước native SELECT (đã kiểm 2026-11-08 trên `updateTeam`) |
+| 3 | Header `API_Spec.md`, `Processing_Flow.md`, `Component_Class_Design.md` | Ghi nhận | v3.5 → v3.6 | design-standards §10 |
+
+### Ảnh hưởng
+- Hành vi, contract, DB, nghiệp vụ, SRS: không đổi; số câu SQL mỗi endpoint không đổi (`NfsQueryCountTest`, `NfsWriteQueryCountTest` PASS).
+- Giữ flush tường minh (bắt vi phạm unique): 2.1 tạo `oauth_account`, 2.12 mời thành viên.
+
 ## [v3.5] — 2026-11-07
 
 **Type:** MINOR (chỉ đổi tên class; không đổi endpoint, DTO, mã lỗi, luồng) · **Tóm tắt:** `OptimisticLockRetrier` → `ConcurrencyConflictRetrier` — từ v3.4 class thử lại cả deadlock, tên cũ chỉ nói optimistic lock.

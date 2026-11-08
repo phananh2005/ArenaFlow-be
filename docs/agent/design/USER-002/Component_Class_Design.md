@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` · kiến trúc hiện hành theo USER-001 |
 | Ràng buộc dữ liệu | USER-001 schema V1/V2/V3; delta USER-002 dưới đây cần migration Flyway |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.6** (developer · 2026-11-07) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.7** (developer · 2026-11-09) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -65,7 +65,7 @@ Mở rộng filter trạng thái hỗ trợ `DISBANDED`, không đổi `ACTIVE` 
 - `disbandedOr(teamId, fallback)` (mới, bổ sung sau implement — `Processing_Flow.md` §5): guard thất bại **sau** Q1 đọc lại trạng thái đã commit; `DISBANDED` → `TEAM_016`, ngược lại `fallback`. Dùng trong `requireCaptain` (`TEAM_002`) và tại `transferCaptain` (`TEAM_007`), `leaveTeam` (`TEAM_010`), admin `reactivate` (`TEAM_013`). `findTeam` chuyển `private` để mọi thao tác ghi bắt buộc qua `activeTeam`/`notDisbandedTeam`.
 - `inviteMember`, `leaveTeam` nằm ở `TeamMembershipService(Impl)` (tách từ USER-001), không phải `TeamService`; thay đổi áp tại đó.
 - `inviteMember`: chuyển sang chạy trong `ConcurrencyConflictRetrier` (bỏ `@Transactional` ở method theo ADR-0003). Đọc team bằng `teamGuard.activeTeamForInvite(teamId)` (mới, chốt bởi user 2026-11-05): gọi `TeamRepository.findForInviteById` có `@Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)` rồi áp cùng kiểm tra trạng thái với `activeTeam()` (`TEAM_001 → TEAM_016 → TEAM_015`, tách `requireActiveState` dùng chung). `team.version` tăng trước khi commit. Không inject `EntityManager` vào service; JPA giữ ở tầng repository. Race M1: `Processing_Flow.md` §5. Giữ xử lý `DataIntegrityViolationException` → `TEAM_003`; thêm khả năng `409 TEAM_014` khi hết retry.
-- `disbandTeam`: `notDisbandedTeam` → `requireCaptain` (SELECT, `TEAM_002`) → captain entity LEFT + `saveAndFlush` → team entity DISBANDED + `saveAndFlush` → `disbandRemaining` → projection. Chi tiết: `Processing_Flow.md` §4.1.
+- `disbandTeam`: `notDisbandedTeam` → `requireCaptain` (SELECT, `TEAM_002`) → captain entity LEFT + `save` → team entity DISBANDED + `save` → `disbandRemaining` (Hibernate tự flush captain + team một lần trước native query) → projection. Chi tiết: `Processing_Flow.md` §4.1.
 
 ### 4.2. AdminTeamService
 
@@ -113,7 +113,7 @@ ALTER TABLE team ADD CONSTRAINT team_disband_consistency_check CHECK (
 - `TeamRepository`: detail projection thêm disband metadata + người giải tán (join user); page summary thêm người giải tán; filter status enum hỗ trợ `DISBANDED` và `ALL`.
 - `TeamRepository.findCurrentStatusById(id)` (mới, bổ sung sau implement): native `SELECT status FROM team WHERE id = :id` → `Optional<String>`; chỉ dùng trong `TeamGuard#disbandedOr` (nhánh lỗi).
 - `TeamRepository.findForInviteById(id)` (mới): JPQL `SELECT t FROM Team t WHERE t.id = :id` với `@Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)`; chỉ dùng cho `inviteMember` (race M1).
-- Captain → LEFT và `Team` → DISBANDED đều qua entity + `saveAndFlush` (CAS `@Version`; `Team` có `@PreUpdate`), **không** thêm query viết tay. Kiểm tra quyền dùng `TeamGuard.requireCaptain` có sẵn.
+- Captain → LEFT và `Team` → DISBANDED đều qua entity + `save` (CAS `@Version` khi flush; `Team` có `@PreUpdate`), **không** thêm query viết tay. Kiểm tra quyền dùng `TeamGuard.requireCaptain` có sẵn.
 - `TeamMemberRepository.disbandRemaining(teamId, now)` (mới, `@Modifying` native): **một** bulk transition dùng `CASE`: `ACTIVE` → `LEFT` với `left_at = GREATEST(:now, COALESCE(joined_at, invited_at))`, `PENDING` → `REJECTED` (không set `left_at`), `version = version + 1`, điều kiện `team_id = :teamId AND status IN ('ACTIVE','PENDING')`. Gọi sau khi captain và team đã flush.
 - `TeamMemberRepository.findByUserIdAndStatusInOrderByIdAsc(userId, statuses)` (v1.2, ADR-0007): derived query với `@Lock(LockModeType.PESSIMISTIC_WRITE)` (PostgreSQL: `FOR NO KEY UPDATE`) trên mọi membership ACTIVE/PENDING của user, sắp theo `id` (thứ tự khoá ổn định); trả entity `TeamMember` sẵn có (không projection mới). Chỉ dùng cho `deleteAccount`; phải gọi trong transaction.
 - `TeamMemberRepository.leaveAndRejectAllOpen(userId, now)` (v1.2, ADR-0007, `@Modifying(clearAutomatically = true)` native): **một** bulk `CASE` theo mẫu `disbandRemaining`: MEMBER `ACTIVE` → `LEFT` với `left_at = GREATEST(:now, COALESCE(joined_at, invited_at))`, `PENDING` → `REJECTED` (không set `left_at`), `version = version + 1`, điều kiện `user_id = :userId AND (status = 'PENDING' OR (status = 'ACTIVE' AND role = 'MEMBER'))` — không đụng row CAPTAIN (lớp an toàn).
