@@ -427,7 +427,7 @@ public class GlobalExceptionHandler {
 - **Method ghi (create/update/delete):** `@Transactional` (bỏ readOnly)
 - **Isolation level:** default = `READ_COMMITTED`
 - **Propagation:** default = `REQUIRED`
-- **Ghi entity:** mặc định để Hibernate ghi lúc commit; `saveAndFlush` / `flush()` chỉ khi có lý do và kèm comment — xem `non-functional-standards.md` §4.1
+- **Ghi entity:** mặc định `save()` / `saveAll()` hoặc dirty checking, một lần flush (tự động) cho mỗi lượt ghi; `saveAndFlush` / `flush()` chỉ theo ngoại lệ, kèm comment — xem `non-functional-standards.md` §4.1
 
 ```java
 @Transactional
