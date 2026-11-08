@@ -59,6 +59,8 @@
 - [ ] Admin và User đều có thể thêm địa điểm
 - [ ] Ảnh tối đa 5, chỉ 1 is_primary
 - [ ] Report không tự ẩn địa điểm (cần admin xác minh)
+- [ ] Chỉ người tạo hoặc Admin sửa địa điểm / xóa ảnh; xóa ảnh chính tự chọn ảnh chính mới
+- [ ] Không trùng report chờ xử lý cho cùng (user, địa điểm, lý do)
 
 #### COST DOMAIN
 - [ ] Thỏa thuận chi phí chỉ hiển thị, không thanh toán
@@ -428,6 +430,35 @@
 - Admin nhận notification
 - Địa điểm KHÔNG tự ẩn (cần admin xác minh)
 - Admin xem chi tiết từng report
+- User đã có report cùng lý do đang chờ xử lý → bị từ chối, không tạo report mới
+- Địa điểm đã ngừng hoạt động → không cho report
+
+---
+
+### AC-V04: Sửa thông tin địa điểm
+
+**Given:** Địa điểm tồn tại
+
+**When:** Actor sửa tên/địa chỉ/tọa độ/loại sân/điện thoại/website và submit
+
+**Then:**
+- Actor là người tạo hoặc Admin → thông tin mới được lưu, thời điểm cập nhật thay đổi
+- Kèo tham chiếu địa điểm hiển thị thông tin mới
+- Actor khác → bị từ chối, thông tin giữ nguyên
+- Loại sân ngoài sân 5/7/11 → bị từ chối
+
+---
+
+### AC-V05: Xóa ảnh sân
+
+**Given:** Địa điểm có 3 ảnh, ảnh A là ảnh chính, ảnh B có thứ tự hiển thị nhỏ nhất trong 2 ảnh còn lại
+
+**When:** Người tạo địa điểm (hoặc Admin) xóa ảnh A
+
+**Then:**
+- Ảnh A không còn hiển thị; địa điểm còn 2 ảnh
+- Ảnh B thành ảnh chính (đúng 1 ảnh chính)
+- User không phải người tạo/Admin xóa ảnh → bị từ chối
 
 ---
 

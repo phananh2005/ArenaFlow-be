@@ -5,8 +5,8 @@
 | **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-02 |
 | **Người quyết định** | Product Owner (chốt retry 3 lần → 409) · solution-architect (đề xuất cách thực hiện) |
-| **Liên quan** | `docs/agent/design/USER-001/Processing_Flow.md` §5 · `docs/agent/convention-backend.md` §9 · ngoại lệ có phạm vi cho `deleteAccount` (khoá bi quan): [ADR-0007](0007-scoped-pessimistic-lock-for-account-deletion.md) · `docs/agent/design/USER-002/Processing_Flow.md` §4–§5 (disband, transfer, thứ tự khoá) · [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) |
-| **Sửa đổi** | 2026-11-06 — `deleteAccount` là ngoại lệ có phạm vi: bất biến giữ bằng khoá bi quan theo ADR-0007, không dựa vào kiểm `@Version` · 2026-11-06 — phạm vi của "không deadlock" ở Hệ quả (chỉ đúng cho bước đọc) · 2026-11-06 — retrier thử lại cả deadlock (`40P01`) · 2026-11-07 — đổi tên `OptimisticLockRetrier` → `ConcurrencyConflictRetrier` |
+| **Liên quan** | `docs/agent/design/USER-001/Processing_Flow.md` §5 · `docs/agent/convention-backend.md` §9 · ngoại lệ có phạm vi cho `deleteAccount` (khoá bi quan): [ADR-0007](0007-scoped-pessimistic-lock-for-account-deletion.md) · `docs/agent/design/USER-002/Processing_Flow.md` §4–§5 (disband, transfer, thứ tự khoá) · [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) · `docs/agent/design/VENUE-001/Processing_Flow.md` §5 (khoá dòng `venue` cho ghi ảnh) |
+| **Sửa đổi** | 2026-11-06 — `deleteAccount` là ngoại lệ có phạm vi: bất biến giữ bằng khoá bi quan theo ADR-0007, không dựa vào kiểm `@Version` · 2026-11-06 — phạm vi của "không deadlock" ở Hệ quả (chỉ đúng cho bước đọc) · 2026-11-06 — retrier thử lại cả deadlock (`40P01`) · 2026-11-07 — đổi tên `OptimisticLockRetrier` → `ConcurrencyConflictRetrier` · 2026-11-09 — ghi ảnh sân tuần tự hoá bằng khoá dòng `venue` (không retry); retrier thêm overload nhận mã lỗi hết lượt |
 
 ## Bối cảnh (Context)
 - Các thao tác trên `team`/`team_member` có thể chạy song song: sửa đội, chuyển quyền captain, chấp nhận lời mời, rời đội, admin đổi trạng thái, xoá tài khoản captain. Lost update làm sai số captain/thành viên.
@@ -68,3 +68,12 @@ Chúng tôi dùng **JPA `@Version`** trên `Team` và `TeamMember` (cột `versi
 
 - `OptimisticLockRetrier` đổi tên thành `ConcurrencyConflictRetrier` (cùng package `application/support/`; field ở caller: `concurrencyConflictRetrier`). Từ mục Sửa đổi "retrier thử lại cả deadlock" class không chỉ xử lý optimistic lock nên tên cũ sai nghĩa.
 - Không đổi quyết định hay hành vi. Tên `OptimisticLockRetrier` ở các mục phía trên giữ nguyên (không viết lại ADR đã `Accepted`), đọc là `ConcurrencyConflictRetrier`.
+
+## Sửa đổi 2026-11-09 — Ghi ảnh sân khoá dòng `venue`; retrier nhận mã lỗi theo miền
+
+- **Ghi ảnh sân** (thêm ảnh, đổi ảnh chính, xoá ảnh — `docs/agent/design/VENUE-001/` 2.5, 2.6, 2.13) tuần tự hoá theo địa điểm bằng khoá dòng `venue` ở **đầu** transaction: `UPDATE venue SET version = version + 1 WHERE id = ?` — **không** so `version`, **không** chạy qua `ConcurrencyConflictRetrier`. Request sau chờ request trước commit rồi đọc dữ liệu mới; không thất bại do xung đột nên không cần retry. Entity `Venue` được nạp **sau** câu khoá và không bị ghi lại.
+- Lý do: chỉ kiểm `@Version` lúc commit (vd `OPTIMISTIC_FORCE_INCREMENT`) thì hai request cùng đặt ảnh chính đều đã INSERT trước điểm tuần tự hoá → đụng unique index một phần `idx_venue_image_primary` → 500. Khoá trước khi đọc số ảnh / ảnh chính loại bỏ trường hợp này.
+- `version` vẫn tăng để các luồng ghi `venue` dùng `@Version` (sửa địa điểm, admin ngừng / kích hoạt lại) đang giữ bản cũ phát hiện xung đột và retry như quyết định gốc.
+- Phạm vi: chỉ `venue` / `venue_image`. Mọi luồng khác giữ quyết định của ADR này.
+- `ConcurrencyConflictRetrier` thêm overload `execute(ErrorCode exhaustedCode, Supplier<T>)`; bản cũ giữ `TEAM_014` nên luồng team không đổi. VENUE-001 dùng cho sửa địa điểm, admin ngừng / kích hoạt lại, xử lý report; hết lượt → `409 VENUE_011`.
+- Deadlock: ghi ảnh khoá `venue` rồi `venue_image`, không chạm `venue_report` → không thấy vòng chờ với các luồng VENUE-001 khác [Inference — chưa tái hiện; nếu gặp sẽ bọc retrier].

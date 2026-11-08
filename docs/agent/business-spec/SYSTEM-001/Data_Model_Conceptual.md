@@ -268,7 +268,7 @@
 - Tên
 - Địa chỉ
 - Tọa độ (latitude, longitude)
-- Loại sân (bóng đá, cầu lông, bóng rổ...)
+- Loại sân (không bắt buộc): sân 5, sân 7, sân 11 — bộ môn thuộc về kèo, không thuộc địa điểm
 - Điện thoại
 - Website
 - Người tạo (User ID hoặc Admin ID)
@@ -300,7 +300,7 @@
 **Relationships:**
 - N Venue_Image thuộc về 1 Venue
 
-**Ghi chú:** Tối đa 5 ảnh mỗi venue; chỉ 1 ảnh `is_primary=true`.
+**Ghi chú:** Tối đa 5 ảnh mỗi venue; chỉ 1 ảnh `is_primary=true`. Người tạo địa điểm hoặc Admin xóa được ảnh; xóa ảnh chính → ảnh còn lại có thứ tự hiển thị nhỏ nhất thành ảnh chính.
 
 ---
 
@@ -320,7 +320,7 @@
 **Relationships:**
 - N Venue_Report thuộc về 1 Venue
 
-**Ghi chú:** Report không tự ẩn địa điểm; admin xác minh rồi đánh dấu ngừng hoạt động.
+**Ghi chú:** Report không tự ẩn địa điểm; admin xác minh rồi đánh dấu ngừng hoạt động. Mỗi (người report, địa điểm, lý do) có tối đa 1 report đang pending.
 
 ---
 
