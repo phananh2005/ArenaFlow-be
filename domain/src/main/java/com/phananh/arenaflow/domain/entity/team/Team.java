@@ -2,6 +2,12 @@ package com.phananh.arenaflow.domain.entity.team;
 
 import com.phananh.arenaflow.domain.entity.converter.SkillLevelsConverter;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.math.BigDecimal;
@@ -16,6 +22,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "team")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
 public class Team {
 
     @Id
@@ -37,6 +48,7 @@ public class Team {
 
     @Convert(converter = SkillLevelsConverter.class)
     @Column(name = "skill_levels", nullable = false, columnDefinition = "TEXT")
+    @Builder.Default
     private List<String> skillLevels = List.of();
 
     @Column(name = "inactive_reason", length = 500)
@@ -53,43 +65,55 @@ public class Team {
 
     @Version
     @Column(name = "version", nullable = false)
+    @Setter(AccessLevel.NONE)
     private Long version;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
+    @Builder.Default
     private TeamStatus status = TeamStatus.ACTIVE;
 
     @Column(name = "reliability_score", nullable = false)
+    @Builder.Default
     private Integer reliabilityScore = 80;
 
     @Column(name = "total_matches_completed", nullable = false)
+    @Builder.Default
     private Integer totalMatchesCompleted = 0;
 
     @Column(name = "total_matches_confirmed", nullable = false)
+    @Builder.Default
     private Integer totalMatchesConfirmed = 0;
 
     @Column(name = "average_rating", precision = 3, scale = 2)
     private BigDecimal averageRating;
 
     @Column(name = "report_count_noshow", nullable = false)
+    @Builder.Default
     private Integer reportCountNoshow = 0;
 
     @Column(name = "report_count_bad_play", nullable = false)
+    @Builder.Default
     private Integer reportCountBadPlay = 0;
 
     @Column(name = "report_count_bad_communication", nullable = false)
+    @Builder.Default
     private Integer reportCountBadCommunication = 0;
 
     @Column(name = "report_count_skill_mismatch", nullable = false)
+    @Builder.Default
     private Integer reportCountSkillMismatch = 0;
 
     @Column(name = "clean_streak", nullable = false)
+    @Builder.Default
     private Integer cleanStreak = 0;
 
     @Column(name = "created_at", nullable = false, updatable = false)
+    @Setter(AccessLevel.NONE)
     private OffsetDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
+    @Setter(AccessLevel.NONE)
     private OffsetDateTime updatedAt;
 
     @PrePersist
@@ -101,180 +125,6 @@ public class Team {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = OffsetDateTime.now();
-    }
-
-    // Getters and Setters
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public UUID getCreatedBy() {
-        return createdBy;
-    }
-
-    public void setCreatedBy(UUID createdBy) {
-        this.createdBy = createdBy;
-    }
-
-    public String getAvatarUrl() {
-        return avatarUrl;
-    }
-
-    public void setAvatarUrl(String avatarUrl) {
-        this.avatarUrl = avatarUrl;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public List<String> getSkillLevels() {
-        return skillLevels;
-    }
-
-    public void setSkillLevels(List<String> skillLevels) {
-        this.skillLevels = skillLevels;
-    }
-
-    public String getInactiveReason() {
-        return inactiveReason;
-    }
-
-    public void setInactiveReason(String inactiveReason) {
-        this.inactiveReason = inactiveReason;
-    }
-
-    public String getDisbandReason() {
-        return disbandReason;
-    }
-
-    public void setDisbandReason(String disbandReason) {
-        this.disbandReason = disbandReason;
-    }
-
-    public OffsetDateTime getDisbandedAt() {
-        return disbandedAt;
-    }
-
-    public void setDisbandedAt(OffsetDateTime disbandedAt) {
-        this.disbandedAt = disbandedAt;
-    }
-
-    public UUID getDisbandedBy() {
-        return disbandedBy;
-    }
-
-    public void setDisbandedBy(UUID disbandedBy) {
-        this.disbandedBy = disbandedBy;
-    }
-
-    public Long getVersion() {
-        return version;
-    }
-
-    public TeamStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(TeamStatus status) {
-        this.status = status;
-    }
-
-    public Integer getReliabilityScore() {
-        return reliabilityScore;
-    }
-
-    public void setReliabilityScore(Integer reliabilityScore) {
-        this.reliabilityScore = reliabilityScore;
-    }
-
-    public Integer getTotalMatchesCompleted() {
-        return totalMatchesCompleted;
-    }
-
-    public void setTotalMatchesCompleted(Integer totalMatchesCompleted) {
-        this.totalMatchesCompleted = totalMatchesCompleted;
-    }
-
-    public Integer getTotalMatchesConfirmed() {
-        return totalMatchesConfirmed;
-    }
-
-    public void setTotalMatchesConfirmed(Integer totalMatchesConfirmed) {
-        this.totalMatchesConfirmed = totalMatchesConfirmed;
-    }
-
-    public BigDecimal getAverageRating() {
-        return averageRating;
-    }
-
-    public void setAverageRating(BigDecimal averageRating) {
-        this.averageRating = averageRating;
-    }
-
-    public Integer getReportCountNoshow() {
-        return reportCountNoshow;
-    }
-
-    public void setReportCountNoshow(Integer reportCountNoshow) {
-        this.reportCountNoshow = reportCountNoshow;
-    }
-
-    public Integer getReportCountBadPlay() {
-        return reportCountBadPlay;
-    }
-
-    public void setReportCountBadPlay(Integer reportCountBadPlay) {
-        this.reportCountBadPlay = reportCountBadPlay;
-    }
-
-    public Integer getReportCountBadCommunication() {
-        return reportCountBadCommunication;
-    }
-
-    public void setReportCountBadCommunication(Integer reportCountBadCommunication) {
-        this.reportCountBadCommunication = reportCountBadCommunication;
-    }
-
-    public Integer getReportCountSkillMismatch() {
-        return reportCountSkillMismatch;
-    }
-
-    public void setReportCountSkillMismatch(Integer reportCountSkillMismatch) {
-        this.reportCountSkillMismatch = reportCountSkillMismatch;
-    }
-
-    public Integer getCleanStreak() {
-        return cleanStreak;
-    }
-
-    public void setCleanStreak(Integer cleanStreak) {
-        this.cleanStreak = cleanStreak;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
     }
 
     public enum TeamStatus {

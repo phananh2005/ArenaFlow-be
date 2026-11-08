@@ -168,9 +168,7 @@ class AuthServiceImplTest {
     @Test
     void refreshIssuesNewPairWithCurrentRole() {
         UUID userId = UUID.randomUUID();
-        User user = new User();
-        ReflectionTestUtils.setField(user, "id", userId);
-        user.setRole(User.Role.ADMIN);
+        User user = User.builder().id(userId).role(User.Role.ADMIN).build();
         when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(user));
 
         AuthResponse response = service.refresh(new RefreshTokenRequest(jwtTokenService.issueRefreshToken(userId)));

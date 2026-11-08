@@ -35,9 +35,10 @@ class SqlErrorLoggingPiiTest extends RepositoryIntegrationTest {
     }
 
     private static User userWithPhone(String phone) {
-        User user = new User();
-        user.setDisplayName("Pii Probe");
-        user.setPhoneNumber(phone);
+        User user = User.builder()
+                .displayName("Pii Probe")
+                .phoneNumber(phone)
+                .build();
         return user;
     }
 }

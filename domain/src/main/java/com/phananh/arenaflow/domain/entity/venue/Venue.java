@@ -1,6 +1,12 @@
 package com.phananh.arenaflow.domain.entity.venue;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.math.BigDecimal;
@@ -12,6 +18,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "venue")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
 public class Venue {
 
     @Id
@@ -49,6 +60,7 @@ public class Venue {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
+    @Builder.Default
     private Status status = Status.ACTIVE;
 
     @Column(name = "last_selected_at")
@@ -58,9 +70,11 @@ public class Venue {
     private OffsetDateTime adminVerifiedInactiveAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
+    @Setter(AccessLevel.NONE)
     private OffsetDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
+    @Setter(AccessLevel.NONE)
     private OffsetDateTime updatedAt;
 
     @PrePersist
@@ -72,120 +86,6 @@ public class Venue {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = OffsetDateTime.now();
-    }
-
-    // Getters and Setters
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getAddress() {
-        return address;
-    }
-
-    public void setAddress(String address) {
-        this.address = address;
-    }
-
-    public BigDecimal getLatitude() {
-        return latitude;
-    }
-
-    public void setLatitude(BigDecimal latitude) {
-        this.latitude = latitude;
-    }
-
-    public BigDecimal getLongitude() {
-        return longitude;
-    }
-
-    public void setLongitude(BigDecimal longitude) {
-        this.longitude = longitude;
-    }
-
-    public CreatedByType getCreatedByType() {
-        return createdByType;
-    }
-
-    public void setCreatedByType(CreatedByType createdByType) {
-        this.createdByType = createdByType;
-    }
-
-    public UUID getCreatedByUserId() {
-        return createdByUserId;
-    }
-
-    public void setCreatedByUserId(UUID createdByUserId) {
-        this.createdByUserId = createdByUserId;
-    }
-
-    public String getPhone() {
-        return phone;
-    }
-
-    public void setPhone(String phone) {
-        this.phone = phone;
-    }
-
-    public String getWebsite() {
-        return website;
-    }
-
-    public void setWebsite(String website) {
-        this.website = website;
-    }
-
-    public String getVenueType() {
-        return venueType;
-    }
-
-    public void setVenueType(String venueType) {
-        this.venueType = venueType;
-    }
-
-    public Status getStatus() {
-        return status;
-    }
-
-    public void setStatus(Status status) {
-        this.status = status;
-    }
-
-    public OffsetDateTime getLastSelectedAt() {
-        return lastSelectedAt;
-    }
-
-    public void setLastSelectedAt(OffsetDateTime lastSelectedAt) {
-        this.lastSelectedAt = lastSelectedAt;
-    }
-
-    public OffsetDateTime getAdminVerifiedInactiveAt() {
-        return adminVerifiedInactiveAt;
-    }
-
-    public void setAdminVerifiedInactiveAt(OffsetDateTime adminVerifiedInactiveAt) {
-        this.adminVerifiedInactiveAt = adminVerifiedInactiveAt;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
     }
 
     public enum CreatedByType {

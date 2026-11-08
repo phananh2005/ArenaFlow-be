@@ -1,6 +1,12 @@
 package com.phananh.arenaflow.domain.entity.user;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.math.BigDecimal;
@@ -14,6 +20,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "\"user\"") // "user" là từ khoá PostgreSQL → phải quote, khớp V1 (CREATE TABLE "user")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
 public class User {
 
     @Id
@@ -41,6 +52,7 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false, length = 20)
+    @Builder.Default
     private Role role = Role.USER;
 
     @Column(name = "ward_id")
@@ -50,30 +62,38 @@ public class User {
     private String phoneNumber;
 
     @Column(name = "reliability_score", nullable = false)
+    @Builder.Default
     private Integer reliabilityScore = 80;
 
     @Column(name = "total_matches_completed", nullable = false)
+    @Builder.Default
     private Integer totalMatchesCompleted = 0;
 
     @Column(name = "total_matches_confirmed", nullable = false)
+    @Builder.Default
     private Integer totalMatchesConfirmed = 0;
 
     @Column(name = "average_rating", precision = 3, scale = 2)
     private BigDecimal averageRating;
 
     @Column(name = "report_count_noshow", nullable = false)
+    @Builder.Default
     private Integer reportCountNoshow = 0;
 
     @Column(name = "report_count_bad_play", nullable = false)
+    @Builder.Default
     private Integer reportCountBadPlay = 0;
 
     @Column(name = "report_count_bad_communication", nullable = false)
+    @Builder.Default
     private Integer reportCountBadCommunication = 0;
 
     @Column(name = "report_count_skill_mismatch", nullable = false)
+    @Builder.Default
     private Integer reportCountSkillMismatch = 0;
 
     @Column(name = "clean_streak", nullable = false)
+    @Builder.Default
     private Integer cleanStreak = 0;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -94,184 +114,6 @@ public class User {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = OffsetDateTime.now();
-    }
-
-    // Getters and Setters
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    public void setDisplayName(String displayName) {
-        this.displayName = displayName;
-    }
-
-    public String getAvatarUrl() {
-        return avatarUrl;
-    }
-
-    public void setAvatarUrl(String avatarUrl) {
-        this.avatarUrl = avatarUrl;
-    }
-
-    public String getBio() {
-        return bio;
-    }
-
-    public void setBio(String bio) {
-        this.bio = bio;
-    }
-
-    public String getPreferredPosition() {
-        return preferredPosition;
-    }
-
-    public void setPreferredPosition(String preferredPosition) {
-        this.preferredPosition = preferredPosition;
-    }
-
-    public LocalDate getDateOfBirth() {
-        return dateOfBirth;
-    }
-
-    public void setDateOfBirth(LocalDate dateOfBirth) {
-        this.dateOfBirth = dateOfBirth;
-    }
-
-    public String getGender() {
-        return gender;
-    }
-
-    public void setGender(String gender) {
-        this.gender = gender;
-    }
-
-    public Role getRole() {
-        return role;
-    }
-
-    public void setRole(Role role) {
-        this.role = role;
-    }
-
-    public UUID getWardId() {
-        return wardId;
-    }
-
-    public void setWardId(UUID wardId) {
-        this.wardId = wardId;
-    }
-
-    public String getPhoneNumber() {
-        return phoneNumber;
-    }
-
-    public void setPhoneNumber(String phoneNumber) {
-        this.phoneNumber = phoneNumber;
-    }
-
-    public Integer getReliabilityScore() {
-        return reliabilityScore;
-    }
-
-    public void setReliabilityScore(Integer reliabilityScore) {
-        this.reliabilityScore = reliabilityScore;
-    }
-
-    public Integer getTotalMatchesCompleted() {
-        return totalMatchesCompleted;
-    }
-
-    public void setTotalMatchesCompleted(Integer totalMatchesCompleted) {
-        this.totalMatchesCompleted = totalMatchesCompleted;
-    }
-
-    public Integer getTotalMatchesConfirmed() {
-        return totalMatchesConfirmed;
-    }
-
-    public void setTotalMatchesConfirmed(Integer totalMatchesConfirmed) {
-        this.totalMatchesConfirmed = totalMatchesConfirmed;
-    }
-
-    public BigDecimal getAverageRating() {
-        return averageRating;
-    }
-
-    public void setAverageRating(BigDecimal averageRating) {
-        this.averageRating = averageRating;
-    }
-
-    public Integer getReportCountNoshow() {
-        return reportCountNoshow;
-    }
-
-    public void setReportCountNoshow(Integer reportCountNoshow) {
-        this.reportCountNoshow = reportCountNoshow;
-    }
-
-    public Integer getReportCountBadPlay() {
-        return reportCountBadPlay;
-    }
-
-    public void setReportCountBadPlay(Integer reportCountBadPlay) {
-        this.reportCountBadPlay = reportCountBadPlay;
-    }
-
-    public Integer getReportCountBadCommunication() {
-        return reportCountBadCommunication;
-    }
-
-    public void setReportCountBadCommunication(Integer reportCountBadCommunication) {
-        this.reportCountBadCommunication = reportCountBadCommunication;
-    }
-
-    public Integer getReportCountSkillMismatch() {
-        return reportCountSkillMismatch;
-    }
-
-    public void setReportCountSkillMismatch(Integer reportCountSkillMismatch) {
-        this.reportCountSkillMismatch = reportCountSkillMismatch;
-    }
-
-    public Integer getCleanStreak() {
-        return cleanStreak;
-    }
-
-    public void setCleanStreak(Integer cleanStreak) {
-        this.cleanStreak = cleanStreak;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(OffsetDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(OffsetDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
-
-    public OffsetDateTime getDeletedAt() {
-        return deletedAt;
-    }
-
-    public void setDeletedAt(OffsetDateTime deletedAt) {
-        this.deletedAt = deletedAt;
     }
 
     public enum Role {

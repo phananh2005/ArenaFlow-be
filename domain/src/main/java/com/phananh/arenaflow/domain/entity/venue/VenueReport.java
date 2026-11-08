@@ -1,6 +1,12 @@
 package com.phananh.arenaflow.domain.entity.venue;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.OffsetDateTime;
@@ -11,6 +17,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "venue_report")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
 public class VenueReport {
 
     @Id
@@ -28,48 +39,11 @@ public class VenueReport {
     private String reason;
 
     @Column(name = "created_at", nullable = false, updatable = false)
+    @Setter(AccessLevel.NONE)
     private OffsetDateTime createdAt;
 
     @PrePersist
     protected void onCreate() {
         createdAt = OffsetDateTime.now();
-    }
-
-    // Getters and Setters
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public UUID getVenueId() {
-        return venueId;
-    }
-
-    public void setVenueId(UUID venueId) {
-        this.venueId = venueId;
-    }
-
-    public UUID getReporterId() {
-        return reporterId;
-    }
-
-    public void setReporterId(UUID reporterId) {
-        this.reporterId = reporterId;
-    }
-
-    public String getReason() {
-        return reason;
-    }
-
-    public void setReason(String reason) {
-        this.reason = reason;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
     }
 }

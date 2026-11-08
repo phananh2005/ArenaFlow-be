@@ -85,18 +85,22 @@ class TeamServiceImplTest {
     }
 
     private Team team(Team.TeamStatus status) {
-        Team team = withId(new Team(), teamId);
-        team.setName("Old");
-        team.setStatus(status);
+        Team team = Team.builder()
+                .id(teamId)
+                .name("Old")
+                .status(status)
+                .build();
         return team;
     }
 
     private TeamMember member(UUID userId, TeamMember.Role role) {
-        TeamMember member = withId(new TeamMember(), UUID.randomUUID());
-        member.setTeamId(teamId);
-        member.setUserId(userId);
-        member.setRole(role);
-        member.setStatus(TeamMember.Status.ACTIVE);
+        TeamMember member = TeamMember.builder()
+                .id(UUID.randomUUID())
+                .teamId(teamId)
+                .userId(userId)
+                .role(role)
+                .status(TeamMember.Status.ACTIVE)
+                .build();
         return member;
     }
 
@@ -112,8 +116,10 @@ class TeamServiceImplTest {
 
     @Test
     void createTeamMakesCreatorActiveCaptainAndRecordsHistory() {
-        User creator = withId(new User(), captainId);
-        creator.setDisplayName("Captain A");
+        User creator = User.builder()
+                .id(captainId)
+                .displayName("Captain A")
+                .build();
         when(userRepository.findByIdAndDeletedAtIsNull(captainId)).thenReturn(Optional.of(creator));
 
         TeamResponse response = service.createTeam(captainId,
@@ -191,7 +197,7 @@ class TeamServiceImplTest {
         when(teamMemberRepository.findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE))
                 .thenReturn(Optional.of(member(captainId, TeamMember.Role.CAPTAIN)));
         assertError(() -> service.updateTeam(teamId, memberId, request), ErrorCode.TEAM_002);
-        verify(teamRepository, never()).saveAndFlush(any());
+        verify(teamRepository, never()).save(any());
     }
 
     @Test
@@ -209,7 +215,7 @@ class TeamServiceImplTest {
         assertThat(team.getName()).isEqualTo("New");
         assertThat(team.getDescription()).isEqualTo("keep");
         assertThat(team.getSkillLevels()).isEmpty();
-        verify(teamRepository).saveAndFlush(team);
+        verify(teamRepository).save(team);
         assertThat(response.teamName()).isEqualTo("New");
     }
 
@@ -247,7 +253,7 @@ class TeamServiceImplTest {
 
         assertThat(oldCaptain.getRole()).isEqualTo(TeamMember.Role.MEMBER);
         assertThat(newCaptain.getRole()).isEqualTo(TeamMember.Role.CAPTAIN);
-        verify(teamMemberRepository).saveAllAndFlush(List.of(oldCaptain, newCaptain));
+        verify(teamMemberRepository).saveAll(List.of(oldCaptain, newCaptain));
         ArgumentCaptor<TeamCaptainHistory> history = ArgumentCaptor.forClass(TeamCaptainHistory.class);
         verify(historyRepository).save(history.capture());
         assertThat(history.getValue().getFromUserId()).isEqualTo(captainId);
@@ -297,8 +303,8 @@ class TeamServiceImplTest {
                 .thenReturn(Optional.of(member(captainId, TeamMember.Role.CAPTAIN)));
         assertError(() -> service.disbandTeam(teamId, memberId, null), ErrorCode.TEAM_002);
 
-        verify(teamRepository, never()).saveAndFlush(any());
-        verify(teamMemberRepository, never()).saveAndFlush(any());
+        verify(teamRepository, never()).save(any());
+        verify(teamMemberRepository, never()).save(any());
         verify(teamMemberRepository, never()).disbandRemaining(any(), any());
     }
 
@@ -322,8 +328,8 @@ class TeamServiceImplTest {
         assertThat(team.getDisbandedAt()).isNotNull();
         assertThat(team.getInactiveReason()).isEqualTo("Admin khoá");
         InOrder order = inOrder(teamMemberRepository, teamRepository);
-        order.verify(teamMemberRepository).saveAndFlush(captain);
-        order.verify(teamRepository).saveAndFlush(team);
+        order.verify(teamMemberRepository).save(captain);
+        order.verify(teamRepository).save(team);
         order.verify(teamMemberRepository).disbandRemaining(eq(teamId), any());
         order.verify(teamRepository).findDetailById(teamId);
         verify(retrier).execute(any());

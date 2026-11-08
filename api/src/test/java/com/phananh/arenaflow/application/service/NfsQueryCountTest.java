@@ -107,8 +107,9 @@ class NfsQueryCountTest {
     }
 
     private User saveUser(String name) {
-        User user = new User();
-        user.setDisplayName(name);
+        User user = User.builder()
+                .displayName(name)
+                .build();
         return userRepository.save(user);
     }
 }

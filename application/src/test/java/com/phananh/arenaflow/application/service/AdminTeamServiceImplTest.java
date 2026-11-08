@@ -26,7 +26,6 @@ import org.mapstruct.factory.Mappers;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -68,10 +67,7 @@ class AdminTeamServiceImplTest {
     }
 
     private Team team(Team.TeamStatus status) {
-        Team team = new Team();
-        ReflectionTestUtils.setField(team, "id", teamId);
-        team.setStatus(status);
-        return team;
+        return Team.builder().id(teamId).status(status).build();
     }
 
     private static void assertError(Runnable call, ErrorCode expected) {
@@ -86,7 +82,7 @@ class AdminTeamServiceImplTest {
 
         when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.INACTIVE)));
         assertError(() -> service.markInactive(teamId, new MarkInactiveRequest("x")), ErrorCode.TEAM_011);
-        verify(teamRepository, never()).saveAndFlush(any());
+        verify(teamRepository, never()).save(any());
     }
 
     @Test
@@ -98,7 +94,7 @@ class AdminTeamServiceImplTest {
 
         assertThat(team.getStatus()).isEqualTo(Team.TeamStatus.INACTIVE);
         assertThat(team.getInactiveReason()).isEqualTo("Vi phạm");
-        verify(teamRepository).saveAndFlush(team);
+        verify(teamRepository).save(team);
         assertThat(response.teamId()).isEqualTo(teamId);
     }
 
@@ -114,7 +110,7 @@ class AdminTeamServiceImplTest {
         when(teamMemberRepository.findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE))
                 .thenReturn(Optional.empty());
         assertError(() -> service.reactivate(teamId), ErrorCode.TEAM_013);
-        verify(teamRepository, never()).saveAndFlush(any());
+        verify(teamRepository, never()).save(any());
     }
 
     @Test
@@ -123,13 +119,13 @@ class AdminTeamServiceImplTest {
         team.setInactiveReason("Vi phạm");
         when(teamRepository.findById(teamId)).thenReturn(Optional.of(team));
         when(teamMemberRepository.findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE))
-                .thenReturn(Optional.of(new TeamMember()));
+                .thenReturn(Optional.of(TeamMember.builder().build()));
 
         service.reactivate(teamId);
 
         assertThat(team.getStatus()).isEqualTo(Team.TeamStatus.ACTIVE);
         assertThat(team.getInactiveReason()).isNull();
-        verify(teamRepository).saveAndFlush(team);
+        verify(teamRepository).save(team);
     }
 
     @Test
@@ -150,7 +146,7 @@ class AdminTeamServiceImplTest {
         assertError(() -> service.markInactive(teamId, new MarkInactiveRequest("x")), ErrorCode.TEAM_016);
         assertError(() -> service.reactivate(teamId), ErrorCode.TEAM_016);
 
-        verify(teamRepository, never()).saveAndFlush(any());
+        verify(teamRepository, never()).save(any());
         verify(teamMemberRepository, never()).findByTeamIdAndRoleAndStatus(any(), any(), any());
     }
 

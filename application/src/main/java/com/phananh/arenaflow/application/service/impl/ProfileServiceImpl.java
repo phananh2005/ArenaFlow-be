@@ -56,7 +56,8 @@ public class ProfileServiceImpl implements ProfileService {
             throw new BusinessException(ErrorCode.USER_002);
         }
         applyChanges(user, request);
-        userRepository.saveAndFlush(user);
+        userRepository.save(user);
+        // Hibernate tự flush thay đổi trên trước native query đọc lại response.
         return toResponse(userId);
     }
 

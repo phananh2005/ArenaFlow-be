@@ -395,40 +395,44 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
     }
 
     private Team saveDisbandedTeam(String name, User disbander, String reason) {
-        Team team = new Team();
-        team.setName(name);
-        team.setCreatedBy(disbander.getId());
-        team.setSkillLevels(List.of());
-        team.setStatus(Team.TeamStatus.DISBANDED);
-        team.setDisbandReason(reason);
-        team.setDisbandedAt(OffsetDateTime.now());
-        team.setDisbandedBy(disbander.getId());
+        Team team = Team.builder()
+                .name(name)
+                .createdBy(disbander.getId())
+                .skillLevels(List.of())
+                .status(Team.TeamStatus.DISBANDED)
+                .disbandReason(reason)
+                .disbandedAt(OffsetDateTime.now())
+                .disbandedBy(disbander.getId())
+                .build();
         return teamRepository.save(team);
     }
 
     private Team saveTeam(String name, User creator, List<String> skillLevels) {
-        Team team = new Team();
-        team.setName(name);
-        team.setCreatedBy(creator.getId());
-        team.setSkillLevels(skillLevels);
+        Team team = Team.builder()
+                .name(name)
+                .createdBy(creator.getId())
+                .skillLevels(skillLevels)
+                .build();
         return teamRepository.save(team);
     }
 
     private TeamMember saveMember(Team team, User user, TeamMember.Role role, TeamMember.Status status) {
-        TeamMember member = new TeamMember();
-        member.setTeamId(team.getId());
-        member.setUserId(user.getId());
-        member.setRole(role);
-        member.setStatus(status);
+        TeamMember member = TeamMember.builder()
+                .teamId(team.getId())
+                .userId(user.getId())
+                .role(role)
+                .status(status)
+                .build();
         return teamMemberRepository.save(member);
     }
 
     private TeamCaptainHistory saveHistory(Team team, User from, User to, String reason) {
-        TeamCaptainHistory history = new TeamCaptainHistory();
-        history.setTeamId(team.getId());
-        history.setFromUserId(from == null ? null : from.getId());
-        history.setToUserId(to.getId());
-        history.setReason(reason);
+        TeamCaptainHistory history = TeamCaptainHistory.builder()
+                .teamId(team.getId())
+                .fromUserId(from == null ? null : from.getId())
+                .toUserId(to.getId())
+                .reason(reason)
+                .build();
         return historyRepository.save(history);
     }
 

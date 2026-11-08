@@ -61,9 +61,10 @@ class MapperTest {
         values.put("provinceName", "TP. Hồ Chí Minh");
         values.put("createdAt", CREATED);
         values.put("updatedAt", CREATED);
-        OAuthAccount account = new OAuthAccount();
-        account.setProvider(OAuthAccount.Provider.google);
-        account.setProviderUserId("user@example.com");
+        OAuthAccount account = OAuthAccount.builder()
+                .provider(OAuthAccount.Provider.google)
+                .providerUserId("user@example.com")
+                .build();
 
         ProfileResponse response = profileMapper.toResponse(projection(ProfileView.class, values), List.of(account));
 
@@ -162,12 +163,13 @@ class MapperTest {
 
     @Test
     void membershipMapperBuildsInvitationAndMasksDeletedMember() {
-        TeamMember member = new TeamMember();
-        member.setTeamId(UUID.randomUUID());
-        member.setUserId(UUID.randomUUID());
-        member.setRole(TeamMember.Role.MEMBER);
-        member.setStatus(TeamMember.Status.PENDING);
-        member.setInvitedAt(CREATED_UTC);
+        TeamMember member = TeamMember.builder()
+                .teamId(UUID.randomUUID())
+                .userId(UUID.randomUUID())
+                .role(TeamMember.Role.MEMBER)
+                .status(TeamMember.Status.PENDING)
+                .invitedAt(CREATED_UTC)
+                .build();
 
         InvitationResponse invitation = membershipMapper.toInvitation(member, "Team Alpha");
 

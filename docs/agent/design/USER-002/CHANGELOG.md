@@ -1,5 +1,23 @@
 # CHANGELOG — USER-002 Giải tán đội & quy tắc xoá tài khoản đội trưởng
 
+## [v1.7] — 2026-11-09
+
+**Type:** MINOR (không đổi endpoint, DTO, mã lỗi, số truy vấn) · **Tóm tắt:** Disband ghi captain/team bằng `save`, Hibernate tự flush một lần trước bulk Q5 (thay 2 lần `saveAndFlush`); transfer ghi lúc commit.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `Processing_Flow.md` §2 sequence, §3 bảng disband, §4.1 Q3/Q4/Q5 + double-submit, §5 bảng race double-submit | Sửa | Q3/Q4 `saveAndFlush` (2 lần flush) → `save`; Hibernate tự flush một lần trước native Q5, thứ tự `UPDATE team` → `UPDATE team_member` captain | Giảm 1 lần flush/dirty-check; đã kiểm 2026-11-08: 6 câu SQL, test race disband PASS, không `40P01` |
+| 2 | `Processing_Flow.md` §4.1 kết quả R2 | Sửa | "transfer flush row captain cũ" → "transfer ghi row captain cũ (lúc commit)" | Transfer dùng `saveAll` (USER-001 v3.6 #1) |
+| 3 | `Processing_Flow.md` §5 giả định không deadlock R2 | Sửa | Thêm thứ tự ghi mới của transfer (`INSERT` history → captain cũ → captain mới) và disband (`UPDATE team` → captain cũ → các row khác); transfer không `UPDATE` row `team`; thêm phạm vi đã xét (invite, admin, accept/leave, xoá tài khoản) | Thứ tự khoá giữa các row `team_member` không đổi; test R2 vẫn fail nếu có `40P01` |
+| 4 | `Processing_Flow.md` §5 bảng race "Disband vs admin lock" | Sửa | `markInactive`/`reactivate` `saveAndFlush` → ghi entity qua `save` | Code đổi theo quy tắc flush |
+| 5 | `Component_Class_Design.md` §4.1 `disbandTeam`, §5.2 quy tắc ghi | Sửa | `saveAndFlush` → `save` + auto-flush trước `disbandRemaining` | Như #1 |
+| 6 | Header `API_Spec.md`, `Processing_Flow.md`, `Component_Class_Design.md` | Ghi nhận | v1.6 → v1.7 | design-standards §10 |
+
+### Ảnh hưởng
+- Hành vi, contract, DB, nghiệp vụ, SRS: không đổi. Disband vẫn 6 câu SQL (`NfsWriteQueryCountTest`).
+
 ## [v1.6] — 2026-11-07
 
 **Type:** MINOR (chỉ đổi tên class; không đổi endpoint, DTO, mã lỗi, luồng) · **Tóm tắt:** Đồng bộ USER-001 v3.5 — `OptimisticLockRetrier` → `ConcurrencyConflictRetrier`.

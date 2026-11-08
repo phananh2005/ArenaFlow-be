@@ -74,18 +74,22 @@ class TeamMembershipServiceImplTest {
     }
 
     private Team team(Team.TeamStatus status) {
-        Team team = withId(new Team(), teamId);
-        team.setName("Team Alpha");
-        team.setStatus(status);
+        Team team = Team.builder()
+                .id(teamId)
+                .name("Team Alpha")
+                .status(status)
+                .build();
         return team;
     }
 
     private TeamMember member(UUID id, UUID userId, TeamMember.Role role, TeamMember.Status status) {
-        TeamMember member = withId(new TeamMember(), id);
-        member.setTeamId(teamId);
-        member.setUserId(userId);
-        member.setRole(role);
-        member.setStatus(status);
+        TeamMember member = TeamMember.builder()
+                .id(id)
+                .teamId(teamId)
+                .userId(userId)
+                .role(role)
+                .status(status)
+                .build();
         return member;
     }
 
@@ -120,7 +124,7 @@ class TeamMembershipServiceImplTest {
         when(userRepository.findByIdAndDeletedAtIsNull(inviteeId)).thenReturn(Optional.empty());
         assertError(() -> service.inviteMember(teamId, captainId, request), ErrorCode.USER_001);
 
-        when(userRepository.findByIdAndDeletedAtIsNull(inviteeId)).thenReturn(Optional.of(new User()));
+        when(userRepository.findByIdAndDeletedAtIsNull(inviteeId)).thenReturn(Optional.of(User.builder().build()));
         when(teamMemberRepository.existsByTeamIdAndUserIdAndStatusIn(eq(teamId), eq(inviteeId), anyCollection()))
                 .thenReturn(true);
         assertError(() -> service.inviteMember(teamId, captainId, request), ErrorCode.TEAM_003);
@@ -130,7 +134,7 @@ class TeamMembershipServiceImplTest {
     @Test
     void inviteMemberCreatesPendingInvitationAndMapsUniqueRaceToTeam003() {
         givenActiveTeamWithCaptain();
-        when(userRepository.findByIdAndDeletedAtIsNull(inviteeId)).thenReturn(Optional.of(new User()));
+        when(userRepository.findByIdAndDeletedAtIsNull(inviteeId)).thenReturn(Optional.of(User.builder().build()));
         when(teamMemberRepository.saveAndFlush(any(TeamMember.class)))
                 .thenAnswer(invocation -> withId(invocation.getArgument(0), invitationId));
 
@@ -185,7 +189,7 @@ class TeamMembershipServiceImplTest {
 
         assertThat(invitation.getStatus()).isEqualTo(TeamMember.Status.ACTIVE);
         assertThat(invitation.getJoinedAt()).isNotNull();
-        verify(teamMemberRepository).saveAndFlush(invitation);
+        verify(teamMemberRepository).save(invitation);
         assertThat(response.displayName()).isEqualTo("Invitee");
         assertThat(response.status()).isEqualTo("ACTIVE");
     }
@@ -199,7 +203,7 @@ class TeamMembershipServiceImplTest {
         service.rejectInvitation(invitationId, inviteeId);
 
         assertThat(invitation.getStatus()).isEqualTo(TeamMember.Status.REJECTED);
-        verify(teamMemberRepository).saveAndFlush(invitation);
+        verify(teamMemberRepository).save(invitation);
     }
 
     @Test
@@ -245,13 +249,13 @@ class TeamMembershipServiceImplTest {
 
         assertThat(active.getStatus()).isEqualTo(TeamMember.Status.LEFT);
         assertThat(active.getLeftAt()).isNotNull();
-        verify(teamMemberRepository).saveAndFlush(active);
+        verify(teamMemberRepository).save(active);
     }
 
     @Test
     void inviteMemberRunsInsideRetrierAndReadsTeamWithForceIncrementLock() {
         givenActiveTeamWithCaptain();
-        when(userRepository.findByIdAndDeletedAtIsNull(inviteeId)).thenReturn(Optional.of(new User()));
+        when(userRepository.findByIdAndDeletedAtIsNull(inviteeId)).thenReturn(Optional.of(User.builder().build()));
         when(teamMemberRepository.saveAndFlush(any(TeamMember.class)))
                 .thenAnswer(invocation -> withId(invocation.getArgument(0), invitationId));
 

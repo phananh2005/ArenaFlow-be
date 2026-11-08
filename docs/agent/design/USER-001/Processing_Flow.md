@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.5** (developer · 2026-11-07) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.6** (developer · 2026-11-09) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan luồng
 
@@ -106,7 +106,7 @@ sequenceDiagram
     Note right of RT: captain.userId ≠ userId → TEAM_002<br/>newCaptainId = userId → TEAM_008
     RT->>TMR: findByTeamIdAndUserIdAndStatus(teamId, newCaptainId, ACTIVE)
     Note right of RT: không có → TEAM_007
-    RT->>TMR: flush: captain cũ role=MEMBER, captain mới role=CAPTAIN (@Version)
+    RT->>TMR: saveAll: captain cũ role=MEMBER, captain mới role=CAPTAIN (@Version, ghi lúc commit)
     RT->>HR: save(TeamCaptainHistory from, to, reason)
     alt xung đột version / deadlock (xem §5)
         RT->>RT: thử lại (tối đa 3 lần) → hết → TEAM_014
@@ -125,7 +125,7 @@ Ký hiệu truy vấn: **S** = SELECT, **I** = INSERT, **U** = UPDATE. Loại: D
 | 2.3 | `POST /auth/verify-otp` | Như 2.1 với `provider=phone`, `provider_user_id=phone`; user mới set `phone_number=phone` · đụng độ có thể đến từ `idx_user_phone_unique` (I user lỗi) hoặc unique oauth_account | Như 2.1 | ≤ 4 / W6 ✅ |
 | 2.4 | `POST /auth/refresh` | Parse refresh token (AUTH_002) → S user theo id (không có/đã xoá → AUTH_003) → cấp cặp token mới với `role` hiện tại | S | 1 / D3 ✅ |
 | 2.5 | `GET /profile` | S `ProfileView` (user LEFT JOIN ward LEFT JOIN province, `deleted_at IS NULL`) → USER_001 · S oauth_account theo user | S, S | 2 / D3 ✅ |
-| 2.6 | `PATCH /profile` | S user chưa xoá (USER_001) → nếu có `wardId`: S ward+province (USER_002) → áp field ≠ null → U user (`saveAndFlush`) → S `ProfileView` (response qua `ProfileMapper`, khớp DB — đọc lại có chủ đích, lệch NFS §3 đã duyệt: `Component_Class_Design.md` §10) → S oauth_account (response) | S, (S ward), U, S, S | 4–5 / W6 ✅ |
+| 2.6 | `PATCH /profile` | S user chưa xoá (USER_001) → nếu có `wardId`: S ward+province (USER_002) → áp field ≠ null → U user (`save`; Hibernate tự flush trước native S `ProfileView`) → S `ProfileView` (response qua `ProfileMapper`, khớp DB — đọc lại có chủ đích, lệch NFS §3 đã duyệt: `Component_Class_Design.md` §10) → S oauth_account (response) | S, (S ward), U, S, S | 4–5 / W6 ✅ |
 | 2.7 | `DELETE /profile` | Xem §2.2 (luồng USER-002) · còn captain ACTIVE → `USER_003`, không đổi trạng thái đội · **membership MEMBER ACTIVE → LEFT, PENDING → REJECTED** · khoá membership ACTIVE/PENDING trước (`PESSIMISTIC_WRITE`, ADR-0007) rồi kiểm captain trên dữ liệu đã khoá · `softDelete` chỉ khi `deleted_at IS NULL` → gọi lại vẫn 204 · Access token còn hiệu lực tối đa 1h (JWT stateless, grace period chấp nhận cho MVP) | S (khoá), U, U | 3 / W6 ✅ |
 | 2.8 | `POST /teams` | S user chưa xoá (USER_001; lấy `displayName` làm `captainName`) → I team (`skill_levels` JSON) → I team_member (CAPTAIN, ACTIVE, `joined_at=now`) → I history (`from=null`) · response dựng từ dữ liệu đã có (`memberCount=1`) | S, I, I, I | 4 / W6 ✅ |
 | 2.9 | `GET /teams/{id}` | S `TeamDetailView` (team LEFT JOIN captain ACTIVE LEFT JOIN user, `memberCount` bằng subquery COUNT) → TEAM_001 | S | 1 / D3 ✅ |

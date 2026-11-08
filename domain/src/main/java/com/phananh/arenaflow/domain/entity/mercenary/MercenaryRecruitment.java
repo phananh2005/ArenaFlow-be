@@ -1,6 +1,12 @@
 package com.phananh.arenaflow.domain.entity.mercenary;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.OffsetDateTime;
@@ -11,6 +17,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "mercenary_recruitment")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
 public class MercenaryRecruitment {
 
     @Id
@@ -32,6 +43,7 @@ public class MercenaryRecruitment {
     private Integer quantityNeeded;
 
     @Column(name = "quantity_approved", nullable = false)
+    @Builder.Default
     private Integer quantityApproved = 0;
 
     @Enumerated(EnumType.STRING)
@@ -39,9 +51,11 @@ public class MercenaryRecruitment {
     private Status status;
 
     @Column(name = "created_at", nullable = false, updatable = false)
+    @Setter(AccessLevel.NONE)
     private OffsetDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
+    @Setter(AccessLevel.NONE)
     private OffsetDateTime updatedAt;
 
     @PrePersist
@@ -53,72 +67,6 @@ public class MercenaryRecruitment {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = OffsetDateTime.now();
-    }
-
-    // Getters and Setters
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public UUID getMatchId() {
-        return matchId;
-    }
-
-    public void setMatchId(UUID matchId) {
-        this.matchId = matchId;
-    }
-
-    public UUID getTeamId() {
-        return teamId;
-    }
-
-    public void setTeamId(UUID teamId) {
-        this.teamId = teamId;
-    }
-
-    public Position getPosition() {
-        return position;
-    }
-
-    public void setPosition(Position position) {
-        this.position = position;
-    }
-
-    public Integer getQuantityNeeded() {
-        return quantityNeeded;
-    }
-
-    public void setQuantityNeeded(Integer quantityNeeded) {
-        this.quantityNeeded = quantityNeeded;
-    }
-
-    public Integer getQuantityApproved() {
-        return quantityApproved;
-    }
-
-    public void setQuantityApproved(Integer quantityApproved) {
-        this.quantityApproved = quantityApproved;
-    }
-
-    public Status getStatus() {
-        return status;
-    }
-
-    public void setStatus(Status status) {
-        this.status = status;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
     }
 
     public enum Position {

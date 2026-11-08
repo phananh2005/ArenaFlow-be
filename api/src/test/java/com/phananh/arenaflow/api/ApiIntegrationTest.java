@@ -46,9 +46,10 @@ public abstract class ApiIntegrationTest {
     }
 
     protected User saveUser(String displayName, User.Role role) {
-        User user = new User();
-        user.setDisplayName(displayName);
-        user.setRole(role);
+        User user = User.builder()
+                .displayName(displayName)
+                .role(role)
+                .build();
         return userRepository.save(user);
     }
 
@@ -57,26 +58,25 @@ public abstract class ApiIntegrationTest {
     }
 
     protected Team saveTeam(String name, User captain) {
-        Team team = new Team();
-        team.setName(name);
-        team.setCreatedBy(captain.getId());
+        Team team = Team.builder()
+                .name(name)
+                .createdBy(captain.getId())
+                .build();
         teamRepository.save(team);
         saveMember(team, captain, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
         return team;
     }
 
     protected TeamMember saveMember(Team team, User user, TeamMember.Role role, TeamMember.Status status) {
-        TeamMember member = new TeamMember();
-        member.setTeamId(team.getId());
-        member.setUserId(user.getId());
-        member.setRole(role);
-        member.setStatus(status);
         OffsetDateTime now = OffsetDateTime.now();
-        member.setInvitedAt(now);
-        if (status == TeamMember.Status.ACTIVE) {
-            member.setJoinedAt(now);
-        }
-        return teamMemberRepository.save(member);
+        return teamMemberRepository.save(TeamMember.builder()
+                .teamId(team.getId())
+                .userId(user.getId())
+                .role(role)
+                .status(status)
+                .invitedAt(now)
+                .joinedAt(status == TeamMember.Status.ACTIVE ? now : null)
+                .build());
     }
 
     protected void flush() {
