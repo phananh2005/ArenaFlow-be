@@ -51,7 +51,7 @@
   // bulk phải thấy captain đã LEFT — dựa vào auto-flush trước native query
   teamMemberRepository.disbandRemaining(teamId, now);
   ```
-- Hibernate (JPA, FlushMode `AUTO`) **tự flush** thay đổi đang chờ trước JPQL / native query / bulk `@Modifying` trong cùng transaction → **không** cần `saveAndFlush` để query sau thấy dữ liệu vừa ghi. **MUST** comment một dòng tại query phụ thuộc auto-flush. Đã kiểm 2026-11-08 (Hibernate 7.2) với native bulk UPDATE; native SELECT [cần xác nhận] — kiểm trước khi bỏ flush ở chỗ đọc lại bằng native projection.
+- Hibernate (JPA, FlushMode `AUTO`) **tự flush** thay đổi đang chờ trước JPQL / native query / bulk `@Modifying` trong cùng transaction → **không** cần `saveAndFlush` để query sau thấy dữ liệu vừa ghi. **MUST** comment một dòng tại query phụ thuộc auto-flush. Đã kiểm 2026-11-08 (Hibernate 7.2, log SQL) với native bulk UPDATE (`disbandRemaining`) và native SELECT dựng response (`findDetailById` sau `updateTeam`).
 - **NEVER** gọi `saveAndFlush` / `saveAllAndFlush` / `flush()` trừ khi:
   1. Cần bắt lỗi ràng buộc DB (unique, FK, CHECK) ngay trong method để đổi thành mã lỗi nghiệp vụ (`try { saveAndFlush } catch (DataIntegrityViolationException)`).
   2. Cần phát hiện xung đột (optimistic lock, ràng buộc) **trước** một tác dụng phụ không rollback được trong cùng transaction (gọi API ngoài, gửi email/message).
