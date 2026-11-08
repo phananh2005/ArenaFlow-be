@@ -42,7 +42,7 @@
   2. Cần bắt lỗi ràng buộc DB (unique, FK, CHECK) ngay trong method để đổi thành mã lỗi nghiệp vụ (`try { saveAndFlush } catch (DataIntegrityViolationException)`).
 - **MUST** ghi comment một dòng nêu lý do ngay tại chỗ flush.
 - Ghi nhiều entity → một lần `saveAll` / flush; **NEVER** flush từng entity trong vòng lặp.
-- Optimistic lock (`@Version`) **không** cần flush: xung đột lúc commit vẫn ném ra trong `OptimisticLockRetrier` (ADR-0003).
+- Optimistic lock (`@Version`) **không** cần flush: xung đột lúc commit vẫn ném ra trong `ConcurrencyConflictRetrier` (ADR-0003).
 - Lý do: flush không đổi số câu SQL (ngưỡng §3 tính như nhau); flush sớm giữ khoá row đến hết transaction (tăng tranh chấp khi đồng thời) và tốn một lần dirty-check toàn persistence context mỗi lần gọi.
 
 ## 5. Ranh giới request đồng bộ

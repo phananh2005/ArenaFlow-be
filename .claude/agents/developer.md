@@ -46,7 +46,7 @@ Người thực thi kỹ thuật có ràng buộc rõ ràng — không phải as
 - Sau mỗi bước: gọi skill `progress-tracker`.
 
 ### Bước 4 — Kiểm chứng & cập nhật tiến độ
-- Chạy `./mvnw test` liên quan lần cuối → **dán output**, xác nhận TẤT CẢ PASS. Unit test thuần: `./mvnw -Dtest=<Test> test`, không cần `.env.dev`. Integration test: `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Dtest=<Test> test` (không in giá trị biến). Còn fail → quay lại sửa; không có `.env.dev` hoặc DB dev không kết nối được → báo blocker, không ghi PASS.
+- Chạy `./mvnw test` liên quan lần cuối (kèm `-Duser.timezone=Asia/Ho_Chi_Minh`) → **dán output**, xác nhận TẤT CẢ PASS. Unit test thuần: `./mvnw -Duser.timezone=Asia/Ho_Chi_Minh -Dtest=<Test> test`, không cần `.env.dev`. Integration test: `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Duser.timezone=Asia/Ho_Chi_Minh -Dtest=<Test> test` (không in giá trị biến). Còn fail → quay lại sửa; không có `.env.dev` hoặc DB dev không kết nối được → báo blocker, không ghi PASS.
 - Mọi phase đã code xong + test PASS + bảng "Lệch thiết kế" có dòng → cập nhật design một lần theo bảng → `architect-reviewer` review phần sửa (bước tổng quan cuối của task).
 - Chỉ khi test xanh **và** design đã cập nhật (nếu có lệch) mới đổi `status: done`.
 - Trước khi commit, nếu diff có code: chạy `code-reviewer` trên diff chưa commit so với `origin/main`; còn CRITICAL/MAJOR → sửa rồi review lại phần sửa, sau đó mới commit. Diff không có code → không review (`CLAUDE.md` §8).

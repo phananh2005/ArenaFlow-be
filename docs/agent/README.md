@@ -104,7 +104,9 @@ node docs/agent/hooks/fixture-tests.cjs
 node docs/agent/hooks/agent-hooks.cjs test
 ```
 
-Project Neon `ArenaFlow-be` (`misty-dew-90700890`) ở Singapore có database mặc định `neondb` và branch `main`. Unit test thuần chạy độc lập, không cần `.env.dev`. Integration test cần DB: agent tự nạp `.env.dev` (DB dev; `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`) bằng `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Dtest=<Test> test`. Chưa cấu hình Testcontainers hay DB test riêng; integration test ghi vào DB dev. Không báo test PASS nếu test chưa chạy đạt.
+Project Neon `ArenaFlow-be` (`misty-dew-90700890`) ở Singapore có database mặc định `neondb` và branch `main`. Unit test thuần chạy độc lập, không cần `.env.dev`. Integration test cần DB: agent tự nạp `.env.dev` (DB dev; `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`) bằng `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Duser.timezone=Asia/Ho_Chi_Minh -Dtest=<Test> test`. Chưa cấu hình Testcontainers hay DB test riêng; integration test ghi vào DB dev. Không báo test PASS nếu test chưa chạy đạt.
+
+**Timezone khi build/test/chạy:** mọi lệnh `./mvnw` (build, test) kèm `-Duser.timezone=Asia/Ho_Chi_Minh`, vd `./mvnw -Duser.timezone=Asia/Ho_Chi_Minh test`. Tham số này tới được JVM con chạy test của surefire (đã kiểm 2026-11-08: chạy với `-Duser.timezone=UTC` → log của JVM test có offset `Z`). Chạy jar: `java -Duser.timezone=Asia/Ho_Chi_Minh -jar …`. Cột thời gian là `timestamptz` nên PostgreSQL vẫn lưu theo UTC; timezone JVM quyết định offset của `OffsetDateTime.now()` và giờ trong log.
 
 ## Ownership
 
