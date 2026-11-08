@@ -835,7 +835,7 @@
 
 **Main Flow:**
 1. Actor chọn "Thêm địa điểm"
-2. Actor nhập thông tin (tên, địa chỉ, tọa độ, loại sân, điện thoại, website)
+2. Actor nhập thông tin (tên, địa chỉ, tọa độ, loại sân — sân 5 / sân 7 / sân 11, không bắt buộc — điện thoại, website)
 3. Actor submit
 4. Hệ thống tạo địa điểm với trạng thái active, lưu người tạo
 5. Hệ thống hiển thị "Địa điểm đã được thêm"
@@ -859,6 +859,7 @@
 **Preconditions:**
 - Địa điểm đã tồn tại
 - Địa điểm có <5 ảnh
+- Địa điểm đang hoạt động; địa điểm đã ngừng hoạt động chỉ Admin được thêm ảnh / đổi ảnh chính
 
 **Main Flow:**
 1. Actor chọn "Thêm ảnh"
@@ -882,10 +883,10 @@
 
 ### UC-V03: Report địa điểm sân
 
-**Actor:** User
+**Actor:** User (không gồm Admin — Admin sửa hoặc đánh dấu ngừng hoạt động trực tiếp)
 
 **Preconditions:**
-- Địa điểm tồn tại
+- Địa điểm tồn tại và đang hoạt động
 
 **Main Flow:**
 1. User chọn "Report địa điểm"
@@ -899,6 +900,16 @@
 - Report được lưu
 - Admin thấy chi tiết từng report
 - Report không tự ẩn địa điểm (cần admin xác minh)
+
+**Exception Flows:**
+
+**4a. User đã có report chờ xử lý cùng lý do cho địa điểm này:**
+- 4a1. Hệ thống hiển thị "Bạn đã report địa điểm này, đang chờ admin xử lý"
+- 4a2. Use case kết thúc
+
+**4b. Địa điểm đã ngừng hoạt động:**
+- 4b1. Hệ thống không cho report
+- 4b2. Use case kết thúc
 
 ---
 
@@ -921,6 +932,66 @@
 - Địa điểm chuyển sang inactive
 - Địa điểm bị loại khỏi gợi ý
 - Match cũ vẫn giữ tham chiếu
+
+---
+
+### UC-V05: Sửa thông tin địa điểm sân
+
+**Actor:** Người tạo địa điểm hoặc Admin
+
+**Preconditions:**
+- Địa điểm tồn tại
+- Actor là người tạo địa điểm hoặc Admin
+- Địa điểm đã ngừng hoạt động: chỉ Admin được sửa (người tạo không sửa được)
+
+**Main Flow:**
+1. Actor chọn "Sửa địa điểm"
+2. Actor sửa một hoặc nhiều thông tin: tên, địa chỉ, tọa độ, loại sân, điện thoại, website
+3. Actor submit
+4. Hệ thống lưu thông tin mới và thời điểm cập nhật
+5. Hệ thống hiển thị "Địa điểm đã được cập nhật"
+
+**Postconditions:**
+- Địa điểm mang thông tin mới
+- Mọi kèo tham chiếu địa điểm (kể cả kèo đã chốt) hiển thị thông tin mới nhất; kèo không lưu bản sao thông tin địa điểm
+
+**Exception Flows:**
+
+**1a. Actor không phải người tạo và không phải Admin:**
+- 1a1. Hệ thống không cho sửa; gợi ý "Report thông tin sai" (UC-V03)
+- 1a2. Use case kết thúc
+
+**3a. Validation thất bại:**
+- 3a1. Hệ thống hiển thị lỗi (vd: "Tên không được để trống")
+- 3a2. Quay về bước 2
+
+---
+
+### UC-V06: Xóa ảnh sân
+
+**Actor:** Người tạo địa điểm hoặc Admin
+
+**Preconditions:**
+- Địa điểm có ít nhất 1 ảnh
+- Địa điểm đã ngừng hoạt động: chỉ Admin được xóa ảnh
+- Actor là người tạo địa điểm hoặc Admin
+
+**Main Flow:**
+1. Actor chọn ảnh cần xóa
+2. Actor xác nhận xóa
+3. Hệ thống xóa ảnh khỏi địa điểm
+4. (Nếu ảnh bị xóa là ảnh chính và địa điểm còn ảnh khác) Hệ thống chọn ảnh còn lại có thứ tự hiển thị nhỏ nhất làm ảnh chính
+5. Hệ thống hiển thị "Ảnh đã được xóa"
+
+**Postconditions:**
+- Ảnh không còn hiển thị ở địa điểm; địa điểm có thể thêm ảnh mới (tối đa 5)
+- Nếu địa điểm còn ảnh thì có đúng 1 ảnh chính; hết ảnh thì không có ảnh chính
+
+**Exception Flows:**
+
+**1a. Actor không phải người tạo và không phải Admin:**
+- 1a1. Hệ thống không cho xóa
+- 1a2. Use case kết thúc
 
 ---
 

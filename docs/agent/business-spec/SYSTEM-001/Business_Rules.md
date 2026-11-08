@@ -48,6 +48,12 @@
 | BR-V02 | Ảnh sân: tối đa 5 ảnh mỗi địa điểm | Khi upload ảnh |
 | BR-V03 | Chỉ 1 ảnh is_primary=true mỗi venue | Khi upload ảnh hoặc đổi ảnh chính |
 | BR-V04 | Report địa điểm không tự ẩn địa điểm; cần admin xác minh | Khi report địa điểm |
+| BR-V05 | Loại sân (không bắt buộc) chỉ nhận: sân 5, sân 7, sân 11 | Khi thêm/sửa địa điểm |
+| BR-V06 | Chỉ người tạo địa điểm hoặc Admin được sửa thông tin địa điểm và xóa ảnh sân; địa điểm đã ngừng hoạt động chỉ Admin được sửa | Khi sửa địa điểm, xóa ảnh |
+| BR-V07 | Mọi user đã đăng nhập được thêm ảnh và đổi ảnh chính; địa điểm đã ngừng hoạt động chỉ Admin được thêm/đổi ảnh chính/xóa ảnh | Khi upload ảnh, đổi ảnh chính, xóa ảnh |
+| BR-V08 | Xóa ảnh chính khi địa điểm còn ảnh khác → ảnh còn lại có thứ tự hiển thị nhỏ nhất thành ảnh chính | Khi xóa ảnh |
+| BR-V09 | Mỗi user chỉ có tối đa 1 report chờ xử lý cho mỗi (địa điểm, lý do); không report địa điểm đã ngừng hoạt động | Khi report địa điểm |
+| BR-V10 | Kèo chỉ tham chiếu địa điểm; luôn hiển thị thông tin địa điểm mới nhất (không lưu bản sao) | Khi sửa địa điểm, hiển thị kèo |
 | **COST** | | |
 | BR-C01 | Tiền tệ mặc định VND trong MVP | Khi nhập thỏa thuận chi phí |
 | BR-C02 | Số tiền phải > 0 | Khi nhập thỏa thuận chi phí |
@@ -356,6 +362,8 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 | BC-V03 | Report địa điểm không tự ẩn địa điểm; admin xác minh rồi đánh dấu ngừng hoạt động |
 | BC-V04 | Địa điểm ngừng hoạt động bị loại khỏi gợi ý mặc định; Match cũ giữ tham chiếu |
 | BC-V05 | Admin cảnh báo 1 lần khi địa điểm không được chọn trong 180 ngày hoặc có báo cáo ngừng hoạt động; không nhắc định kỳ |
+| BC-V06 | Chỉ người tạo địa điểm hoặc Admin được sửa địa điểm và xóa ảnh; người khác dùng report "thông tin sai" |
+| BC-V07 | Không trùng report chờ xử lý cho cùng (user, địa điểm, lý do) |
 | **COST** | |
 | BC-C01 | ArenaFlow chỉ lưu thỏa thuận để hiển thị; không thu/giữ tiền hay xử lý thanh toán |
 | BC-C02 | Tiền tệ mặc định VND trong MVP |
@@ -380,6 +388,9 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 | Đánh giá đội sau trận mercenary (1-5 sao) | Đánh giá đội khác khi không tham gia trận |
 | Report đội sau trận mercenary | Report đội khác khi không tham gia trận |
 | Xóa tài khoản (soft-delete) | Hard-delete tài khoản (để sau, có chính sách retention) |
+| Thêm địa điểm, thêm ảnh sân, đổi ảnh chính | Sửa địa điểm / xóa ảnh của địa điểm do người khác tạo |
+| Sửa địa điểm và xóa ảnh của địa điểm do mình tạo | — |
+| Report địa điểm đang hoạt động | Report trùng khi report cùng lý do còn chờ xử lý; report địa điểm đã ngừng hoạt động |
 
 ### 5.2. Team Captain
 
@@ -417,7 +428,8 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 | Bật/tắt bộ môn qua admin panel | Tạo kèo cho User |
 | Đánh dấu đội INACTIVE | Xóa cứng đội |
 | Thêm địa điểm sân | Xóa cứng địa điểm |
-| Xem chi tiết report địa điểm | Tự xóa địa điểm khi có report (phải xác minh trước) |
+| Sửa mọi địa điểm, xóa mọi ảnh sân | — |
+| Xem chi tiết report địa điểm | Tự xóa địa điểm khi có report (phải xác minh trước); report địa điểm (dùng sửa/đánh dấu ngừng hoạt động trực tiếp) |
 | Xác minh report địa điểm và đánh dấu ngừng hoạt động | — |
 | Xử lý tranh chấp report bùng (quyết định cuối cùng) | Tự report thay User |
 | Xem thống kê hệ thống | Sửa Reliability Score thủ công (chỉ qua tranh chấp) |

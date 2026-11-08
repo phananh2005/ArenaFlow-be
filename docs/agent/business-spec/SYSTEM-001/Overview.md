@@ -116,6 +116,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 - Admin và User thêm địa điểm trực tiếp (không cần duyệt trước)
 - Trường: tên, địa chỉ, tọa độ, người tạo, created/updated, lần chọn gần nhất, trạng thái, điện thoại, website, loại sân
 - Ảnh: lưu trong bảng riêng, tối đa 5, có is_primary, display_order
+- Sửa địa điểm và xóa ảnh: chỉ người tạo địa điểm hoặc Admin; kèo luôn hiển thị thông tin địa điểm mới nhất
 - Report địa điểm: mỗi report lưu người report, lý do, thời gian; admin xác minh rồi đánh dấu ngừng hoạt động
 - Địa điểm ngừng hoạt động bị loại khỏi gợi ý; Match cũ giữ tham chiếu
 - ArenaFlow cảnh báo admin 1 lần khi địa điểm không được chọn trong 180 ngày hoặc có báo cáo ngừng hoạt động
@@ -214,7 +215,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 
 ## 10. Trạng thái tài liệu
 
-**Phiên bản:** v1.0 (baseline) → v1.1 (hoàn chỉnh)  
+**Phiên bản:** v1.0 (baseline) → v1.1 (hoàn chỉnh) → v1.2 (2026-11-09: bổ sung UC-V05 sửa địa điểm, UC-V06 xóa ảnh, BR-V05..V10, AC-V04/V05 — cho `VENUE-001`)  
 **Ngày hoàn thiện:** 2026-11-02  
 **Trạng thái:** ✅ **Hoàn chỉnh** — Tất cả quyết định nghiệp vụ đã được chốt, không còn [cần xác nhận]  
 **Sẵn sàng cho:** Solution design (thiết kế kỹ thuật chi tiết)
