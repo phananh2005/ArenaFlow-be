@@ -36,13 +36,28 @@
 - Cột filter/sort/join của truy vấn danh sách có index — thêm qua migration Flyway có kiểm soát, nêu lý do.
 
 ### 4.1 Ghi entity & flush
-- **MUST** mặc định để Hibernate ghi lúc commit: sửa entity đang managed (dirty checking) hoặc `save()` / `saveAll()`.
-- **NEVER** gọi `saveAndFlush` / `saveAllAndFlush` / `flush()` trừ khi có một trong các lý do:
-  1. Bước sau trong cùng transaction là native query, bulk `@Modifying` hoặc projection native cần thấy dữ liệu vừa ghi (vd. dựng response bằng `findDetailById` sau khi cập nhật entity).
-  2. Cần bắt lỗi ràng buộc DB (unique, FK, CHECK) ngay trong method để đổi thành mã lỗi nghiệp vụ (`try { saveAndFlush } catch (DataIntegrityViolationException)`).
-- **MUST** ghi comment một dòng nêu lý do ngay tại chỗ flush.
-- Ghi nhiều entity → một lần `saveAll` / flush; **NEVER** flush từng entity trong vòng lặp.
-- Optimistic lock (`@Version`) **không** cần flush: xung đột lúc commit vẫn ném ra trong `OptimisticLockRetrier` (ADR-0003).
+- **MUST** mặc định để Hibernate ghi: sửa entity đang managed (dirty checking) hoặc `save()` / `saveAll()`.
+- **Một lần flush cho mỗi lượt ghi:** ghi nhiều entity trước cùng một query hoặc trước commit → `save()` / `saveAll()` từng entity để Hibernate flush **gộp một lần**. **NEVER** `saveAndFlush` liên tiếp cho từng entity, **NEVER** flush từng entity trong vòng lặp — mỗi lần flush là một lần dirty-check toàn persistence context.
+
+  ```java
+  // SAI — 2 lần flush
+  teamMemberRepository.saveAndFlush(captain);
+  teamRepository.saveAndFlush(team);
+  teamMemberRepository.disbandRemaining(teamId, now);
+
+  // ĐÚNG — 1 lần flush: Hibernate tự flush captain + team trước native query
+  teamMemberRepository.save(captain);
+  teamRepository.save(team);
+  // bulk phải thấy captain đã LEFT — dựa vào auto-flush trước native query
+  teamMemberRepository.disbandRemaining(teamId, now);
+  ```
+- Hibernate (JPA, FlushMode `AUTO`) **tự flush** thay đổi đang chờ trước JPQL / native query / bulk `@Modifying` trong cùng transaction → **không** cần `saveAndFlush` để query sau thấy dữ liệu vừa ghi. **MUST** comment một dòng tại query phụ thuộc auto-flush. Đã kiểm 2026-11-08 (Hibernate 7.2, log SQL) với native bulk UPDATE (`disbandRemaining`) và native SELECT dựng response (`findDetailById` sau `updateTeam`).
+- **NEVER** gọi `saveAndFlush` / `saveAllAndFlush` / `flush()` trừ khi:
+  1. Cần bắt lỗi ràng buộc DB (unique, FK, CHECK) ngay trong method để đổi thành mã lỗi nghiệp vụ (`try { saveAndFlush } catch (DataIntegrityViolationException)`).
+  2. Cần phát hiện xung đột (optimistic lock, ràng buộc) **trước** một tác dụng phụ không rollback được trong cùng transaction (gọi API ngoài, gửi email/message).
+- **MUST** ghi comment một dòng nêu lý do ngay tại chỗ flush tường minh.
+- **NEVER** đổi FlushMode sang `COMMIT` — phá auto-flush mà code dựa vào.
+- Optimistic lock (`@Version`) **không** cần flush: kiểm version nằm trong chính câu `UPDATE … WHERE version = ?` dù chạy lúc flush hay lúc commit; retrier bọc cả bước commit nên xung đột lúc commit vẫn được thử lại (ADR-0003).
 - Lý do: flush không đổi số câu SQL (ngưỡng §3 tính như nhau); flush sớm giữ khoá row đến hết transaction (tăng tranh chấp khi đồng thời) và tốn một lần dirty-check toàn persistence context mỗi lần gọi.
 
 ## 5. Ranh giới request đồng bộ

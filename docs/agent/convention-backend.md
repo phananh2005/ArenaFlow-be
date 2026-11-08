@@ -224,8 +224,8 @@ public interface ArenaRepository extends JpaRepository<Arena, Long> {
 })
 @Getter
 @Setter
-@NoArgsConstructor
-@AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)  // JPA cần; code ngoài dùng builder
+@AllArgsConstructor(access = AccessLevel.PRIVATE)   // chỉ cho @Builder dùng
 @Builder
 public class Arena extends BaseEntity {
     
@@ -252,6 +252,7 @@ public class Arena extends BaseEntity {
     private ArenaStatus status;
     
     @OneToMany(mappedBy = "arena", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default  // thiếu → builder để null, bỏ qua "= new ArrayList<>()"
     private List<TimeSlot> timeSlots = new ArrayList<>();
 }
 ```
@@ -265,24 +266,51 @@ public abstract class BaseEntity {
     
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
     
     @LastModifiedDate
     @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+    private OffsetDateTime updatedAt;
     
     @Column(name = "deleted_at")
-    private LocalDateTime deletedAt;
+    private OffsetDateTime deletedAt;
 }
 ```
 
 **Quy tắc:**
 - `@Entity` + `@Table(name = "...")`
-- Lombok: `@Getter`, `@Setter`, `@NoArgsConstructor`, `@AllArgsConstructor`, `@Builder`
+- Lombok: `@Getter`, `@Setter`, `@NoArgsConstructor(access = PROTECTED)`, `@AllArgsConstructor(access = PRIVATE)`, `@Builder` — **không** viết tay getter/setter/constructor
+- **NEVER** `@Data`, `@EqualsAndHashCode`, `@ToString` trên entity (equals/hashCode theo field sai với entity JPA; toString có thể kích hoạt lazy load)
 - Column name = **snake_case**: `arena_name`, `price_per_hour`
 - Enum dùng `@Enumerated(EnumType.STRING)`
-- Timestamp: `LocalDateTime`, có `createdAt`, `updatedAt`, `deletedAt`
+- Timestamp: `OffsetDateTime` (cột `timestamptz`), có `createdAt`, `updatedAt`, `deletedAt` — **không** `LocalDateTime` (không mang múi giờ, giá trị phụ thuộc timezone JVM). JVM build/test/chạy với `-Duser.timezone=Asia/Ho_Chi_Minh` (`docs/agent/README.md`)
 - Relationship: `@OneToMany`, `@ManyToOne`, `mappedBy`, `cascade`
+
+### 6.1. Tạo entity bằng builder
+
+```java
+// ĐÚNG — tạo mới bằng builder
+TeamMember captain = TeamMember.builder()
+        .teamId(teamId)
+        .userId(userId)
+        .role(TeamMember.Role.CAPTAIN)
+        .status(TeamMember.Status.ACTIVE)
+        .invitedAt(now)
+        .joinedAt(now)
+        .build();
+
+// SAI — chuỗi setter sau new, hoặc hàm phụ private chỉ để gán field
+TeamMember captain = new TeamMember();
+captain.setTeamId(teamId);
+captain.setUserId(userId);
+// ...
+```
+
+- **Tạo mới** entity → **MUST** dùng `X.builder()…build()`; không dùng `new X()` + chuỗi setter, không viết hàm phụ `private static X x(...)` chỉ để gán field.
+- **Sửa** entity đang được persistence context quản lý → dùng **setter** (dirty checking). **NEVER** `toBuilder()` / builder để sửa: tạo object mới, Hibernate không theo dõi.
+- Field có giá trị khởi tạo (`= List.of()`, `= new ArrayList<>()`, enum mặc định…) → **MUST** `@Builder.Default`.
+- Code `src/main` **NEVER** gán qua builder các field do JPA/Hibernate quản lý: `id` (`@GeneratedValue`), `version` (`@Version`), `createdAt`/`updatedAt` (`@PrePersist`/`@PreUpdate`, auditing).
+- Builder chỉ gom việc gán field; quy tắc nghiệp vụ (vd `joinedAt = invitedAt` cho captain) vẫn nằm ở service/guard, có comment lý do tại chỗ.
 
 ---
 
@@ -291,50 +319,42 @@ public abstract class BaseEntity {
 ### Request DTO
 
 ```java
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-public class CreateArenaRequest {
-    
-    @NotBlank(message = "Tên sân không được để trống")
-    @Size(max = 100, message = "Tên sân tối đa 100 ký tự")
-    private String arenaName;
-    
-    @NotBlank(message = "Địa chỉ không được để trống")
-    @Size(max = 200, message = "Địa chỉ tối đa 200 ký tự")
-    private String location;
-    
-    @NotNull(message = "Loại sân không được để trống")
-    private ArenaType arenaType;
-    
-    @NotNull(message = "Giá không được để trống")
-    @DecimalMin(value = "0.0", inclusive = false, message = "Giá phải lớn hơn 0")
-    private BigDecimal pricePerHour;
+public record CreateArenaRequest(
+        @NotBlank(message = "Tên sân không được để trống")
+        @Size(max = 100, message = "Tên sân tối đa 100 ký tự")
+        String arenaName,
+
+        @NotBlank(message = "Địa chỉ không được để trống")
+        @Size(max = 200, message = "Địa chỉ tối đa 200 ký tự")
+        String location,
+
+        @NotNull(message = "Loại sân không được để trống")
+        ArenaType arenaType,
+
+        @NotNull(message = "Giá không được để trống")
+        @DecimalMin(value = "0.0", inclusive = false, message = "Giá phải lớn hơn 0")
+        BigDecimal pricePerHour) {
 }
 ```
 
 ### Response DTO
 
 ```java
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class ArenaResponse {
-    private Long id;
-    private String arenaName;
-    private String location;
-    private ArenaType arenaType;
-    private BigDecimal pricePerHour;
-    private ArenaStatus status;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+public record ArenaResponse(
+        UUID id,
+        String arenaName,
+        String location,
+        ArenaType arenaType,
+        BigDecimal pricePerHour,
+        ArenaStatus status,
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt) {
 }
 ```
 
 **Quy tắc:**
+- DTO = Java `record` (request lẫn response); **không** Lombok, **không** `@Builder`
+- Dựng DTO bằng mapper (MapStruct) hoặc constructor chuẩn của record — thiếu tham số là lỗi biên dịch; builder cho phép bỏ sót field mà không báo
 - Field name = **camelCase** (trùng API convention)
 - Request: có validation annotations (`@NotBlank`, `@NotNull`, `@Size`, ...)
 - Response: không có validation, chỉ có data
@@ -370,7 +390,7 @@ public class GlobalExceptionHandler {
             .code("ARENA_001")
             .message("Sân không tồn tại")
             .details(ex.getMessage())
-            .timestamp(LocalDateTime.now())
+            .timestamp(OffsetDateTime.now())
             .path(((ServletWebRequest) request).getRequest().getRequestURI())
             .build();
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
@@ -391,7 +411,7 @@ public class GlobalExceptionHandler {
             .code("VALIDATION_ERROR")
             .message("Dữ liệu không hợp lệ")
             .validationErrors(validationErrors)
-            .timestamp(LocalDateTime.now())
+            .timestamp(OffsetDateTime.now())
             .path(((ServletWebRequest) request).getRequest().getRequestURI())
             .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
@@ -407,7 +427,7 @@ public class GlobalExceptionHandler {
 - **Method ghi (create/update/delete):** `@Transactional` (bỏ readOnly)
 - **Isolation level:** default = `READ_COMMITTED`
 - **Propagation:** default = `REQUIRED`
-- **Ghi entity:** mặc định để Hibernate ghi lúc commit; `saveAndFlush` / `flush()` chỉ khi có lý do và kèm comment — xem `non-functional-standards.md` §4.1
+- **Ghi entity:** mặc định `save()` / `saveAll()` hoặc dirty checking, một lần flush (tự động) cho mỗi lượt ghi; `saveAndFlush` / `flush()` chỉ theo ngoại lệ, kèm comment — xem `non-functional-standards.md` §4.1
 
 ```java
 @Transactional
@@ -417,16 +437,16 @@ public BookingResponse createBooking(CreateBookingRequest request) {
 }
 ```
 
-**Ngoại lệ — Method có optimistic lock retry:**
+**Ngoại lệ — Method có retry xung đột đồng thời (optimistic lock, deadlock):**
 - **Không** annotate `@Transactional` ở method level
-- Transaction do `OptimisticLockRetrier` quản lý — mỗi lần thử là 1 transaction mới
+- Transaction do `ConcurrencyConflictRetrier` quản lý — mỗi lần thử là 1 transaction mới
 - Lý do: retry phải nằm **ngoài** transaction; nếu `@Transactional` bọc retry → toàn bộ lần thử dùng chung persistence context đã rollback-only
 - Xem ADR-0003 cho chi tiết
 
 ```java
 // Method có retry - KHÔNG có @Transactional
 public TeamResponse updateTeam(UUID teamId, UUID userId, UpdateTeamRequest request) {
-    return optimisticLockRetrier.execute(() -> {
+    return concurrencyConflictRetrier.execute(() -> {
         // Transaction mới cho mỗi lần thử
         // ...
     });
@@ -512,6 +532,8 @@ class ArenaServiceImplTest {
 }
 ```
 
+**Fixture:** dựng entity bằng `X.builder()` (§6.1), chỉ gán field test cần — không `new X()` + chuỗi setter. Unit test với mock được gán `id` qua builder (entity không persist); test có persist (integration) **không** gán `id`/`version`/audit.
+
 ### Integration Test (Repository)
 
 ```java
@@ -549,8 +571,9 @@ class ArenaRepositoryTest {
 - [ ] Javadoc tiếng Việt theo §2.4 (có cho method có hợp đồng không hiển nhiên; không cho method tự mô tả; không trỏ tài liệu/ADR)
 - [ ] Controller chỉ xử lý HTTP, không có business logic
 - [ ] Service có `@Transactional`, method ghi bỏ `readOnly`
-- [ ] Entity có `@Entity`, column name snake_case, có BaseEntity
-- [ ] DTO không expose entity, có validation
+- [ ] Entity có `@Entity`, column name snake_case, có BaseEntity; Lombok `@Getter/@Setter/@Builder`, không `@Data`
+- [ ] Tạo mới entity (main + fixture test) bằng builder; sửa entity managed bằng setter, không `toBuilder()`; field khởi tạo có `@Builder.Default`
+- [ ] DTO là `record`, không expose entity, có validation
 - [ ] Exception có custom exception + global handler
 - [ ] Soft delete dùng `deletedAt`
 - [ ] Logging dùng `@Slf4j`, không log sensitive data

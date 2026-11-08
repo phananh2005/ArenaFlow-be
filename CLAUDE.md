@@ -108,9 +108,9 @@
 - Nhận yêu cầu implement **chức năng mới** → **MUST** chạy `task-state-init` trước khi viết code (sau khi thiết kế đã duyệt).
 - **MUST** ghi kế hoạch chi tiết vào `current-task.md` và chờ user duyệt — một cổng duyệt duy nhất.
 - Viết endpoint / truy vấn DB → **MUST** đọc `docs/agent/non-functional-standards.md` **trước** khi lập kế hoạch; không đạt ngưỡng → dừng, chờ xác nhận.
-- Sau khi viết/sửa code → **MUST** chạy `./mvnw test` liên quan, dán output, xác nhận PASS.
+- Sau khi viết/sửa code → **MUST** chạy `./mvnw -Duser.timezone=Asia/Ho_Chi_Minh test` liên quan, dán output, xác nhận PASS. Mọi lệnh `./mvnw` (build/test) **MUST** kèm `-Duser.timezone=Asia/Ho_Chi_Minh`.
   - **Unit test thuần** (không dựng Spring context/DB) chạy độc lập, **không** cần `.env.dev`.
-  - **Integration test** (`@SpringBootTest`, `@DataJpaTest`, migration test) cần DB → agent **tự nạp `.env.dev`** (DB dev) rồi chạy, không cần hỏi: `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Dtest=<Test> test`. **NEVER** in giá trị biến môi trường.
+  - **Integration test** (`@SpringBootTest`, `@DataJpaTest`, migration test) cần DB → agent **tự nạp `.env.dev`** (DB dev) rồi chạy, không cần hỏi: `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Duser.timezone=Asia/Ho_Chi_Minh -Dtest=<Test> test`. **NEVER** in giá trị biến môi trường.
   - Chỉ báo blocker khi không có `.env.dev` hoặc DB dev không kết nối được; khi đó không khẳng định PASS.
 - **Sau khi sửa chức năng đã triển khai và test PASS → MUST tự kiểm tra:**
   1. Có thay đổi API contract / database schema / luồng component / integration? → cập nhật design
