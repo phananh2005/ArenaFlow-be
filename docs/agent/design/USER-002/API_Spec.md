@@ -1,144 +1,382 @@
 # API Specification — Giải tán đội & quy tắc xoá tài khoản đội trưởng
 
+<!-- File này được publish cho FE (ADR-0010). Viết theo design-standards.md §11:
+     không tên class/bảng/cột/migration/transaction/khoá/số truy vấn; không trỏ Component_Class_Design.md,
+     Processing_Flow.md, docs/database/. Chi tiết nội bộ BE ghi ở hai file đó.
+     Số mục §2.1a, §2.4, §2.5, §4 được tài liệu khác trỏ tới — giữ nguyên khi sửa. -->
+
 | Mục | Giá trị |
 |---|---|
 | Mã chức năng | `USER-002` |
 | Phạm vi tầng | Backend (Spring Boot REST API) |
-| Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · PostgreSQL (Neon) · Flyway |
-| Quy ước áp dụng | `docs/agent/api-convention.md`, `docs/agent/security-backend.md` |
-| Ràng buộc dữ liệu | USER-001 schema V1/V2/V3; delta được mô tả tại `Component_Class_Design.md` §5 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.7** (developer · 2026-11-09) — lịch sử thay đổi: `CHANGELOG.md` |
+| Repo | ArenaFlow-be |
+| Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
+| Spec nghiệp vụ | `docs/agent/business-spec/USER-002/` (UC-T06, UC-U03 sửa, UC-T05 sửa; BR-T06..BR-T14, BC-T02, BC-T06) |
+| Phụ thuộc | [`USER-001/API_Spec.md`](../USER-001/API_Spec.md) — hợp đồng gốc của đội, lời mời, hồ sơ; file này chỉ mô tả phần USER-002 thêm/đổi |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.8** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
-Bổ sung giải tán vĩnh viễn bởi captain, biểu diễn trạng thái `DISBANDED`, giữ lịch sử đội và membership, và sửa quy tắc xoá tài khoản captain. Kế thừa envelope, UUID, phân trang, kiểu enum UPPERCASE, JWT và hợp đồng endpoint USER-001; không chép lại các DTO không đổi.
+Đội trưởng **giải tán vĩnh viễn** đội của mình (kể cả đội đang bị admin khoá). Đội đã giải tán vẫn xem được, có trạng thái `DISBANDED` kèm người/thời điểm/lý do giải tán, nhưng mọi thao tác ghi bị chặn. Admin xem được lịch sử thành viên của đội ở mọi trạng thái. Đội trưởng muốn xoá tài khoản phải chuyển quyền hoặc giải tán hết đội của mình trước.
 
-**Ngoài phạm vi:** frontend; xử lý Match/pairing/mercenary gắn đội; thông báo; khôi phục đội đã giải tán; `Idempotency-Key` (`api-convention.md` §13) cho `POST /teams` và `POST /teams/{id}/disband` — làm thành chức năng dùng chung riêng (bảng `idempotency_keys`, component dùng chung, vượt W6 cần duyệt NFS), chốt bởi user 2026-11-05.
+**Quy ước chung cho mọi endpoint của mã này:**
+- Kế thừa toàn bộ quy ước chung của USER-001 (mục "Quy ước chung cho mọi endpoint"): xác thực `Authorization: Bearer <access token>` (thiếu/sai/hết hạn → `401 AUTH_001`), ID là chuỗi UUID, envelope `data` / `error` / `pagination`, giá trị enum **UPPERCASE**, phân trang `page` (≥ 1, mặc định 1) · `pageSize` (1..100, mặc định 20).
+- Field thời điểm (`…At`) của mã này là chuỗi ISO-8601 UTC, vd `"2026-11-05T09:15:00Z"`.
+- Tên và ảnh của **user đã xoá tài khoản** được che: tên → `"Người dùng đã xóa"`, ảnh → `null`; id của user vẫn giữ nguyên.
+- Thao tác ghi lên đội va chạm với thao tác khác cùng lúc → `409 TEAM_014`; FE cho người dùng bấm lại.
+
+**Ngoài phạm vi:** frontend; trận đấu/ghép kèo/lính đánh thuê gắn với đội; thông báo; khôi phục đội đã giải tán. Header `Idempotency-Key` (`api-convention.md` §13) **chưa hỗ trợ** cho `POST /teams` và `POST /teams/{teamId}/disband` — gửi kèm header không có tác dụng.
 
 ## 2. Endpoints
 
-| Endpoint | Thay đổi USER-002 |
-|---|---|
-| `POST /api/v1/teams/{teamId}/disband` | Mới; captain hoạt động giải tán đội đang `ACTIVE` hoặc `INACTIVE` |
-| `GET /api/v1/teams/{teamId}` | Mở rộng `TeamResponse` cho `DISBANDED` và thông tin người giải tán |
-| `GET /api/v1/teams` | Filter nhận thêm `DISBANDED`; mặc định vẫn `ACTIVE`; `ALL` gồm các trạng thái |
-| `GET /api/v1/admin/teams` | Filter dùng chung `TeamStatusFilter` nên nhận thêm `DISBANDED`; mặc định vẫn `ALL`, **nay gồm cả đội `DISBANDED`**. `AdminTeamSummaryResponse` thêm `disbandedByName` (§3.2) |
-| `GET /api/v1/admin/teams/{teamId}/members` | Mới; Admin xem lịch sử membership của đội ở mọi trạng thái (giữ phân trang/response convention USER-001) |
-| `GET /api/v1/teams/{teamId}/captain/history` | Tiếp tục đọc lịch sử, kể cả đội `DISBANDED` |
-| `DELETE /api/v1/profile` | Captain phải chuyển quyền hoặc giải tán tất cả đội chưa giải tán trước khi xoá; thành viên thường tiếp tục được xử lý theo USER-001 |
-| `PATCH /api/v1/teams/{teamId}`; `POST /api/v1/teams/{teamId}/invitations`; `POST /api/v1/invitations/{invitationId}/accept`; `POST /api/v1/invitations/{invitationId}/reject`; `POST /api/v1/teams/{teamId}/captain/transfer`; `POST /api/v1/teams/{teamId}/members/leave`; `PATCH /api/v1/admin/teams/{teamId}/mark-inactive`; `PATCH /api/v1/admin/teams/{teamId}/reactivate` | Thêm `422 TEAM_016` khi đội `DISBANDED` (thứ tự guard §2.1a). Riêng `POST .../invitations` thêm `409 TEAM_014`: nay chạy qua retrier và tăng `team.version`, nên các lời mời song song vào cùng một đội bị tuần tự hoá. Giữ hợp đồng USER-001 còn lại |
+| # | Method + Path | Loại | Dùng khi | Ai gọi được |
+|---|---|---|---|---|
+| 2.1 | `POST /api/v1/teams/{teamId}/disband` | **Mới** | Đội trưởng bấm "Giải tán đội" | Đội trưởng đang hoạt động của đội |
+| 2.2 | `GET /api/v1/teams/{teamId}` | Đổi response | Xem chi tiết đội | User đã đăng nhập |
+| 2.3 | `GET /api/v1/teams` | Đổi filter + response | Danh sách đội | User đã đăng nhập |
+| 2.4 | `GET /api/v1/admin/teams/{teamId}/members` | **Mới** | Admin xem lịch sử thành viên của đội | Admin |
+| 2.5 | `DELETE /api/v1/profile` | Đổi điều kiện lỗi | User xoá tài khoản | User đã đăng nhập |
+| 2.6 | `GET /api/v1/admin/teams` | Đổi filter + mặc định + response | Admin tìm đội | Admin |
+| 2.7 | 8 endpoint ghi của USER-001 (liệt kê ở mục 2.7) | Thêm mã lỗi | Mọi thao tác ghi lên đội | Như USER-001 |
+| 2.8 | `GET /api/v1/teams/{teamId}/captain/history`, `GET /api/v1/teams/{teamId}/members` | Không đổi hợp đồng | Xem lịch sử đội trưởng / thành viên hiện tại | User đã đăng nhập |
 
-### 2.1. POST /api/v1/teams/{teamId}/disband
+Lỗi chung của mọi endpoint (`400 VALIDATION_ERROR`, `401 AUTH_001`, lỗi `SYS_*`) theo `api-convention.md` và USER-001; bảng lỗi từng endpoint dưới đây chỉ liệt kê mã riêng.
 
-**Quyền:** User đã xác thực; service xác minh người gọi là captain `ACTIVE` của đội. Không kiểm tra role: Admin không giải tán được **với tư cách admin**, nhưng user role ADMIN đang là captain ACTIVE của đội mình vẫn giải tán được với tư cách đội trưởng (BR-T07; chốt bởi user, 2026-11-05).
+### 2.1. Giải tán đội — `POST /api/v1/teams/{teamId}/disband`
 
-**Request:** `DisbandTeamRequest`, **body không bắt buộc** (`@RequestBody(required = false)`): không body, `{}` hoặc `{"reason": null}` đều dùng lý do mặc định.
+**Dùng khi:** Đội trưởng chọn "Giải tán đội" ở màn hình chi tiết đội, xác nhận cảnh báo (giải tán là vĩnh viễn, mọi thành viên rời đội, lời mời đang chờ bị huỷ) và nhập lý do (tuỳ chọn).
+**Ai gọi được:** Đội trưởng đang hoạt động của đội; đội đang `ACTIVE` hoặc `INACTIVE` (bị admin khoá). Thành viên thường và người được mời không gọi được. Admin **không** giải tán được với tư cách admin; user có vai trò `ADMIN` vẫn giải tán được đội mà chính mình đang là đội trưởng.
 
-> Endpoint dạng hành động (`/disband`) theo tiền lệ USER-001 (`/captain/transfer`, `/members/leave`, `/accept`, `/mark-inactive`). Ngoại lệ "action sub-resource" sẽ được bổ sung vào `api-convention.md` qua `workflow-adapt` trên nhánh `chore/agent-framework-*` riêng.
+**Path params**
+
+| Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `teamId` | UUID | Có | — | `"0193a5c2-7e41-7c3a-9f12-4b8e6d2a1c01"` |
+
+**Request body** — **không bắt buộc**: không gửi body, gửi `{}` hoặc `{"reason": null}` đều dùng lý do mặc định.
+
+| Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `reason` | string \| null | Không | ≤ 100 ký tự, tính cả khoảng trắng đầu/cuối. Server bỏ khoảng trắng đầu/cuối; rỗng hoặc chỉ gồm khoảng trắng → lưu `"Đội trưởng giải tán đội"` | `"Hết người chơi"` |
 
 ```json
 { "reason": "Hết người chơi" }
 ```
 
-`reason` tùy chọn, tối đa 100 ký tự tính trên giá trị gốc (`400 VALIDATION_ERROR`). Service `trim()`; nếu vắng mặt, null hoặc rỗng sau trim (kể cả chỉ gồm khoảng trắng) thì lưu `Đội trưởng giải tán đội`, ngược lại lưu giá trị đã trim (BR-T08).
+**Response 200** — đối tượng Đội (chi tiết) sau khi giải tán (mục 5.1): `status = DISBANDED`, có `disbandedAt`, `disbandedById`, `disbandedByName`, `disbandReason`; `captainId`/`captainName` = `null` và `memberCount = 0` vì mọi thành viên (kể cả đội trưởng) đã rời đội; `inactiveReason` giữ nguyên nếu đội đang bị admin khoá.
 
-**Response 200:** `TeamResponse` cập nhật; envelope `data` theo USER-001. `status = DISBANDED`, gồm `disbandedAt`, `disbandedById`, `disbandedByName`, `disbandReason`; `inactiveReason` được giữ nguyên nếu có.
+```json
+{
+  "data": {
+    "teamId": "0193a5c2-7e41-7c3a-9f12-4b8e6d2a1c01",
+    "teamName": "Team Alpha",
+    "avatarUrl": null,
+    "description": "Đá giao lưu tối thứ 5",
+    "skillLevels": ["Nhiệt tình", "Rèn luyện"],
+    "status": "DISBANDED",
+    "inactiveReason": null,
+    "captainId": null,
+    "captainName": null,
+    "memberCount": 0,
+    "createdBy": "0193a5c0-1b2c-7d3e-8f40-5a6b7c8d9e01",
+    "createdAt": "2026-11-02T11:00:00Z",
+    "updatedAt": "2026-11-05T09:15:00Z",
+    "disbandedAt": "2026-11-05T09:15:00Z",
+    "disbandedById": "0193a5c0-1b2c-7d3e-8f40-5a6b7c8d9e01",
+    "disbandedByName": "Nguyễn Văn A",
+    "disbandReason": "Hết người chơi"
+  }
+}
+```
 
-**Lỗi:** `400 VALIDATION_ERROR` (reason >100 hoặc lỗi định dạng); `401 AUTH_001`; `403 TEAM_002` (caller không phải captain đang hoạt động); `404 TEAM_001`; `409 TEAM_014` (xung đột đồng thời hết retry); `422 TEAM_016` (đội đã giải tán, kể cả giải tán lặp lại).
+**Kết quả phụ** (FE không nhận trong response, thấy khi gọi lại các endpoint đọc): mọi thành viên đang hoạt động → `LEFT`; mọi lời mời đang chờ của đội → `REJECTED`; lịch sử đội trưởng và lịch sử thành viên giữ nguyên.
 
-**Guard:** xem §2.1a.
+**Không idempotent:** gọi lại (kể cả bấm hai lần liên tiếp) → `422 TEAM_016`. Request bị timeout/mất kết nối → gọi `GET /api/v1/teams/{teamId}` để biết đội đã giải tán hay chưa, không gửi lại mù.
 
-### 2.1a. Thứ tự guard theo endpoint (nguồn duy nhất)
+**Lỗi**
 
-Chốt bởi user, 2026-11-05: kiểm tra `DISBANDED` → `422 TEAM_016` **ngay sau** kiểm tra tồn tại, **trước** `INACTIVE` (`TEAM_015`) và trước quyền/tư cách (`TEAM_002`, `TEAM_010`, `TEAM_006`...). Lý do: đội đã giải tán không còn captain hoặc member ACTIVE, nên nếu kiểm tra quyền trước thì `TEAM_016` không bao giờ được trả về. Thứ tự này khớp code `TeamGuard` USER-001 (tồn tại → trạng thái → quyền) và **thay** câu "tồn tại → quyền → state" trong `USER-001/Processing_Flow.md` §1. 401 (filter Security) luôn trả trước 400 (Bean Validation).
-
-| Endpoint | Thứ tự guard (sau JWT + Bean Validation) | Ghi chú |
-|---|---|---|
-| `POST /teams/{id}/disband` | `TEAM_001` → `TEAM_016` → `TEAM_002` | Không chặn `INACTIVE` (BR-T12) |
-| `PATCH /teams/{id}` | `TEAM_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` | |
-| `POST /teams/{id}/invitations` | `TEAM_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` → `USER_001` → `TEAM_003` | Tăng `team.version` lúc commit (race M1, `Processing_Flow.md` §5) |
-| `POST /invitations/{id}/accept` · `/reject` | `TEAM_004` → `TEAM_005` → `TEAM_016` → `TEAM_015` → `TEAM_006` | |
-| `POST /teams/{id}/captain/transfer` | `TEAM_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` → `TEAM_008` → `TEAM_007` | |
-| `POST /teams/{id}/members/leave` | `TEAM_001` → `TEAM_016` → `TEAM_010` → `TEAM_009` | **Không** chặn `INACTIVE`: thành viên vẫn rời được đội bị Admin khoá, như USER-001 (chốt bởi user, 2026-11-05) |
-| `PATCH /admin/teams/{id}/mark-inactive` | `TEAM_001` → `TEAM_016` → `TEAM_011` | |
-| `PATCH /admin/teams/{id}/reactivate` | `TEAM_001` → `TEAM_016` → `TEAM_012` → `TEAM_013` | |
-
-**Bên thua race luôn nhận `TEAM_016`:** nếu đội bị giải tán bởi request song song **sau** khi request này đã qua bước kiểm trạng thái, các guard phía sau (`TEAM_002`, `TEAM_007`, `TEAM_010`, `TEAM_013`) có thể thất bại vì captain/member vừa bị chuyển LEFT. Khi đó service đọc lại trạng thái đã commit của đội; đội `DISBANDED` → trả `422 TEAM_016` thay cho mã gốc (`Processing_Flow.md` §5). Đội chưa giải tán → giữ mã gốc.
-
-### 2.2. Thay đổi response `TeamResponse`
-
-Các field USER-001 giữ nguyên. Thêm:
-
-| Field | Type | Mô tả |
-|---|---|---|
-| `disbandedAt` | `OffsetDateTime \| null` | Thời điểm giải tán UTC; null nếu chưa giải tán |
-| `disbandedById` | `UUID \| null` | User giải tán; null nếu chưa giải tán |
-| `disbandedByName` | `String \| null` | Tên người giải tán để hiển thị; với đội đã giải tán hiển thị người giải tán thay vì captain đang hoạt động |
-| `disbandReason` | `String \| null` | Lý do giải tán; đội đã giải tán luôn có giá trị, gồm mặc định |
-
-Với đội `DISBANDED`, mọi member đã rời nên `captainId`/`captainName` tiếp tục null theo USER-001; `disbandedByName` là nhãn người chịu trách nhiệm hiển thị. Nếu người giải tán đã soft-delete: `disbandedByName` = `Người dùng đã xóa` qua `DeletedUserMasking` USER-001; `disbandedById` giữ nguyên. Cờ deleted lấy trong cùng query join, không thêm query.
-
-### 2.3. Thay đổi filter `GET /api/v1/teams`
-
-`status` ∈ `ACTIVE | INACTIVE | DISBANDED | ALL`, mặc định `ACTIVE`; sort/page/pageSize và envelope giữ USER-001. `DISBANDED` lọc riêng trạng thái đã giải tán. Danh sách `ALL` gồm cả ba trạng thái.
-
-### 2.4. GET /api/v1/admin/teams/{teamId}/members
-
-**Quyền:** chỉ Admin; User thường bị từ chối theo quy tắc admin USER-001.
-
-**Mô tả:** Xem lịch sử membership của đội ở **mọi trạng thái** (`ACTIVE`, `INACTIVE`, `DISBANDED`). Chỉ gồm người đã từng tham gia: `team_member.status ∈ {ACTIVE, LEFT}`; không gồm lời mời `PENDING`/`REJECTED`. Không thay đổi quyền hoặc nội dung endpoint `GET /api/v1/teams/{teamId}/members` hiện có.
-
-**Query params:**
-
-| Param | Type | Mặc định | Ràng buộc |
+| HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
-| `status` | `String` | `ALL` | `ACTIVE \| LEFT \| ALL`; giá trị khác → `400 VALIDATION_ERROR` |
-| `page`, `pageSize` | `int` | theo USER-001 | theo `PageRequestFactory` USER-001 |
+| 400 | `VALIDATION_ERROR` | `reason` > 100 ký tự (`validationErrors[].field = "reason"`) hoặc JSON sai | Hiện lỗi dưới ô lý do, giữ hộp thoại |
+| 403 | `TEAM_002` | Người gọi không phải đội trưởng đang hoạt động (vd quyền vừa được chuyển cho người khác) | Tải lại chi tiết đội; ẩn nút "Giải tán đội" |
+| 404 | `TEAM_001` | Đội không tồn tại | Báo "Không tìm thấy đội", quay về danh sách |
+| 409 | `TEAM_014` | Đội vừa bị thao tác khác thay đổi cùng lúc, thử lại vẫn va chạm | Tải lại chi tiết đội, cho người dùng bấm lại |
+| 422 | `TEAM_016` | Đội đã giải tán (kể cả lần bấm thứ hai) | Tải lại chi tiết đội, hiện nhãn "Đã giải tán", ẩn mọi nút thao tác |
 
-**Sort:** `joined_at ASC, id ASC` (ổn định, cố định; không nhận param sort).
+### 2.1a. Thứ tự mã lỗi khi nhiều điều kiện cùng sai
 
-**Response 200:** `PageResponse<MemberHistoryResponse>` trong envelope USER-001.
+Khi một request vi phạm nhiều điều kiện, server trả **mã đứng trước** trong cột "Thứ tự". Luôn: `401 AUTH_001` trước `400 VALIDATION_ERROR`; `400 VALIDATION_ERROR` trước mọi mã trong bảng.
 
-| Field | Type | Mô tả |
+| Endpoint | Thứ tự | Ghi chú cho FE |
 |---|---|---|
-| `memberId`, `teamId`, `userId`, `displayName`, `avatarUrl`, `role`, `status`, `joinedAt` | như `MemberResponse` | `displayName`/`avatarUrl` che theo `DeletedUserMasking`; `role` là vai trò tại thời điểm rời đội |
-| `leftAt` | `OffsetDateTime \| null` | Thời điểm rời đội; null nếu đang `ACTIVE` |
+| `POST /teams/{teamId}/disband` | `TEAM_001` → `TEAM_016` → `TEAM_002` | Đội `INACTIVE` vẫn giải tán được, không có `TEAM_015` |
+| `PATCH /teams/{teamId}` | `TEAM_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` | |
+| `POST /teams/{teamId}/invitations` | `TEAM_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` → `USER_001` → `TEAM_003` | |
+| `POST /invitations/{invitationId}/accept` · `/reject` | `TEAM_004` → `TEAM_005` → `TEAM_016` → `TEAM_015` → `TEAM_006` | |
+| `POST /teams/{teamId}/captain/transfer` | `TEAM_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` → `TEAM_008` → `TEAM_007` | |
+| `POST /teams/{teamId}/members/leave` | `TEAM_001` → `TEAM_016` → `TEAM_010` → `TEAM_009` | Đội `INACTIVE` vẫn rời được, không có `TEAM_015` |
+| `PATCH /admin/teams/{teamId}/mark-inactive` | `TEAM_001` → `TEAM_016` → `TEAM_011` | |
+| `PATCH /admin/teams/{teamId}/reactivate` | `TEAM_001` → `TEAM_016` → `TEAM_012` → `TEAM_013` | |
 
-**Lỗi:** `400 VALIDATION_ERROR`; `401 AUTH_001`; `403 AUTH_004`; `404 TEAM_001`.
+**Đội vừa bị giải tán bởi người khác trong lúc request đang chạy:** server trả `422 TEAM_016` thay cho `TEAM_002`, `TEAM_007`, `TEAM_010`, `TEAM_013`. FE xử lý `TEAM_016` như bảng lỗi mục 2.1 (tải lại, ẩn nút).
 
-### 2.5. Xoá tài khoản captain
+### 2.2. Chi tiết đội — `GET /api/v1/teams/{teamId}` (đổi response)
 
-Quy tắc của [ADR-0005](../../decisions/0005-captain-must-hand-over-before-account-deletion.md). `DELETE /api/v1/profile` vẫn trả `204` khi thành công. Nếu user còn captain ACTIVE của bất kỳ đội nào chưa `DISBANDED`, trả `422 USER_003`; không thay đổi đội, membership, invitation hoặc tài khoản. Sau khi qua guard, hành vi USER-001 giữ nguyên: membership ACTIVE → LEFT; invitation PENDING gửi tới user → REJECTED; không tự đổi trạng thái đội.
+**Dùng khi / Ai gọi được / Lỗi:** như USER-001 (`404 TEAM_001`). Đội `DISBANDED` vẫn xem được.
 
-**Mã lỗi:** tái dùng `USER_003` (422) với phạm vi mở rộng: áp dụng cho mọi đội chưa `DISBANDED` mà user là captain ACTIVE, kể cả khi là người duy nhất trong đội và đội đang `INACTIVE`. Message đổi thành “Bạn phải chuyển quyền đội trưởng hoặc giải tán đội trước khi xóa tài khoản” (UC-U03 4a1). Giữ mã để client đang bắt `USER_003` không phải đổi.
+**Thay đổi:** response (đối tượng Đội — chi tiết) thêm 4 field `disbandedAt`, `disbandedById`, `disbandedByName`, `disbandReason` (mục 5.1) và `status` có thêm giá trị `DISBANDED`. Các field USER-001 giữ nguyên. Ví dụ đội đã giải tán: response mục 2.1.
 
-## 3. DTO mới/thay đổi
+**Gợi ý hiển thị:** đội `DISBANDED` không còn đội trưởng (`captainName = null`) → hiển thị `disbandedByName` là "Người giải tán" thay cho đội trưởng, kèm `disbandReason` và `disbandedAt`.
 
-### 3.1. DisbandTeamRequest
+### 2.3. Danh sách đội — `GET /api/v1/teams` (đổi filter + response)
 
-| Field | Type | Required | Ràng buộc |
+**Dùng khi / Ai gọi được:** như USER-001.
+
+**Query params** (`page`, `pageSize`, thứ tự sắp xếp: như USER-001)
+
+| Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `status` | enum | Không | `ACTIVE` \| `INACTIVE` \| `DISBANDED` \| `ALL`; mặc định `ACTIVE`. `ALL` = cả ba trạng thái. Giá trị khác → `400 VALIDATION_ERROR` | `DISBANDED` |
+
+**Thay đổi:** thêm giá trị filter `DISBANDED`; `ALL` nay gồm cả đội đã giải tán; mỗi phần tử (Đội — tóm tắt, mục 5.2) thêm `disbandedByName`.
+
+```json
+{
+  "data": [
+    {
+      "teamId": "0193a5c2-7e41-7c3a-9f12-4b8e6d2a1c01",
+      "teamName": "Team Alpha",
+      "avatarUrl": null,
+      "skillLevels": ["Nhiệt tình"],
+      "status": "DISBANDED",
+      "captainName": null,
+      "memberCount": 0,
+      "createdAt": "2026-11-02T11:00:00Z",
+      "disbandedByName": "Nguyễn Văn A"
+    }
+  ],
+  "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
+}
+```
+
+**Lỗi:** `400 VALIDATION_ERROR` (`status`/`page`/`pageSize` sai) → sửa tham số lọc, về giá trị mặc định.
+
+### 2.4. Lịch sử thành viên (Admin) — `GET /api/v1/admin/teams/{teamId}/members`
+
+**Dùng khi:** Admin mở tab "Lịch sử thành viên" của một đội ở màn hình quản trị — đội ở **mọi trạng thái** (`ACTIVE`, `INACTIVE`, `DISBANDED`).
+**Ai gọi được:** chỉ Admin. Danh sách thành viên đang hoạt động cho user thường vẫn là `GET /api/v1/teams/{teamId}/members` (USER-001, không đổi).
+
+Chỉ gồm người **đã từng tham gia** đội (thành viên `ACTIVE` hoặc đã rời `LEFT`); không gồm lời mời `PENDING`/`REJECTED`.
+
+**Path / Query params**
+
+| Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `teamId` (path) | UUID | Có | — | `"0193a5c2-7e41-7c3a-9f12-4b8e6d2a1c01"` |
+| `status` | enum | Không | `ACTIVE` \| `LEFT` \| `ALL`; mặc định `ALL` (= `ACTIVE` + `LEFT`). Giá trị khác → `400 VALIDATION_ERROR` | `LEFT` |
+| `page` | integer | Không | ≥ 1; mặc định 1 | `1` |
+| `pageSize` | integer | Không | 1..100; mặc định 20 | `20` |
+
+**Sắp xếp:** cố định `joinedAt` tăng dần, rồi `memberId` tăng dần; không nhận tham số `sort`.
+
+**Response 200** — mảng Lịch sử thành viên (mục 5.3) + `pagination`.
+
+```json
+{
+  "data": [
+    {
+      "memberId": "0193a5c3-0a11-7b22-8c33-1d44e55f6601",
+      "teamId": "0193a5c2-7e41-7c3a-9f12-4b8e6d2a1c01",
+      "userId": "0193a5c0-1b2c-7d3e-8f40-5a6b7c8d9e01",
+      "displayName": "Nguyễn Văn A",
+      "avatarUrl": "https://res.cloudinary.com/demo/image/upload/a.jpg",
+      "role": "CAPTAIN",
+      "status": "LEFT",
+      "joinedAt": "2026-11-02T11:00:00Z",
+      "leftAt": "2026-11-05T09:15:00Z"
+    },
+    {
+      "memberId": "0193a5c3-0a11-7b22-8c33-1d44e55f6602",
+      "teamId": "0193a5c2-7e41-7c3a-9f12-4b8e6d2a1c01",
+      "userId": "0193a5c0-1b2c-7d3e-8f40-5a6b7c8d9e02",
+      "displayName": "Người dùng đã xóa",
+      "avatarUrl": null,
+      "role": "MEMBER",
+      "status": "LEFT",
+      "joinedAt": "2026-11-03T08:00:00Z",
+      "leftAt": "2026-11-04T10:00:00Z"
+    }
+  ],
+  "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 2 }
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
-| `reason` | `String` | No | `@Size(max = 100)` trên giá trị gốc; service trim, rỗng sau trim → mặc định |
+| 400 | `VALIDATION_ERROR` | `status`, `page` hoặc `pageSize` sai giá trị (`validationErrors[].field` = tên tham số) | Về giá trị lọc mặc định |
+| 403 | `AUTH_004` | Người gọi không phải Admin | Không hiển thị màn hình quản trị cho user thường |
+| 404 | `TEAM_001` | Đội không tồn tại | Báo "Không tìm thấy đội", quay về danh sách quản trị |
 
-### 3.2. TeamResponse / TeamSummaryResponse
+### 2.5. Xoá tài khoản — `DELETE /api/v1/profile` (đổi điều kiện lỗi)
 
-`TeamResponse` thêm các field ở §2.2. `TeamSummaryResponse` và `AdminTeamSummaryResponse` thêm trạng thái `DISBANDED` và `disbandedByName` (`String | null`, null nếu chưa giải tán) để hiển thị người giải tán trong danh sách; áp cùng quy tắc masking §2.2.
+**Dùng khi / Ai gọi được / Response:** như USER-001 — thành công trả `204` không body.
 
-## 4. Mã lỗi mới / cập nhật
+**Thay đổi** ([ADR-0005](../../decisions/0005-captain-must-hand-over-before-account-deletion.md), BR-T06): user còn là **đội trưởng đang hoạt động của bất kỳ đội nào chưa giải tán** — kể cả là người duy nhất trong đội, kể cả đội đang bị admin khoá — bị từ chối `422 USER_003`; tài khoản, đội, tư cách thành viên và lời mời giữ nguyên. Đội đã giải tán không tính. Không đội nào bị hệ thống tự chuyển trạng thái khi xoá tài khoản (trước đây đội có đội trưởng duy nhất tự chuyển `INACTIVE`).
 
-| Ngữ cảnh | HTTP | Mã/message |
-|---|---:|---|
-| Thao tác ghi bất kỳ trên đội đã giải tán; giải tán lần nữa; admin lock/reactivate | 422 | **Mới** `TEAM_016` — “Đội đã giải tán”. Một mã dùng chung cho mọi thao tác, kể cả kích hoạt lại; nhất quán quy ước 422 của `TEAM_015` |
-| Xoá tài khoản khi caller còn captain đội chưa giải tán | 422 | **Sửa** `USER_003` — “Bạn phải chuyển quyền đội trưởng hoặc giải tán đội trước khi xóa tài khoản”; điều kiện mở rộng theo §2.5 |
-| Request reason vượt 100 ký tự | 400 | `VALIDATION_ERROR` theo convention |
-| Xung đột optimistic lock hoặc deadlock hết retry | 409 | `TEAM_014` (tái dùng USER-001) |
+Khi qua điều kiện trên, hành vi như USER-001: user rời mọi đội đang tham gia (`LEFT`), mọi lời mời đang chờ gửi tới user → `REJECTED`; xoá lần 2 vẫn `204`.
 
-Đã soát registry `ErrorCode` hiện hành: `TEAM_001`…`TEAM_015`, `USER_001`…`USER_003`; `TEAM_016` chưa dùng.
+**Lỗi**
 
-## 5. Danh sách [cần xác nhận]
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 409 | `TEAM_014` | Va chạm với thao tác khác trên đội của user, thử lại vẫn va chạm | Cho người dùng bấm lại |
+| 422 | `USER_003` | Còn là đội trưởng của ít nhất một đội chưa giải tán | Hiện message của `USER_003`; người dùng vào từng đội để chuyển quyền hoặc giải tán (chưa có API liệt kê "đội tôi làm đội trưởng" — mục 6) |
 
-1. ~~Chi tiết endpoint Admin lịch sử thành viên~~ — **đã chốt (user, 2026-11-05):** mọi trạng thái đội; chỉ `ACTIVE`/`LEFT`; DTO mới `MemberHistoryResponse` (§2.4).
-2. ~~Whitespace-only reason~~ — **đã chốt (user, 2026-11-05):** trim; rỗng sau trim → mặc định (§2.1).
-3. ~~Mã lỗi cho đội đã giải tán~~ — **đã chốt (user, 2026-11-05):** `422 TEAM_016` “Đội đã giải tán” cho mọi thao tác ghi, kể cả kích hoạt lại.
-4. ~~Masking người giải tán~~ — **đã chốt (user, 2026-11-05):** `DeletedUserMasking` cho `disbandedByName` ở detail và summary; giữ `disbandedById` (§2.2, §3.2).
-5. ~~Mã lỗi xoá tài khoản captain~~ — **đã chốt (user, 2026-11-05):** mở rộng `422 USER_003`, message theo UC-U03 4a1.
+Mã `USER_003` giữ nguyên từ USER-001, chỉ mở rộng điều kiện và đổi message (mục 4) — FE đang bắt `USER_003` không phải đổi mã.
+
+### 2.6. Danh sách đội (Admin) — `GET /api/v1/admin/teams` (đổi filter + mặc định + response)
+
+**Dùng khi / Ai gọi được:** như USER-001 (Admin; không phải Admin → `403 AUTH_004`).
+
+**Query params** (`page`, `pageSize`, thứ tự sắp xếp: như USER-001)
+
+| Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `status` | enum | Không | `ACTIVE` \| `INACTIVE` \| `DISBANDED` \| `ALL`; mặc định `ALL` | `INACTIVE` |
+
+**Thay đổi:** thêm giá trị filter `DISBANDED`; mặc định `ALL` **nay gồm cả đội đã giải tán**; mỗi phần tử (Đội — tóm tắt Admin, mục 5.2) thêm `disbandedByName`.
+
+```json
+{
+  "data": [
+    {
+      "teamId": "0193a5c2-7e41-7c3a-9f12-4b8e6d2a1c01",
+      "teamName": "Team Alpha",
+      "avatarUrl": null,
+      "skillLevels": ["Nhiệt tình"],
+      "status": "DISBANDED",
+      "inactiveReason": "Vi phạm quy định sân",
+      "captainName": null,
+      "memberCount": 0,
+      "createdAt": "2026-11-02T11:00:00Z",
+      "disbandedByName": "Nguyễn Văn A"
+    }
+  ],
+  "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
+}
+```
+
+**Lỗi:** `400 VALIDATION_ERROR` (tham số sai) · `403 AUTH_004` — xử lý như mục 2.4.
+
+### 2.7. Thao tác ghi USER-001 trên đội đã giải tán (thêm mã lỗi)
+
+Request/response các endpoint dưới đây **không đổi** (xem USER-001). Thêm:
+
+| Endpoint | Thêm lỗi |
+|---|---|
+| `PATCH /api/v1/teams/{teamId}` | `422 TEAM_016` |
+| `POST /api/v1/teams/{teamId}/invitations` | `422 TEAM_016`; `409 TEAM_014` (nhiều lời mời gửi cùng lúc vào cùng một đội) |
+| `POST /api/v1/invitations/{invitationId}/accept` | `422 TEAM_016` |
+| `POST /api/v1/invitations/{invitationId}/reject` | `422 TEAM_016` |
+| `POST /api/v1/teams/{teamId}/captain/transfer` | `422 TEAM_016` |
+| `POST /api/v1/teams/{teamId}/members/leave` | `422 TEAM_016` |
+| `PATCH /api/v1/admin/teams/{teamId}/mark-inactive` | `422 TEAM_016` |
+| `PATCH /api/v1/admin/teams/{teamId}/reactivate` | `422 TEAM_016` (đội đã giải tán không kích hoạt lại được, kể cả Admin) |
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 409 | `TEAM_014` | Lời mời gửi cùng lúc với thao tác khác trên cùng đội (vd đội trưởng mời nhiều người liên tiếp rất nhanh), thử lại vẫn va chạm | Cho người dùng gửi lại lời mời |
+| 422 | `TEAM_016` | Đội đã giải tán (kể cả vừa bị giải tán trong lúc request đang chạy) | Tải lại chi tiết đội, hiện nhãn "Đã giải tán", ẩn nút thao tác; với lời mời: xoá khỏi danh sách lời mời đang chờ |
+
+Khi nhiều lỗi cùng xảy ra: mục 2.1a.
+
+### 2.8. Endpoint đọc USER-001 với đội đã giải tán
+
+Hợp đồng không đổi; hành vi với đội `DISBANDED`:
+
+| Endpoint | Với đội `DISBANDED` |
+|---|---|
+| `GET /api/v1/teams/{teamId}/captain/history` | Vẫn trả đầy đủ lịch sử đội trưởng |
+| `GET /api/v1/teams/{teamId}/members` | Trả danh sách rỗng (endpoint chỉ trả thành viên `ACTIVE`; mọi thành viên đã rời). Admin xem lịch sử ở mục 2.4 |
+
+---
+
+## 3. Hành động theo trạng thái đội
+
+"Đội trưởng" = đội trưởng đang hoạt động; "Thành viên" = thành viên `ACTIVE` không phải đội trưởng; "Người được mời" = người có lời mời `PENDING` vào đội. Mọi user đã đăng nhập xem được chi tiết đội, danh sách đội, lịch sử đội trưởng và thành viên hiện tại ở **mọi** trạng thái.
+
+| Trạng thái | Đội trưởng | Thành viên | Người được mời | Admin |
+|---|---|---|---|---|
+| `ACTIVE` | Sửa đội · Mời · Chuyển quyền · **Giải tán** (2.1). Không rời đội được (`TEAM_009`) | Rời đội | Chấp nhận · Từ chối lời mời | Khoá đội (mark-inactive) · Xem lịch sử thành viên (2.4). Kích hoạt lại → `TEAM_012` |
+| `INACTIVE` | **Giải tán** (2.1). Sửa/Mời/Chuyển quyền → `TEAM_015`. Rời đội → `TEAM_009` | Rời đội | Chấp nhận/Từ chối → `TEAM_015` | Kích hoạt lại · Xem lịch sử thành viên. Khoá lại → `TEAM_011` |
+| `DISBANDED` | Không còn đội trưởng; mọi thao tác → `TEAM_016` | Không còn thành viên; rời đội → `TEAM_016` | Không còn lời mời (đã `REJECTED`); chấp nhận/từ chối → `TEAM_016` | Chỉ xem (chi tiết, lịch sử thành viên). Khoá/Kích hoạt lại → `TEAM_016` |
+
+**Xoá tài khoản** (2.5): user đang là đội trưởng của đội `ACTIVE` hoặc `INACTIVE` → `422 USER_003`; FE hiện message của `USER_003`, người dùng vào từng đội để chuyển quyền hoặc giải tán.
+
+## 4. Mã lỗi
+
+Mã mới hoặc đổi ở USER-002 (mã khác giữ nguyên theo USER-001):
+
+| Mã | HTTP | Message | Endpoint | Thay đổi |
+|---|---|---|---|---|
+| `TEAM_016` | 422 | "Đội đã giải tán" | 2.1, 2.7 | **Mới.** Một mã dùng chung cho mọi thao tác ghi trên đội đã giải tán, kể cả giải tán lại và Admin kích hoạt lại |
+| `USER_003` | 422 | "Bạn phải chuyển quyền đội trưởng hoặc giải tán đội trước khi xóa tài khoản" | 2.5 | **Đổi** ([ADR-0005](../../decisions/0005-captain-must-hand-over-before-account-deletion.md)) điều kiện (mọi đội chưa giải tán mà user là đội trưởng, kể cả người duy nhất, kể cả đội `INACTIVE`) và message |
+| `TEAM_014` | 409 | "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại" | 2.1, 2.5, 2.7 | Mã USER-001; nay có thêm ở giải tán và mời thành viên |
+| `TEAM_001` | 404 | "Không tìm thấy đội" | 2.1, 2.4 | Mã USER-001 |
+| `TEAM_002` | 403 | "Chỉ đội trưởng được thực hiện" | 2.1 | Mã USER-001 |
+| `AUTH_004` | 403 | "Cần quyền quản trị" | 2.4, 2.6 | Mã USER-001 |
+| `VALIDATION_ERROR` | 400 | "Dữ liệu không hợp lệ" | 2.1, 2.3, 2.4, 2.6 | Theo `api-convention.md` §11 |
+
+## 5. Kiểu dữ liệu dùng chung
+
+### 5.1. Đội — chi tiết (response của 2.1, 2.2 và các endpoint USER-001 trả chi tiết đội)
+
+Field USER-001 giữ nguyên. Thêm:
+
+| Field | Kiểu | Ý nghĩa |
+|---|---|---|
+| `disbandedAt` | string (ISO-8601 UTC) \| null | Thời điểm giải tán; `null` nếu chưa giải tán |
+| `disbandedById` | UUID \| null | User đã giải tán; `null` nếu chưa giải tán. Giữ nguyên kể cả khi user đó đã xoá tài khoản |
+| `disbandedByName` | string \| null | Tên người giải tán để hiển thị; `null` nếu chưa giải tán; `"Người dùng đã xóa"` nếu người đó đã xoá tài khoản |
+| `disbandReason` | string \| null | Lý do giải tán; `null` nếu chưa giải tán; đội đã giải tán luôn có giá trị (tối thiểu là lý do mặc định `"Đội trưởng giải tán đội"`) |
+
+Với đội `DISBANDED`: `captainId`, `captainName` = `null`; `memberCount` = 0; `inactiveReason` giữ lý do khoá của Admin nếu đội bị khoá trước khi giải tán.
+
+### 5.2. Đội — tóm tắt (phần tử của 2.3) và Đội — tóm tắt Admin (phần tử của 2.6)
+
+Field USER-001 giữ nguyên (bản Admin có thêm `inactiveReason` như USER-001). Thêm:
+
+| Field | Kiểu | Ý nghĩa |
+|---|---|---|
+| `disbandedByName` | string \| null | Như mục 5.1 |
+
+### 5.3. Lịch sử thành viên (phần tử của 2.4)
+
+| Field | Kiểu | Ý nghĩa |
+|---|---|---|
+| `memberId` | UUID | Id tư cách thành viên |
+| `teamId` | UUID | Id đội |
+| `userId` | UUID | Id user; giữ nguyên kể cả khi user đã xoá tài khoản |
+| `displayName` | string | Tên hiển thị; `"Người dùng đã xóa"` nếu user đã xoá tài khoản |
+| `avatarUrl` | string \| null | Ảnh đại diện; `null` nếu chưa có hoặc user đã xoá tài khoản |
+| `role` | enum | `CAPTAIN` \| `MEMBER` — vai trò hiện tại, hoặc vai trò lúc rời đội nếu đã `LEFT` |
+| `status` | enum | `ACTIVE` \| `LEFT` |
+| `joinedAt` | string (ISO-8601 UTC) | Thời điểm vào đội |
+| `leftAt` | string (ISO-8601 UTC) \| null | Thời điểm rời đội; `null` nếu đang `ACTIVE` |
+
+### 5.4. Enum
+
+| Kiểu / enum | Giá trị | Ý nghĩa |
+|---|---|---|
+| `status` của đội | `ACTIVE` \| `INACTIVE` \| `DISBANDED` | Đang hoạt động · Bị Admin khoá (mở lại được) · **Đã giải tán** (vĩnh viễn, mới ở USER-002) |
+| Filter `status` của 2.3, 2.6 | `ACTIVE` \| `INACTIVE` \| `DISBANDED` \| `ALL` | Lọc một trạng thái; `ALL` = cả ba. Mặc định: 2.3 `ACTIVE`, 2.6 `ALL` |
+| Filter `status` của 2.4 | `ACTIVE` \| `LEFT` \| `ALL` | Đang trong đội · Đã rời · Cả hai (mặc định) |
+| `status` của thành viên/lời mời | `PENDING` \| `ACTIVE` \| `LEFT` \| `REJECTED` | Như USER-001. Khi đội giải tán: `ACTIVE` → `LEFT`, `PENDING` → `REJECTED` |
+
+## 6. Danh sách [cần xác nhận]
+
+1. **Chưa có endpoint "các đội tôi đang làm đội trưởng"** — FE cần để dẫn người dùng tới đội phải chuyển quyền/giải tán khi nhận `USER_003` và để ẩn/cảnh báo nút "Xoá tài khoản" trước. Là chức năng riêng, chưa làm; hiện người dùng phải tự vào từng đội.
+
+Các điểm đã chốt ngày 2026-11-05 (phạm vi lịch sử thành viên Admin, lý do chỉ gồm khoảng trắng, mã lỗi đội đã giải tán, che tên người giải tán, mã lỗi xoá tài khoản đội trưởng) đã phản ánh ở các mục trên.

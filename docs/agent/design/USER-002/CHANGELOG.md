@@ -1,5 +1,26 @@
 # CHANGELOG — USER-002 Giải tán đội & quy tắc xoá tài khoản đội trưởng
 
+## [v1.8] — 2026-11-10
+
+**Type:** MINOR (không đổi endpoint, method, field, kiểu, status, mã lỗi, message) · **Tóm tắt:** Viết lại `API_Spec.md` để FE đọc độc lập, không đổi hợp đồng.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `API_Spec.md` §2 | Sửa | Bảng endpoint dạng delta → thêm cột Loại (Mới / Đổi), Dùng khi, Ai gọi được; endpoint mới (2.1 giải tán, 2.4 lịch sử thành viên Admin) có bảng field + JSON request/response; endpoint USER-001 bị đổi chỉ nêu phần FE thấy thay đổi và trỏ `USER-001/API_Spec.md` | FE gọi được API chỉ với tài liệu này |
+| 2 | `API_Spec.md` §2.1, §2.4, §2.5, §2.7 | Thêm | — → bảng lỗi "Khi nào / FE nên làm gì" | FE biết cách xử lý từng mã |
+| 3 | `API_Spec.md` §2.1a | Sửa | Thứ tự kiểm tra kèm giải thích nội bộ → bảng "nhiều lỗi cùng xảy ra thì nhận mã nào"; đội vừa bị giải tán trong lúc request đang chạy → nhận `TEAM_016` | Giữ phần FE dùng được |
+| 4 | `API_Spec.md` §3 (mới) | Thêm | — → bảng hành động theo trạng thái đội (`ACTIVE` / `INACTIVE` / `DISBANDED` × đội trưởng / thành viên / người được mời / Admin) | FE biết nút nào hiện |
+| 5 | `API_Spec.md` §2.8 (mới), §5 | Thêm | — → với đội `DISBANDED`: lịch sử đội trưởng vẫn đầy đủ, danh sách thành viên rỗng, `memberCount = 0`, `captainId`/`captainName` = `null`; bảng field Lịch sử thành viên; bảng enum | Ghi rõ hành vi đã có, không đổi hợp đồng |
+| 6 | `API_Spec.md` §6 | Thêm `[cần xác nhận]` | — → chưa có endpoint "các đội tôi đang làm đội trưởng" (để dẫn người dùng khi nhận `USER_003`) | Chức năng riêng, chưa làm |
+| 7 | `API_Spec.md` toàn bộ | Xoá | Chi tiết cài đặt phía BE → chỉ còn mô tả theo góc người gọi API | Tài liệu dành cho FE |
+| 8 | `API_Spec.md` §4, §5 | Đổi chỗ | Mã lỗi giữ ở §4, kiểu dữ liệu ở §5 | Giữ số mục §2.1a, §2.4, §2.5, §4 mà tài liệu khác đang trỏ tới |
+| 9 | Header tài liệu thiết kế USER-002; tài liệu nội bộ BE | Ghi nhận | v1.7 → v1.8; cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Đồng bộ phiên bản; giữ phần giải thích nội bộ đã gỡ khỏi `API_Spec.md` |
+
+### Ảnh hưởng
+- Hợp đồng API, nghiệp vụ, SRS: không đổi. FE không phải sửa phần gọi API.
+
 ## [v1.7] — 2026-11-09
 
 **Type:** MINOR (không đổi endpoint, DTO, mã lỗi, số truy vấn) · **Tóm tắt:** Disband ghi captain/team bằng `save`, Hibernate tự flush một lần trước bulk Q5 (thay 2 lần `saveAndFlush`); transfer ghi lúc commit.
