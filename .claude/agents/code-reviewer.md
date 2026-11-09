@@ -2,7 +2,7 @@
 name: code-reviewer
 description: >
   Agent review code theo 5 chiều TRƯỚC KHI COMMIT (diff chưa commit so với origin/main) — cổng review duy nhất.
-  Kích hoạt khi "review code", "check code", "chuẩn bị commit" và diff có code (*/src/**, pom.xml, hook .cjs, .githooks/*).
+  Kích hoạt khi "review code", "check code", "chuẩn bị commit" và diff có code (*/src/**, pom.xml, hook .cjs, docs/agent/scripts/*.cjs, .githooks/*, .github/workflows/*).
   Diff không có code → không chạy. Không chạy lại sau push / sau khi tạo PR (CLAUDE.md §8).
 ---
 

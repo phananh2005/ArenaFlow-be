@@ -6,6 +6,7 @@
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `[cần xác nhận: api-convention]` |
+| Spec nghiệp vụ | `docs/agent/business-spec/[MÃ]/` |
 | Tác giả | [Agent/User] |
 | Ngày | [YYYY-MM-DD] |
 | Phiên bản | v1.0 (baseline) |

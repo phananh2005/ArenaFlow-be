@@ -1,0 +1,71 @@
+# Publish SRS + API_Spec (+ CHANGELOG, api-convention, ADR) sang repo chỉ-đọc phananh2005/ArenaFlow-spec cho FE.
+# Logic sao chép nằm ở docs/agent/scripts/publish-spec.cjs (chạy thử được trên máy).
+name: publish-spec
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/agent/business-spec/**
+      - docs/agent/design/*/API_Spec.md
+      - docs/agent/design/*/CHANGELOG.md
+      - docs/agent/api-convention.md
+      - docs/agent/decisions/**
+      - docs/agent/scripts/publish-spec.cjs
+      - docs/agent/scripts/publish-spec-tests.cjs
+      - .github/workflows/publish-spec.yml
+  workflow_dispatch:
+
+concurrency:
+  group: publish-spec
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    # Chỉ publish tài liệu đã merge vào main (chặn workflow_dispatch từ nhánh khác).
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout ArenaFlow-be
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: be
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Test publish script
+        run: node be/docs/agent/scripts/publish-spec-tests.cjs
+
+      - name: Checkout ArenaFlow-spec
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: phananh2005/ArenaFlow-spec
+          ref: main
+          path: spec
+          token: ${{ secrets.SPEC_REPO_TOKEN }}
+
+      - name: Copy docs
+        run: node be/docs/agent/scripts/publish-spec.cjs be spec --sha "$GITHUB_SHA"
+
+      - name: Commit and push
+        working-directory: spec
+        run: |
+          git add -A
+          # SOURCE đổi ở mọi lần chạy; chỉ commit khi tài liệu thực sự đổi.
+          if git diff --cached --quiet -- . ':(exclude)SOURCE'; then
+            echo "Không có thay đổi tài liệu — bỏ qua commit."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "sync: ArenaFlow-be@${GITHUB_SHA::7}"
+          git push origin HEAD:main
