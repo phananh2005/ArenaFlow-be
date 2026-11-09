@@ -7,11 +7,11 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.6** (developer · 2026-11-09) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.7** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan luồng
 
-21 endpoint (`API_Spec.md` §2). Mã lỗi chỉ ghi mã — nghĩa ở `API_Spec.md` §4. Class/method: `Component_Class_Design.md` §4–§5.
+21 endpoint (`API_Spec.md` §2). Mã lỗi chỉ ghi mã — nghĩa ở `API_Spec.md` §5. Class/method: `Component_Class_Design.md` §4–§5.
 
 **Thứ tự guard cho thao tác ghi:** nguồn duy nhất là USER-002 `API_Spec.md` §2.1a (theo từng endpoint; từ USER-002 thay thứ tự cũ "Bean Validation → JWT → tồn tại → quyền → trạng thái").
 
@@ -120,7 +120,7 @@ Ký hiệu truy vấn: **S** = SELECT, **I** = INSERT, **U** = UPDATE. Loại: D
 
 | # | Endpoint | Guard & logic (theo thứ tự) | Truy vấn | Tổng / Ngưỡng |
 |---|---|---|---|---|
-| 2.1 | `POST /auth/oauth` | S tài khoản theo `(provider, providerUserId = email)` join user → có: `deleted_at` ≠ null → AUTH_003, ngược lại 200 · không có (trong `TransactionTemplate`): I user, I oauth_account (`saveAndFlush`), U user (tên mặc định cần id sinh lúc persist) → 201 · vi phạm unique (song song) → rollback, S lại ngoài transaction đã rollback → 200 (tài khoản đã xoá → AUTH_003; không thấy → ném lại → 500) | Tạo mới: S, I, I, U (đo ≤ 6 bằng `AuthServiceIntegrationTest`) · Đụng độ: ước tính S, I, I (lỗi), S — dựa vào thứ tự flush INSERT trước UPDATE của Hibernate, **chưa đo** | 4 / W6 ✅ |
+| 2.1 | `POST /auth/oauth` | S tài khoản theo `(provider, providerUserId = email đã trim + chữ thường)` join user → có: `deleted_at` ≠ null → AUTH_003, ngược lại 200 · không có (trong `TransactionTemplate`): I user, I oauth_account (`saveAndFlush`), U user (tên mặc định cần id sinh lúc persist) → 201 · vi phạm unique (song song) → rollback, S lại ngoài transaction đã rollback → 200 (tài khoản đã xoá → AUTH_003; không thấy → ném lại → 500) | Tạo mới: S, I, I, U (đo ≤ 6 bằng `AuthServiceIntegrationTest`) · Đụng độ: ước tính S, I, I (lỗi), S — dựa vào thứ tự flush INSERT trước UPDATE của Hibernate, **chưa đo** | 4 / W6 ✅ |
 | 2.2 | `POST /auth/send-otp` | Validate phone, trả `expiresIn=300` | — | 0 ✅ |
 | 2.3 | `POST /auth/verify-otp` | Như 2.1 với `provider=phone`, `provider_user_id=phone`; user mới set `phone_number=phone` · đụng độ có thể đến từ `idx_user_phone_unique` (I user lỗi) hoặc unique oauth_account | Như 2.1 | ≤ 4 / W6 ✅ |
 | 2.4 | `POST /auth/refresh` | Parse refresh token (AUTH_002) → S user theo id (không có/đã xoá → AUTH_003) → cấp cặp token mới với `role` hiện tại | S | 1 / D3 ✅ |
@@ -184,7 +184,7 @@ Isolation: `READ_COMMITTED` (mặc định PostgreSQL). Không gọi dịch vụ
 | 2.13, 2.14 | Chuyển trạng thái chỉ từ PENDING → gọi lại → TEAM_006 |
 | 2.7 | `softDelete` có điều kiện `deleted_at IS NULL` → gọi lại → 204 |
 | 2.19, 2.20 | Kiểm trạng thái → gọi lại → TEAM_011 / TEAM_012 |
-| 2.8 | **Không idempotent** — trùng tên được phép; `Idempotency-Key` hoãn (`API_Spec.md` §6 #4) |
+| 2.8 | **Không idempotent** — trùng tên được phép, không có khoá tự nhiên; `Idempotency-Key` (`api-convention.md` §13) hoãn MVP vì cần bảng `idempotency_keys` (tech-debt; USER-002 chốt làm thành chức năng dùng chung riêng) |
 
 ## 8. Performance Considerations
 

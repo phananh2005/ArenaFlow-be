@@ -1,5 +1,25 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v3.7] — 2026-11-10
+
+**Type:** MINOR (không đổi endpoint, field, kiểu, status code, mã lỗi, message) · **Tóm tắt:** Viết lại `API_Spec.md` để FE đọc độc lập; không đổi hợp đồng, FE không phải sửa code đang chạy.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do |
+|---|---|---|---|---|
+| 1 | `API_Spec.md` toàn bộ | Sửa | Bố cục mới: §1.1 quy ước chung, §1.2 lỗi chung, §2 mỗi endpoint có "Dùng khi · Ai gọi được", bảng field, JSON request + response, bảng lỗi "Khi nào / FE nên làm gì"; §3 hành động theo trạng thái (đội, lời mời/thành viên, tài khoản); §4 enum + đối tượng response; §5 mã lỗi; §6 `[cần xác nhận]`. Số mục endpoint 2.1–2.21 giữ nguyên. Mục DTO cũ (§3.x, gồm quy tắc tên user đã xoá ở §3.12) không còn — quy tắc tên user đã xoá nay ở §1.1, đối tượng response ở §4.2 | Dễ đọc cho FE (ADR-0010) |
+| 2 | `API_Spec.md` 2.11–2.15, 2.18–2.20 | Sửa | `422 TEAM_016`, `409 TEAM_014` (từ USER-002) đưa vào bảng lỗi từng endpoint, xếp theo thứ tự BE kiểm (USER-002 `API_Spec.md` §2.1a); ví dụ JSON đội có đủ field `disbanded*`, filter `status` liệt kê `DISBANDED` | Trước chỉ nằm ở ghi chú cuối file |
+| 3 | `API_Spec.md` §1.2 | Thêm | `409 TEAM_014` định nghĩa một lần: đụng độ với thao tác khác cùng lúc → tải lại dữ liệu đang hiển thị, cho người dùng bấm lại | Một chỗ định nghĩa, các endpoint trỏ về |
+| 4 | `API_Spec.md` §1.1, 2.16, 2.17, §3.2 | Thêm | Mô tả hành vi đang có: BE cắt khoảng trắng đầu/cuối `displayName`, `teamName`, `reason` (2.19); field `null` luôn có mặt; thời gian có thể mang offset khác `Z` (2.8, 2.12, 2.15, `timestamp` lỗi) — FE đọc offset trong chuỗi; 2.16 trùng thời điểm thì `historyId` giảm dần; 2.17 cuối cùng sắp theo `userId` tăng dần; lời mời `PENDING` thành `REJECTED` khi đội bị giải tán | Spec cũ chưa ghi; khớp hành vi hiện tại |
+| 5 | `API_Spec.md` §6 | Thêm | 4 `[cần xác nhận]` (khoảng trống phạm vi nghiệp vụ, cần BA bổ sung): lời mời của tôi (chặn luồng FE 2.13–2.14), tìm người dùng để mời (chặn 2.12), danh mục phường/xã (chặn chọn khu vực ở 2.6), đội của tôi | FE cần để hoàn tất luồng |
+| 6 | — | Ghi nhận | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | — |
+| 7 | Header 3 tài liệu thiết kế | Ghi nhận | v3.6 → v3.7 | Phiên bản ở header khớp entry mới nhất |
+
+### Ảnh hưởng
+- FE: không phải sửa code; hợp đồng API (path, method, field, kiểu, status code, mã lỗi, message) giữ nguyên. Nên đọc lại §1.1 (thời gian, cắt khoảng trắng) và §3 (nút nào hiện theo trạng thái).
+- Tài liệu trỏ "USER-001 `API_Spec.md` §1" vẫn đúng (quy ước chung ở §1.1). Tài liệu trỏ số mục cũ §3.x (vd §3.12 từ VENUE-001) được sửa ở PR viết lại tài liệu đó.
+
 ## [v3.6] — 2026-11-09
 
 **Type:** MINOR (không đổi endpoint, DTO, mã lỗi, số truy vấn) · **Tóm tắt:** Bỏ flush thừa theo quy tắc "một lần flush mỗi lượt ghi" — ghi entity bằng `save`/`saveAll`, Hibernate tự flush trước native query hoặc lúc commit.

@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.6** (developer · 2026-11-09) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.7** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -232,12 +232,13 @@ public interface TeamCaptainHistoryRepository extends JpaRepository<TeamCaptainH
 
 ## 7. DTO
 
-- Field + ràng buộc: `API_Spec.md` §3. Request DTO dùng `record` hoặc Lombok theo convention §7; annotation: `@NotBlank`, `@Size`, `@Email`, `@Pattern`, `@Past`.
+- Field + ràng buộc: `API_Spec.md` §2 (request, theo endpoint), §4.2 (response). Request DTO dùng `record` hoặc Lombok theo convention §7; annotation: `@NotBlank`, `@Size`, `@Email`, `@Pattern`, `@Past`.
 - Ràng buộc tuỳ biến: `@MinAge(13)` (cho `dateOfBirth`), `@ValidSkillLevels` (≤3, không trùng, ∈ `SkillLevel`), `@OneOf` cho enum dạng chuỗi (`provider`, `gender`, `preferredPosition`).
+- `preferredPosition` dùng cùng tập giá trị với cột `mercenary_recruitment.position` (BR-U06) — đổi tập giá trị thì đổi cả hai.
 - `SkillLevel`: hằng danh sách 9 nhãn (nguồn duy nhất cho validator).
 - **Enum mapping:** `provider` lưu DB lowercase (`google`, `facebook`, `phone`) → API UPPERCASE (`GOOGLE`, `FACEBOOK`, `PHONE`) — chuyển trong `ProfileMapper` (§8).
-- Thời gian trả ra: `OffsetDateTime` (UTC, ISO-8601) — cột DB là `TIMESTAMPTZ`; projection trả `Instant`, mapper chuyển (§5).
-- `DeletedUserMasking`: hàm thuần áp quy tắc tên user đã xoá (`API_Spec.md` §3.12). **Chỉ dùng trong mapper** (qua `MapperSupport`), dựa vào cờ `*Deleted` của projection — SQL không che tên, để logic che tên có một nguồn.
+- Thời gian trả ra: `OffsetDateTime` ISO-8601 — cột DB là `TIMESTAMPTZ`. Response dựng từ projection: `Instant` → UTC (`Z`) qua mapper (§5). **Lệch (chưa sửa code):** giá trị lấy thẳng từ `OffsetDateTime.now()` mang offset của timezone JVM — `createdAt`/`updatedAt` của 2.8 (`Team` `@PrePersist`), `invitedAt` của 2.12 (`TeamMember` `@PrePersist`), `transferredAt` của 2.15 (`TeamServiceImpl#transferCaptain`), `error.timestamp` (`ErrorResponse.from`). [Inference] JVM chạy `Asia/Ho_Chi_Minh` → ra `+07:00` (chưa kiểm ở runtime). Hợp đồng ngoài chỉ hứa "ISO-8601 kèm offset" (`API_Spec.md` §1.1). Tech-debt: §12.
+- `DeletedUserMasking`: hàm thuần áp quy tắc tên user đã xoá (`API_Spec.md` §1.1) — chỉ che ở response, DB giữ nguyên hồ sơ (`"user".deleted_at IS NOT NULL` → cờ `*Deleted`). **Chỉ dùng trong mapper** (qua `MapperSupport`), dựa vào cờ `*Deleted` của projection — SQL không che tên, để logic che tên có một nguồn.
 
 ## 8. Mapper (MapStruct)
 
@@ -265,7 +266,7 @@ static String maskAvatar(String avatarUrl, Boolean deleted);   // qua DeletedUse
 ### 9.1. SecurityConfig
 - Stateless, `csrf` tắt, `oauth2ResourceServer(jwt)` với bean `JwtDecoder` HS256 (`NimbusJwtDecoder.withSecretKey`), validator = `JwtValidators.createDefault()` + `AccessTokenTypeValidator` (§9.2).
 - Chuyển claim → quyền: **bean `JwtAuthenticationConverter` của Spring** khai báo trong `SecurityConfig`, dùng `JwtGrantedAuthoritiesConverter` (claim `roles`, prefix `ROLE_`). Không viết class converter riêng.
-- **`BearerTokenResolver` bỏ qua header trên `/api/v1/auth/**`** (hợp đồng ngoài: `API_Spec.md` §2): bộ lọc Bearer của Spring xác thực token ngay khi có header `Authorization: Bearer`, kể cả trên đường dẫn `permitAll` — token sai làm endpoint public trả 401 (client tự gắn access token hết hạn khi gọi `/auth/refresh` → không refresh được). Test: token sai định dạng (`AuthControllerTest.publicAuthEndpointIgnoresInvalidBearerHeader`); token hết hạn đi cùng cơ chế, chưa có test riêng. Resolver dùng chung hằng `PUBLIC_AUTH_PATH` với `permitAll`: khớp → trả `null` (không xác thực), còn lại → `DefaultBearerTokenResolver`.
+- **`BearerTokenResolver` bỏ qua header trên `/api/v1/auth/**`** (hợp đồng ngoài: `API_Spec.md` §1.1): bộ lọc Bearer của Spring xác thực token ngay khi có header `Authorization: Bearer`, kể cả trên đường dẫn `permitAll` — token sai làm endpoint public trả 401 (client tự gắn access token hết hạn khi gọi `/auth/refresh` → không refresh được). Test: token sai định dạng (`AuthControllerTest.publicAuthEndpointIgnoresInvalidBearerHeader`); token hết hạn đi cùng cơ chế, chưa có test riêng. Resolver dùng chung hằng `PUBLIC_AUTH_PATH` với `permitAll`: khớp → trả `null` (không xác thực), còn lại → `DefaultBearerTokenResolver`.
   - Chỉ áp cho `/api/v1/auth/**`. Health và API docs giữ hành vi mặc định có chủ đích (Bearer sai → 401 theo cơ chế mặc định; chưa có test); đưa vào matcher khi có client gọi các đường dẫn này kèm token.
   - **NEVER** đặt endpoint cần xác thực dưới `/api/v1/auth/**`: SecurityContext ở đó luôn anonymous, `CurrentUserArgumentResolver` ném `AUTH_001` dù token hợp lệ. Cần endpoint như vậy (vd logout) → thu hẹp `PUBLIC_AUTH_PATH` (dùng cho cả `permitAll` và resolver) thành danh sách endpoint public cụ thể, để endpoint mới rơi vào `authenticated()`.
 - Phân quyền theo đường dẫn:
@@ -300,7 +301,7 @@ Claims: `sub` = userId, `roles` = `["USER"]` hoặc `["ADMIN"]` (theo `security-
 
 ## 10. Exception Handling
 
-- `ErrorCode` enum: `code`, `HttpStatus`, `message` — một nguồn cho mọi mã trong `API_Spec.md` §4 (mã miền, `VALIDATION_ERROR`, `SYS_001`–`SYS_005`). `SYS_004`/`SYS_005` mang status danh nghĩa (400/500); handler trả status gốc của exception framework.
+- `ErrorCode` enum: `code`, `HttpStatus`, `message` — một nguồn cho mọi mã trong `API_Spec.md` §5 (mã miền, `VALIDATION_ERROR`, `SYS_001`–`SYS_005`). `SYS_004`/`SYS_005` mang status danh nghĩa (400/500); handler trả status gốc của exception framework.
 - `BusinessException(ErrorCode, String details)` — mọi lỗi miền ném qua class này. **NEVER** ném `SYS_*` hoặc dùng `VALIDATION_ERROR` qua `BusinessException`: các mã này chỉ do `GlobalExceptionHandler` phát ra.
 - Envelope lỗi: `ErrorEnvelope(ErrorResponse error)`; `ErrorResponse` chứa `code`, `message`, `details`, `timestamp`, `path`, `validationErrors` (`List<ValidationError>`).
 - `GlobalExceptionHandler` (`@RestControllerAdvice`):
@@ -351,3 +352,5 @@ Log `WARN` chỉ ghi mã lỗi/status + URI; log `ERROR` kèm exception (stack t
 - **Base package & ID type:** Repo dùng `com.phananh.arenaflow` (đổi từ `com.phananh.ArenaFlow` ở v1.2, ADR-0006) + UUID; `convention-backend.md` đã cập nhật qua `workflow-adapt` (2026-11-02, xem `decisions-log.md`).
 - **TTL access token:** `security-backend.md` đã cập nhật từ 24h → 1h (theo ADR-0001).
 - **Enum `provider`:** DB lưu lowercase, API trả UPPERCASE — chuyển trong `ProfileMapper` (§8).
+- **Tech-debt — chuẩn hoá thời gian về UTC:** các giá trị `OffsetDateTime.now()` ở §7 nên trả `Z` như response đọc từ projection. Làm ở task bugfix riêng (đổi giá trị trả ra → kiểm ảnh hưởng FE, ghi CHANGELOG).
+- **ID UUID v7 (ADR-0008):** entity dùng `@UuidGenerator(style = VERSION_7)`; id tạo trước ADR-0008 giữ dạng v1. Hợp đồng ngoài chỉ hứa "UUID, không suy thứ tự từ id" (`API_Spec.md` §1.1).
