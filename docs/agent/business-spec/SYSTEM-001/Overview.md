@@ -76,7 +76,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 ### Match Lifecycle
 - Trạng thái: OPEN, CONFIRMED, ARCHIVED, COMPLETED, EXPIRED, CANCELLED
 - CONFIRMED: không sửa giờ/sân/trình độ; muốn thay đổi phải hủy
-- Hủy Match: OPEN không ảnh hưởng uy tín (phải từ chối mọi request PENDING trước); CONFIRMED bị trừ điểm theo khoảng cách giờ trận
+- Hủy Match: OPEN không ảnh hưởng uy tín (phải từ chối mọi request PENDING trước); CONFIRMED bị trừ điểm uy tín của đội hủy theo khoảng cách giờ trận, không hủy được khi trận đã bắt đầu
 - Hết hạn: scheduled job 5 phút + lazy check khi API gọi
 - Khi đến giờ kết thúc dự kiến: System gửi push cho 2 đội trưởng, Match → ARCHIVED
 - Khi có đội trưởng đánh giá: Match → COMPLETED
@@ -126,7 +126,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 - Loại chi phí: tiền sân, tiền nước, hoặc cả hai
 - Cách chia: 50-50, 70-30 (đội chủ nhà bao 70% hoặc ai thua bao 70%), đội thua trả toàn bộ tiền nước
 - Lưu số tiền cụ thể (VND trong MVP)
-- Khoản tự nhập: danh sách các khoản phí khác (tên + số tiền)
+- Khoản tự nhập: danh sách các khoản phí khác (tên + số tiền), tối đa 10 khoản
 - Luồng B: có thể có thỏa thuận chia đôi tiền cọc; cọc do thỏa thuận bên ngoài, có trường "ai giữ tiền cọc"
 
 ### Notification & Chat
@@ -215,7 +215,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 
 ## 10. Trạng thái tài liệu
 
-**Phiên bản:** v1.0 (baseline) → v1.1 (hoàn chỉnh) → v1.2 (2026-11-09: bổ sung UC-V05 sửa địa điểm, UC-V06 xóa ảnh, BR-V05..V10, AC-V04/V05 — cho `VENUE-001`)  
+**Phiên bản:** v1.0 (baseline) → v1.1 (hoàn chỉnh) → v1.2 (2026-11-09: bổ sung UC-V05 sửa địa điểm, UC-V06 xóa ảnh, BR-V05..V10, AC-V04/V05 — cho `VENUE-001`) → v1.3 (2026-11-09: BR-M09..BR-M18, BR-C03..BR-C04, làm rõ BC-M04, sửa §2.1/§2.2/§5.2/§7.3 Business_Rules, UC-M01/M03/M04/M08/M09/C01/C02, sửa AC-M06/AC-C01, thêm AC-M09..AC-M12 — cho `MATCH-001`)  
 **Ngày hoàn thiện:** 2026-11-02  
 **Trạng thái:** ✅ **Hoàn chỉnh** — Tất cả quyết định nghiệp vụ đã được chốt, không còn [cần xác nhận]  
 **Sẵn sàng cho:** Solution design (thiết kế kỹ thuật chi tiết)
