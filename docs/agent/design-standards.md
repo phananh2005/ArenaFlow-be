@@ -73,3 +73,5 @@ Bảng: **Mã chức năng · Phạm vi tầng · Repo/stack · Quy ước áp d
 5. **Đối tượng có trạng thái → bảng hành động theo trạng thái** (trạng thái × vai trò → hành động được phép), để FE biết nút nào hiện.
 
 Đổi hợp đồng → `CHANGELOG.md` entry MAJOR (§10). Chỉ sửa câu chữ cho dễ đọc → MINOR.
+
+**`CHANGELOG.md` cũng được publish → áp quy tắc 1–2:** mỗi entry ghi thay đổi **FE thấy được** (endpoint, field, mã lỗi, hành vi) và FE cần làm gì; không tên class/annotation, bảng/cột, cơ chế nội bộ. Thay đổi chỉ nội bộ BE (CCD/PF) → một dòng chung, vd "cập nhật tài liệu nội bộ BE, không ảnh hưởng FE". Không sửa entry cũ (§10).
