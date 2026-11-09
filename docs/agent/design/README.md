@@ -26,6 +26,13 @@ design/
 
 Xem `docs/agent/design-standards.md`.
 
+## Publish cho FE
+
+- Merge vào `main` → workflow `publish-spec` tự chép `design/<MÃ>/API_Spec.md` và `CHANGELOG.md` (nếu có) sang `api/<MÃ>/` của repo chỉ-đọc `ArenaFlow-spec`. `Component_Class_Design.md`, `Processing_Flow.md` **không** publish; `<MÃ>` chưa có `API_Spec.md` bị bỏ qua.
+- FE chỉ thấy thay đổi **sau khi merge vào `main`**. **NEVER** sửa trực tiếp ArenaFlow-spec — sửa ở đây.
+- Sửa API_Spec phá vỡ hợp đồng → entry **MAJOR** trong `CHANGELOG.md`: đây là tín hiệu để FE xem lại. Giữ hàng "Phiên bản" (`hiện tại **vX.Y**`) và hàng "Spec nghiệp vụ" (`docs/agent/business-spec/<MÃ>/`) trong header API_Spec — mục lục ở ArenaFlow-spec đọc phiên bản và link SRS từ đó.
+- Gom theo cụm (`design/<CỤM>/<MÃ>/`) → phải sửa script publish trước. Chi tiết: `docs/agent/README.md` mục "Publish tài liệu cho FE".
+
 ## Ownership
 
 - **Tạo/sửa:** qua `solution-architect` → `architect-reviewer` → duyệt → commit.

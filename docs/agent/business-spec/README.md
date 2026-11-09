@@ -22,7 +22,7 @@ business-spec/
 ```
 
 **Hiện tại:** spec đặt thẳng trong `business-spec/<MÃ>/`. Khi số chức năng tăng, sẽ gom theo domain:
-- `business-spec/<DOMAIN>/<MÃ>/` — theo domain (vd `booking/`, `arena/`, `user/`)
+- `business-spec/<DOMAIN>/<MÃ>/` — theo domain (vd `booking/`, `arena/`, `user/`) — phải sửa script publish trước (xem mục dưới)
 
 ## Quy trình
 
@@ -35,6 +35,12 @@ business-spec/
 Spec nghiệp vụ viết **ngôn ngữ nghiệp vụ**, KHÔNG có thuật ngữ kỹ thuật:
 - ✅ Dùng: User, Booking, Arena, trạng thái, use case, business rule
 - ❌ Không dùng: API, endpoint, controller, DTO, SQL, database schema
+
+## Publish cho FE
+
+- Merge vào `main` → workflow `publish-spec` tự chép `business-spec/<MÃ>/**` (không gồm `_template/` và file README này) sang repo chỉ-đọc `ArenaFlow-spec` mà FE gắn làm submodule.
+- FE chỉ thấy spec **sau khi merge vào `main`**. **NEVER** sửa trực tiếp ArenaFlow-spec — sửa ở đây.
+- Tên thư mục `<MÃ>` phải khớp `^[A-Z][A-Z0-9]*-\d+$`; khác mẫu → publish dừng. Chi tiết: `docs/agent/README.md` mục "Publish tài liệu cho FE".
 
 ## Ownership
 

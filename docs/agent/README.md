@@ -28,6 +28,7 @@ ArenaFlow-be/
 │       ├── af-handoff.md
 │       └── af-resume.md
 ├── .githooks/pre-commit                # Secret scan staged
+├── .github/workflows/publish-spec.yml  # Publish SRS + API_Spec sang ArenaFlow-spec cho FE
 ├── docs/agent/
 │   ├── CLAUDE.md                       # Kiến thức dự án
 │   ├── design-standards.md             # Chuẩn viết thiết kế (API, Class, Flow)
@@ -58,9 +59,12 @@ ArenaFlow-be/
 │   │   ├── session-handoff.md
 │   │   ├── decisions-log.md
 │   │   └── tech-debt.md
-│   └── hooks/
-│       ├── agent-hooks.cjs
-│       └── fixture-tests.cjs
+│   ├── hooks/
+│   │   ├── agent-hooks.cjs
+│   │   └── fixture-tests.cjs
+│   └── scripts/
+│       ├── publish-spec.cjs            # Chép tài liệu FE cần sang thư mục đích
+│       └── publish-spec-tests.cjs
 └── .agent-bootstrap/project-profile.md # Hồ sơ dự án
 ```
 
@@ -72,7 +76,7 @@ ArenaFlow-be/
 4. **Sửa nhỏ:** thẳng `developer`.
 5. Khi implement, đọc skill `task-state-init`, procedure `developer`, rồi cập nhật `progress-tracker`.
 6. Kết thúc phiên: `/af-handoff`; tiếp tục phiên: `/af-resume`.
-7. Trước commit: diff có code (`*/src/**`, POM, hook) → agent `code-reviewer`; không có code → không review (`CLAUDE.md` §8). Git pre-commit quét secret trong staged content.
+7. Trước commit: diff có code (`*/src/**`, POM, hook, `docs/agent/scripts/*.cjs`, `.github/workflows/*`) → agent `code-reviewer`; không có code → không review (`CLAUDE.md` §8). Git pre-commit quét secret trong staged content.
 8. Rà ADR khi cần bằng skill `decisions-relevance`.
 
 ## Hooks
@@ -97,11 +101,24 @@ git config --local --unset core.hooksPath
 
 `core.hooksPath` không đi theo clone. Cần Node.js trên PATH; thiếu Node thì pre-commit cảnh báo và cho commit. Hooks Claude Code yêu cầu mở phiên ở gốc repo và workspace đã trust. Dùng `/hooks` để xem, chỉnh hoặc tắt.
 
+## Publish tài liệu cho FE
+
+- SRS và API_Spec ở BE là **nguồn duy nhất**. Khi merge vào `main` thay đổi ở `business-spec/<MÃ>/`, `design/<MÃ>/API_Spec.md`, `design/<MÃ>/CHANGELOG.md`, `api-convention.md` hoặc `decisions/`, workflow `.github/workflows/publish-spec.yml` tự chép sang repo chỉ-đọc `phananh2005/ArenaFlow-spec` (FE gắn làm git submodule). Có thể chạy tay bằng `workflow_dispatch` trên `main`.
+- Đích: `business-spec/<MÃ>/`, `api/<MÃ>/API_Spec.md` + `CHANGELOG.md`, `api/api-convention.md`, `decisions/`, `README.md` (mục lục, sinh tự động), `SOURCE` (SHA commit BE). Không publish `Component_Class_Design.md`, `Processing_Flow.md`, `_template`, `docs/database/`, state, hooks, mã nguồn.
+- FE chỉ thấy thay đổi **sau khi merge vào `main`**. **NEVER** sửa trực tiếp ArenaFlow-spec — bị ghi đè ở lần publish sau.
+- Entry **MAJOR** trong `CHANGELOG.md` của API_Spec là tín hiệu FE phải xem lại phần gọi API.
+- Thư mục `<MÃ>` phải khớp `^[A-Z][A-Z0-9]*-\d+$`. Gom theo domain/cụm (`<DOMAIN>/<MÃ>/`) → publish báo lỗi và dừng; sửa script trước.
+- Token ghi sang ArenaFlow-spec là secret `SPEC_REPO_TOKEN` của repo BE; không ghi token vào file.
+- Điều kiện chạy: repo `ArenaFlow-spec` đã tồn tại và nhánh `main` có ít nhất một commit (tạo repo kèm README) — repo rỗng thì bước checkout lỗi. README này bị thay bằng README sinh tự động ở lần publish đầu.
+
 ## Kiểm chứng
 
 ```sh
 node docs/agent/hooks/fixture-tests.cjs
 node docs/agent/hooks/agent-hooks.cjs test
+node docs/agent/scripts/publish-spec-tests.cjs
+# Chạy thử publish vào thư mục tạm (không đụng ArenaFlow-spec):
+node docs/agent/scripts/publish-spec.cjs . <thư-mục-tạm>
 ```
 
 Project Neon `ArenaFlow-be` (`misty-dew-90700890`) ở Singapore có database mặc định `neondb` và branch `main`. Unit test thuần chạy độc lập, không cần `.env.dev`. Integration test cần DB: agent tự nạp `.env.dev` (DB dev; `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`) bằng `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Duser.timezone=Asia/Ho_Chi_Minh -Dtest=<Test> test`. Chưa cấu hình Testcontainers hay DB test riêng; integration test ghi vào DB dev. Không báo test PASS nếu test chưa chạy đạt.
@@ -118,6 +135,8 @@ Project Neon `ArenaFlow-be` (`misty-dew-90700890`) ở Singapore có database m�
 | `docs/agent/adaptation-rules.md` | Dự án | Điều chỉnh sau khi có bằng chứng và được duyệt |
 | `.mvn/`, `mvnw`, `mvnw.cmd`, `HELP.md` | Spring Initializr | Không sửa trực tiếp |
 | `.githooks/` | Dự án | Git hooks version-controlled; cần cài `core.hooksPath` riêng mỗi clone |
+| `.github/workflows/publish-spec.yml`, `docs/agent/scripts/` | Dự án | Pin action theo commit SHA; secret chỉ qua `secrets.*`; sửa → qua `code-reviewer` |
+| Repo `ArenaFlow-spec` | Sinh tự động từ BE | Chỉ đọc; không sửa trực tiếp |
 
 ## Điều kiện sử dụng
 
