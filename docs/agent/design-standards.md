@@ -75,3 +75,5 @@ Bảng: **Mã chức năng · Phạm vi tầng · Repo/stack · Quy ước áp d
 Đổi hợp đồng → `CHANGELOG.md` entry MAJOR (§10). Chỉ sửa câu chữ cho dễ đọc → MINOR.
 
 **`CHANGELOG.md` cũng được publish → áp quy tắc 1–2:** mỗi entry ghi thay đổi **FE thấy được** (endpoint, field, mã lỗi, hành vi) và FE cần làm gì; không tên class/annotation, bảng/cột, cơ chế nội bộ. Thay đổi chỉ nội bộ BE (CCD/PF) → một dòng chung, vd "cập nhật tài liệu nội bộ BE, không ảnh hưởng FE". Không sửa entry cũ (§10).
+
+**Kiểm tự động:** `publish-spec` chặn publish khi API_Spec / entry CHANGELOG mới nhất vi phạm quy tắc 1–2 (danh sách mẫu: `docs/agent/README.md` mục "Publish tài liệu cho FE"). Quy tắc 3–5 vẫn do `architect-reviewer` soi.

@@ -313,6 +313,113 @@ try {
     }
   });
 
+  // Kiểm tài liệu cho FE: API_Spec + entry CHANGELOG mới nhất không được lộ nội bộ BE hay có link gãy ở đích.
+  let lintIndex = 0;
+  function lintRun(files) {
+    lintIndex += 1;
+    const root = path.join(tmp, `be-lint-${lintIndex}`);
+    makeBackend(root);
+    for (const [relative, content] of Object.entries(files)) write(root, `docs/agent/${relative}`, content);
+    const out = path.join(tmp, `be-lint-${lintIndex}-out`);
+    write(out, 'decisions/old.md');
+    return { result: run(root, out, '--sha', SHA), marker: path.join(out, 'decisions/old.md') };
+  }
+  const withLines = (...lines) => `${apiSpec('| Phiên bản | v1.0 |')}${lines.join('\n')}\n`;
+
+  check('API_Spec nhắc nội bộ BE thì dừng, báo file:dòng, không đụng đích', () => {
+    for (const line of [
+      'Chi tiết: `Processing_Flow.md` §3',
+      'Xem `Component_Class_Design.md`',
+      'Schema ở `docs/database/schema.dbml`',
+      'Theo design-standards §11',
+      'Chạy trong @Transactional',
+      'Gọi TeamServiceImpl',
+      'Đọc qua MatchRepository',
+      'Hết lượt ConcurrencyConflictRetrier',
+      'Migration V6__match_flow_a_lifecycle.sql',
+    ]) {
+      const { result, marker } = lintRun({ 'design/CCC-003/API_Spec.md': withLines('', line) });
+      assertRefusedUntouched(result, marker);
+      assert.match(result.stderr, /design\/CCC-003\/API_Spec\.md:11:/, line);
+    }
+  });
+
+  check('nội dung trong comment HTML không bị chặn', () => {
+    const { result } = lintRun({
+      'design/CCC-003/API_Spec.md': withLines('<!-- Viết theo design-standards §11;', 'chi tiết ở Processing_Flow.md -->', 'Nội dung cho FE'),
+    });
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  check('CHANGELOG chỉ kiểm entry mới nhất', () => {
+    const clean = lintRun({
+      'design/AAA-001/CHANGELOG.md': '# CHANGELOG\n\n## [v2.0] — 2026-11-10\nThêm ví dụ JSON cho FE\n\n## [v1.0] — 2026-11-01\nSửa TeamServiceImpl\n',
+    });
+    assert.equal(clean.result.status, 0, clean.result.stderr);
+    const dirty = lintRun({
+      'design/AAA-001/CHANGELOG.md': '# CHANGELOG\n\n## [v2.0] — 2026-11-10\nSửa `Processing_Flow.md` §1\n\n## [v1.0] — 2026-11-01\nBản đầu\n',
+    });
+    assertRefusedUntouched(dirty.result, dirty.marker);
+    assert.match(dirty.result.stderr, /design\/AAA-001\/CHANGELOG\.md:4:/);
+    const crlf = lintRun({
+      'design/AAA-001/CHANGELOG.md': '# CHANGELOG\r\n\r\n## [v2.0] — 2026-11-10\r\nSửa `Processing_Flow.md` §1\r\n',
+    });
+    assertRefusedUntouched(crlf.result, crlf.marker);
+    assert.match(crlf.result.stderr, /design\/AAA-001\/CHANGELOG\.md:4:/);
+  });
+
+  check('CHANGELOG sai định dạng vẫn bị kiểm (phần mở đầu, heading lệch chuẩn)', () => {
+    const preamble = lintRun({
+      'design/AAA-001/CHANGELOG.md': '# CHANGELOG\nXem Processing_Flow.md\n\n## [v2.0] — 2026-11-10\nThêm ví dụ\n',
+    });
+    assertRefusedUntouched(preamble.result, preamble.marker);
+    assert.match(preamble.result.stderr, /design\/AAA-001\/CHANGELOG\.md:2:/);
+    const noEntry = lintRun({
+      'design/AAA-001/CHANGELOG.md': '# CHANGELOG\n\n## v2 — 2026-11-10\nSửa TeamServiceImpl\n',
+    });
+    assertRefusedUntouched(noEntry.result, noEntry.marker);
+    assert.match(noEntry.result.stderr, /design\/AAA-001\/CHANGELOG\.md:4:/);
+  });
+
+  check('link tương đối phải trỏ tới tài liệu được publish và còn đúng ở đích', () => {
+    const ok = lintRun({
+      'design/CCC-003/API_Spec.md': withLines(
+        '[ADR](../../decisions/0001-x.md) · [API khác](../AAA-001/API_Spec.md#2-endpoints)',
+        '[SRS](../../business-spec/AAA-001/) · [ngoài](https://example.com/a.md) · [mục](#1-tong-quan)',
+        '[SRS không gạch cuối](../../business-spec/AAA-001) · [có title](../../decisions/0001-x.md "ADR 1")',
+        '[ref]: ../AAA-001/API_Spec.md',
+      ),
+    });
+    assert.equal(ok.result.status, 0, ok.result.stderr);
+    for (const line of [
+      '[x](../../api-convention.md)',
+      '[x](../README.md)',
+      '[x](../../decisions/_template.md)',
+      '[x](../../decisions/9999-missing.md)',
+      '[x](../DDD-004/)',
+      '[x](/docs/agent/decisions/0001-x.md)',
+      '[x](C:/docs/agent/decisions/0001-x.md)',
+      '[x](../aaa-001/API_Spec.md)',
+      '[x](../../api-convention.md "quy ước")',
+      '[x](<../../api-convention.md>)',
+      '[quy ước]: ../../api-convention.md',
+    ]) {
+      const { result, marker } = lintRun({ 'design/CCC-003/API_Spec.md': withLines(line) });
+      assertRefusedUntouched(result, marker);
+      assert.match(result.stderr, /CCC-003\/API_Spec\.md:10: link/, line);
+    }
+  });
+
+  check('báo đủ mọi vi phạm trong một lần chạy', () => {
+    const { result, marker } = lintRun({
+      'design/CCC-003/API_Spec.md': withLines('Gọi TeamServiceImpl'),
+      'design/AAA-001/API_Spec.md': withLines('[x](../../api-convention.md)'),
+    });
+    assertRefusedUntouched(result, marker);
+    assert.match(result.stderr, /CCC-003\/API_Spec\.md/);
+    assert.match(result.stderr, /AAA-001\/API_Spec\.md/);
+  });
+
   check('thiếu thư mục nguồn thì dừng', () => {
     const partial = path.join(tmp, 'be-partial');
     makeBackend(partial);
