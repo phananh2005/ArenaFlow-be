@@ -1,88 +1,85 @@
 # API Specification — [TÊN CHỨC NĂNG]
 
+<!-- File này được publish cho FE (ADR-0010). Viết theo design-standards.md §11:
+     không tên class/bảng/cột/migration/transaction/khoá/số truy vấn; không trỏ Component_Class_Design.md,
+     Processing_Flow.md, docs/database/. Chi tiết nội bộ BE ghi ở hai file đó. -->
+
 | Mục | Giá trị |
 |---|---|
 | Mã chức năng | `[MÃ]` |
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo | ArenaFlow-be |
-| Quy ước áp dụng | `[cần xác nhận: api-convention]` |
-| Spec nghiệp vụ | `docs/agent/business-spec/[MÃ]/` |
-| Tác giả | [Agent/User] |
-| Ngày | [YYYY-MM-DD] |
-| Phiên bản | v1.0 (baseline) |
+| Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
+| Spec nghiệp vụ | `docs/agent/business-spec/[MÃ]/` ([UC/BR liên quan]) |
+| Tác giả / Ngày / Phiên bản | [Agent/User] · [YYYY-MM-DD] · v1.0 (baseline) |
 
 ## 1. Tổng quan
 
-[Mô tả ngắn chức năng này làm gì, phục vụ ai]
+[Chức năng làm gì, cho ai — 2–3 câu theo góc nhìn người dùng app.]
+
+**Quy ước chung cho mọi endpoint của mã này:** [xác thực, enum UPPERCASE, quy tắc nghiệp vụ dùng chung… — chỉ những gì FE cần.]
 
 ## 2. Endpoints
 
-### 2.1. [TÊN ENDPOINT 1]
-
-**Method & Path:**
-```
-[GET|POST|PUT|DELETE] /api/v1/[path]
-```
-
-**Mô tả:** [Làm gì]
-
-**Request:**
-- Headers: `Authorization: Bearer <token>`
-- Path params: [nếu có]
-- Query params: [nếu có]
-- Body (nếu có):
-```json
-{
-  "field1": "string",
-  "field2": 123
-}
-```
-
-**Response thành công (200/201):**
-```json
-{
-  "data": {
-    "field1": "string",
-    "field2": 123
-  }
-}
-```
-
-**Response lỗi:**
-- `400 Bad Request`: [khi nào]
-- `401 Unauthorized`: token không hợp lệ
-- `403 Forbidden`: không có quyền
-- `404 Not Found`: [khi nào]
-- `500 Internal Server Error`: lỗi hệ thống
-
-**Validation:**
-- [field]: [ràng buộc]
-
-**Phân quyền:**
-- [ROLE hoặc cần xác nhận]
-
----
-
-## 3. Data Models (DTO)
-
-### 3.1. [TênDTO]
-
-| Field | Type | Required | Mô tả |
+| # | Method + Path | Dùng khi | Ai gọi được |
 |---|---|---|---|
-| `field1` | `String` | Yes | [Mô tả] |
-| `field2` | `Integer` | No | [Mô tả] |
+| 2.1 | `POST /api/v1/[path]` | [Màn hình / hành động] | [Vai trò] |
 
----
+### 2.1. [Tên hành động] — `POST /api/v1/[path]`
 
-## 4. Mã lỗi
+**Dùng khi:** [Người dùng làm gì trên màn hình nào.]
+**Ai gọi được:** [Vai trò + điều kiện, vd "đội trưởng đội tạo kèo"].
 
-| Mã | HTTP Status | Ngữ cảnh | Message |
+**Path / Query params** (nếu có)
+
+| Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `[id]` | UUID | Có | — | `"0190…"` |
+
+**Request body** (nếu có)
+
+| Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `[field]` | string | Có | [≤ 100 ký tự; enum `A` \| `B`] | `"…"` |
+
+```json
+{ "[field]": "…" }
+```
+
+**Response [200|201|204]**
+
+```json
+{ "data": { "[field]": "…" } }
+```
+
+**Lỗi** (ngoài lỗi chung `400 VALIDATION_ERROR`, `401`, `403` của `api-convention.md`)
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
-| `[MÃ]_001` | 400 | [khi nào] | [message] |
+| 409 | `[MÃ]_001` | [Tình huống người dùng gặp] | [Tải lại / ẩn nút / hiện thông báo …] |
 
 ---
 
-## 5. Danh sách [cần xác nhận]
+## 3. Hành động theo trạng thái
 
-1. [Điểm chưa rõ 1]
-2. [Điểm chưa rõ 2]
+<!-- Bắt buộc khi đối tượng có trạng thái; bỏ mục nếu không có. -->
+
+| Trạng thái | [Vai trò 1] | [Vai trò 2] | [Người khác] |
+|---|---|---|---|
+| `[STATUS_A]` | [Hành động được phép → endpoint] | — | — |
+
+## 4. Kiểu dữ liệu dùng chung
+
+| Kiểu / enum | Giá trị | Ý nghĩa |
+|---|---|---|
+| `[status]` | `A` \| `B` | [Ý nghĩa từng giá trị] |
+
+## 5. Mã lỗi
+
+| Mã | HTTP | Message | Endpoint |
+|---|---|---|---|
+| `[MÃ]_001` | 409 | [message] | 2.1 |
+
+## 6. Danh sách [cần xác nhận]
+
+1. [Điểm ảnh hưởng hợp đồng API chưa chốt — điểm nội bộ BE ghi ở Component_Class_Design.md / Processing_Flow.md]

@@ -36,6 +36,7 @@ description: >
 
 ### Bước 3 — Sinh tài liệu (backend)
 - Theo `docs/agent/design-standards.md`: hợp đồng ngoài (API) · cấu trúc trong (class/module) · luồng xử lý — nhất quán tên giữa các tài liệu.
+- `API_Spec.md` được publish cho FE → viết theo `design-standards.md` §11 (đọc độc lập, góc nhìn người gọi API); chi tiết nội bộ BE chỉ ở `Component_Class_Design.md` / `Processing_Flow.md`.
 - Thao tác ghi: thứ tự guard, ranh giới transaction, khoá lạc quan, idempotency.
 - Có DB: thể hiện **số truy vấn dự kiến** mỗi API; vượt ngưỡng (N_DETAIL=3, N_LIST=4, N_WRITE=6) → **DỪNG**, nêu lý do, chờ xác nhận.
 - Điểm chưa map được → `[cần xác nhận]` inline + gom danh sách cuối file. **Không đoán cho xong.**
