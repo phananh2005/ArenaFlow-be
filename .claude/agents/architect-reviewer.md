@@ -31,6 +31,7 @@ description: >
 ### 3. Tuân thủ chuẩn — soi từng endpoint với **file nguồn**, không theo trí nhớ
 - [ ] Path, đặt tên, envelope, mã lỗi, phân trang, kiểu dữ liệu đúng `docs/agent/api-convention.md`.
 - [ ] Class/tầng/đóng gói đúng `docs/agent/convention-backend.md` + `architecture.md` (nếu có).
+- [ ] `API_Spec.md` đọc độc lập cho FE theo `docs/agent/design-standards.md` §11: không chi tiết nội bộ BE, không trỏ file không publish, mỗi endpoint có ví dụ JSON request/response + bảng lỗi "khi nào / FE nên làm gì", có bảng hành động theo trạng thái khi đối tượng có trạng thái.
 
 ### 4. Khả thi & rủi ro
 - [ ] Khoá lạc quan / soft-delete / audit / idempotency xử lý đúng.
