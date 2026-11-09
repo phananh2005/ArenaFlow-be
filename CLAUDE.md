@@ -44,7 +44,7 @@
 | Sửa chức năng đã triển khai | `developer` → code & test → kiểm tra ảnh hưởng → cập nhật design (nếu có) → cập nhật SRS (nếu có) → `architect-reviewer` (nếu sửa design) → `code-reviewer` (nếu có code) | bỏ qua cập nhật tài liệu khi có ảnh hưởng |
 | Debug / lỗi | skill `debug` | đoán nguyên nhân khi chưa reproduce |
 | Review thiết kế | procedure `architect-reviewer` | tự sửa thiết kế |
-| Review code / chuẩn bị commit | procedure `code-reviewer` (chỉ khi diff có code) | commit code khi chưa qua `code-reviewer` |
+| Review code / chuẩn bị PR | procedure `code-reviewer` (chỉ khi nhánh có code) | push / tạo PR có code khi chưa qua `code-reviewer` |
 | Agent lệch quy ước repo (lặp lại) | skill `workflow-adapt` | tự nới guardrail |
 | Hỏi đáp / giải thích / tìm kiếm | xử lý trực tiếp | — |
 
@@ -60,7 +60,7 @@
 | `task-state-init` | Bắt đầu implement tính năng mới |
 | `progress-tracker` | Sau mỗi bước implement hoàn thành |
 | `reuse-scan` | Trước khi tạo thành phần dùng chung mới |
-| `code-review` | Review nhanh 5 chiều **khi user yêu cầu** — không phải bước bắt buộc trước commit |
+| `code-review` | Review nhanh 5 chiều **khi user yêu cầu** — không phải bước bắt buộc trước PR |
 | `debug` | Debug có hệ thống (reproduce → isolate → diagnose → fix) |
 | `workflow-adapt` | Điều chỉnh cách làm việc khi agent lệch quy ước repo |
 | `decisions-relevance` | Rà kho ADR khi có quyết định kiến trúc |
@@ -117,7 +117,10 @@
   2. Có thay đổi use case / business rule / actor / workflow? → cập nhật SRS
   3. Đã cập nhật design → gọi `architect-reviewer` review phần sửa
 - Sau mỗi bước implement → **MUST** chạy `progress-tracker`.
-- Trước khi commit, **nếu diff có code** (`*/src/**` (Java, migration SQL, `application*.properties`), `pom.xml` / `*/pom.xml`, hook `.cjs`, `docs/agent/scripts/*.cjs`, `.githooks/*`, `.github/workflows/*`) → **MUST** chạy agent `code-reviewer` trên diff chưa commit so với `origin/main` (`git diff origin/main`, gồm cả file mới chưa track); còn CRITICAL/MAJOR → sửa, chạy lại `code-reviewer` cho phần sửa rồi mới commit. Đây là cổng review **duy nhất**: không chạy thêm skill `code-review`, không review lại sau push / sau khi tạo PR. **Diff không có code** (tài liệu `*.md`, `.claude/settings.json`, `.gitignore`, `.gitattributes`, `.env.example`…) → không chạy `code-reviewer` lẫn `code-review`. Git pre-commit vẫn quét secret.
+- **Cổng review đặt trước PR, không đặt ở commit.** Trước khi push nhánh để tạo PR (`gh pr create`), **nếu thay đổi của nhánh có code** (`*/src/**` (Java, migration SQL, `application*.properties`), `pom.xml` / `*/pom.xml`, hook `.cjs`, `docs/agent/scripts/*.cjs`, `.githooks/*`, `.github/workflows/*`) → **MUST** chạy agent `code-reviewer` trên toàn bộ thay đổi của nhánh so với `origin/main` (`git diff origin/main...HEAD` + thay đổi chưa commit + file mới chưa track); còn CRITICAL/MAJOR → sửa, commit, chạy lại `code-reviewer` cho phần sửa rồi mới push / tạo PR.
+  - Commit trên nhánh **không** cần review (kể cả commit chứa code); nhiều commit trên nhánh → review một lần trước PR.
+  - PR đang mở mà sắp push thêm commit có code → `code-reviewer` trên **phần mới** trước khi push (`git diff origin/<nhánh>` + chưa commit; nhánh vừa rebase → `git diff origin/main...HEAD`, chỉ xét phần mới).
+  - Đây là cổng review **duy nhất**: không chạy thêm skill `code-review`, không review lại phần đã review sau push / sau khi tạo PR. **Thay đổi không có code** (tài liệu `*.md`, `.claude/settings.json`, `.gitignore`, `.gitattributes`, `.env.example`…) → không chạy `code-reviewer` lẫn `code-review`. Git pre-commit vẫn quét secret ở **mỗi** commit.
 - **Đồng bộ `main`:** trên **mọi nhánh khác `main`**, agent **MUST tự** chạy `git fetch origin && git rebase --autostash origin/main` tại 3 thời điểm: (1) trước khi bắt đầu triển khai một chức năng, (2) trước mỗi commit, (3) trước mỗi push.
   - Conflict khi rebase → `git rebase --abort`, **dừng**, báo danh sách file conflict; **NEVER** tự resolve. Conflict khi áp lại autostash → dừng, báo (stash vẫn còn trong `git stash list`).
   - `fetch` lỗi (mạng/quyền) → báo, **không** khẳng định đã đồng bộ.
@@ -137,7 +140,7 @@
     2. Working tree còn thay đổi chưa commit **của việc khác** → **dừng**, hỏi user (commit hay stash); **NEVER** mang sang nhánh mới.
     3. `git fetch origin` → nhánh hiện tại **là** nhánh đích → `git rebase --autostash origin/main`; nhánh đích đã tồn tại → checkout rồi rebase; chưa có → `git switch -c <nhánh-đích> origin/main`.
   - Trước commit: thay đổi thuộc nhóm khác nhánh hiện tại (vd framework trên nhánh `feature/`) → **NEVER** commit lẫn; tách sang nhánh đúng nhóm (tạo từ `origin/main`), không rõ nhóm → hỏi user.
-- **Merge vào `main` chỉ qua merge request (GitHub Pull Request):** commit (diff có code thì đã qua `code-reviewer`, xem quy tắc commit ở trên) → push nhánh → `gh pr create --base main` → user tự merge trên GitHub **hoặc** yêu cầu agent merge bằng `gh pr merge <số> --squash` (chỉ khi user yêu cầu rõ PR nào; mặc định squash, **không** kèm `--delete-branch`). **NEVER** `git merge` / `git rebase` / `git commit` / `git push` trực tiếp lên `main` local hay `origin/main`. Tạo PR vẫn chỉ khi user yêu cầu.
+- **Merge vào `main` chỉ qua merge request (GitHub Pull Request):** commit → (nhánh có code: `code-reviewer`, xem cổng review ở trên) → push nhánh → `gh pr create --base main` → user tự merge trên GitHub **hoặc** yêu cầu agent merge bằng `gh pr merge <số> --squash` (chỉ khi user yêu cầu rõ PR nào; mặc định squash, **không** kèm `--delete-branch`). **NEVER** `git merge` / `git rebase` / `git commit` / `git push` trực tiếp lên `main` local hay `origin/main`. Tạo PR vẫn chỉ khi user yêu cầu.
 - Debug → **MUST** reproduce trước khi nêu nguyên nhân.
 - **Subagent chạy trên repo thật** (mặc định, không `isolation: "worktree"`): agent đọc/review (`architect-reviewer`, `code-reviewer`, `Explore`) phải thấy diff chưa commit; agent viết code chạy tuần tự với phiên chính. Chỉ dùng worktree khi user yêu cầu nhiều agent ghi code song song trên phần độc lập — worktree tạo từ commit (không có thay đổi chưa commit) và không có `.env.dev` (test cần DB không chạy được nếu chưa copy). Xong việc → gộp kết quả về rồi `git worktree remove` (không xoá nhánh).
 

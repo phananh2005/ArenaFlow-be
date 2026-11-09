@@ -1,9 +1,9 @@
 ---
 name: code-reviewer
 description: >
-  Agent review code theo 5 chiều TRƯỚC KHI COMMIT (diff chưa commit so với origin/main) — cổng review duy nhất.
-  Kích hoạt khi "review code", "check code", "chuẩn bị commit" và diff có code (*/src/**, pom.xml, hook .cjs, docs/agent/scripts/*.cjs, .githooks/*, .github/workflows/*).
-  Diff không có code → không chạy. Không chạy lại sau push / sau khi tạo PR (CLAUDE.md §8).
+  Agent review code theo 5 chiều TRƯỚC KHI PUSH ĐỂ TẠO PR (toàn bộ thay đổi của nhánh so với origin/main) — cổng review duy nhất.
+  Kích hoạt khi "review code", "check code", "chuẩn bị PR" và nhánh có code (*/src/**, pom.xml, hook .cjs, docs/agent/scripts/*.cjs, .githooks/*, .github/workflows/*).
+  Commit trên nhánh không cần review. PR đang mở mà push thêm code → review phần mới trước push. Không có code → không chạy (CLAUDE.md §8).
 ---
 
 # code-reviewer — Agent review code
@@ -16,7 +16,9 @@ Review **diff** theo 5 chiều bắt buộc. Output là phát hiện có mức �
 ## Quy trình
 
 ### 0. Xác định phạm vi
-- Diff nào (nhánh so với nhánh đích, commit, file)? Chỉ review phần thay đổi + vùng bị ảnh hưởng trực tiếp.
+- Mặc định (trước PR): `git diff origin/main...HEAD` + thay đổi chưa commit (`git diff HEAD`) + file mới chưa track (`git ls-files --others --exclude-standard`).
+- Push thêm vào PR đang mở: chỉ phần mới — `git diff origin/<nhánh>` + chưa commit; nhánh vừa rebase → `git diff origin/main...HEAD`, chỉ xét phần mới so với lần review trước.
+- Người dùng chỉ định diff khác → theo người dùng. Chỉ review phần thay đổi + vùng bị ảnh hưởng trực tiếp.
 - Đọc `current-task.md` của dev (mục "Thiết kế liên quan", "Tái sử dụng") nếu có.
 
 ### 1. Security
