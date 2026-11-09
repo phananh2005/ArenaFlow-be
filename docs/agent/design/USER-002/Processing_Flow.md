@@ -7,11 +7,13 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6), ADR-0003 optimistic retry, ADR-0007 (ngoại lệ khoá bi quan cho `deleteAccount`) |
 | Ràng buộc dữ liệu | USER-001 V1/V2/V3 + delta `Component_Class_Design.md` §5 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.7** (developer · 2026-11-09) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.8** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
 Các luồng ghi dùng `ConcurrencyConflictRetrier` hiện hữu (quy tắc retry: USER-001 `Processing_Flow.md` §5). Transaction theo READ_COMMITTED. Không gọi service ngoài, không notification. Thứ tự guard theo từng endpoint: xem `API_Spec.md` §2.1a (nguồn duy nhất).
+
+**Lý do thứ tự guard (chốt bởi user, 2026-11-05):** kiểm `DISBANDED` → `422 TEAM_016` **ngay sau** kiểm tồn tại, **trước** `INACTIVE` (`TEAM_015`) và trước quyền/tư cách (`TEAM_002`, `TEAM_010`, `TEAM_006`…): đội đã giải tán không còn captain hoặc member ACTIVE, nếu kiểm quyền trước thì `TEAM_016` không bao giờ được trả về. Thứ tự khớp `TeamGuard` (tồn tại → trạng thái → quyền) và thay câu "tồn tại → quyền → state" cũ của USER-001 `Processing_Flow.md` §1. `401` do filter Security trả trước Bean Validation (`400`). Invite tăng `team.version` lúc commit (race M1, §5). Bên thua race với disband nhận `TEAM_016` thay mã gốc nhờ đọc lại trạng thái đã commit (§5).
 
 ## 2. Sequence — giải tán đội
 
@@ -116,7 +118,7 @@ Dùng `@Version` Team/TeamMember và retrier USER-001/ADR-0003; cập nhật bul
 
 ## 6. Idempotency
 
-`POST .../disband` không idempotent về response: first call chuyển state; replay trên `DISBANDED` trả `422 TEAM_016`, không sửa metadata. Client retry sau timeout phải GET team để xác định outcome. Double-submit chồng nhau cũng trả `TEAM_016` (§4.1). `Idempotency-Key` (`api-convention.md` §13) không làm trong USER-002 (xem `API_Spec.md` §1 "Ngoài phạm vi").
+`POST .../disband` không idempotent về response: first call chuyển state; replay trên `DISBANDED` trả `422 TEAM_016`, không sửa metadata. Client retry sau timeout phải GET team để xác định outcome. Double-submit chồng nhau cũng trả `TEAM_016` (§4.1). `Idempotency-Key` (`api-convention.md` §13) không làm trong USER-002 cho `POST /teams` và `POST /teams/{id}/disband` (hợp đồng ngoài: `API_Spec.md` §1 "Ngoài phạm vi"): làm thành chức năng dùng chung riêng (bảng `idempotency_keys`, component dùng chung, vượt W6 cần duyệt NFS) — chốt bởi user 2026-11-05.
 
 ## 7. Error handling
 
