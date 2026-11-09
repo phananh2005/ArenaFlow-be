@@ -48,7 +48,7 @@
 **Main Flow:**
 1. User truy cập màn hình hồ sơ cá nhân
 2. Hệ thống hiển thị hồ sơ hiện tại (tên, ảnh, tiểu sử, vị trí ưa thích, ngày sinh, giới tính, khu vực)
-3. User cập nhật thông tin
+3. User cập nhật thông tin; khu vực chọn từ danh mục tỉnh/thành → phường/xã (UC-U04 — `USER-003`)
 4. User submit
 5. Hệ thống validate và lưu thay đổi
 6. Hệ thống hiển thị "Cập nhật thành công"
@@ -133,11 +133,11 @@
 
 **Preconditions:**
 - User là đội trưởng
-- User biết ID/username của người được mời
+- Đội trưởng tìm được người được mời theo số điện thoại hoặc tên hiển thị (UC-U05 — `USER-003`)
 
 **Main Flow:**
 1. Đội trưởng chọn "Mời thành viên"
-2. Đội trưởng nhập ID/username người được mời
+2. Đội trưởng tìm người được mời theo số điện thoại hoặc tên hiển thị (UC-U05 — `USER-003`) và chọn một người trong kết quả
 3. Đội trưởng submit
 4. Hệ thống tạo lời mời với trạng thái pending
 5. Hệ thống gửi notification cho người được mời
@@ -167,7 +167,7 @@
 - User nhận được lời mời vào đội
 
 **Main Flow:**
-1. User xem lời mời trong notification
+1. User xem lời mời trong notification hoặc trong danh sách lời mời của tôi (UC-T07 — `USER-003`)
 2. User chọn "Chấp nhận" hoặc "Từ chối"
 3. Hệ thống cập nhật trạng thái lời mời
 4. (Nếu chấp nhận) Hệ thống thêm User vào đội với vai trò MEMBER
