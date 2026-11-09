@@ -31,6 +31,16 @@
 | BR-M06 | Tối đa 1 Match_Request ACCEPTED mỗi Match (ràng buộc dữ liệu) | Khi chấp nhận Match_Request |
 | BR-M07 | Pairing confirmation: cả 2 đội trưởng phải xác nhận qua UI riêng (không phải chat) | Khi xác nhận Pairing |
 | BR-M08 | Luồng B có thể có nhiều Pairing đồng thời (Match vẫn OPEN trong lúc trao đổi) | Khi tạo Pairing |
+| BR-M09 | Hủy Match CONFIRMED hoặc rút Match_Request đã ACCEPTED: chỉ **đội** thực hiện bị trừ Reliability Score của đội; không trừ điểm cá nhân của đội trưởng; đội còn lại không bị trừ (2026-11-09) | Khi hủy Match CONFIRMED, rút request ACCEPTED |
+| BR-M10 | Mức trừ tính theo khoảng cách từ lúc hủy/rút đến giờ bắt đầu trận: từ đủ 24 giờ trở lên → -2; từ đủ 4 giờ đến dưới 24 giờ → -5; dưới 4 giờ → -10 (hủy đúng 24 giờ trước → -2; đúng 4 giờ trước → -5) (2026-11-09) | Khi hủy Match CONFIRMED, rút request ACCEPTED |
+| BR-M11 | Không được hủy Match CONFIRMED hoặc rút Match_Request đã ACCEPTED khi trận đã bắt đầu (đã đến giờ bắt đầu); hệ thống báo "Trận đã bắt đầu, không thể hủy" (2026-11-09) | Khi hủy/rút |
+| BR-M12 | Đội đã ghép rút Match_Request đã ACCEPTED = đội đó hủy kèo: Match chuyển CANCELLED, request chuyển WITHDRAWN, chỉ đội rút bị trừ (BR-M09, BR-M10). Đội đã ghép chọn "Hủy kèo" cho cùng kết quả. Mỗi lần hủy chỉ trừ điểm một lần (2026-11-09) | Khi đội đã ghép rút request / hủy kèo |
+| BR-M13 | Khi hủy kèo hoặc rút request, hệ thống so với trạng thái mà đội trưởng **đang thấy** trên màn hình (kèo: đang mở / đã ghép; request: đang chờ / đã được chấp nhận), kể cả khi màn hình đã cũ từ trước lúc bấm. Trạng thái hiện tại khác (vd kèo đang mở đã được ghép; request đang chờ đã được chấp nhận) → hệ thống từ chối, báo "Trạng thái đã thay đổi, vui lòng tải lại", không hủy/rút và không trừ điểm (2026-11-09) | Khi hủy kèo, rút request |
+| BR-M14 | Đội tạo kèo hoặc đội gửi request đang tạm ngưng (INACTIVE) hoặc đã giải tán: Match OPEN của đội tạo kèo không hiển thị trong tìm kèo; không gửi được request mới; không chấp nhận được request (cả khi đội gửi không còn hoạt động). Hệ thống không tự hủy Match; Match OPEN hết hạn theo thời hạn bài đăng, Match CONFIRMED tiếp tục vòng đời. Đội tạm ngưng vẫn được hủy kèo, từ chối và rút request (2026-11-09) | Khi tìm kèo, gửi/chấp nhận/từ chối/rút request, hủy kèo |
+| BR-M15 | Chỉ tạo kèo cho bộ môn đang bật. Bộ môn bị tắt: Match OPEN của bộ môn không hiển thị trong tìm kèo, không gửi/chấp nhận được request; không tự hủy; Match CONFIRMED tiếp tục vòng đời (2026-11-09) | Khi tạo kèo, tìm kèo, gửi/chấp nhận request, Admin tắt bộ môn |
+| BR-M16 | Giới hạn khi tạo kèo: giờ kết thúc dự kiến sau giờ bắt đầu và không quá 12 giờ; trình độ mong muốn tối đa 3 trong 9 nhãn, không chọn = nhận mọi trình độ; ghi chú độ tuổi ≤100 ký tự; tính chất trận ≤200 ký tự. Lý do hủy/từ chối/rút ≤500 ký tự; bắt buộc nhập lý do khi hủy Match CONFIRMED hoặc rút request ACCEPTED (2026-11-09) | Khi tạo kèo, hủy kèo, từ chối/rút request |
+| BR-M17 | Match OPEN đã quá thời hạn bài đăng được hiển thị là EXPIRED ngay khi có người xem, kể cả trước lần cập nhật định kỳ; mọi thao tác trên Match đó (gửi/chấp nhận/từ chối/rút request, hủy, sửa chi phí) bị từ chối với thông báo "Kèo đã hết hạn" và Match chuyển EXPIRED ngay (2026-11-09) | Khi xem/thao tác trên Match quá hạn |
+| BR-M18 | Hai đội khác nhau có cùng một đội trưởng vẫn được gửi/chấp nhận request cho nhau; hệ thống không kiểm trùng lịch thi đấu giữa các Match của một đội (2026-11-09) | Khi gửi/chấp nhận request |
 | **REPUTATION** | | |
 | BR-R01 | Mỗi cặp (Match, đội đánh giá, đội được đánh giá) chỉ được đánh giá 1 lần | Khi đánh giá đối phương |
 | BR-R02 | Chỉ hiển thị Completion Rate khi ≥5 trận đã chốt; trước đó hiển thị "Mới tham gia X/5 trận" | Khi hiển thị Completion Rate |
@@ -57,6 +67,8 @@
 | **COST** | | |
 | BR-C01 | Tiền tệ mặc định VND trong MVP | Khi nhập thỏa thuận chi phí |
 | BR-C02 | Số tiền phải > 0 | Khi nhập thỏa thuận chi phí |
+| BR-C03 | Luồng A: chỉ đội trưởng đội tạo kèo nhập/sửa thỏa thuận chi phí, và chỉ khi Match đang OPEN; mỗi lần lưu thay toàn bộ thỏa thuận cũ (kể cả danh sách khoản tự nhập) (2026-11-09) | Khi nhập thỏa thuận chi phí luồng A |
+| BR-C04 | Loại chi phí chỉ gồm: tiền sân, tiền nước, hoặc cả hai (không có loại "tùy chỉnh"). Khoản tự nhập là danh sách riêng, tối đa 10 khoản; tên khoản ≤100 ký tự; mọi số tiền > 0 và ≤ 1.000.000.000 VND. Cách chia "đội thua trả toàn bộ tiền nước" chỉ chọn được khi có tiền nước (2026-11-09) | Khi nhập thỏa thuận chi phí |
 | **NOTIFICATION** | | |
 | BR-N01 | Chat lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED) | Khi lưu chat |
 | BR-N02 | Notification lưu 30 ngày | Khi tạo notification |
@@ -87,10 +99,10 @@ stateDiagram-v2
 |---|---|---|---|---|
 | — | OPEN | Tạo kèo luồng A hoặc B | Team Captain | Khởi tạo |
 | OPEN | CONFIRMED | 1 Match_Request ACCEPTED (A) hoặc 1 Pairing CONFIRMED (B) | Team Captain | Không sửa giờ/sân/trình độ sau CONFIRMED |
-| OPEN | EXPIRED | `expires_at` ≤ now | System | Scheduled job + lazy check |
+| OPEN | EXPIRED | `expires_at` ≤ now | System | Scheduled job + lazy check (BR-M17) |
 | OPEN | CANCELLED | Tác giả hủy (phải từ chối mọi request PENDING trước) | Team Captain | Không trừ uy tín |
 | CONFIRMED | ARCHIVED | `scheduled_end_time` ≤ now | System | Gửi push cho 2 đội trưởng: "Trận đấu hôm nay thế nào? Hãy nhập tỷ số và đánh giá đồng đội!" |
-| CONFIRMED | CANCELLED | Đội trưởng hủy | Team Captain | Trừ Reliability theo khoảng cách giờ trận |
+| CONFIRMED | CANCELLED | Đội trưởng đội tạo kèo hoặc đội đã ghép hủy, hoặc đội đã ghép rút request đã ACCEPTED (BR-M12); chỉ trước giờ bắt đầu trận (BR-M11) | Team Captain | Trừ Reliability của đội hủy theo khoảng cách giờ trận (BR-M09, BR-M10) |
 | ARCHIVED | COMPLETED | ≥1 đội trưởng đánh giá | Team Captain | Đội trưởng còn lại vẫn có thể đánh giá sau, không giới hạn |
 
 **Trạng thái terminal:** CANCELLED, EXPIRED, COMPLETED
@@ -124,7 +136,7 @@ stateDiagram-v2
 | PENDING | WITHDRAWN | Người gửi rút | Team Captain (người gửi) | Không trừ uy tín khi PENDING |
 | PENDING | SUPERSEDED | Request khác được ACCEPTED hoặc Match chuyển CONFIRMED/CANCELLED | System | Tự động khi có request thắng |
 | PENDING | EXPIRED | Match hết hạn | System | Theo expires_at của Match |
-| ACCEPTED | WITHDRAWN | Người gửi rút | Team Captain (người gửi) | Trừ Reliability: -2/-5/-10 theo khoảng cách giờ trận |
+| ACCEPTED | WITHDRAWN | Người gửi rút, hoặc đội gửi hủy Match (BR-M12); chỉ trước giờ bắt đầu trận (BR-M11) | Team Captain (người gửi) | Match chuyển CANCELLED; trừ Reliability của đội gửi: -2/-5/-10 (BR-M09, BR-M10) |
 
 **Trạng thái terminal:** REJECTED, WITHDRAWN, SUPERSEDED, EXPIRED
 
@@ -338,7 +350,7 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 | BC-M01 | Match CONFIRMED: không được sửa giờ/sân/trình độ; muốn thay đổi phải hủy |
 | BC-M02 | Hủy Match OPEN: phải từ chối mọi Match_Request PENDING trước khi Match có thể chuyển CANCELLED |
 | BC-M03 | Tối đa 1 Match_Request ACCEPTED mỗi Match (ràng buộc dữ liệu: unique constraint hoặc check) |
-| BC-M04 | Khi Match chuyển CONFIRMED hoặc CANCELLED: mọi Pairing đang NEGOTIATING và mọi Match_Request PENDING tự chuyển SUPERSEDED (nếu CONFIRMED) hoặc CANCELLED (nếu Match CANCELLED) |
+| BC-M04 | Khi Match chuyển CONFIRMED hoặc CANCELLED: mọi Pairing đang NEGOTIATING và mọi Match_Request PENDING tự chuyển SUPERSEDED (nếu CONFIRMED) hoặc CANCELLED (nếu Match CANCELLED). **Làm rõ 2026-11-09:** Match_Request không có trạng thái CANCELLED; luồng A không còn request PENDING khi Match bị hủy (OPEN phải từ chối hết trước — BR-M05; CONFIRMED đã không còn request PENDING) |
 | BC-M05 | Thời gian lưu theo UTC trong DB; frontend convert theo timezone thiết bị |
 | BC-M06 | Pairing hết hạn theo `expires_at` của bài đăng |
 | BC-M07 | Match_Request hết hạn theo `expires_at` của bài đăng; không có timeout riêng |
@@ -405,7 +417,8 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 | Chấp nhận/Từ chối Match Request cho kèo của mình | Chấp nhận nhiều request (tối đa 1 ACCEPTED) |
 | Tạo Pairing (luồng B) | — |
 | Xác nhận Pairing (cả 2 bên phải xác nhận) | Xác nhận 1 bên (cần cả 2) |
-| Hủy kèo (OPEN hoặc CONFIRMED) | Hủy kèo của đội khác |
+| Hủy kèo đội mình tạo (OPEN hoặc CONFIRMED) hoặc kèo đội mình đã ghép (CONFIRMED), trước giờ bắt đầu trận (BR-M11) | Hủy kèo không liên quan đến đội mình |
+| Nhập/sửa thỏa thuận chi phí kèo đội mình tạo khi kèo đang OPEN (luồng A — BR-C03) | Sửa thỏa thuận chi phí kèo của đội khác |
 | Tuyển mercenary (sau khi Match CONFIRMED) | Tuyển trước khi Match CONFIRMED |
 | Duyệt/Từ chối ứng viên mercenary | Duyệt ứng viên cho đội khác |
 | Đánh giá đối phương sau trận (1-5 sao hoặc "không đến") | Đánh giá nhiều lần cùng Match |
@@ -425,7 +438,7 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 
 | Có thể | Không thể |
 |---|---|
-| Bật/tắt bộ môn qua admin panel | Tạo kèo cho User |
+| Bật/tắt bộ môn qua admin panel (ảnh hưởng: BR-M15) | Tạo kèo cho User |
 | Đánh dấu đội INACTIVE | Xóa cứng đội |
 | Thêm địa điểm sân | Xóa cứng địa điểm |
 | Sửa mọi địa điểm, xóa mọi ảnh sân | — |
@@ -520,6 +533,8 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 | | -5 | <4 giờ |
 | **Report bùng xác nhận qua tranh chấp** | -10 | Admin xác nhận đúng |
 | **Report khác** | Xem §3.2 | Mức trừ tăng dần theo số lần |
+
+**Bên bị trừ và biên khung giờ (2026-11-09, `MATCH-001`):** hủy Match CONFIRMED và rút Match_Request ACCEPTED trừ Reliability của **đội** thực hiện, không trừ cá nhân đội trưởng (BR-M09). Khoảng cách = giờ bắt đầu trận − thời điểm hủy/rút; "≥24 giờ" = từ đủ 24 giờ trở lên, "4-24 giờ" = từ đủ 4 giờ đến dưới 24 giờ, "<4 giờ" = dưới 4 giờ (BR-M10). Không hủy/rút khi trận đã bắt đầu (BR-M11).
 
 ### 7.4. Reset bộ đếm số lần report
 

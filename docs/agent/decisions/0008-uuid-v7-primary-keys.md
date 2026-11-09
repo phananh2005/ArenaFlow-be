@@ -5,7 +5,8 @@
 | **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-06 |
 | **Người quyết định** | Chủ repo (chốt backlog 2026-11-06) · developer (đề xuất cách thực hiện) |
-| **Liên quan** | `docs/database/schema-design.md` (ID: UUID v7 sinh ở Java) · `docs/agent/convention-backend.md` (ví dụ entity) · `docs/agent/design/USER-001/API_Spec.md` §1 |
+| **Liên quan** | `docs/database/schema-design.md` (ID: UUID v7 sinh ở Java) · `docs/agent/convention-backend.md` (ví dụ entity) · `docs/agent/design/USER-001/API_Spec.md` §1 · `docs/agent/design/MATCH-001/Component_Class_Design.md` §5.2 (`insertAll`) |
+| **Sửa đổi** | 2026-11-09 — câu INSERT gom lô viết tay (không qua Hibernate) dùng `uuidv7()` của PostgreSQL ≥ 18 |
 
 ## Bối cảnh (Context)
 - 22 entity trong `domain/.../entity/**` sinh id bằng `@UuidGenerator(style = UuidGenerator.Style.TIME)`, tức UUID v1. Trước thay đổi này, id sinh ra có `version() == 1` (kiểm bằng `UserRepositoryTest` khi viết test Red).
@@ -39,3 +40,10 @@ Chúng tôi dùng `@UuidGenerator(style = UuidGenerator.Style.VERSION_7)` cho **
 
 **Cần theo dõi**
 - Nếu sau này cần sắp xếp/phân trang theo id thay cho cột thời gian, xem lại dữ liệu v1 còn lại.
+
+## Sửa đổi 2026-11-09 — INSERT gom lô viết tay dùng `uuidv7()` của PostgreSQL
+
+- **Bối cảnh:** MATCH-001 ghi danh sách khoản tự nhập (`cost_custom_item`, ≤ 10 dòng) bằng **một** câu native `INSERT … SELECT … FROM unnest(...)` để số truy vấn không tăng theo số dòng (`non-functional-standards.md` §1). Câu này không qua Hibernate nên `@UuidGenerator(VERSION_7)` không chạy; sinh id ở Java ngoài session cần thêm tiện ích riêng.
+- **Quyết định bổ sung:** câu INSERT gom lô viết tay (không qua Hibernate) sinh id bằng hàm built-in `uuidv7()` của **PostgreSQL ≥ 18** — cùng định dạng UUID v7 (RFC 9562). Neon dev (`misty-dew-90700890`) đã kiểm 2026-11-09: `server_version = 18.6`, có `uuidv7`. Mọi entity và mọi INSERT qua Hibernate giữ `@UuidGenerator(style = VERSION_7)`; `EntityIdGenerationTest` không đổi.
+- **Phương án loại:** sinh id ở Java bằng generator Hibernate gọi ngoài session hoặc tiện ích `UuidV7` riêng (thêm mã tự viết cho định dạng đã có sẵn trong DB); JDBC batch qua `saveAll` (cần bật `hibernate.jdbc.batch_size` toàn ứng dụng, số câu vẫn theo số dòng).
+- **Hệ quả:** ứng dụng phụ thuộc PostgreSQL ≥ 18 cho các câu này — môi trường thấp hơn lỗi khi chạy câu (migration không bị ảnh hưởng). Id do DB sinh → caller cần id phải đọc lại hoặc dùng `RETURNING`. Thứ tự tăng của id giữa JVM và DB chỉ gần đúng ở mức mili-giây (giống nhiều instance ở §Hệ quả); thứ tự thời gian vẫn dùng cột `*_at` hoặc cột thứ tự riêng (`display_order`).

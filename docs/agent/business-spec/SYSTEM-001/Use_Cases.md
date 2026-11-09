@@ -250,6 +250,8 @@
 **Preconditions:**
 - User là đội trưởng
 - Đội trưởng đã tự đặt sân bên ngoài ArenaFlow
+- Đội đang hoạt động (không tạm ngưng, không giải tán) — BR-M14
+- Bộ môn đang bật — BR-M15
 
 **Main Flow:**
 1. Đội trưởng chọn "Tạo kèo"
@@ -268,6 +270,14 @@
 **4a. Thời hạn không hợp lệ:**
 - 4a1. Hệ thống hiển thị "Thời hạn phải trong khoảng tối đa 7 ngày trước giờ đá đến giờ bắt đầu"
 - 4a2. Quay về bước 3
+
+**4b. Giờ trận không hợp lệ (BR-M01, BR-M16):** giờ đá chưa đủ 1 giờ sau hiện tại, giờ kết thúc không sau giờ bắt đầu, hoặc trận dài quá 12 giờ
+- 4b1. Hệ thống hiển thị lỗi tại trường giờ tương ứng
+- 4b2. Quay về bước 3
+
+**4c. Bộ môn đang tắt (BR-M15):**
+- 4c1. Hệ thống hiển thị "Bộ môn hiện không được hỗ trợ"
+- 4c2. Use case kết thúc
 
 ---
 
@@ -306,7 +316,9 @@
 **Preconditions:**
 - User là đội trưởng
 - Match đang ở trạng thái OPEN
-- Đội chưa gửi request cho Match này
+- Đội chưa gửi request cho Match này (được gửi lại sau khi đã rút hoặc request đã hết hạn; không gửi lại sau khi bị từ chối/bị thay thế)
+- Đội gửi không phải đội tạo kèo
+- Đội gửi và đội tạo kèo đang hoạt động; bộ môn đang bật — BR-M14, BR-M15
 
 **Main Flow:**
 1. Đội trưởng xem Match trong danh sách tìm kèo
@@ -325,6 +337,18 @@
 **3a. Match đã chuyển sang CONFIRMED:**
 - 3a1. Hệ thống hiển thị "Kèo đã được ghép"
 - 3a2. Use case kết thúc
+
+**3b. Match đã quá thời hạn bài đăng (BR-M17):**
+- 3b1. Hệ thống chuyển Match sang EXPIRED và hiển thị "Kèo đã hết hạn"
+- 3b2. Use case kết thúc
+
+**3c. Đội tạo kèo không còn hoạt động hoặc bộ môn đã tắt (BR-M14, BR-M15):**
+- 3c1. Hệ thống từ chối gửi yêu cầu
+- 3c2. Use case kết thúc
+
+**3d. Đội đã có request cho Match này:**
+- 3d1. Hệ thống hiển thị "Đội đã gửi yêu cầu cho kèo này"
+- 3d2. Use case kết thúc
 
 ---
 
@@ -356,6 +380,18 @@
 **3a. Match đã chuyển sang CONFIRMED (race condition):**
 - 3a1. Hệ thống hiển thị "Kèo đã được ghép bởi request khác"
 - 3a2. Use case kết thúc
+
+**3b. Request không còn chờ xử lý (đội gửi vừa rút hoặc request đã bị từ chối):**
+- 3b1. Hệ thống hiển thị "Yêu cầu đã được xử lý"; Match giữ OPEN
+- 3b2. Use case kết thúc
+
+**3c. Match đã quá thời hạn bài đăng (BR-M17):**
+- 3c1. Hệ thống chuyển Match sang EXPIRED và hiển thị "Kèo đã hết hạn"
+- 3c2. Use case kết thúc
+
+**3d. Đội gửi không còn hoạt động hoặc bộ môn đã tắt (BR-M14, BR-M15):**
+- 3d1. Hệ thống từ chối chấp nhận; Match giữ OPEN
+- 3d2. Use case kết thúc
 
 ---
 
@@ -441,6 +477,8 @@
 
 **Preconditions:**
 - Match đang ở trạng thái OPEN hoặc CONFIRMED
+- Đội hủy là đội tạo kèo (OPEN hoặc CONFIRMED) hoặc đội đã ghép (CONFIRMED); đội không bị giải tán (đội tạm ngưng vẫn hủy được — BR-M14)
+- (Nếu CONFIRMED) Trận chưa bắt đầu — BR-M11
 
 **Main Flow (Match OPEN):**
 1. Đội trưởng chọn "Hủy kèo"
@@ -455,13 +493,14 @@
 2. Đội trưởng nhập lý do hủy
 3. Đội trưởng xác nhận
 4. Hệ thống tính khoảng cách đến giờ trận (≥24h, 4-24h, <4h)
-5. Hệ thống trừ Reliability Score (-2/-5/-10)
+5. Hệ thống trừ Reliability Score của đội hủy (-2/-5/-10 — BR-M09, BR-M10)
 6. Hệ thống chuyển Match sang CANCELLED
 7. Hệ thống gửi notification cho đội kia
 
 **Postconditions:**
 - Match chuyển sang CANCELLED
-- (Nếu CONFIRMED) Bên hủy bị trừ Reliability Score theo khoảng cách giờ trận
+- (Nếu CONFIRMED) Đội hủy bị trừ Reliability Score theo khoảng cách giờ trận (BR-M09, BR-M10); đội còn lại không bị trừ
+- (Nếu đội đã ghép hủy) Match_Request đã ACCEPTED của đội đó chuyển WITHDRAWN (BR-M12)
 - (Nếu CANCELLED ≥24h trước) Match loại khỏi mẫu số Completion Rate
 
 **Exception Flows:**
@@ -469,6 +508,24 @@
 **3a. Có request PENDING chưa xử lý:**
 - 3a1. Hệ thống hiển thị "Vui lòng từ chối tất cả yêu cầu trước khi hủy"
 - 3a2. Use case kết thúc
+
+**3b. Trận đã bắt đầu (BR-M11):**
+- 3b1. Hệ thống hiển thị "Trận đã bắt đầu, không thể hủy"; không trừ điểm
+- 3b2. Use case kết thúc
+
+**3c. Trạng thái Match khác trạng thái đội trưởng đang thấy (BR-M13)** — vd màn hình còn "đang mở" nhưng kèo đã được ghép:
+- 3c1. Hệ thống hiển thị "Trạng thái đã thay đổi, vui lòng tải lại"; không hủy, không trừ điểm
+- 3c2. Use case kết thúc
+
+**3d. Hủy Match CONFIRMED chưa nhập lý do (BR-M16):**
+- 3d1. Hệ thống yêu cầu nhập lý do hủy
+- 3d2. Quay về bước 2
+
+**Alternative Flow (Đội đã ghép rút Match_Request đã ACCEPTED — BR-M12):**
+- A1. Đội trưởng đội đã ghép chọn "Rút yêu cầu" trên request đã được chấp nhận và nhập lý do
+- A2. Hệ thống xử lý như đội đó hủy Match CONFIRMED (bước 4–7 Main Flow CONFIRMED, exception 3b, 3d)
+- A2a. Request trên màn hình đang "chờ" nhưng thực tế đã được chấp nhận (hoặc ngược lại) → hệ thống từ chối như 3c, không rút, không trừ điểm (BR-M13)
+- A3. Match_Request chuyển WITHDRAWN; Match chuyển CANCELLED; chỉ đội rút bị trừ Reliability Score
 
 ---
 
@@ -492,8 +549,8 @@
 **Alternative Flow (Lazy check):**
 - 1a. API được gọi (vd: xem chi tiết Match)
 - 1a1. System kiểm tra `expires_at`
-- 1a2. Nếu hết hạn và chưa EXPIRED → cập nhật ngay
-- 1a3. Tiếp tục xử lý API
+- 1a2. Nếu hết hạn và chưa EXPIRED (BR-M17): khi xem → hiển thị EXPIRED ngay; khi thao tác trên Match (gửi/chấp nhận/từ chối/rút request, hủy, sửa chi phí) → chuyển Match sang EXPIRED ngay, request PENDING chuyển EXPIRED, và báo "Kèo đã hết hạn"
+- 1a3. Tiếp tục xử lý (xem) hoặc kết thúc (thao tác)
 
 ---
 
@@ -1003,6 +1060,7 @@
 
 **Preconditions:**
 - Match đang ở trạng thái NEGOTIATING (luồng B) hoặc trước khi CONFIRMED (luồng A)
+- (Luồng A) Người nhập là đội trưởng đội tạo kèo; Match đang OPEN — BR-C03
 
 **Main Flow:**
 1. Đội trưởng chọn "Thỏa thuận chi phí"
@@ -1034,11 +1092,17 @@
 3. Đội trưởng nhập số tiền
 4. Đội trưởng submit
 5. Hệ thống thêm khoản phí vào danh sách
-6. (Lặp lại cho các khoản phí khác)
+6. (Lặp lại cho các khoản phí khác, tối đa 10 khoản — BR-C04)
 
 **Postconditions:**
 - Các khoản phí tự do được lưu
 - Hiển thị trong thỏa thuận chi phí
+
+**Exception Flows:**
+
+**4a. Đã đủ 10 khoản, tên trống/quá 100 ký tự, hoặc số tiền không hợp lệ (BR-C02, BR-C04):**
+- 4a1. Hệ thống hiển thị lỗi tại khoản tương ứng
+- 4a2. Quay về bước 2
 
 ---
 

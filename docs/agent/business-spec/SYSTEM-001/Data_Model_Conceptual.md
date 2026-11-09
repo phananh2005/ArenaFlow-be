@@ -155,7 +155,7 @@
 - Đội tạo (Team ID)
 - Trạng thái (OPEN, CONFIRMED, ARCHIVED, COMPLETED, EXPIRED, CANCELLED)
 - Định dạng (5v5, 7v7, 11v11)
-- Trình độ mong muốn (tùy chọn, chọn từ 9 nhãn)
+- Trình độ mong muốn (tùy chọn, tối đa 3 trong 9 nhãn; không chọn = mọi trình độ — BR-M16)
 - Tuổi (văn bản tự do, vd: "U23")
 - Tính chất trận (văn bản tự do, vd: "Giao hữu")
 - Thời hạn bài đăng (`expires_at`)
@@ -164,13 +164,13 @@
 - **Luồng A:**
   - Địa điểm sân (Venue ID)
   - Giờ bắt đầu
-  - Giờ kết thúc dự kiến (`scheduled_end_time`)
+  - Giờ kết thúc dự kiến (`scheduled_end_time`; sau giờ bắt đầu, không quá 12 giờ — BR-M16)
 - **Luồng B:**
   - Nhiều lựa chọn địa điểm (danh sách Venue ID)
   - Nhiều lựa chọn giờ (danh sách thời gian)
   - Địa điểm/giờ cuối cùng được chốt (sau khi Pairing CONFIRMED)
   - Giờ kết thúc dự kiến cuối cùng (`scheduled_end_time`, sau khi chốt)
-- Lý do hủy (nếu CANCELLED)
+- Đội hủy, thời điểm hủy, lý do hủy (nếu CANCELLED; lý do bắt buộc khi hủy Match đã CONFIRMED — BR-M16)
 
 **Relationships:**
 - 1 Match thuộc về 1 Team (đội tạo)
@@ -331,14 +331,14 @@
 **Attributes:**
 - ID
 - Match ID (khóa ngoại, 1:1)
-- Loại chi phí (tiền sân, tiền nước, hoặc cả hai)
+- Loại chi phí (tiền sân, tiền nước, hoặc cả hai; không có loại "tùy chỉnh" — BR-C04)
 - Số tiền sân (VND)
 - Số tiền nước (VND)
 - Cách chia (50-50, 70-30 chủ nhà bao 70%, 70-30 thua bao 70%, thua trả toàn bộ tiền nước)
 - Thỏa thuận cọc (boolean, chỉ luồng B)
 - Số tiền cọc (VND, nếu có)
 - Ai giữ tiền cọc (văn bản, vd: "Đội chủ nhà")
-- Khoản tự nhập (danh sách, mỗi khoản có tên + số tiền)
+- Khoản tự nhập (danh sách riêng, tối đa 10 khoản, mỗi khoản có tên + số tiền — BR-C04)
 
 **Relationships:**
 - 1 Cost_Agreement thuộc về 1 Match (0..1)
@@ -474,7 +474,7 @@
 **Relationships:**
 - 1 Reliability_Score thuộc về 1 Team hoặc 1 User (1:1)
 
-**Ghi chú:** Chặn trong [0, 100]; reset bộ đếm sau 5 trận sạch.
+**Ghi chú:** Chặn trong [0, 100]; reset bộ đếm sau 5 trận sạch. Hủy Match CONFIRMED / rút request ACCEPTED trừ Reliability_Score loại team của đội thực hiện, không trừ loại individual của đội trưởng (BR-M09).
 
 ---
 

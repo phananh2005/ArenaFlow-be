@@ -40,6 +40,8 @@
 - [ ] Race condition Pairing được xử lý đúng (timestamp xác nhận cuối)
 - [ ] Scheduled job cập nhật trạng thái hết hạn chạy đúng mỗi 5 phút
 - [ ] Lazy check khi API gọi hoạt động đúng
+- [ ] Trừ Reliability đúng đội hủy, đúng biên khung giờ; không hủy/rút khi trận đã bắt đầu (BR-M09..BR-M11)
+- [ ] Kèo của đội tạm ngưng/giải tán hoặc bộ môn tắt bị ẩn và chặn đúng (BR-M14, BR-M15)
 
 #### REPUTATION DOMAIN
 - [ ] Reliability Score chặn trong [0, 100]
@@ -227,16 +229,21 @@
 
 ### AC-M06: Hủy Match CONFIRMED
 
-**Given:** Match đang CONFIRMED
+**Given:** Match đang CONFIRMED; trận chưa bắt đầu
 
-**When:** Đội trưởng hủy Match và nhập lý do
+**When:** Đội trưởng đội tạo kèo **hoặc** đội đã ghép hủy Match và nhập lý do
 
 **Then:**
-- Hệ thống tính khoảng cách đến giờ trận
-- Reliability Score bị trừ: -2 (≥24h), -5 (4-24h), -10 (<4h)
+- Hệ thống tính khoảng cách từ lúc hủy đến giờ bắt đầu trận
+- Reliability Score của **đội hủy** bị trừ: -2 (từ đủ 24h trở lên), -5 (từ đủ 4h đến dưới 24h), -10 (dưới 4h); hủy đúng 24h trước → -2, đúng 4h trước → -5 (BR-M09, BR-M10)
+- Đội còn lại không bị trừ; đội trưởng không bị trừ điểm cá nhân
+- Điểm sau khi trừ không nhỏ hơn 0 (BR-R03)
 - Match chuyển CANCELLED
+- (Nếu đội đã ghép hủy) request đã ACCEPTED của đội đó chuyển WITHDRAWN (BR-M12)
 - (Nếu hủy ≥24h trước) Match loại khỏi mẫu số Completion Rate
 - Đội kia nhận notification
+- Chưa nhập lý do → hệ thống yêu cầu nhập, không hủy
+- Trận đã bắt đầu → hệ thống báo "Trận đã bắt đầu, không thể hủy", không hủy, không trừ điểm (BR-M11)
 
 ---
 
@@ -262,6 +269,63 @@
 **Then:**
 - Match chuyển ARCHIVED
 - Push notification gửi cho 2 đội trưởng: "Trận đấu hôm nay thế nào? Hãy nhập tỷ số và đánh giá đồng đội!"
+
+---
+
+### AC-M09: Rút Match_Request đã ACCEPTED (BR-M12)
+
+**Given:** Match CONFIRMED với request ACCEPTED của đội B; trận chưa bắt đầu
+
+**When:** Đội trưởng đội B rút request và nhập lý do
+
+**Then:**
+- Request chuyển WITHDRAWN; Match chuyển CANCELLED (đội hủy = đội B)
+- Chỉ đội B bị trừ Reliability theo BR-M10; đội tạo kèo không bị trừ
+- Rút lần hai (hoặc đội B bấm "Hủy kèo" sau đó) không trừ thêm điểm
+- Đội tạo kèo nhận notification "Kèo bị hủy"
+- Rút request PENDING: request chuyển WITHDRAWN, không trừ điểm, Match giữ nguyên
+
+---
+
+### AC-M10: Kèo của đội không hoạt động hoặc bộ môn bị tắt (BR-M14, BR-M15)
+
+**Given:** Đội A có Match OPEN; Admin đánh dấu đội A INACTIVE (hoặc đội A giải tán, hoặc Admin tắt bộ môn của Match)
+
+**When:** Người dùng tìm kèo; đội khác gửi request; đội A (khi INACTIVE) chấp nhận/hủy
+
+**Then:**
+- Match không xuất hiện trong danh sách tìm kèo
+- Không gửi được request mới cho Match
+- Không chấp nhận được request (cả khi chính đội gửi request không còn hoạt động)
+- Match không bị tự hủy; hết hạn theo thời hạn bài đăng
+- Đội A khi INACTIVE vẫn hủy kèo, từ chối và rút request được
+- Match CONFIRMED của đội/bộ môn đó vẫn chuyển ARCHIVED khi hết giờ
+- Bộ môn đang tắt: không tạo được kèo mới cho bộ môn đó
+
+---
+
+### AC-M11: Hủy kèo / rút request khi trạng thái đã thay đổi (BR-M13)
+
+**Given:** Đội trưởng tác giả đang thấy Match "đang mở"; đội trưởng đội gửi đang thấy request "đang chờ"
+
+**When:** Request được chấp nhận (Match → CONFIRMED) trước khi — hoặc gần như cùng lúc — đội trưởng tác giả bấm hủy kèo, hoặc đội trưởng đội gửi bấm rút request, trên màn hình chưa tải lại
+
+**Then:**
+- Chấp nhận diễn ra trước (kể cả từ lâu trước khi bấm): hệ thống so với trạng thái đội trưởng đang thấy → từ chối với thông báo "Trạng thái đã thay đổi, vui lòng tải lại"; Match giữ CONFIRMED; request giữ ACCEPTED; không đội nào bị trừ điểm
+- Hủy / rút diễn ra trước: Match CANCELLED (hủy) hoặc request WITHDRAWN (rút); thao tác chấp nhận bị từ chối
+- Muốn hủy kèo đã ghép, đội trưởng phải tải lại, thấy "đã ghép" rồi hủy (có lý do, bị trừ điểm theo BR-M10)
+
+---
+
+### AC-M12: Giới hạn khi tạo kèo (BR-M16)
+
+**Given:** Đội trưởng tạo kèo luồng A
+
+**When:** Nhập trận dài hơn 12 giờ, hoặc chọn hơn 3 nhãn trình độ
+
+**Then:**
+- Hệ thống báo lỗi tại trường tương ứng; Match không được tạo
+- Không chọn nhãn trình độ → Match hiển thị cho mọi trình độ và khớp mọi bộ lọc trình độ khi tìm kèo
 
 ---
 
@@ -472,6 +536,8 @@
 - Thỏa thuận được lưu
 - Hiển thị trên bảng tin Match
 - ArenaFlow KHÔNG thu/giữ tiền; 2 đội thanh toán bên ngoài
+- (Luồng A) Chỉ đội trưởng đội tạo kèo nhập/sửa, chỉ khi Match OPEN; lưu lại thay toàn bộ thỏa thuận cũ (BR-C03)
+- Loại chi phí chỉ: tiền sân, tiền nước, cả hai; tối đa 10 khoản tự nhập; số tiền > 0 và ≤ 1.000.000.000 VND (BR-C04)
 
 ---
 
