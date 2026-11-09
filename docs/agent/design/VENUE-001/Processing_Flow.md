@@ -7,11 +7,31 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway · Cloudinary |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + `Component_Class_Design.md` §4.9 |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
-13 endpoint + 2 scheduled job + 2 method port cho MATCH-001. Mã lỗi: `API_Spec.md` §4; thứ tự guard: `API_Spec.md` §2.0; giá trị cấu hình: `Component_Class_Design.md` §8. Số truy vấn tính cho **một lần thử**; JWT không truy vấn DB. Ký hiệu: **S** SELECT, **I** INSERT, **U** UPDATE, **D** DELETE. Không gọi HTTP ra ngoài trong request; Admin API Cloudinary chỉ trong job dọn (§3.16).
+13 endpoint + 2 scheduled job + 2 method port cho MATCH-001. Mã lỗi: `API_Spec.md` §5; thứ tự guard: §1.1; giá trị cấu hình: `Component_Class_Design.md` §8. Số truy vấn tính cho **một lần thử**; JWT không truy vấn DB. Ký hiệu: **S** SELECT, **I** INSERT, **U** UPDATE, **D** DELETE. Không gọi HTTP ra ngoài trong request; Admin API Cloudinary chỉ trong job dọn (§3.16).
+
+### 1.1. Thứ tự guard (nguồn duy nhất)
+
+Chuyển từ `API_Spec.md` v1.0; `API_Spec.md` thể hiện cùng thứ tự bằng cách xếp bảng lỗi mỗi endpoint theo thứ tự kiểm. Sau JWT (401/403 ở filter) và Bean Validation (400). Mẫu USER-002 §2.1a (tồn tại → trạng thái → quyền); kiểm role không cần DB đứng đầu; khi quy tắc trạng thái phụ thuộc role, quyền đứng trước trạng thái.
+
+| Endpoint | Thứ tự guard |
+|---|---|
+| 2.1 | `USER_001` |
+| 2.3 | `VENUE_001` |
+| 2.4 | `VENUE_012` → `VENUE_001` → `VENUE_002` (không phải Admin) → `VENUE_003` |
+| 2.5 | `VENUE_012` → `VENUE_005` (không chạm DB: mẫu `publicId`, người xin chữ ký, hạn xác nhận, chữ ký response) → `VENUE_001` → `VENUE_002` (không phải Admin) → `VENUE_003` → `VENUE_006` (khi INSERT) |
+| 2.6 | `VENUE_001` → `VENUE_002` (không phải Admin) → `VENUE_004` |
+| 2.7 | `VENUE_015` (caller là Admin) → `VENUE_001` → `VENUE_002` → `VENUE_014` (khi INSERT) |
+| 2.9 | `VENUE_009` → `VENUE_010` |
+| 2.10 | `VENUE_001` → `VENUE_007` |
+| 2.11 | `VENUE_001` → `VENUE_008` |
+| 2.12 | `VENUE_001` → `VENUE_013` → `VENUE_002` (không phải Admin) |
+| 2.13 | `VENUE_001` → `VENUE_013` → `VENUE_002` (không phải Admin) → `VENUE_004` |
+
+`VENUE_011` (2.9–2.12) phát sinh khi retrier hết lượt, không theo vị trí cố định trong chuỗi guard.
 
 ## 2. Sequence
 
@@ -133,7 +153,7 @@ Q1 `findDetailById` → `VENUE_001`; Q2 `findByVenueIdOrderByDisplayOrderAsc`.
 Q1–Q2 `lockForImageWrite` (`VENUE_001`) → `requireWritable` (`VENUE_002`) → Q3 `clearPrimary` → Q4 `setPrimary`: 0 dòng → `VENUE_004` (exception → rollback hoàn tác Q3) → Q5 danh sách ảnh. Hai câu riêng vì PostgreSQL kiểm unique index theo từng dòng trong một `UPDATE`; gộp có thể vi phạm tạm thời.
 
 ### 3.7. `POST …/reports` (`@Transactional`)
-`actor.admin()` → `VENUE_015` → Q1 `activeVenue` (`VENUE_001`, `VENUE_002`) → Q2 `saveAndFlush` report (`PENDING`); `uq_venue_report_pending` → `VENUE_014` (index là nguồn duy nhất, không SELECT kiểm trước) → nếu `reason = CLOSED` và `closureAlertedAt == null` (đọc ở Q1): Q3 `markClosureAlerted` (`WHERE status = 'ACTIVE' AND closure_alerted_at IS NULL`, `version + 1`); 1 dòng → `VenueAdminAlertEvent(CLOSURE_REPORTED)` → luôn `VenueReportedEvent`.
+`actor.admin()` → `VENUE_015` → Q1 `activeVenue` (`VENUE_001`, `VENUE_002`) → Q2 `saveAndFlush` report (`PENDING`); `uq_venue_report_pending` → `VENUE_014` (index là nguồn duy nhất, không SELECT kiểm trước) → nếu `reason = CLOSED` và `closureAlertedAt == null` (đọc ở Q1): Q3 `markClosureAlerted` (`WHERE status = 'ACTIVE' AND closure_alerted_at IS NULL`, `version + 1`); 1 dòng → `VenueAdminAlertEvent(CLOSURE_REPORTED)` → luôn `VenueReportedEvent` `[cần xác nhận #1, #2]`.
 
 ### 3.8. `GET /admin/venue-reports`
 Q1 `findAdminReports` (JOIN venue, LEFT JOIN user reporter/handler) + Q2 count.
@@ -271,10 +291,12 @@ Native projection + JOIN, ảnh chính bằng `LEFT JOIN … AND is_primary`, kh
 
 ## 10. Danh sách [cần xác nhận]
 
-Đánh số toàn thiết kế: 1–7 ở `API_Spec.md` §6, 8–15 ở `Component_Class_Design.md` §12, 16–18 ở đây.
+Đánh số toàn thiết kế: 1–2 và 16–18 ở đây, 3–7 ở `API_Spec.md` §6 (kèm phần ảnh hưởng FE của #9), 8–15 ở `Component_Class_Design.md` §12.
 
 | # | Nội dung | Loại |
 |---|---|---|
+| 1 | Report phát cả `VenueReportedEvent` (mỗi report, UC-V03 bước 6) lẫn `VenueAdminAlertEvent(CLOSURE_REPORTED)` một lần (BC-V05); NOTIFICATION-001 quyết định gộp (chuyển từ `API_Spec.md` v1.0) | Không chặn |
+| 2 | Mở lại cổng "cảnh báo 1 lần": `CLOSURE_REPORTED` khi hết report `CLOSED` `PENDING` hoặc reactivate; `STALE_180_DAYS` khi được chọn lại hoặc reactivate (chuyển từ `API_Spec.md` v1.0) | Không chặn |
 | 16 | Deadlock resolve vs mark-inactive (§5): chọn cho `resolveReport` chạy qua retrier thay vì đổi thứ tự khoá | Không chặn (đã có mặc định) |
 | 17 | Trùng địa điểm: không khoá tự nhiên, spec không có quy tắc | Không chặn |
 | 18 | Rate limit cho 2.1, 2.5, 2.7 (AC §3.2 chỉ nêu endpoint public) | Không chặn |
