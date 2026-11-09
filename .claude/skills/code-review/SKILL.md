@@ -2,7 +2,7 @@
 description: >
   Review nhanh code theo 5 chiều (Security, Performance, Correctness, Style,
   Reuse & Duplication) trong phiên, CHỈ KHI USER YÊU CẦU ("review nhanh", "kiểm tra code").
-  Không phải bước bắt buộc trước commit — cổng review trước commit là agent code-reviewer (CLAUDE.md §8).
+  Không phải bước bắt buộc trước PR — cổng review trước PR là agent code-reviewer (CLAUDE.md §8).
 ---
 
 # Code Review (nhanh, theo yêu cầu)
@@ -12,10 +12,10 @@ description: >
 
 ## Khi nào dùng
 - User yêu cầu review nhanh trong phiên (vd trước khi quyết định có cần review độc lập).
-- **Không** thay cho `code-reviewer`: diff có code vẫn MUST qua `code-reviewer` trước commit (`CLAUDE.md` §8).
+- **Không** thay cho `code-reviewer`: nhánh có code vẫn MUST qua `code-reviewer` trước PR (`CLAUDE.md` §8).
 
 ## Không chạy
-- Như một cổng trước commit — đã bỏ (2026-11-05, gộp vào `code-reviewer`).
+- Như một cổng trước commit/PR — đã bỏ (2026-11-05, gộp vào `code-reviewer`; cổng dời sang trước PR 2026-11-10).
 
 ## Quy trình
 1. **Phạm vi:** diff nào? Người dùng đã chỉ định → bắt đầu luôn.
@@ -29,4 +29,4 @@ description: >
 4. **Đề xuất sửa:** mỗi CRITICAL/MAJOR kèm đoạn code gợi ý + `file:line`.
 
 ## Liên kết
-- Cổng review trước commit (diff có code) → agent `code-reviewer`
+- Cổng review trước PR (nhánh có code) → agent `code-reviewer`
