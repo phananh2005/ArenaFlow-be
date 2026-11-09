@@ -1,276 +1,921 @@
 # API Specification — Quản lý địa điểm sân
 
+<!-- File này được publish cho FE (ADR-0010). Viết theo design-standards.md §11:
+     không tên class/bảng/cột/migration/transaction/khoá/số truy vấn; không trỏ Component_Class_Design.md,
+     Processing_Flow.md, docs/database/. Chi tiết nội bộ BE ghi ở hai file đó. -->
+
 | Mục | Giá trị |
 |---|---|
 | Mã chức năng | `VENUE-001` |
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
-| Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · PostgreSQL (Neon) · Flyway · Cloudinary ([ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) `Proposed`) |
-| Quy ước áp dụng | `docs/agent/api-convention.md`, `docs/agent/security-backend.md`; quy ước chung USER-001 `API_Spec.md` §1 (UUID v7, envelope, enum UPPERCASE, phân trang, `VALIDATION_ERROR`) |
-| Ràng buộc dữ liệu | V1 (`venue`, `venue_image`, `venue_report`) + `V5__venue_management.sql` (`Component_Class_Design.md` §5.1) |
-| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.2) — UC-V01..V06, BR-V01..V10, BC-V01..V07, Business_Rules §2.6, §5.1/§5.4, AC-V01..V05, DoD Venue |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) |
+| Repo | ArenaFlow-be |
+| Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); USER-001 `API_Spec.md` §1.1 "Quy ước chung" và §1.2 "Lỗi chung" |
+| Quyết định liên quan | [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) (`Proposed`) — ảnh lưu trên Cloudinary, FE upload thẳng lên Cloudinary bằng chữ ký backend cấp |
+| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.2) — UC-V01..V06, BR-V01..V10, BC-V01..V07, Business_Rules §2.6, §5.1/§5.4, AC-V01..V05 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
-Thêm địa điểm không cần duyệt (UC-V01); người tạo hoặc Admin sửa địa điểm (UC-V05) và xoá ảnh (UC-V06); mọi user thêm ảnh qua Cloudinary (backend ký, client upload thẳng, backend xác nhận) và đổi ảnh chính (UC-V02, BR-V07); User (không gồm Admin) report địa điểm đang hoạt động (UC-V03); Admin xử lý report, ngừng / kích hoạt lại địa điểm (UC-V04, Business_Rules §2.6). Danh sách mặc định loại `INACTIVE`; chi tiết `INACTIVE` vẫn đọc được. Kèo chỉ lưu `venue_id` nên luôn thấy thông tin mới nhất (BR-V10) — sửa địa điểm không bị chặn bởi kèo.
+Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ duyệt), tìm địa điểm, thêm ảnh sân (tối đa 5 ảnh, đúng 1 ảnh chính khi có ảnh) và report địa điểm sai thông tin / đã đóng cửa. Người tạo địa điểm hoặc Admin sửa thông tin và xoá ảnh. Admin xử lý report, đánh dấu địa điểm ngừng hoạt động và kích hoạt lại. Kèo chỉ tham chiếu địa điểm nên luôn hiển thị thông tin địa điểm mới nhất (BR-V10); sửa địa điểm không bị chặn khi đã có kèo.
 
-**Ngoài phạm vi:** frontend · gửi notification thật (chỉ phát `ApplicationEvent`, `Component_Class_Design.md` §4.7) · cập nhật `last_selected_at` khi tạo kèo (MATCH-001 gọi port, `Component_Class_Design.md` §4.6) · sắp xếp lại ảnh · `Idempotency-Key` (`api-convention.md` §13, hoãn như USER-001/002).
+**Ngoài phạm vi:** frontend · gửi thông báo cho admin/người dùng (NOTIFICATION-001; API này chưa gửi thông báo) · `lastSelectedAt` được cập nhật khi địa điểm được chọn cho kèo (MATCH-001), không có endpoint riêng · sắp xếp lại thứ tự ảnh · header `Idempotency-Key` (`api-convention.md` §13) chưa hỗ trợ.
 
-**Quy ước riêng:**
-- Mọi endpoint cần access token; không endpoint public mới. Token sai → `401 AUTH_001`; `/api/v1/admin/**` không phải admin → `403 AUTH_004`.
-- Enum (UPPERCASE): `status` địa điểm `ACTIVE|INACTIVE`; `venueType` `FIVE_A_SIDE|SEVEN_A_SIDE|ELEVEN_A_SIDE` (BR-V05); `createdByType` `ADMIN|USER`; `reason` report `CLOSED|WRONG_INFO|OTHER`; `status` report `PENDING|VERIFIED|REJECTED`.
-- "Admin" = claim `roles` của JWT chứa `ADMIN` (cùng nguồn `SecurityConfig`). "Người tạo" = `venue.created_by_user_id`.
-- **Địa điểm `INACTIVE`:** chỉ Admin được ghi (sửa, cấp chữ ký, thêm/đổi chính/xoá ảnh — BR-V06, BR-V07); người khác → `422 VENUE_002`. Không ai report được (UC-V03 4b).
+**Quy ước chung cho mọi endpoint của mã này:**
+- Mọi endpoint cần `Authorization: Bearer <access token>`; không có endpoint public. Token thiếu/sai/hết hạn → `401 AUTH_001`. Endpoint `/api/v1/admin/**` mà tài khoản không phải admin → `403 AUTH_004` → ẩn chức năng quản trị.
+- Cách xử lý `401 AUTH_001` và lỗi hệ thống `SYS_*`: theo USER-001 `API_Spec.md` §1.2 "Lỗi chung".
+- **Admin** = tài khoản có role `ADMIN` trong access token. **Người tạo** = user có id bằng `createdById` của địa điểm. FE so `createdById` với id user đang đăng nhập và role để quyết định hiện nút (§3); backend vẫn kiểm lại.
+- Id là UUID dạng chuỗi. Thời gian là chuỗi ISO-8601 UTC (vd `"2026-11-09T03:00:00Z"`). Toạ độ là số thập phân.
+- Enum viết UPPERCASE, phân biệt hoa thường (§4.1); riêng `format` ảnh viết thường.
+- Chuỗi được cắt khoảng trắng đầu/cuối trước khi lưu. Field tuỳ chọn gửi `""`: ở request tạo coi như không nhập (lưu `null`, không báo lỗi); ở `PATCH /venues/{venueId}` (2.12) nghĩa là xoá giá trị.
+- Danh sách: `page` (≥ 1, mặc định 1), `pageSize` (1..100, mặc định 20); response có `pagination` (`api-convention.md` §7). Thứ tự sắp xếp cố định, ghi ở từng endpoint; không có tham số `sort`.
+- Lỗi trả theo envelope `error` (`api-convention.md` §4.4). Sai định dạng / độ dài / enum / thiếu field bắt buộc / id trên path không phải UUID → `400 VALIDATION_ERROR` kèm `validationErrors[].field` (`api-convention.md` §11).
+- Khi một request vi phạm nhiều điều kiện, backend trả **lỗi đầu tiên** theo thứ tự: `401`/`403 AUTH_*` → `400 VALIDATION_ERROR` → các dòng trong bảng lỗi của endpoint, **từ trên xuống**.
+- `201` không kèm header `Location`; lấy id trong body.
 
 ## 2. Endpoints
 
-| # | Method & Path | Quyền | Thành công | Tiêu chí `api-convention.md` §5 |
+| # | Method + Path | Dùng khi | Ai gọi được | Thành công |
 |---|---|---|---|---|
-| 2.1 | `POST /api/v1/venues` | User, Admin | 201 | B2 |
-| 2.2 | `GET /api/v1/venues` | User, Admin | 200 | B1 |
-| 2.3 | `GET /api/v1/venues/{venueId}` | User, Admin | 200 | B1 |
-| 2.4 | `POST /api/v1/venues/{venueId}/image-upload-signatures` | User, Admin | 200 | B3 (chữ ký, `publicId` do server sinh; không tạo tài nguyên) |
-| 2.5 | `POST /api/v1/venues/{venueId}/images` | Người xin chữ ký ở 2.4 | 201 | B2 |
-| 2.6 | `PATCH /api/v1/venues/{venueId}/images/{imageId}/set-primary` | User, Admin | 200 | B4 |
-| 2.7 | `POST /api/v1/venues/{venueId}/reports` | User (không Admin) | 201 | B2 |
-| 2.8 | `GET /api/v1/admin/venue-reports` | Admin | 200 | B1 |
-| 2.9 | `PATCH /api/v1/admin/venue-reports/{reportId}/resolve` | Admin | 200 | B3 (`handledAt`, `handledByName`) |
-| 2.10 | `PATCH /api/v1/admin/venues/{venueId}/mark-inactive` | Admin | 200 | B4 |
-| 2.11 | `PATCH /api/v1/admin/venues/{venueId}/reactivate` | Admin | 200 | B4 |
-| 2.12 | `PATCH /api/v1/venues/{venueId}` | Người tạo, Admin | 200 | B4 |
-| 2.13 | `DELETE /api/v1/venues/{venueId}/images/{imageId}` | Người tạo, Admin | 200 | B3 (ảnh chính mới do server chọn), B4 |
+| 2.1 | `POST /api/v1/venues` | Thêm địa điểm | Mọi user | 201 |
+| 2.2 | `GET /api/v1/venues` | Danh sách / tìm / gợi ý địa điểm gần | Mọi user | 200 |
+| 2.3 | `GET /api/v1/venues/{venueId}` | Xem chi tiết địa điểm | Mọi user | 200 |
+| 2.4 | `POST /api/v1/venues/{venueId}/image-upload-signatures` | Thêm ảnh — Bước 1: xin chữ ký upload | Mọi user (địa điểm `INACTIVE`: chỉ Admin) | 200 |
+| 2.5 | `POST /api/v1/venues/{venueId}/images` | Thêm ảnh — Bước 3: lưu ảnh đã upload | Chính người đã xin chữ ký ở 2.4 | 201 |
+| 2.6 | `PATCH /api/v1/venues/{venueId}/images/{imageId}/set-primary` | Đặt ảnh làm ảnh chính | Mọi user (địa điểm `INACTIVE`: chỉ Admin) | 200 |
+| 2.7 | `POST /api/v1/venues/{venueId}/reports` | Report địa điểm | User không phải Admin | 201 |
+| 2.8 | `GET /api/v1/admin/venue-reports` | Admin xem report | Admin | 200 |
+| 2.9 | `PATCH /api/v1/admin/venue-reports/{reportId}/resolve` | Admin chốt report | Admin | 200 |
+| 2.10 | `PATCH /api/v1/admin/venues/{venueId}/mark-inactive` | Admin đánh dấu ngừng hoạt động | Admin | 200 |
+| 2.11 | `PATCH /api/v1/admin/venues/{venueId}/reactivate` | Admin kích hoạt lại | Admin | 200 |
+| 2.12 | `PATCH /api/v1/venues/{venueId}` | Sửa thông tin địa điểm | Người tạo, Admin | 200 |
+| 2.13 | `DELETE /api/v1/venues/{venueId}/images/{imageId}` | Xoá ảnh | Người tạo, Admin | 200 (có body) |
 
-Ghi chú hợp đồng: `201` không kèm `Location`. 2.6, 2.9–2.11 là action sub-resource đổi trạng thái (`api-convention.md` §2.1), `PATCH` theo tiền lệ `mark-inactive`. 2.4 không đổi trạng thái → danh từ số nhiều, `POST` trả `200` (B3). 2.13 trả `200` có body thay `204` vì server chọn ảnh chính mới (§5 chọn mã theo kết quả). `q`/`lat`/`lng`/`radiusKm` là tham số tìm kiếm, không phải filter theo field (§8.1); sort cố định như USER-001.
+### 2.1. Thêm địa điểm — `POST /api/v1/venues`
 
-### 2.0. Thứ tự guard (nguồn duy nhất)
+**Dùng khi:** người dùng mở màn "Thêm địa điểm", nhập thông tin sân rồi lưu (UC-V01, AC-V01). Địa điểm có hiệu lực ngay (`ACTIVE`), hiện trong gợi ý, không chờ admin duyệt.
+**Ai gọi được:** mọi user đã đăng nhập, kể cả Admin.
 
-Sau JWT (401/403 ở filter) và Bean Validation (400). Mẫu USER-002 §2.1a (tồn tại → trạng thái → quyền); kiểm role không cần DB đứng đầu; khi quy tắc trạng thái phụ thuộc role, quyền đứng trước trạng thái.
+**Request body**
 
-| Endpoint | Thứ tự guard |
-|---|---|
-| 2.1 | `USER_001` |
-| 2.3 | `VENUE_001` |
-| 2.4 | `VENUE_012` → `VENUE_001` → `VENUE_002` (không phải Admin) → `VENUE_003` |
-| 2.5 | `VENUE_012` → `VENUE_005` (không chạm DB: mẫu `publicId`, người xin chữ ký, hạn xác nhận, chữ ký response) → `VENUE_001` → `VENUE_002` (không phải Admin) → `VENUE_003` → `VENUE_006` (khi INSERT) |
-| 2.6 | `VENUE_001` → `VENUE_002` (không phải Admin) → `VENUE_004` |
-| 2.7 | `VENUE_015` (caller là Admin) → `VENUE_001` → `VENUE_002` → `VENUE_014` (khi INSERT) |
-| 2.9 | `VENUE_009` → `VENUE_010` |
-| 2.10 | `VENUE_001` → `VENUE_007` |
-| 2.11 | `VENUE_001` → `VENUE_008` |
-| 2.12 | `VENUE_001` → `VENUE_013` → `VENUE_002` (không phải Admin) |
-| 2.13 | `VENUE_001` → `VENUE_013` → `VENUE_002` (không phải Admin) → `VENUE_004` |
+| Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `venueName` | string | Có | Không rỗng / không chỉ khoảng trắng; ≤ 200 ký tự (BR-V01) | `"Sân bóng Hoa Lư"` |
+| `address` | string | Có | Không rỗng / không chỉ khoảng trắng; ≤ 500 ký tự `[cần xác nhận #5]` | `"2 Đinh Tiên Hoàng, Phường Đa Kao, TP.HCM"` |
+| `latitude` | number | Có | -90..90; tối đa 7 chữ số thập phân | `10.7881234` |
+| `longitude` | number | Có | -180..180; tối đa 7 chữ số thập phân | `106.6991234` |
+| `venueType` | string | Không | `FIVE_A_SIDE` \| `SEVEN_A_SIDE` \| `ELEVEN_A_SIDE` (BR-V05); vắng / `null` / `""` = không chọn | `"SEVEN_A_SIDE"` |
+| `phone` | string | Không | Khớp `^0[0-9]{9,10}$` (10–11 chữ số, bắt đầu bằng 0) `[cần xác nhận #5]`; `""` = không nhập | `"0281234567"` |
+| `website` | string | Không | URL bắt đầu `http://` hoặc `https://`; ≤ 500 ký tự; `""` = không nhập | `"https://example.com"` |
+
+```json
+{
+  "venueName": "Sân bóng Hoa Lư",
+  "address": "2 Đinh Tiên Hoàng, Phường Đa Kao, TP.HCM",
+  "latitude": 10.7881234,
+  "longitude": 106.6991234,
+  "venueType": "SEVEN_A_SIDE",
+  "phone": "0281234567",
+  "website": "https://example.com"
+}
+```
+
+**Response 201** — Venue (§4.2), `images` rỗng. `createdByType` = `ADMIN` nếu tài khoản người tạo có role `ADMIN`, ngược lại `USER`; `createdById` luôn là người gọi `[cần xác nhận #6]`.
+
+```json
+{
+  "data": {
+    "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+    "venueName": "Sân bóng Hoa Lư",
+    "address": "2 Đinh Tiên Hoàng, Phường Đa Kao, TP.HCM",
+    "latitude": 10.7881234,
+    "longitude": 106.6991234,
+    "venueType": "SEVEN_A_SIDE",
+    "phone": "0281234567",
+    "website": "https://example.com",
+    "status": "ACTIVE",
+    "createdByType": "USER",
+    "createdById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
+    "createdByName": "Nguyễn Văn A",
+    "lastSelectedAt": null,
+    "adminVerifiedInactiveAt": null,
+    "createdAt": "2026-11-09T03:00:00Z",
+    "updatedAt": "2026-11-09T03:00:00Z",
+    "images": []
+  }
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 400 | `VALIDATION_ERROR` | Field sai ràng buộc ở bảng trên | Hiện lỗi dưới từng field theo `validationErrors[].field` |
+| 404 | `USER_001` | Tài khoản đang đăng nhập không còn tồn tại (đã xoá) | Đăng xuất, về màn đăng nhập |
+
+Backend không chặn gửi lặp (chưa hỗ trợ `Idempotency-Key`) → FE khoá nút "Lưu" khi request đang chạy.
 
 ---
 
-### 2.1. POST /api/v1/venues
+### 2.2. Danh sách / tìm địa điểm — `GET /api/v1/venues`
 
-UC-V01. Tạo `ACTIVE`, không duyệt. `createdByType` = `ADMIN` nếu `"user".role = ADMIN`, ngược lại `USER`; `createdById` = caller trong cả hai trường hợp `[cần xác nhận #6]`.
+**Dùng khi:** màn danh sách / tìm địa điểm; gợi ý địa điểm gần khi chọn sân cho kèo (AC-V01, BC-V04); Admin xem cả địa điểm ngừng hoạt động.
+**Ai gọi được:** mọi user đã đăng nhập.
 
-**Request:** `CreateVenueRequest` (§3.1).
-```json
-{ "venueName": "Sân bóng Hoa Lư", "address": "2 Đinh Tiên Hoàng, Phường Đa Kao, TP.HCM",
-  "latitude": 10.7881234, "longitude": 106.6991234,
-  "venueType": "SEVEN_A_SIDE", "phone": "0281234567", "website": "https://example.com" }
+**Query params**
+
+| Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `q` | string | Không | ≤ 100 ký tự; khớp một phần, không phân biệt hoa thường, trong tên **hoặc** địa chỉ | `hoa lư` |
+| `status` | string | Không | `ACTIVE` \| `INACTIVE` \| `ALL`; mặc định `ACTIVE` | `ACTIVE` |
+| `lat` | number | Không | -90..90, tối đa 7 chữ số thập phân; phải gửi cùng `lng` | `10.78` |
+| `lng` | number | Không | -180..180, tối đa 7 chữ số thập phân; phải gửi cùng `lat` | `106.70` |
+| `radiusKm` | number | Không | 0.1..50; mặc định 5 khi có `lat`/`lng`; chỉ được gửi khi có `lat`/`lng` | `3` |
+| `page` | integer | Không | ≥ 1; mặc định 1 | `1` |
+| `pageSize` | integer | Không | 1..100; mặc định 20 (SRS AC §3.4 ghi tối đa 50 — API nhận tới 100, đã chốt 2026-11-09) | `20` |
+
+**Thứ tự sắp xếp:** có `lat`/`lng` → chỉ trả địa điểm trong bán kính `radiusKm`, gần nhất trước (`distanceKm` tăng dần), bằng nhau → `venueId` tăng dần. Không có toạ độ → `venueName` A→Z, bằng nhau → `venueId` tăng dần.
+
+```http
+GET /api/v1/venues?lat=10.78&lng=106.70&radiusKm=3&page=1&pageSize=20
 ```
-**Response 201:** `VenueResponse` (§3.7), `images = []`. **Lỗi:** `400 VALIDATION_ERROR` · `404 USER_001`.
 
-### 2.2. GET /api/v1/venues
+**Response 200** — mảng VenueSummary (§4.3) + `pagination`.
 
-Danh sách / tìm / gợi ý (AC-V01, BC-V04). Query: `SearchVenueRequest` (§3.3). Sort: có toạ độ → `distanceKm` ↑, `venueId` ↑; không → `venueName` ↑, `venueId` ↑.
-**Response 200:** `VenueSummaryResponse[]` (§3.8) + `pagination`. **Lỗi:** `400 VALIDATION_ERROR` (gồm chỉ gửi một trong `lat`/`lng`, `radiusKm` thiếu toạ độ).
+```json
+{
+  "data": [
+    {
+      "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+      "venueName": "Sân bóng Hoa Lư",
+      "address": "2 Đinh Tiên Hoàng, Phường Đa Kao, TP.HCM",
+      "latitude": 10.7881234,
+      "longitude": 106.6991234,
+      "venueType": "SEVEN_A_SIDE",
+      "status": "ACTIVE",
+      "primaryImageUrl": "https://res.cloudinary.com/demo-cloud/image/upload/v1794193260/arenaflow-dev/venues/01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01/1794193200-q8Zr0vKd3XyWm5TnBf7LhA-Jc4Np2Qs9Rt6Uv1Wx3Yz5a.jpg",
+      "distanceKm": 1.24,
+      "lastSelectedAt": "2026-11-08T12:30:00Z"
+    }
+  ],
+  "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
+}
+```
 
-### 2.3. GET /api/v1/venues/{venueId}
+**Lỗi**
 
-Chi tiết + ảnh theo `displayOrder`, kể cả `INACTIVE`. **Response 200:** `VenueResponse`. **Lỗi:** `400 VALIDATION_ERROR` · `404 VENUE_001`.
-
-### 2.4. POST /api/v1/venues/{venueId}/image-upload-signatures
-
-UC-V02 bước 1–2. Cấp tham số upload đã ký; server chọn `publicId` (định dạng: `Component_Class_Design.md` §4.5) gắn với **người gọi** — chỉ người này lưu được ảnh ở 2.5 (danh tính được ràng buộc bằng HMAC, không lộ user id trong URL). Kiểm sớm giới hạn 5 ảnh (kiểm lại ở 2.5). Không body.
-
-**Response 200:** `VenueImageUploadSignatureResponse` (§3.9).
-
-**Client dùng:** `POST multipart` tới `uploadUrl` với `file` + `api_key`, `timestamp`, `public_id`, `allowed_formats`, `overwrite`, `signature` đúng giá trị nhận được. Chữ ký hết hạn 1 giờ sau `timestamp` ([Cloudinary — Authentication signatures](https://cloudinary.com/documentation/authentication_signatures)). Rồi gọi 2.5 với `public_id`, `version`, `format`, `signature` trong response Cloudinary, trong hạn `confirm-window` (`Component_Class_Design.md` §8).
-
-**Lỗi:** `404 VENUE_001` · `422 VENUE_002` · `422 VENUE_003` · `503 VENUE_012`.
-
-### 2.5. POST /api/v1/venues/{venueId}/images
-
-UC-V02 bước 3–5. Backend **không nhận URL**: kiểm `publicId` đúng mẫu, đúng địa điểm trên path, do chính caller xin chữ ký, còn trong hạn xác nhận và không ở tương lai; xác minh chữ ký response Cloudinary; rồi tự dựng `imageUrl` (`Processing_Flow.md` §3.5). Hạn xác nhận ngắn hơn ân hạn của job dọn asset để job không xoá ảnh còn xác nhận được.
-
-**Ảnh chính (BR-V03):** chưa có ảnh → ảnh mới luôn là ảnh chính; có ảnh và `isPrimary = true` → ảnh chính cũ bỏ. `displayOrder` = lớn nhất + 1 (có thể có khoảng trống sau 2.13).
-
-**Request:** `AddVenueImageRequest` (§3.4). **Response 201:** `VenueImageResponse` (§3.10).
-
-**Lỗi:** `400 VALIDATION_ERROR` · `400 VENUE_005` · `404 VENUE_001` · `409 VENUE_006` · `422 VENUE_002` · `422 VENUE_003` · `503 VENUE_012`.
-
-### 2.6. PATCH /api/v1/venues/{venueId}/images/{imageId}/set-primary
-
-Đổi ảnh chính (BR-V03, BR-V07). Ảnh đích đã là ảnh chính → 200, không đổi. Không body; không có thao tác bỏ ảnh chính.
-**Response 200:** `VenueImageResponse[]` theo `displayOrder`. **Lỗi:** `400 VALIDATION_ERROR` · `404 VENUE_001` · `404 VENUE_004` · `422 VENUE_002`.
-
-### 2.7. POST /api/v1/venues/{venueId}/reports
-
-UC-V03. Lưu report `PENDING`, không đổi trạng thái địa điểm (BR-V04). Admin → `403 VENUE_015` (Admin sửa hoặc đánh dấu ngừng hoạt động trực tiếp). Địa điểm `INACTIVE` → `422 VENUE_002`; đã có report `PENDING` cùng `(caller, venue, reason)` → `409 VENUE_014` (BR-V09). Phát `VenueReportedEvent` mỗi report; `reason = CLOSED` lần đầu → `VenueAdminAlertEvent(CLOSURE_REPORTED)` `[cần xác nhận #1, #2]`.
-
-**Request:** `ReportVenueRequest` (§3.5) `{ "reason": "CLOSED", "detail": "Sân đã đóng cửa" }`. **Response 201:** `VenueReportResponse` (§3.11).
-**Lỗi:** `400 VALIDATION_ERROR` · `403 VENUE_015` · `404 VENUE_001` · `409 VENUE_014` · `422 VENUE_002`.
-
-### 2.8. GET /api/v1/admin/venue-reports
-
-UC-V04 bước 1. Query: `status` ∈ `PENDING|VERIFIED|REJECTED|ALL` (mặc định `PENDING`) · `venueId` (tuỳ chọn) · `page`, `pageSize` như USER-001. Sort `createdAt` ↓, `reportId` ↓.
-**Response 200:** `AdminVenueReportResponse[]` (§3.12) + `pagination`. **Lỗi:** `400 VALIDATION_ERROR` · `403 AUTH_004`.
-
-### 2.9. PATCH /api/v1/admin/venue-reports/{reportId}/resolve
-
-`PENDING` → `VERIFIED|REJECTED`, ghi người xử lý. Không đổi trạng thái địa điểm (dùng 2.10). Sau đó user được report lại cùng lý do. Hết report `CLOSED` `PENDING` → mở lại cổng `CLOSURE_REPORTED` `[cần xác nhận #2]`.
-**Request:** `ResolveVenueReportRequest` (§3.6) `{ "status": "REJECTED" }`. **Response 200:** `AdminVenueReportResponse`.
-**Lỗi:** `400 VALIDATION_ERROR` · `403 AUTH_004` · `404 VENUE_009` · `409 VENUE_010` · `409 VENUE_011`.
-
-### 2.10. PATCH /api/v1/admin/venues/{venueId}/mark-inactive
-
-UC-V04 bước 3–6. `ACTIVE` → `INACTIVE`; report `CLOSED` `PENDING` → `VERIFIED` `[cần xác nhận #3, #4]`. Kèo cũ giữ tham chiếu. Không body.
-**Response 200:** `VenueResponse`. **Lỗi:** `403 AUTH_004` · `404 VENUE_001` · `409 VENUE_007` · `409 VENUE_011`.
-
-### 2.11. PATCH /api/v1/admin/venues/{venueId}/reactivate
-
-`INACTIVE` → `ACTIVE`, mở lại cả hai cổng cảnh báo. Không body.
-**Response 200:** `VenueResponse`. **Lỗi:** `403 AUTH_004` · `404 VENUE_001` · `409 VENUE_008` · `409 VENUE_011`.
-
-### 2.12. PATCH /api/v1/venues/{venueId}
-
-UC-V05, AC-V04. Cập nhật một phần: field vắng/`null` → giữ nguyên; `""` cho `venueType`/`phone`/`website` → xoá `[cần xác nhận #7]`. Không field nào đổi → 200, không ghi DB. Không đổi `status`, `createdBy*`, `lastSelectedAt`.
-**Request:** `UpdateVenueRequest` (§3.2). **Response 200:** `VenueResponse`.
-**Lỗi:** `400 VALIDATION_ERROR` · `403 VENUE_013` · `404 VENUE_001` · `409 VENUE_011` · `422 VENUE_002`.
-
-### 2.13. DELETE /api/v1/venues/{venueId}/images/{imageId}
-
-UC-V06, AC-V05. Xoá cứng dòng `venue_image` (lệch có chủ đích `api-convention.md` §12, đã được user duyệt 2026-11-09 — `Component_Class_Design.md` §10). Xoá ảnh chính khi còn ảnh khác → ảnh `displayOrder` nhỏ nhất (hoà → `imageId` nhỏ nhất) thành ảnh chính, cùng transaction (BR-V08). Asset Cloudinary do job dọn xoá sau (`Processing_Flow.md` §3.16). Không body.
-**Response 200:** `VenueImageResponse[]` còn lại (có thể rỗng). **Lỗi:** `400 VALIDATION_ERROR` · `403 VENUE_013` · `404 VENUE_001` · `404 VENUE_004` · `422 VENUE_002`.
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 400 | `VALIDATION_ERROR` | Tham số sai miền giá trị; chỉ gửi một trong `lat`/`lng` (`field` = `lat`); gửi `radiusKm` mà thiếu toạ độ (`field` = `radiusKm`) | Sửa bộ lọc; luôn gửi `lat` và `lng` cùng nhau |
 
 ---
 
-## 3. Data Models (DTO)
+### 2.3. Xem chi tiết địa điểm — `GET /api/v1/venues/{venueId}`
 
-Thời gian: `OffsetDateTime` UTC ISO-8601. Chuỗi được `trim()` ở service. Field tuỳ chọn gửi `""`: ở request tạo coi như không nhập (lưu `null`, không báo 400); ở 2.12 nghĩa là xoá.
+**Dùng khi:** màn chi tiết địa điểm; tải lại sau khi gặp lỗi xung đột ở các thao tác ghi. Xem được cả địa điểm `INACTIVE` (kèo cũ vẫn mở được địa điểm).
+**Ai gọi được:** mọi user đã đăng nhập.
 
-### 3.1. CreateVenueRequest
-| Field | Type | Required | Ràng buộc |
-|---|---|---|---|
-| `venueName` | `String` | Yes | không blank, ≤200 (BR-V01) |
-| `address` | `String` | Yes | không blank, ≤500 `[cần xác nhận #5]` |
-| `latitude` | `BigDecimal` | Yes | [-90, 90], ≤7 chữ số thập phân |
-| `longitude` | `BigDecimal` | Yes | [-180, 180], ≤7 chữ số thập phân |
-| `venueType` | `String` | No | `FIVE_A_SIDE\|SEVEN_A_SIDE\|ELEVEN_A_SIDE` hoặc `""` |
-| `phone` | `String` | No | `^0[0-9]{9,10}$` hoặc `""` `[cần xác nhận #5]` |
-| `website` | `String` | No | URL `http(s)://` ≤500 hoặc `""` |
+**Path params**
 
-### 3.2. UpdateVenueRequest
-Mọi field tuỳ chọn, cùng ràng buộc §3.1; `venueName`/`address` nếu có thì không blank; `latitude`, `longitude` gửi riêng lẻ được.
+| Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `venueId` | UUID | Có | — | `"01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01"` |
 
-### 3.3. SearchVenueRequest (query)
-| Param | Type | Mặc định | Ràng buộc |
-|---|---|---|---|
-| `q` | `String` | — | ≤100; khớp không phân biệt hoa thường trong `venueName` hoặc `address` |
-| `status` | `VenueStatusFilter` | `ACTIVE` | `ACTIVE\|INACTIVE\|ALL` |
-| `lat`, `lng` | `BigDecimal` | — | đi cùng nhau; miền như §3.1 |
-| `radiusKm` | `BigDecimal` | `5` khi có toạ độ | 0.1..50; chỉ khi có toạ độ |
-| `page`, `pageSize` | `Integer` | 1 / 20 | `page ≥ 1`, `pageSize` 1..100 |
+**Response 200** — Venue (§4.2), `images` sắp theo `displayOrder` tăng dần.
 
-`pageSize` tối đa 100 (không theo 50 của AC §3.4): user chốt 2026-11-09 để nhất quán `PageRequestFactory` dùng chung.
-
-### 3.4. AddVenueImageRequest
-| Field | Type | Required | Ràng buộc |
-|---|---|---|---|
-| `publicId` | `String` | Yes | không blank, ≤255 |
-| `version` | `Long` | Yes | > 0 |
-| `format` | `String` | Yes | `jpg\|jpeg\|png\|webp` (chữ thường như Cloudinary trả) |
-| `signature` | `String` | Yes | không blank, ≤128 |
-| `isPrimary` | `Boolean` | No | mặc định `false` |
-
-### 3.5. ReportVenueRequest
-`reason` (Yes, `CLOSED\|WRONG_INFO\|OTHER`) · `detail` (No, ≤1000 `[cần xác nhận #5]`).
-
-### 3.6. ResolveVenueReportRequest
-`status` (Yes, `VERIFIED\|REJECTED`).
-
-### 3.7. VenueResponse
 ```json
-{ "data": {
-  "venueId": "uuid", "venueName": "Sân bóng Hoa Lư", "address": "…",
-  "latitude": 10.7881234, "longitude": 106.6991234, "venueType": "SEVEN_A_SIDE",
-  "phone": "0281234567", "website": "https://example.com", "status": "ACTIVE",
-  "createdByType": "USER", "createdById": "uuid", "createdByName": "Nguyễn Văn A",
-  "lastSelectedAt": null, "adminVerifiedInactiveAt": null,
-  "createdAt": "2026-11-09T03:00:00Z", "updatedAt": "2026-11-09T03:00:00Z",
-  "images": [ /* VenueImageResponse theo displayOrder */ ]
-} }
+{
+  "data": {
+    "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+    "venueName": "Sân bóng Hoa Lư",
+    "address": "2 Đinh Tiên Hoàng, Phường Đa Kao, TP.HCM",
+    "latitude": 10.7881234,
+    "longitude": 106.6991234,
+    "venueType": "SEVEN_A_SIDE",
+    "phone": "0281234567",
+    "website": "https://example.com",
+    "status": "ACTIVE",
+    "createdByType": "USER",
+    "createdById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
+    "createdByName": "Nguyễn Văn A",
+    "lastSelectedAt": "2026-11-08T12:30:00Z",
+    "adminVerifiedInactiveAt": null,
+    "createdAt": "2026-11-09T03:00:00Z",
+    "updatedAt": "2026-11-09T03:05:00Z",
+    "images": [
+      {
+        "imageId": "01936a20-7d11-7b5c-8e2f-3a4b5c6d7e01",
+        "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+        "imageUrl": "https://res.cloudinary.com/demo-cloud/image/upload/v1794193260/arenaflow-dev/venues/01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01/1794193200-q8Zr0vKd3XyWm5TnBf7LhA-Jc4Np2Qs9Rt6Uv1Wx3Yz5a.jpg",
+        "isPrimary": true,
+        "displayOrder": 1,
+        "uploadedById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
+        "createdAt": "2026-11-09T03:01:00Z"
+      }
+    ]
+  }
+}
 ```
-`createdById`/`createdByName` = `null` khi FK bị set null (chỉ Admin sửa được). `createdByName` che theo USER-001 §3.12. Client so `createdById` / role để hiện nút; backend vẫn kiểm.
 
-### 3.8. VenueSummaryResponse
-`venueId`, `venueName`, `address`, `latitude`, `longitude`, `venueType`, `status`, `primaryImageUrl` (`null` khi chưa có ảnh), `distanceKm` (2 chữ số; `null` khi không gửi toạ độ), `lastSelectedAt`.
+**Lỗi**
 
-### 3.9. VenueImageUploadSignatureResponse
-```json
-{ "data": {
-  "uploadUrl": "https://api.cloudinary.com/v1_1/<cloudName>/image/upload",
-  "cloudName": "<cloudName>", "apiKey": "<api_key>",
-  "publicId": "<folder>/venues/<venueId>/1731150000-<nonce>-<tag>", "timestamp": 1731150000,
-  "allowedFormats": "jpg,jpeg,png,webp", "overwrite": false, "signature": "<hex>",
-  "expiresAt": "2026-11-09T04:00:00Z"
-} }
-```
-`apiKey` không phải secret; **NEVER** trả `api_secret`. `timestamp` (Unix giây) và `overwrite` (boolean) là tham số Cloudinary client gửi lại nguyên tên/giá trị nên không theo hậu tố `…At` / tiền tố `is…` (`api-convention.md` §10); thời điểm ISO là `expiresAt`.
-
-### 3.10. VenueImageResponse
-`imageId`, `venueId`, `imageUrl`, `isPrimary`, `displayOrder`, `uploadedById`, `createdAt`. Không trả `publicId`.
-
-### 3.11. VenueReportResponse
-`reportId`, `venueId`, `reason`, `detail`, `status`, `createdAt`.
-
-### 3.12. AdminVenueReportResponse
-`reportId`, `venueId`, `venueName`, `venueStatus`, `reporterId`, `reporterName`, `reason`, `detail`, `status`, `handledById`, `handledByName`, `handledAt`, `createdAt`. Tên che theo USER-001 §3.12; `handled*` = `null` khi `PENDING`.
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 404 | `VENUE_001` | Địa điểm không tồn tại | Báo "Không tìm thấy địa điểm", quay về danh sách |
 
 ---
 
-## 4. Mã lỗi mới (domain `VENUE`)
+### Luồng thêm ảnh (2.4 → Cloudinary → 2.5)
 
-Đã soát `ErrorCode` hiện hành: chưa có `VENUE_*`. Domain cần thêm vào `api-convention.md` §6 (`Component_Class_Design.md` §11).
+Ảnh không đi qua backend: FE xin chữ ký ở backend, upload file **thẳng lên Cloudinary**, rồi gửi kết quả Cloudinary trả về cho backend để lưu (ADR-0009). Mỗi file ảnh = một lượt đủ 3 bước.
 
-| Mã | HTTP | Ngữ cảnh | Message |
+```mermaid
+sequenceDiagram
+    participant FE
+    participant BE as ArenaFlow API
+    participant CL as Cloudinary
+    FE->>BE: 1. POST /venues/{venueId}/image-upload-signatures
+    BE-->>FE: 200 uploadUrl, apiKey, publicId, timestamp, allowedFormats, overwrite, signature, expiresAt
+    FE->>CL: 2. POST uploadUrl (multipart: file + các tham số đã ký)
+    CL-->>FE: public_id, version, format, signature, …
+    FE->>BE: 3. POST /venues/{venueId}/images { publicId, version, format, signature, isPrimary }
+    BE-->>FE: 201 ảnh đã lưu (imageUrl)
+```
+
+**Trước khi bắt đầu:** địa điểm còn dưới 5 ảnh; người dùng được thêm ảnh (§3.1); file có định dạng `jpg`, `jpeg`, `png` hoặc `webp` (FE tự kiểm — `[cần xác nhận #9]`).
+
+**Bước 1 — Xin chữ ký (2.4):** nhận UploadSignature (§4.5). Mỗi chữ ký dùng cho **một** file.
+
+**Bước 2 — Upload lên Cloudinary:** `POST` `multipart/form-data` tới `uploadUrl` với **đúng** các field sau, giá trị lấy nguyên từ response 2.4. Gửi sai dạng giá trị thì chữ ký không khớp và Cloudinary từ chối.
+
+| Field multipart gửi Cloudinary | Lấy từ response 2.4 | Ghi chú |
+|---|---|---|
+| `file` | — | File ảnh người dùng chọn |
+| `api_key` | `apiKey` | |
+| `timestamp` | `timestamp` | Số nguyên thập phân, giữ nguyên giá trị nhận từ 2.4 (vd `1794193200`) |
+| `public_id` | `publicId` | Không sửa, không thêm đuôi file |
+| `allowed_formats` | `allowedFormats` | Nguyên chuỗi, vd `jpg,jpeg,png,webp` |
+| `overwrite` | `overwrite` | Đúng chuỗi `false` (chữ thường) |
+| `signature` | `signature` | |
+
+**Không gửi thêm tham số nào khác** (vd `folder`, `tags`, `upload_preset`, `transformation`): Cloudinary kiểm chữ ký trên mọi tham số gửi kèm (trừ `file`, `cloud_name`, `resource_type`, `api_key`), thêm tham số làm chữ ký không khớp ([Cloudinary — Authentication signatures](https://cloudinary.com/documentation/authentication_signatures)). Upload phải thực hiện trước `expiresAt` (chữ ký hết hạn 1 giờ sau `timestamp`).
+
+Từ JSON Cloudinary trả về, lấy `public_id`, `version`, `format`, `signature` (các field khác bỏ qua). `signature` này là chữ ký của Cloudinary, **khác** `signature` ở 2.4.
+
+**Bước 3 — Lưu ảnh (2.5):** gọi ngay, bằng **chính tài khoản đã xin chữ ký**, trong hạn xác nhận (hiện là 6 giờ kể từ `timestamp`). FE không tự dựng hay gửi URL ảnh; dùng `imageUrl` trong response 2.5.
+
+Cloudinary trả lỗi ở Bước 2 (không có mã lỗi ArenaFlow; vd quá `expiresAt`, chữ ký không khớp) → FE xin chữ ký mới (Bước 1) rồi upload lại. Cloudinary có chặn định dạng ngoài `allowedFormats` hay không chưa chạy thử `[cần xác nhận #9]` — FE vẫn tự kiểm định dạng trước khi upload. File đã lên Cloudinary nhưng không lưu được ở Bước 3 (bỏ ngang, quá hạn, bị từ chối) không hiện ở địa điểm; FE không cần và không thể xoá ảnh trên Cloudinary.
+
+### 2.4. Xin chữ ký upload ảnh — `POST /api/v1/venues/{venueId}/image-upload-signatures`
+
+**Dùng khi:** người dùng chọn file ảnh để thêm vào địa điểm (Bước 1 của luồng thêm ảnh; UC-V02 bước 1–2).
+**Ai gọi được:** mọi user khi địa điểm `ACTIVE`; chỉ Admin khi địa điểm `INACTIVE` (BR-V07).
+
+**Path params:** `venueId` (UUID, bắt buộc). **Request body:** không có.
+
+Không tạo dữ liệu; gọi lặp an toàn (mỗi lần nhận `publicId` mới). Giới hạn 5 ảnh được kiểm ở đây và kiểm lại ở 2.5. `publicId` là chuỗi do backend sinh, gắn với địa điểm trên path và với người gọi — FE không phân tích hay sửa chuỗi này.
+
+**Response 200** — UploadSignature (§4.5).
+
+```json
+{
+  "data": {
+    "uploadUrl": "https://api.cloudinary.com/v1_1/demo-cloud/image/upload",
+    "cloudName": "demo-cloud",
+    "apiKey": "123456789012345",
+    "publicId": "arenaflow-dev/venues/01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01/1794193200-q8Zr0vKd3XyWm5TnBf7LhA-Jc4Np2Qs9Rt6Uv1Wx3Yz5a",
+    "timestamp": 1794193200,
+    "allowedFormats": "jpg,jpeg,png,webp",
+    "overwrite": false,
+    "signature": "3f9c1e7a5b2d4c6e8f0a1b3c5d7e9f1a2b4c6d8e",
+    "expiresAt": "2026-11-09T04:00:00Z"
+  }
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 503 | `VENUE_012` | Dịch vụ lưu ảnh chưa sẵn sàng ở server | Báo "tạm thời không thêm được ảnh", cho thử lại sau; không chặn các chức năng khác |
+| 404 | `VENUE_001` | Địa điểm không tồn tại | Báo, quay về danh sách |
+| 422 | `VENUE_002` | Địa điểm `INACTIVE` và người gọi không phải Admin | Ẩn nút thêm ảnh; tải lại chi tiết (2.3) |
+| 422 | `VENUE_003` | Địa điểm đã có 5 ảnh (BR-V02) | Báo "Tối đa 5 ảnh mỗi địa điểm"; ẩn nút thêm ảnh |
+
+---
+
+### 2.5. Lưu ảnh đã upload — `POST /api/v1/venues/{venueId}/images`
+
+**Dùng khi:** ngay sau khi upload lên Cloudinary thành công (Bước 3 của luồng thêm ảnh; UC-V02 bước 3–5).
+**Ai gọi được:** chính user đã gọi 2.4 để lấy chữ ký cho `publicId` này; địa điểm `INACTIVE` → chỉ Admin.
+
+**Path params:** `venueId` (UUID, bắt buộc) — phải là địa điểm đã xin chữ ký.
+
+**Request body**
+
+| Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `publicId` | string | Có | Không rỗng; ≤ 255 ký tự; = `public_id` Cloudinary trả về | `"arenaflow-dev/venues/01936a1c-…/1794193200-q8Zr…-Jc4N…"` |
+| `version` | integer | Có | > 0; = `version` Cloudinary trả về | `1794193260` |
+| `format` | string | Có | `jpg` \| `jpeg` \| `png` \| `webp` (chữ thường, như Cloudinary trả) | `"jpg"` |
+| `signature` | string | Có | Không rỗng; ≤ 128 ký tự; = `signature` Cloudinary trả về | `"b7e2c4a9d1f3e5a7c9b1d3f5a7c9e1b3d5f7a9c1"` |
+| `isPrimary` | boolean | Không | Mặc định `false` | `true` |
+
+```json
+{
+  "publicId": "arenaflow-dev/venues/01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01/1794193200-q8Zr0vKd3XyWm5TnBf7LhA-Jc4Np2Qs9Rt6Uv1Wx3Yz5a",
+  "version": 1794193260,
+  "format": "jpg",
+  "signature": "b7e2c4a9d1f3e5a7c9b1d3f5a7c9e1b3d5f7a9c1",
+  "isPrimary": true
+}
+```
+
+**Ảnh chính (BR-V03):** địa điểm chưa có ảnh → ảnh mới luôn là ảnh chính (bất kể `isPrimary`). Đã có ảnh và `isPrimary = true` → ảnh mới thành ảnh chính, ảnh chính cũ thành ảnh thường. Response chỉ chứa ảnh mới → FE cập nhật cờ `isPrimary` của ảnh cũ hoặc tải lại 2.3.
+**Thứ tự:** ảnh mới xếp cuối (`displayOrder` = lớn nhất hiện có + 1). `displayOrder` có thể không liên tục sau khi xoá ảnh — FE chỉ dùng để sắp xếp.
+
+**Response 201** — VenueImage (§4.4).
+
+```json
+{
+  "data": {
+    "imageId": "01936a20-7d11-7b5c-8e2f-3a4b5c6d7e01",
+    "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+    "imageUrl": "https://res.cloudinary.com/demo-cloud/image/upload/v1794193260/arenaflow-dev/venues/01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01/1794193200-q8Zr0vKd3XyWm5TnBf7LhA-Jc4Np2Qs9Rt6Uv1Wx3Yz5a.jpg",
+    "isPrimary": true,
+    "displayOrder": 1,
+    "uploadedById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
+    "createdAt": "2026-11-09T03:01:00Z"
+  }
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 400 | `VALIDATION_ERROR` | Thiếu field / sai kiểu / `format` ngoài danh sách | Lỗi ghép dữ liệu ở FE — kiểm lại cách lấy field từ response Cloudinary |
+| 503 | `VENUE_012` | Dịch vụ lưu ảnh chưa sẵn sàng ở server | Báo thử lại sau |
+| 400 | `VENUE_005` | `publicId` không phải do backend cấp cho địa điểm này; người gọi khác người đã xin chữ ký; quá hạn xác nhận (6 giờ kể từ `timestamp`); `version`/`signature` không khớp kết quả Cloudinary | Không gửi lại cùng dữ liệu; làm lại từ đầu (2.4 → upload → 2.5) |
+| 404 | `VENUE_001` | Địa điểm không tồn tại | Báo, quay về danh sách |
+| 422 | `VENUE_002` | Địa điểm vừa bị ngừng hoạt động và người gọi không phải Admin | Báo, tải lại chi tiết (2.3) |
+| 422 | `VENUE_003` | Địa điểm đã đủ 5 ảnh (người khác vừa thêm) | Báo "Tối đa 5 ảnh mỗi địa điểm", tải lại chi tiết |
+| 409 | `VENUE_006` | `publicId` này đã được lưu (gửi lặp) | Coi như đã lưu thành công; tải lại chi tiết (2.3) để hiển thị |
+
+**Gửi lại khi lỗi mạng / timeout:** gọi lại 2.5 với cùng dữ liệu (trong hạn xác nhận). Nhận `409 VENUE_006` = lần trước đã lưu. Nếu ảnh vừa lưu là ảnh thứ 5, lần gửi lại có thể nhận `422 VENUE_003` dù lần trước đã thành công → tải lại 2.3 để biết chắc.
+
+---
+
+### 2.6. Đặt ảnh chính — `PATCH /api/v1/venues/{venueId}/images/{imageId}/set-primary`
+
+**Dùng khi:** người dùng chọn "Đặt làm ảnh chính" trên một ảnh của địa điểm (BR-V03, BR-V07).
+**Ai gọi được:** mọi user khi địa điểm `ACTIVE`; chỉ Admin khi địa điểm `INACTIVE`.
+
+**Path params:** `venueId`, `imageId` (UUID, bắt buộc). **Request body:** không có.
+
+Ảnh đã là ảnh chính → `200`, không đổi gì. Không có thao tác bỏ ảnh chính: khi địa điểm có ảnh thì luôn có đúng 1 ảnh chính.
+
+**Response 200** — mảng VenueImage (§4.4) gồm **mọi** ảnh của địa điểm, theo `displayOrder` tăng dần → FE thay toàn bộ danh sách ảnh đang hiển thị.
+
+```json
+{
+  "data": [
+    {
+      "imageId": "01936a20-7d11-7b5c-8e2f-3a4b5c6d7e01",
+      "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+      "imageUrl": "https://res.cloudinary.com/demo-cloud/image/upload/v1794193260/arenaflow-dev/venues/01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01/1794193200-q8Zr0vKd3XyWm5TnBf7LhA-Jc4Np2Qs9Rt6Uv1Wx3Yz5a.jpg",
+      "isPrimary": false,
+      "displayOrder": 1,
+      "uploadedById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
+      "createdAt": "2026-11-09T03:01:00Z"
+    },
+    {
+      "imageId": "01936a22-0c3e-7a9d-b1f2-4c5d6e7f8a02",
+      "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+      "imageUrl": "https://res.cloudinary.com/demo-cloud/image/upload/v1794193500/arenaflow-dev/venues/01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01/1794193440-Lm3Kp9Qr2St5Uv8Wx1Yz4a-Bc7De0Fg3Hi6Jk9Lm2No5p.png",
+      "isPrimary": true,
+      "displayOrder": 2,
+      "uploadedById": "01935f77-3c2d-7e1f-8a9b-0c1d2e3f4a5b",
+      "createdAt": "2026-11-09T03:05:00Z"
+    }
+  ]
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 404 | `VENUE_001` | Địa điểm không tồn tại | Báo, quay về danh sách |
+| 422 | `VENUE_002` | Địa điểm `INACTIVE` và người gọi không phải Admin | Ẩn nút; tải lại chi tiết (2.3) |
+| 404 | `VENUE_004` | Ảnh không tồn tại hoặc không thuộc địa điểm (vd vừa bị xoá) | Tải lại chi tiết (2.3) |
+
+---
+
+### 2.7. Report địa điểm — `POST /api/v1/venues/{venueId}/reports`
+
+**Dùng khi:** người dùng chọn "Report địa điểm" để báo sân đã đóng cửa, thông tin sai hoặc lý do khác (UC-V03, AC-V03). Với user không phải người tạo, đây cũng là lối thay cho "Sửa địa điểm" (UC-V05 1a1).
+**Ai gọi được:** user **không phải Admin** (Admin sửa trực tiếp bằng 2.12 hoặc ngừng hoạt động bằng 2.10); địa điểm `ACTIVE`.
+
+**Path params:** `venueId` (UUID, bắt buộc).
+
+**Request body**
+
+| Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `reason` | string | Có | `CLOSED` \| `WRONG_INFO` \| `OTHER` | `"CLOSED"` |
+| `detail` | string | Không | ≤ 1000 ký tự `[cần xác nhận #5]` | `"Sân đã đóng cửa"` |
+
+```json
+{ "reason": "CLOSED", "detail": "Sân đã đóng cửa" }
+```
+
+Report được lưu ở trạng thái `PENDING` và **không** đổi trạng thái địa điểm (BR-V04) — admin xác minh rồi xử lý. Mỗi user chỉ có tối đa 1 report `PENDING` cho mỗi cặp (địa điểm, lý do) (BR-V09); lý do khác vẫn report được; sau khi admin xử lý (2.9 / 2.10) thì report lại được cùng lý do.
+
+**Response 201** — VenueReport (§4.6).
+
+```json
+{
+  "data": {
+    "reportId": "01936b05-9a8b-7c6d-a5e4-3f2e1d0c9b01",
+    "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+    "reason": "CLOSED",
+    "detail": "Sân đã đóng cửa",
+    "status": "PENDING",
+    "createdAt": "2026-11-09T05:00:00Z"
+  }
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 400 | `VALIDATION_ERROR` | `reason` thiếu / ngoài enum; `detail` quá dài | Hiện lỗi dưới field |
+| 403 | `VENUE_015` | Người gọi là Admin | Không hiện nút Report cho Admin; hiện "Sửa" / "Đánh dấu ngừng hoạt động" |
+| 404 | `VENUE_001` | Địa điểm không tồn tại | Báo, quay về danh sách |
+| 422 | `VENUE_002` | Địa điểm đã ngừng hoạt động | Ẩn nút Report; tải lại chi tiết (2.3) |
+| 409 | `VENUE_014` | User đã có report `PENDING` cùng lý do cho địa điểm này | Hiện message của lỗi; không gửi lại |
+
+---
+
+### 2.8. Admin xem report — `GET /api/v1/admin/venue-reports`
+
+**Dùng khi:** màn quản trị "Report địa điểm" — hàng chờ xác minh (UC-V04 bước 1); lọc report của một địa điểm từ màn chi tiết.
+**Ai gọi được:** Admin.
+
+**Query params**
+
+| Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `status` | string | Không | `PENDING` \| `VERIFIED` \| `REJECTED` \| `ALL`; mặc định `PENDING` | `PENDING` |
+| `venueId` | UUID | Không | Chỉ lấy report của địa điểm này | `01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01` |
+| `page` | integer | Không | ≥ 1; mặc định 1 | `1` |
+| `pageSize` | integer | Không | 1..100; mặc định 20 | `20` |
+
+**Thứ tự sắp xếp:** `createdAt` mới nhất trước, bằng nhau → `reportId` giảm dần.
+
+```http
+GET /api/v1/admin/venue-reports?status=PENDING&page=1&pageSize=20
+```
+
+**Response 200** — mảng AdminVenueReport (§4.7) + `pagination`.
+
+```json
+{
+  "data": [
+    {
+      "reportId": "01936b05-9a8b-7c6d-a5e4-3f2e1d0c9b01",
+      "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+      "venueName": "Sân bóng Hoa Lư",
+      "venueStatus": "ACTIVE",
+      "reporterId": "01935f77-3c2d-7e1f-8a9b-0c1d2e3f4a5b",
+      "reporterName": "Trần Thị B",
+      "reason": "CLOSED",
+      "detail": "Sân đã đóng cửa",
+      "status": "PENDING",
+      "handledById": null,
+      "handledByName": null,
+      "handledAt": null,
+      "createdAt": "2026-11-09T05:00:00Z"
+    }
+  ],
+  "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 403 | `AUTH_004` | Tài khoản không phải admin | Ẩn menu quản trị |
+| 400 | `VALIDATION_ERROR` | `status` ngoài enum; `venueId` không phải UUID; `page`/`pageSize` ngoài miền | Sửa bộ lọc |
+
+---
+
+### 2.9. Admin chốt report — `PATCH /api/v1/admin/venue-reports/{reportId}/resolve`
+
+**Dùng khi:** admin đã xác minh một report và chốt: đúng (`VERIFIED`) hoặc từ chối (`REJECTED`) (UC-V04).
+**Ai gọi được:** Admin; report đang `PENDING`.
+
+**Path params:** `reportId` (UUID, bắt buộc).
+
+**Request body**
+
+| Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `status` | string | Có | `VERIFIED` \| `REJECTED` | `"REJECTED"` |
+
+```json
+{ "status": "REJECTED" }
+```
+
+Không đổi trạng thái địa điểm — muốn ngừng hoạt động địa điểm thì gọi 2.10. Sau khi chốt, người report được report lại cùng lý do.
+
+**Response 200** — AdminVenueReport (§4.7) đã có người xử lý.
+
+```json
+{
+  "data": {
+    "reportId": "01936b05-9a8b-7c6d-a5e4-3f2e1d0c9b01",
+    "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+    "venueName": "Sân bóng Hoa Lư",
+    "venueStatus": "ACTIVE",
+    "reporterId": "01935f77-3c2d-7e1f-8a9b-0c1d2e3f4a5b",
+    "reporterName": "Trần Thị B",
+    "reason": "CLOSED",
+    "detail": "Sân đã đóng cửa",
+    "status": "REJECTED",
+    "handledById": "01935a02-6e7f-7a1b-9c2d-5e6f7a8b9c0d",
+    "handledByName": "Admin ArenaFlow",
+    "handledAt": "2026-11-09T06:00:00Z",
+    "createdAt": "2026-11-09T05:00:00Z"
+  }
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 403 | `AUTH_004` | Tài khoản không phải admin | Ẩn menu quản trị |
+| 400 | `VALIDATION_ERROR` | `status` thiếu / ngoài `VERIFIED`, `REJECTED` | Lỗi FE — kiểm lại giá trị gửi |
+| 404 | `VENUE_009` | Report không tồn tại | Tải lại danh sách (2.8) |
+| 409 | `VENUE_010` | Report không còn `PENDING` (admin khác vừa chốt, hoặc địa điểm vừa bị ngừng hoạt động) | Tải lại danh sách (2.8) |
+| 409 | `VENUE_011` | Có thao tác khác cùng lúc trên report/địa điểm, backend không hoàn tất được | Tải lại danh sách rồi cho admin thử lại |
+
+---
+
+### 2.10. Admin đánh dấu ngừng hoạt động — `PATCH /api/v1/admin/venues/{venueId}/mark-inactive`
+
+**Dùng khi:** admin xác minh địa điểm đã ngừng hoạt động (UC-V04 bước 3–6), từ một report hoặc chủ động.
+**Ai gọi được:** Admin; địa điểm `ACTIVE`. Không bắt buộc địa điểm có report `PENDING` `[cần xác nhận #3]`.
+
+**Path params:** `venueId` (UUID, bắt buộc). **Request body:** không có.
+
+Kết quả: `status` `ACTIVE` → `INACTIVE`, `adminVerifiedInactiveAt` = thời điểm xử lý. Các report `CLOSED` đang `PENDING` của địa điểm tự chuyển `VERIFIED` (người xử lý = admin này); report `WRONG_INFO` / `OTHER` vẫn `PENDING` `[cần xác nhận #4]`. Địa điểm bị loại khỏi danh sách mặc định (2.2), không chọn được cho kèo mới; kèo cũ vẫn giữ tham chiếu và xem được chi tiết địa điểm.
+
+**Response 200** — Venue (§4.2).
+
+```json
+{
+  "data": {
+    "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+    "venueName": "Sân bóng Hoa Lư",
+    "address": "2 Đinh Tiên Hoàng, Phường Đa Kao, TP.HCM",
+    "latitude": 10.7881234,
+    "longitude": 106.6991234,
+    "venueType": "SEVEN_A_SIDE",
+    "phone": "0281234567",
+    "website": "https://example.com",
+    "status": "INACTIVE",
+    "createdByType": "USER",
+    "createdById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
+    "createdByName": "Nguyễn Văn A",
+    "lastSelectedAt": "2026-11-08T12:30:00Z",
+    "adminVerifiedInactiveAt": "2026-11-09T06:10:00Z",
+    "createdAt": "2026-11-09T03:00:00Z",
+    "updatedAt": "2026-11-09T06:10:00Z",
+    "images": []
+  }
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 403 | `AUTH_004` | Tài khoản không phải admin | Ẩn nút |
+| 404 | `VENUE_001` | Địa điểm không tồn tại | Báo, quay về danh sách |
+| 409 | `VENUE_007` | Địa điểm đã `INACTIVE` | Tải lại chi tiết (2.3) |
+| 409 | `VENUE_011` | Có thao tác khác cùng lúc trên địa điểm, backend không hoàn tất được | Tải lại chi tiết rồi cho admin thử lại |
+
+---
+
+### 2.11. Admin kích hoạt lại — `PATCH /api/v1/admin/venues/{venueId}/reactivate`
+
+**Dùng khi:** admin mở lại địa điểm đã ngừng hoạt động (địa điểm hoạt động trở lại, hoặc đánh dấu nhầm).
+**Ai gọi được:** Admin; địa điểm `INACTIVE`.
+
+**Path params:** `venueId` (UUID, bắt buộc). **Request body:** không có.
+
+Kết quả: `status` `INACTIVE` → `ACTIVE`, `adminVerifiedInactiveAt` = `null`. Report không bị thay đổi.
+
+**Response 200** — Venue (§4.2).
+
+```json
+{
+  "data": {
+    "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+    "venueName": "Sân bóng Hoa Lư",
+    "address": "2 Đinh Tiên Hoàng, Phường Đa Kao, TP.HCM",
+    "latitude": 10.7881234,
+    "longitude": 106.6991234,
+    "venueType": "SEVEN_A_SIDE",
+    "phone": "0281234567",
+    "website": "https://example.com",
+    "status": "ACTIVE",
+    "createdByType": "USER",
+    "createdById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
+    "createdByName": "Nguyễn Văn A",
+    "lastSelectedAt": "2026-11-08T12:30:00Z",
+    "adminVerifiedInactiveAt": null,
+    "createdAt": "2026-11-09T03:00:00Z",
+    "updatedAt": "2026-11-10T02:00:00Z",
+    "images": []
+  }
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 403 | `AUTH_004` | Tài khoản không phải admin | Ẩn nút |
+| 404 | `VENUE_001` | Địa điểm không tồn tại | Báo, quay về danh sách |
+| 409 | `VENUE_008` | Địa điểm đang `ACTIVE` | Tải lại chi tiết (2.3) |
+| 409 | `VENUE_011` | Có thao tác khác cùng lúc trên địa điểm, backend không hoàn tất được | Tải lại chi tiết rồi cho admin thử lại |
+
+---
+
+### 2.12. Sửa thông tin địa điểm — `PATCH /api/v1/venues/{venueId}`
+
+**Dùng khi:** người tạo hoặc Admin chọn "Sửa địa điểm" (UC-V05, AC-V04).
+**Ai gọi được:** người tạo khi địa điểm `ACTIVE`; Admin ở mọi trạng thái (BR-V06). Địa điểm không có người tạo (`createdById = null`) → chỉ Admin.
+
+**Path params:** `venueId` (UUID, bắt buộc).
+
+**Request body** — cập nhật một phần; mọi field tuỳ chọn, cùng ràng buộc như 2.1:
+
+| Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `venueName` | string | Không | Nếu gửi: không rỗng / không chỉ khoảng trắng, ≤ 200 ký tự | `"Sân Hoa Lư (mới)"` |
+| `address` | string | Không | Nếu gửi: không rỗng / không chỉ khoảng trắng, ≤ 500 ký tự `[cần xác nhận #5]` | `"2 Đinh Tiên Hoàng, Q.1, TP.HCM"` |
+| `latitude` | number | Không | -90..90, ≤ 7 chữ số thập phân; gửi riêng được, không cần kèm `longitude` | `10.7881` |
+| `longitude` | number | Không | -180..180, ≤ 7 chữ số thập phân; gửi riêng được | `106.6991` |
+| `venueType` | string | Không | `FIVE_A_SIDE` \| `SEVEN_A_SIDE` \| `ELEVEN_A_SIDE`; `""` = xoá giá trị | `"FIVE_A_SIDE"` |
+| `phone` | string | Không | Khớp `^0[0-9]{9,10}$`; `""` = xoá giá trị | `""` |
+| `website` | string | Không | URL `http(s)://`, ≤ 500 ký tự; `""` = xoá giá trị | `"https://hoalu.vn"` |
+
+Field vắng hoặc `null` → giữ nguyên; `""` cho `venueType` / `phone` / `website` → xoá giá trị `[cần xác nhận #7]`. Không field nào thay đổi → `200` với dữ liệu hiện tại. Không sửa được `status`, người tạo, `lastSelectedAt` hay ảnh qua endpoint này.
+
+```json
+{ "venueType": "FIVE_A_SIDE", "phone": "" }
+```
+
+**Response 200** — Venue (§4.2) sau khi sửa.
+
+```json
+{
+  "data": {
+    "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+    "venueName": "Sân bóng Hoa Lư",
+    "address": "2 Đinh Tiên Hoàng, Phường Đa Kao, TP.HCM",
+    "latitude": 10.7881234,
+    "longitude": 106.6991234,
+    "venueType": "FIVE_A_SIDE",
+    "phone": null,
+    "website": "https://example.com",
+    "status": "ACTIVE",
+    "createdByType": "USER",
+    "createdById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
+    "createdByName": "Nguyễn Văn A",
+    "lastSelectedAt": "2026-11-08T12:30:00Z",
+    "adminVerifiedInactiveAt": null,
+    "createdAt": "2026-11-09T03:00:00Z",
+    "updatedAt": "2026-11-09T07:00:00Z",
+    "images": []
+  }
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 400 | `VALIDATION_ERROR` | Field sai ràng buộc | Hiện lỗi dưới field |
+| 404 | `VENUE_001` | Địa điểm không tồn tại | Báo, quay về danh sách |
+| 403 | `VENUE_013` | Không phải người tạo, không phải Admin | Ẩn nút "Sửa"; gợi ý "Report thông tin sai" (2.7, UC-V05 1a1) |
+| 422 | `VENUE_002` | Địa điểm `INACTIVE` và người gọi không phải Admin | Ẩn nút "Sửa"; tải lại chi tiết (2.3) |
+| 409 | `VENUE_011` | Có thao tác khác cùng lúc trên địa điểm, backend không hoàn tất được | Tải lại chi tiết rồi cho người dùng thử lại |
+
+---
+
+### 2.13. Xoá ảnh — `DELETE /api/v1/venues/{venueId}/images/{imageId}`
+
+**Dùng khi:** người tạo hoặc Admin xoá một ảnh của địa điểm (UC-V06, AC-V05).
+**Ai gọi được:** người tạo khi địa điểm `ACTIVE`; Admin ở mọi trạng thái (BR-V06, BR-V07).
+
+**Path params:** `venueId`, `imageId` (UUID, bắt buộc). **Request body:** không có.
+
+Xoá vĩnh viễn, không khôi phục được. Xoá ảnh chính khi còn ảnh khác → ảnh đứng đầu (`displayOrder` nhỏ nhất; bằng nhau → `imageId` nhỏ nhất) thành ảnh chính (BR-V08). Hết ảnh → địa điểm không có ảnh chính (`primaryImageUrl` = `null` ở 2.2). Trả `200` có body (không phải `204`) vì backend có thể đã chọn ảnh chính mới. URL ảnh đã xoá có thể vẫn mở được thêm một thời gian — FE bỏ ảnh khỏi giao diện ngay theo response.
+
+**Response 200** — mảng VenueImage (§4.4) **còn lại**, theo `displayOrder` tăng dần (có thể `[]`).
+
+```json
+{
+  "data": [
+    {
+      "imageId": "01936a22-0c3e-7a9d-b1f2-4c5d6e7f8a02",
+      "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+      "imageUrl": "https://res.cloudinary.com/demo-cloud/image/upload/v1794193500/arenaflow-dev/venues/01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01/1794193440-Lm3Kp9Qr2St5Uv8Wx1Yz4a-Bc7De0Fg3Hi6Jk9Lm2No5p.png",
+      "isPrimary": true,
+      "displayOrder": 2,
+      "uploadedById": "01935f77-3c2d-7e1f-8a9b-0c1d2e3f4a5b",
+      "createdAt": "2026-11-09T03:05:00Z"
+    }
+  ]
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 404 | `VENUE_001` | Địa điểm không tồn tại | Báo, quay về danh sách |
+| 403 | `VENUE_013` | Không phải người tạo, không phải Admin | Ẩn nút "Xoá ảnh" |
+| 422 | `VENUE_002` | Địa điểm `INACTIVE` và người gọi không phải Admin | Ẩn nút; tải lại chi tiết (2.3) |
+| 404 | `VENUE_004` | Ảnh không tồn tại / không thuộc địa điểm (đã bị xoá, kể cả do bấm lặp) | Tải lại chi tiết (2.3) |
+
+---
+
+## 3. Hành động theo trạng thái
+
+### 3.1. Địa điểm (`ACTIVE` / `INACTIVE`)
+
+"Người tạo" = người tạo **không phải** Admin; người tạo là Admin → cột Admin. ✅ = hiện nút / được phép; mã lỗi = ẩn nút (backend trả mã đó nếu vẫn gọi).
+
+| Hành động (endpoint) | `ACTIVE` · Người tạo | `ACTIVE` · User khác | `ACTIVE` · Admin | `INACTIVE` · Người tạo | `INACTIVE` · User khác | `INACTIVE` · Admin |
+|---|---|---|---|---|---|---|
+| Xem chi tiết (2.3) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Thấy trong danh sách (2.2) | ✅ mặc định | ✅ mặc định | ✅ mặc định | chỉ khi lọc `status=INACTIVE` / `ALL` | như bên trái | như bên trái |
+| Thêm ảnh (2.4 → 2.5), khi < 5 ảnh | ✅ | ✅ | ✅ | `422 VENUE_002` | `422 VENUE_002` | ✅ |
+| Đặt ảnh chính (2.6) | ✅ | ✅ | ✅ | `422 VENUE_002` | `422 VENUE_002` | ✅ |
+| Sửa thông tin (2.12) | ✅ | `403 VENUE_013` | ✅ | `422 VENUE_002` | `403 VENUE_013` | ✅ |
+| Xoá ảnh (2.13) | ✅ | `403 VENUE_013` | ✅ | `422 VENUE_002` | `403 VENUE_013` | ✅ |
+| Report (2.7) | ✅ | ✅ | `403 VENUE_015` | `422 VENUE_002` | `422 VENUE_002` | `403 VENUE_015` |
+| Ngừng hoạt động (2.10) | `403 AUTH_004` | `403 AUTH_004` | ✅ | `403 AUTH_004` | `403 AUTH_004` | `409 VENUE_007` |
+| Kích hoạt lại (2.11) | `403 AUTH_004` | `403 AUTH_004` | `409 VENUE_008` | `403 AUTH_004` | `403 AUTH_004` | ✅ |
+
+### 3.2. Report (`PENDING` / `VERIFIED` / `REJECTED`)
+
+| Trạng thái | Người report (user không phải Admin) | Admin |
+|---|---|---|
+| `PENDING` | Không gửi thêm report cùng địa điểm + cùng lý do (`409 VENUE_014`); lý do khác vẫn gửi được | Xem (2.8); chốt `VERIFIED` / `REJECTED` (2.9). Report `CLOSED` tự thành `VERIFIED` khi admin ngừng hoạt động địa điểm (2.10) |
+| `VERIFIED` | Được report lại cùng lý do (tạo report mới) | Chỉ xem; chốt lại → `409 VENUE_010` |
+| `REJECTED` | Được report lại cùng lý do (tạo report mới) | Chỉ xem; chốt lại → `409 VENUE_010` |
+
+User không có endpoint xem lại report của mình; trạng thái report chỉ Admin thấy (2.8).
+
+## 4. Kiểu dữ liệu dùng chung
+
+### 4.1. Enum
+
+| Kiểu / enum | Giá trị | Ý nghĩa |
+|---|---|---|
+| `status` (địa điểm) | `ACTIVE` | Đang hoạt động: có trong danh sách mặc định, chọn được cho kèo |
+| | `INACTIVE` | Admin đã xác nhận ngừng hoạt động: vẫn xem được chi tiết, chỉ Admin được ghi |
+| `venueType` | `FIVE_A_SIDE` \| `SEVEN_A_SIDE` \| `ELEVEN_A_SIDE` | Sân 5 / sân 7 / sân 11 (BR-V05); `null` = chưa khai báo |
+| `createdByType` | `ADMIN` \| `USER` | Địa điểm do tài khoản admin / user thường tạo |
+| `reason` (report) | `CLOSED` | Địa điểm đã đóng cửa / ngừng hoạt động |
+| | `WRONG_INFO` | Thông tin sai |
+| | `OTHER` | Lý do khác |
+| `status` (report) | `PENDING` | Chờ admin xử lý |
+| | `VERIFIED` | Admin xác nhận report đúng |
+| | `REJECTED` | Admin từ chối report |
+| Bộ lọc `status` của 2.2 | `ACTIVE` \| `INACTIVE` \| `ALL` | `ALL` = cả hai trạng thái |
+| Bộ lọc `status` của 2.8 | `PENDING` \| `VERIFIED` \| `REJECTED` \| `ALL` | `ALL` = mọi trạng thái |
+| `format` (ảnh, chữ thường) | `jpg` \| `jpeg` \| `png` \| `webp` | Định dạng ảnh được nhận |
+
+### 4.2. Venue — chi tiết địa điểm (2.1, 2.3, 2.10, 2.11, 2.12)
+
+| Field | Kiểu | Ghi chú |
+|---|---|---|
+| `venueId` | UUID | |
+| `venueName`, `address` | string | |
+| `latitude`, `longitude` | number | |
+| `venueType` | enum \| `null` | §4.1 |
+| `phone`, `website` | string \| `null` | |
+| `status` | enum | `ACTIVE` \| `INACTIVE` |
+| `createdByType` | enum | `ADMIN` \| `USER` |
+| `createdById` | UUID \| `null` | `null` khi địa điểm không còn gắn người tạo — khi đó chỉ Admin sửa được |
+| `createdByName` | string \| `null` | Người tạo đã xoá tài khoản → `"Người dùng đã xóa"` (quy tắc tên user đã xoá của USER-001 `API_Spec.md`); `null` khi `createdById` = `null` |
+| `lastSelectedAt` | datetime \| `null` | Lần gần nhất địa điểm được chọn cho kèo |
+| `adminVerifiedInactiveAt` | datetime \| `null` | Thời điểm admin đánh dấu ngừng hoạt động; `null` khi `ACTIVE` |
+| `createdAt`, `updatedAt` | datetime | |
+| `images` | VenueImage[] | §4.4, theo `displayOrder` tăng dần |
+
+### 4.3. VenueSummary — một dòng danh sách (2.2)
+
+| Field | Kiểu | Ghi chú |
+|---|---|---|
+| `venueId`, `venueName`, `address`, `latitude`, `longitude`, `venueType`, `status`, `lastSelectedAt` | | Cùng nghĩa §4.2 |
+| `primaryImageUrl` | string \| `null` | URL ảnh chính; `null` khi chưa có ảnh |
+| `distanceKm` | number \| `null` | Khoảng cách (km) tới `lat`/`lng`, làm tròn 2 chữ số thập phân; `null` khi không gửi toạ độ |
+
+### 4.4. VenueImage — ảnh (2.3, 2.5, 2.6, 2.13)
+
+| Field | Kiểu | Ghi chú |
+|---|---|---|
+| `imageId` | UUID | |
+| `venueId` | UUID | |
+| `imageUrl` | string | URL ảnh trên Cloudinary do backend tạo; hiển thị trực tiếp |
+| `isPrimary` | boolean | Đúng 1 ảnh `true` khi địa điểm có ảnh |
+| `displayOrder` | integer | Thứ tự hiển thị tăng dần; có thể không liên tục |
+| `uploadedById` | UUID | Người đã thêm ảnh |
+| `createdAt` | datetime | |
+
+Không trả `publicId`.
+
+### 4.5. UploadSignature — chữ ký upload (2.4)
+
+| Field | Kiểu | Ghi chú |
+|---|---|---|
+| `uploadUrl` | string | URL FE `POST` file tới (Cloudinary) |
+| `cloudName` | string | Tên cloud Cloudinary (đã có trong `uploadUrl`) |
+| `apiKey` | string | Gửi Cloudinary dưới tên `api_key`; không phải bí mật |
+| `publicId` | string | Gửi Cloudinary dưới tên `public_id`; FE không sửa |
+| `timestamp` | integer | Unix giây; gửi Cloudinary dạng số nguyên thập phân, giữ nguyên giá trị |
+| `allowedFormats` | string | Gửi Cloudinary dưới tên `allowed_formats`, vd `"jpg,jpeg,png,webp"` |
+| `overwrite` | boolean | Luôn `false`; gửi Cloudinary đúng chuỗi `false` (chữ thường) |
+| `signature` | string | Chữ ký backend cấp; gửi Cloudinary |
+| `expiresAt` | datetime | Hạn chót upload lên Cloudinary (1 giờ sau `timestamp`) |
+
+`timestamp` và `overwrite` giữ đúng tên tham số Cloudinary nên không theo quy ước hậu tố `…At` / tiền tố `is…` của `api-convention.md` §10; thời điểm dạng ISO là `expiresAt`.
+
+### 4.6. VenueReport — report vừa gửi (2.7)
+
+| Field | Kiểu | Ghi chú |
+|---|---|---|
+| `reportId` | UUID | |
+| `venueId` | UUID | |
+| `reason` | enum | §4.1 |
+| `detail` | string \| `null` | |
+| `status` | enum | Luôn `PENDING` khi vừa tạo |
+| `createdAt` | datetime | |
+
+### 4.7. AdminVenueReport — report cho admin (2.8, 2.9)
+
+| Field | Kiểu | Ghi chú |
+|---|---|---|
+| `reportId`, `venueId` | UUID | |
+| `venueName` | string | |
+| `venueStatus` | enum | Trạng thái hiện tại của địa điểm |
+| `reporterId` | UUID | |
+| `reporterName` | string | Người report đã xoá tài khoản → `"Người dùng đã xóa"` |
+| `reason`, `detail`, `status`, `createdAt` | | Cùng nghĩa §4.6 |
+| `handledById`, `handledByName`, `handledAt` | UUID / string / datetime | Admin chốt report và thời điểm chốt; cả ba `null` khi `PENDING`; admin đã xoá tài khoản → `handledByName` = `"Người dùng đã xóa"` |
+
+## 5. Mã lỗi
+
+| Mã | HTTP | Message | Endpoint |
 |---|---:|---|---|
-| `VENUE_001` | 404 | Địa điểm không tồn tại | "Không tìm thấy địa điểm" |
-| `VENUE_002` | 422 | Địa điểm `INACTIVE`: report (2.7); ghi khi caller không phải Admin (2.4–2.6, 2.12, 2.13) | "Địa điểm đã ngừng hoạt động" |
-| `VENUE_003` | 422 | Đã có 5 ảnh (BR-V02) | "Tối đa 5 ảnh mỗi địa điểm" |
-| `VENUE_004` | 404 | Ảnh không tồn tại hoặc không thuộc địa điểm | "Không tìm thấy ảnh" |
-| `VENUE_005` | 400 | `publicId` sai mẫu / khác địa điểm / không do caller xin chữ ký / quá hạn xác nhận / thời điểm ký ở tương lai · chữ ký response sai | "Ảnh tải lên không hợp lệ" |
-| `VENUE_006` | 409 | `publicId` đã được lưu | "Ảnh này đã được lưu" |
-| `VENUE_007` | 409 | Mark-inactive địa điểm đã `INACTIVE` | "Địa điểm đã ở trạng thái ngừng hoạt động" |
-| `VENUE_008` | 409 | Reactivate địa điểm đang `ACTIVE` | "Địa điểm đang hoạt động" |
-| `VENUE_009` | 404 | Report không tồn tại | "Không tìm thấy báo cáo địa điểm" |
-| `VENUE_010` | 409 | Report không còn `PENDING` | "Báo cáo đã được xử lý" |
-| `VENUE_011` | 409 | Hết retry do xung đột đồng thời / deadlock (2.9–2.12) | "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại" |
-| `VENUE_012` | 503 | Thiếu cấu hình Cloudinary (gồm thư mục) (2.4, 2.5) | "Dịch vụ lưu ảnh tạm thời không khả dụng" |
-| `VENUE_013` | 403 | Không phải người tạo, không phải Admin (2.12, 2.13) | "Chỉ người tạo địa điểm hoặc quản trị viên được thực hiện" |
-| `VENUE_014` | 409 | Đã có report `PENDING` cùng địa điểm + lý do (UC-V03 4a1) | "Bạn đã report địa điểm này, đang chờ admin xử lý" |
-| `VENUE_015` | 403 | Admin gọi report (UC-V03 actor) | "Quản trị viên không report địa điểm; hãy sửa hoặc đánh dấu ngừng hoạt động trực tiếp" |
+| `VENUE_001` | 404 | "Không tìm thấy địa điểm" | 2.3–2.7, 2.10–2.13 |
+| `VENUE_002` | 422 | "Địa điểm đã ngừng hoạt động" | 2.4–2.7, 2.12, 2.13 |
+| `VENUE_003` | 422 | "Tối đa 5 ảnh mỗi địa điểm" | 2.4, 2.5 |
+| `VENUE_004` | 404 | "Không tìm thấy ảnh" | 2.6, 2.13 |
+| `VENUE_005` | 400 | "Ảnh tải lên không hợp lệ" | 2.5 |
+| `VENUE_006` | 409 | "Ảnh này đã được lưu" | 2.5 |
+| `VENUE_007` | 409 | "Địa điểm đã ở trạng thái ngừng hoạt động" | 2.10 |
+| `VENUE_008` | 409 | "Địa điểm đang hoạt động" | 2.11 |
+| `VENUE_009` | 404 | "Không tìm thấy báo cáo địa điểm" | 2.9 |
+| `VENUE_010` | 409 | "Báo cáo đã được xử lý" | 2.9 |
+| `VENUE_011` | 409 | "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại" | 2.9–2.12 |
+| `VENUE_012` | 503 | "Dịch vụ lưu ảnh tạm thời không khả dụng" | 2.4, 2.5 |
+| `VENUE_013` | 403 | "Chỉ người tạo địa điểm hoặc quản trị viên được thực hiện" | 2.12, 2.13 |
+| `VENUE_014` | 409 | "Bạn đã report địa điểm này, đang chờ admin xử lý" | 2.7 |
+| `VENUE_015` | 403 | "Quản trị viên không report địa điểm; hãy sửa hoặc đánh dấu ngừng hoạt động trực tiếp" | 2.7 |
 
-Mã dùng lại: `VALIDATION_ERROR`, `AUTH_001`, `AUTH_004`, `USER_001`, `SYS_*`. `VENUE_013`/`VENUE_015` là 403 miền (như `TEAM_002`), khác `AUTH_004` của filter.
-
-## 5. Thay đổi schema
-
-`V5__venue_management.sql` — DDL và lý do: `Component_Class_Design.md` §5.1.
+**Mã dùng lại** (message theo mục "Mã lỗi" của USER-001 `API_Spec.md`): `VALIDATION_ERROR` (400, mọi endpoint) · `AUTH_001` (401, mọi endpoint) · `AUTH_004` (403, 2.8–2.11) · `USER_001` (404, 2.1) · `SYS_*` (`api-convention.md` §6). FE nên làm gì: `AUTH_001`, `SYS_*` → theo USER-001 `API_Spec.md` §1.2 "Lỗi chung"; `AUTH_004` → ẩn chức năng quản trị. `VENUE_013` / `VENUE_015` (403) là từ chối theo quy tắc của địa điểm; `AUTH_004` (403) là endpoint chỉ dành cho admin.
 
 ## 6. Danh sách [cần xác nhận]
 
-Đánh số toàn thiết kế: 1–7 ở đây, 8–15 ở `Component_Class_Design.md` §12, 16–18 ở `Processing_Flow.md` §10. **Chặn code** = phải chốt/kiểm chứng trước khi viết phần liên quan; **Không chặn** = đã có mặc định, đổi sau được.
+Số thứ tự giữ theo toàn bộ thiết kế VENUE-001; các số không có ở đây là điểm nội bộ backend, không ảnh hưởng cách FE gọi API. #3–#7 đã có mặc định như mô tả ở trên (không chặn); #9 chặn code phía backend tới khi kiểm thử trên cloud thật, FE làm theo hướng dẫn ở dòng #9.
 
 | # | Nội dung | Loại |
 |---|---|---|
-| 1 | Report phát cả `VenueReportedEvent` (mỗi report, UC-V03 bước 6) lẫn `VenueAdminAlertEvent(CLOSURE_REPORTED)` một lần (BC-V05); NOTIFICATION-001 quyết định gộp | Không chặn |
-| 2 | Mở lại cổng "cảnh báo 1 lần": `CLOSURE_REPORTED` khi hết report `CLOSED` `PENDING` hoặc reactivate; `STALE_180_DAYS` khi được chọn lại hoặc reactivate | Không chặn |
-| 3 | Mark-inactive không bắt buộc có report `PENDING` | Không chặn |
-| 4 | Mark-inactive chỉ chuyển report `CLOSED` → `VERIFIED`; `WRONG_INFO`/`OTHER` giữ `PENDING` | Không chặn |
-| 5 | Giới hạn spec không nêu: `address` ≤500, `detail` ≤1000, `phone` `^0[0-9]{9,10}$` | Không chặn |
-| 6 | Admin tạo địa điểm → `createdByType = ADMIN`, vẫn lưu `created_by_user_id` (admin đó là "người tạo") | Không chặn |
+| 3 | Đánh dấu ngừng hoạt động (2.10) không bắt buộc địa điểm có report `PENDING` | Không chặn |
+| 4 | 2.10 chỉ chuyển report `CLOSED` → `VERIFIED`; `WRONG_INFO` / `OTHER` giữ `PENDING` | Không chặn |
+| 5 | Giới hạn spec không nêu: `address` ≤ 500, `detail` ≤ 1000, `phone` `^0[0-9]{9,10}$` | Không chặn |
+| 6 | Admin tạo địa điểm → `createdByType = ADMIN`, `createdById` = admin đó (admin là "người tạo") | Không chặn |
 | 7 | 2.12: `""` = xoá field tuỳ chọn, `null` = giữ nguyên | Không chặn |
+| 9 | (Phần ảnh hưởng FE) Upload Cloudinary chưa chạy thử trên cloud thật: giới hạn dung lượng file; Cloudinary có chặn định dạng ngoài `allowedFormats` và chặn ghi đè (`overwrite=false`) hay không. Trước khi chốt, FE tự kiểm định dạng file trước khi upload | Chặn code phía backend (kiểm thử trên cloud dev) |

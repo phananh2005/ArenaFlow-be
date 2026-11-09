@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · Cloudinary (ký/xác minh cục bộ trong request; Admin API chỉ trong job dọn asset) |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §10 · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) (`Proposed`) |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (§5.1); entity hiện có `domain/.../entity/venue/{Venue,VenueImage,VenueReport}` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -23,7 +23,7 @@ Layered theo 4 module Maven (ADR-0006) như USER-001. Hợp đồng: `API_Spec.m
 
 ```text
 common/        com.phananh.arenaflow.common
-└── exception/       ErrorCode (+ VENUE_001..VENUE_015)
+└── exception/       ErrorCode (+ VENUE_001..VENUE_015; đã soát 2026-11-09: chưa có VENUE_*)
 
 domain/        com.phananh.arenaflow.domain
 ├── entity/venue/    Venue, VenueImage, VenueReport (sửa — §6)
@@ -72,6 +72,20 @@ Quy ước như USER-001 §3 (`@Validated`, `ResponseEntity<ApiResponse<…>>`, 
 - 2.2: `@Valid @ModelAttribute SearchVenueRequest` (§7). 2.8: `@RequestParam` như `AdminTeamController`.
 - Không đổi `SecurityConfig`.
 
+**Mã thành công theo `api-convention.md` §5** (chuyển từ `API_Spec.md` v1.0; hợp đồng không đổi):
+
+| Endpoint | Mã | Tiêu chí |
+|---|---|---|
+| 2.1, 2.5, 2.7 | 201 | B2 |
+| 2.2, 2.3, 2.8 | 200 | B1 |
+| 2.4 | 200 | B3 (chữ ký, `publicId` do server sinh; không tạo tài nguyên) |
+| 2.6, 2.10, 2.11, 2.12 | 200 | B4 |
+| 2.9 | 200 | B3 (`handledAt`, `handledByName`) |
+| 2.13 | 200 | B3 (ảnh chính mới do server chọn), B4 |
+
+- 2.6, 2.9–2.11 là action sub-resource đổi trạng thái (`api-convention.md` §2.1), `PATCH` theo tiền lệ `mark-inactive`. 2.4 không đổi trạng thái → danh từ số nhiều, `POST` trả `200` (B3). 2.13 trả `200` có body thay `204` vì server chọn ảnh chính mới (§5 chọn mã theo kết quả).
+- `q`/`lat`/`lng`/`radiusKm` là tham số tìm kiếm, không phải filter theo field (`api-convention.md` §8.1); sort cố định như USER-001.
+
 ## 4. Service Layer
 
 ### 4.1. VenueService
@@ -119,7 +133,7 @@ void requireOwnerOrAdmin(Venue v, CurrentActor a);      // a.admin() || a.userId
 void requireWritable(Venue v, CurrentActor a);          // INACTIVE && !a.admin() → VENUE_002 (BR-V06, BR-V07)
 Venue lockForImageWrite(UUID venueId);                  // Q1 lockRow (0 dòng → VENUE_001) → Q2 findById
 ```
-- Nguồn duy nhất cho mã `VENUE_001/002/013` theo thứ tự `API_Spec.md` §2.0 (service gọi đúng thứ tự cho từng endpoint).
+- Nguồn duy nhất cho mã `VENUE_001/002/013` theo thứ tự `Processing_Flow.md` §1.1 (service gọi đúng thứ tự cho từng endpoint).
 - `lockForImageWrite`: `UPDATE venue SET version = version + 1 WHERE id = :id` **không** so `version` → chờ khoá dòng thay vì thất bại, nên mọi ghi ảnh của cùng địa điểm chạy tuần tự **trước** khi đọc trạng thái/số ảnh, không cần retry. Đọc entity **sau** khi khoá (Q2) → luôn thấy dữ liệu đã commit mới nhất. Tăng `version` để luồng CAS khác (2.10–2.12) đang giữ bản cũ phát hiện xung đột. Lý do bỏ CAS + retry: `Processing_Flow.md` §5; ghi nhận ở ADR-0003 Sửa đổi 2026-11-09.
 - Hệ quả chấp nhận: ở 2.13, caller không có quyền vẫn giữ khoá dòng trong thời gian ngắn trước khi bị từ chối (đổi lại không thêm truy vấn).
 
@@ -146,7 +160,7 @@ public record SignedPublicId(String scopePath, Instant signedAt, String nonce, S
 - `tag`: 22 ký tự đầu base64url của `HMAC-SHA256(tagKey, scopePath + "|" + signedAt + "|" + nonce + "|" + uploaderId)`; `tagKey = HMAC-SHA256(apiSecret, "arenaflow-upload-tag")` (tách miền với chữ ký Cloudinary). **Vì sao:** ràng buộc người xin chữ ký vào chính `public_id` đã ký → Cloudinary chặn đổi `public_id`, backend kiểm lại ở 2.5 bằng caller hiện tại; URL công khai chỉ chứa tag một chiều (có nonce riêng mỗi upload nên không liên kết được các ảnh cùng người, không suy ra user id); không thêm field request và không thêm secret phải quản lý. Phương án loại: tham số `context` của Cloudinary (backend không đọc lại được ở 2.5 nếu không gọi Admin API, chữ ký response không phủ `context`); user id trong `public_id` (lộ trên URL).
 - Mẫu kiểm: `^<folder>/<scopePath>/\d{10}-[A-Za-z0-9_-]{22}-[A-Za-z0-9_-]{22}$`; không `..`. `folder` và `scopePath` ghép vào regex qua `Pattern.quote(...)` (thư mục có thể chứa ký tự đặc biệt của regex, vd `.`).
 
-**Ký request** ([Authentication signatures](https://cloudinary.com/documentation/authentication_signatures)): mọi tham số gửi kèm trừ `file`, `cloud_name`, `resource_type`, `api_key`; sắp theo tên, nối `k=v` bằng `&`, nối liền `api_secret`, SHA-1 hex. Tham số ký: `allowed_formats`, `overwrite=false`, `public_id`, `timestamp`. Hợp lệ 1 giờ. Test vector bắt buộc: `timestamp=1315060510` + secret `abcd` → `a21ad0f63beb4de2e5575204b79ab90bffb02c10`. `overwrite=false`: chặn dùng lại chữ ký trong 1 giờ để ghi đè asset đã có `[cần xác nhận #9]`.
+**Ký request** ([Authentication signatures](https://cloudinary.com/documentation/authentication_signatures)): mọi tham số gửi kèm trừ `file`, `cloud_name`, `resource_type`, `api_key`; sắp theo tên, nối `k=v` bằng `&`, nối liền `api_secret`, SHA-1 hex. Tham số ký: `allowed_formats`, `overwrite=false`, `public_id`, `timestamp`. Hợp lệ 1 giờ; `UploadSignature.expiresAt` = `timestamp` + 1h (UTC, trả client ở 2.4). Test vector bắt buộc: `timestamp=1315060510` + secret `abcd` → `a21ad0f63beb4de2e5575204b79ab90bffb02c10`. `overwrite=false`: chặn dùng lại chữ ký trong 1 giờ để ghi đè asset đã có `[cần xác nhận #9]`.
 
 **Xác minh response** ([Response signatures](https://cloudinary.com/documentation/response_signatures)): digest SHA trên `public_id`, `version`, `api_secret`; thiết kế: SHA-1 hex của `"public_id=" + publicId + "&version=" + version + apiSecret`, so bằng `MessageDigest.isEqual`. Cách nối chuỗi chưa kiểm trên response thật `[cần xác nhận #9]`.
 
@@ -335,8 +349,8 @@ Giữ Lombok/builder/`@PrePersist` (`convention-backend.md` §6, §6.1); `src/ma
 ## 7. DTO & Mapper
 
 - DTO là `record`; enum dạng chuỗi dùng `@OneOf` (phân biệt hoa thường).
-- **Field tuỳ chọn chấp nhận `""`** (cả tạo và sửa — `API_Spec.md` §3): `venueType` `@OneOf({"FIVE_A_SIDE","SEVEN_A_SIDE","ELEVEN_A_SIDE",""})`; `phone` `@Pattern(regexp = "^$|^0[0-9]{9,10}$")`; `website` `@URL(regexp = "^$|^https?://.*")` + `@Size(max = 500)` ([Inference] `@URL` của Hibernate Validator coi `""` hợp lệ — có test). Service đổi `""` → `null` (tạo) hoặc xoá giá trị (sửa). `UpdateVenueRequest.venueName/address`: `@Size` + `@Pattern(regexp = "(?s).*\\S.*")` (null hợp lệ, chỉ khoảng trắng → 400).
-- **`SearchVenueRequest`** (record, bind `@ModelAttribute`): `page`, `pageSize` kiểu `Integer`, `status` kiểu `VenueStatusFilter`; compact constructor gán mặc định khi `null` (`page = 1`, `pageSize = 20`, `status = ACTIVE`, `radiusKm = 5` nếu có toạ độ) **trước** Bean Validation (`@Min/@Max` chạy trên giá trị sau mặc định). `@ValidGeoQuery` mức lớp gắn lỗi vào property node (`lat` / `radiusKm`) vì `GlobalExceptionHandler` chỉ đọc `getFieldErrors()`. Test bắt buộc: không gửi `page`/`pageSize`/`status` → 1/20/`ACTIVE`; `pageSize=101` → 400.
+- **Field tuỳ chọn chấp nhận `""`** (cả tạo và sửa — `API_Spec.md` §1, §2.1, §2.12): `venueType` `@OneOf({"FIVE_A_SIDE","SEVEN_A_SIDE","ELEVEN_A_SIDE",""})`; `phone` `@Pattern(regexp = "^$|^0[0-9]{9,10}$")`; `website` `@URL(regexp = "^$|^https?://.*")` + `@Size(max = 500)` ([Inference] `@URL` của Hibernate Validator coi `""` hợp lệ — có test). Service đổi `""` → `null` (tạo) hoặc xoá giá trị (sửa). `UpdateVenueRequest.venueName/address`: `@Size` + `@Pattern(regexp = "(?s).*\\S.*")` (null hợp lệ, chỉ khoảng trắng → 400).
+- **`SearchVenueRequest`** (record, bind `@ModelAttribute`): `page`, `pageSize` kiểu `Integer`, `status` kiểu `VenueStatusFilter`; compact constructor gán mặc định khi `null` (`page = 1`, `pageSize = 20`, `status = ACTIVE`, `radiusKm = 5` nếu có toạ độ) **trước** Bean Validation (`@Min/@Max` chạy trên giá trị sau mặc định). `@ValidGeoQuery` mức lớp gắn lỗi vào property node (`lat` / `radiusKm`) vì `GlobalExceptionHandler` chỉ đọc `getFieldErrors()`. Test bắt buộc: không gửi `page`/`pageSize`/`status` → 1/20/`ACTIVE`; `pageSize=101` → 400. `pageSize` tối đa 100 (không theo 50 của AC §3.4): user chốt 2026-11-09 để nhất quán `PageRequestFactory` dùng chung.
 - `VenueMapper` (`componentModel = "spring"`, `uses`/`imports` `MapperSupport`, `unmappedTargetPolicy = ERROR`): `toResponse(VenueDetailView, List<VenueImage>)`, `toCreatedResponse(Venue, String creatorName)`, `toSummary(VenueSummaryView)` (`distanceKm` HALF_UP 2 chữ số), `toImage(VenueImage)` (không map `publicId`), `toReport(VenueReport)`, `toAdminReport(AdminVenueReportView)` (che tên), `toSignatureResponse(UploadSignature)`.
 
 ## 8. Cấu hình (nguồn duy nhất cho giá trị) & Dependencies
@@ -408,7 +422,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 
 ## 12. Danh sách [cần xác nhận]
 
-Đánh số toàn thiết kế: 1–7 ở `API_Spec.md` §6, 8–15 ở đây, 16–18 ở `Processing_Flow.md` §10.
+Đánh số toàn thiết kế: 3–7 ở `API_Spec.md` §6 (kèm phần ảnh hưởng FE của #9), 8–15 ở đây, 1–2 và 16–18 ở `Processing_Flow.md` §10.
 
 | # | Nội dung | Loại |
 |---|---|---|
