@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §10; VENUE-001 `Component_Class_Design.md` §4.6 (port), §4.7 (event), §4.9 (retrier overload), §4.13 (audit) · ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0011](../../decisions/0011-domain-events-after-commit.md), [ADR-0012](../../decisions/0012-scheduled-jobs-claim-with-skip-locked.md), [ADR-0013](../../decisions/0013-reputation-columns-atomic-update.md) (cả ba `Proposed`) |
 | Ràng buộc dữ liệu | PostgreSQL ≥ 18 (`uuidv7()` — §5.2) · V1 + V5 (VENUE-001) + `V6__match_flow_a_lifecycle.sql` (§5.1); entity hiện có `domain/.../entity/match/{Match, MatchRequest, CostCustomItem, Sport}`, `team/Team`, `user/User` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -54,8 +54,8 @@ application/   com.phananh.arenaflow.application
 ├── dto/request/     CreateMatchRequest, SendMatchRequestRequest, RejectMatchRequestRequest, CancelMatchRequest,
 │                    WithdrawMatchRequestRequest, UpdateCostAgreementRequest, CostCustomItemRequest,
 │                    SearchMatchRequest, UpdateSportRequest
-├── dto/response/    MatchResponse (+ MatchTeamResponse, MatchVenueResponse, CostAgreementResponse,
-│                    CostCustomItemResponse), MatchSummaryResponse, MatchRequestResponse,
+├── dto/response/    MatchResponse (+ MatchTeamResponse, MatchVenueResponse, MatchCostAgreementResponse,
+│                    CostCustomItemResponse), CostAgreementResponse, MatchSummaryResponse, MatchRequestResponse,
 │                    AcceptMatchRequestResponse, MatchCancellationResponse, MatchRequestWithdrawalResponse,
 │                    SportResponse
 └── mapper/          MatchMapper, SportMapper (MapStruct); MapperSupport (tái dùng)
@@ -81,6 +81,21 @@ Quy ước như USER-001 §3 (`@Validated`, `ResponseEntity<ApiResponse<…>>`, 
 | `SportController` | `/api/v1/sports` | 2.13 | `SportService` |
 | `AdminSportController` | `/api/v1/admin/sports` | 2.14, 2.15 | `SportService` |
 
+**Mã thành công & tiêu chí `api-convention.md` §5** (chuyển từ `API_Spec.md` v1.0 §2):
+
+| Endpoint | Thành công | Tiêu chí |
+|---|---|---|
+| 2.1, 2.6 | 201 | B2 |
+| 2.2, 2.3, 2.7, 2.11–2.14 | 200 | B1 |
+| 2.4 | 200 | B4 (+ B3: `itemId`, `updatedAt`) |
+| 2.5 | 200 | B3 (`cancelledAt`, `reliabilityPenalty`), B4 |
+| 2.8 | 200 | B3 (`respondedAt`, đội đối thủ) |
+| 2.9 | 204 | N1 |
+| 2.10 | 200 | B3 (`withdrawnAt`, `reliabilityPenalty`, trạng thái kèo) |
+| 2.15 | 200 | B4 |
+
+**Lý do chọn path/method** (chuyển từ `API_Spec.md` v1.0 §2 "Ghi chú hợp đồng"): 2.5, 2.8–2.10 là action sub-resource (`api-convention.md` §2.1), dùng `POST` theo tiền lệ `/invitations/{id}/accept`, `/teams/{id}/disband`. 2.6 tạo tài nguyên con dưới kèo; thao tác trên từng yêu cầu dùng `/match-requests/{id}` (tiền lệ `/teams/{id}/invitations` + `/invitations/{id}/…`). 2.4 `PUT` thay toàn bộ thoả thuận (idempotent). 2.10 luôn trả `200` có body (kể cả rút `PENDING`) để một endpoint có một hình dạng response. 2.15 đổi một field (`isActive`) → `PATCH` thường, không phải action.
+
 - 2.2: `@Valid @ModelAttribute SearchMatchRequest` (§7). Danh sách khác: `@RequestParam` như `AdminTeamController` (enum filter qua `MethodArgumentTypeMismatchException` → 400).
 - 2.9: `@RequestBody(required = false)` (tiền lệ USER-002 disband). 2.5, 2.10: body bắt buộc (`expectedStatus`).
 - Không đổi `SecurityConfig` (`/api/v1/admin/**` đã `hasRole('ADMIN')`).
@@ -99,7 +114,7 @@ MatchCancellationResponse cancelMatch(UUID matchId, UUID callerId, CancelMatchRe
 PageResponse<MatchSummaryResponse> listTeamMatches(UUID teamId, MatchStatusFilter s, MatchRoleFilter role, int page, int pageSize); // readOnly
 ```
 Deps: `MatchRepository`, `CostCustomItemRepository`, `SportRepository`, `TeamRepository` (`existsById` cho 2.11), `MatchRequestRepository` (`existsByMatchIdAndStatus`), `MatchGuard`, `TeamGuard`, `MatchExpiry`, `MatchCancellation`, `VenueSelectionService`, `ConcurrencyConflictRetrier`, `MatchMapper`, `PageRequestFactory`, `ApplicationEventPublisher` (`MatchCancelledEvent` khi huỷ `OPEN`), `Clock`.
-- `createMatch`: guard (thứ tự `API_Spec.md` §2.0) → `Match.builder()` (`type = HAS_VENUE`, `status = OPEN`) → `save` → `markSelected({venueId}, now)` → `getMatch`-tương đương (`findDetailById`) dựng response.
+- `createMatch`: guard (thứ tự `Processing_Flow.md` §1.1) → `Match.builder()` (`type = HAS_VENUE`, `status = OPEN`) → `save` → `markSelected({venueId}, now)` → `getMatch`-tương đương (`findDetailById`) dựng response.
 - `searchMatches`: chọn `searchOpen` / `searchOpenNearby` theo có toạ độ (§5.2); hộp giới hạn + Haversine như VENUE-001 §5.2.
 - `updateCostAgreement`, `cancelMatch`: trả `MatchWriteOutcome` từ lambda retrier; `Expired` → `MATCH_004` **sau** commit (§4.7).
 - `cancelMatch`: **mọi** lần thử so `match.status` với `r.expectedStatus()` (client gửi, bắt buộc) — khác → `MATCH_015`, không ghi, không trừ điểm. So với giá trị client chứ không với trạng thái server đọc ở lần thử đầu, vì màn hình client có thể đã cũ trước khi request tới (BR-M13). `CONFIRMED` → `MatchCancellation.cancelConfirmed`.
@@ -371,14 +386,15 @@ Giữ Lombok/builder/`@PrePersist` (`convention-backend.md` §6, §6.1); `src/ma
 
 ## 7. DTO & Mapper
 
+- Chuỗi trong request được `trim()` ở service; field tuỳ chọn gửi `""` → lưu `null` (chuyển từ `API_Spec.md` v1.0 §3).
 - DTO là `record`; enum dạng chuỗi dùng `@OneOf`; `skillLevels` dùng `@ValidSkillLevels` (USER-001).
-- **`@ValidMatchSchedule`** (mức lớp, `CreateMatchRequest`): quy tắc thời gian `API_Spec.md` §3.1, `now` từ `Clock` (validator là Spring bean qua `LocalValidatorFactoryBean`); lỗi gắn property node theo tên field của request (`startsAt` / `endsAt` / `expiresAt`) vì `GlobalExceptionHandler` chỉ đọc `getFieldErrors()` (như VENUE-001 `@ValidGeoQuery`). Bỏ qua khi field liên quan `null` (để `@NotNull` báo).
-- **`@ValidCostAgreement`** (mức lớp, `UpdateCostAgreementRequest`): quan hệ `costType` ↔ số tiền ↔ `costSplit` (`API_Spec.md` §3.6).
+- **`@ValidMatchSchedule`** (mức lớp, `CreateMatchRequest`): quy tắc thời gian `API_Spec.md` §2.1 (Request body), `now` từ `Clock` (validator là Spring bean qua `LocalValidatorFactoryBean`); lỗi gắn property node theo tên field của request (`startsAt` / `endsAt` / `expiresAt`) vì `GlobalExceptionHandler` chỉ đọc `getFieldErrors()` (như VENUE-001 `@ValidGeoQuery`). Bỏ qua khi field liên quan `null` (để `@NotNull` báo).
+- **`@ValidCostAgreement`** (mức lớp, `UpdateCostAgreementRequest`): quan hệ `costType` ↔ số tiền ↔ `costSplit` (`API_Spec.md` §2.4).
 - `CancelMatchRequest.expectedStatus` `@NotNull @OneOf({"OPEN","CONFIRMED"})`; `WithdrawMatchRequestRequest.expectedStatus` `@NotNull @OneOf({"PENDING","ACCEPTED"})`.
 - **`SearchMatchRequest`**: compact constructor gán mặc định (`page = 1`, `pageSize = 20`, `radiusKm = 10` khi có toạ độ) trước Bean Validation; `@ValidMatchSearch` kiểm cặp `lat`/`lng`, `radiusKm` cần toạ độ, `startsAtFrom ≤ startsAtTo`. Developer xem có tổng quát được `@ValidGeoQuery` (VENUE-001) qua interface chung không (reuse-scan).
 - Hằng nghiệp vụ một nơi (`MatchRules` trong `application/support/match`): `MIN_LEAD_TIME = 1h`, `MAX_POSTING_WINDOW = 7d`, `MAX_DURATION = 12h`, `MAX_CUSTOM_ITEMS = 10`, `MAX_AMOUNT = 1_000_000_000`. Khung trừ điểm ở `TimeBandPenaltyPolicy.MATCH_CANCELLATION`.
 - Tên field API khác tên entity: `startsAt` ↔ `matchStartTime`, `endsAt` ↔ `matchEndTime` (cột V1 giữ nguyên; `api-convention.md` §10 hậu tố `At`).
-- `MatchMapper` (`componentModel = "spring"`, `uses`/`imports` `MapperSupport`, `unmappedTargetPolicy = ERROR`): `toResponse(MatchDetailView, List<CostCustomItem>)`, `toSummary(MatchSummaryView)` (`distanceKm` HALF_UP 2 chữ số), `toRequest(MatchRequestView)`, `toCreatedRequest(MatchRequest, MatchRequestContext…)`, `toCostAgreement(Match, List<CostCustomItem>)`, `toAccept(…)`, `toCancellation(Match, int penalty)`, `toWithdrawal(…)`. `skillLevels` JSON → list qua `SkillLevelsConverter`. `SportMapper.toResponse(Sport)`.
+- `MatchMapper` (`componentModel = "spring"`, `uses`/`imports` `MapperSupport`, `unmappedTargetPolicy = ERROR`): `toResponse(MatchDetailView, List<CostCustomItem>)` (`costAgreement` = `MatchCostAgreementResponse`: `costType`, `costSplit`, `venueAmount`, `drinksAmount`, `customItems` — record lồng riêng, **không** dùng `CostAgreementResponse` 7 field của 2.4; user chốt 2026-11-10, đóng `[cần xác nhận #12]`), `toSummary(MatchSummaryView)` (`distanceKm` HALF_UP 2 chữ số), `toRequest(MatchRequestView)`, `toCreatedRequest(MatchRequest, MatchRequestContext…)`, `toCostAgreement(Match, List<CostCustomItem>)`, `toAccept(…)`, `toCancellation(Match, int penalty)`, `toWithdrawal(…)`. `skillLevels` JSON → list qua `SkillLevelsConverter`. `SportMapper.toResponse(Sport)`.
 
 ## 8. Cấu hình (nguồn duy nhất cho giá trị) & Dependencies
 
@@ -423,7 +439,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 |---|---|---|
 | `docs/database/schema.dbml`, `schema-design.md` §3.1, §3.4, §3.5 và quy ước ID (dòng 11) | Cột/CHECK/index V6; bỏ `CUSTOM` ở `cost_type`; dòng "tối đa 1 ACCEPTED (application layer)" → unique index; quy ước ID "Hibernate generates UUID v7 từ Java, không cần DEFAULT trong DB" thêm ngoại lệ: id `cost_custom_item` do `uuidv7()` của PostgreSQL ≥ 18 sinh trong câu INSERT gom lô (ADR-0008 Sửa đổi 2026-11-09) | `feature/MATCH-001-*` |
 | `docs/database/data-model.md` §3.3 | Lý do huỷ/từ chối/rút; thoả thuận chi phí chỉ khi `OPEN`; rút `ACCEPTED` ⇒ huỷ kèo | `feature/MATCH-001-*` |
-| `docs/agent/api-convention.md` §5, §6 | 15 endpoint vào bảng 2xx; domain `MATCH`, `SPORT` | `chore/agent-framework-*` (qua `workflow-adapt`) |
+| `docs/agent/api-convention.md` §5, §6 | 15 endpoint vào bảng 2xx (tiêu chí ở §3); domain `MATCH`, `SPORT` (đã soát `ErrorCode` hiện hành 2026-11-09: chưa có `MATCH_*`, `SPORT_*`; mã `VENUE_*` theo VENUE-001) | `chore/agent-framework-*` (qua `workflow-adapt`) |
 | `docs/agent/convention-backend.md` §1 | `application/event/<miền>/`, `application/support/<miền>/`, `api/config/ClockConfig` | `chore/agent-framework-*` |
 | `docs/agent/design/USER-001/Component_Class_Design.md` §4 (`TeamGuard`), §6 (`Team`/`User` `updatable = false`) | + `USER-001/CHANGELOG.md` MINOR | `feature/MATCH-001-*` |
 | `docs/agent/design/VENUE-001/Component_Class_Design.md` §4.13 | Overload `AdminAuditLog` + `VENUE-001/CHANGELOG.md` MINOR (tạo mới) | `feature/MATCH-001-*` |
@@ -445,3 +461,21 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 | 5 | **Thứ tự implement:** MATCH-001 cần code VENUE-001 (`VenueSelectionService`, retrier overload, `AdminAuditLog`, `SchedulingConfig`, `application/event/`, `VENUE_001/002`) **và migration V5**. DB dev đang ở Flyway V4; Flyway không chạy out-of-order → nếu phase 0 của MATCH-001 tự dựng phần VENUE-001 thì phải gồm `V5__venue_management.sql`, hoặc đổi số migration (MATCH-001 thành V5 và VENUE-001 lùi sang V6 — phải sửa thiết kế VENUE-001). Lựa chọn còn lại: implement VENUE-001 trước | **Chặn code** — user chọn thứ tự |
 | 10 | `spring.task.scheduling.pool.size` còn hiệu lực với Spring Boot 4.0.9 (không bật virtual threads) [Inference — tên thuộc tính theo Spring Boot 3, chưa kiểm trên 4.0.9]; kiểm bằng log tên luồng `scheduling-1..3` khi chạy | Không chặn |
 | 11 | Phiên bản PostgreSQL production (và môi trường khác ngoài Neon dev) chưa kiểm; `uuidv7()` cần ≥ 18 — thấp hơn thì V6 vẫn chạy nhưng 2.4 lỗi khi có khoản tự nhập | Không chặn — kiểm trước khi deploy |
+
+## 13. Quyết định đã chốt (user, 2026-11-09 và 2026-11-10)
+
+Chuyển từ `API_Spec.md` v1.0 §6.1 (bảng truy vết thiết kế, không publish cho FE). Quyết định nghiệp vụ 2026-11-09 đã đồng bộ vào SRS `SYSTEM-001` v1.3 (`Business_Rules.md` BR-M09..BR-M18, BR-C03..BR-C04; `Acceptance_Criteria.md` AC-M06 sửa, AC-M09..AC-M12). Quyết định 2026-11-10 (#12) là hợp đồng API, không thuộc SRS.
+
+| Quyết định | Nơi áp dụng (`API_Spec.md` v1.1) |
+|---|---|
+| Quy tắc trừ điểm (đội bị trừ, khung giờ) | §1.5 |
+| Rút yêu cầu `ACCEPTED` ⇒ kèo `CANCELLED`, chỉ đội rút bị trừ; đội đã ghép huỷ qua 2.5 cho cùng kết quả, trừ một lần | 2.5, 2.10, §1.5 |
+| Không huỷ / rút khi trận đã bắt đầu (`MATCH_012`) | §1.5, 2.5, 2.10 |
+| Huỷ / rút so với `expectedStatus` client gửi; lệch → `MATCH_015`, không trừ điểm | §1.4, 2.5, 2.10 |
+| Đội `INACTIVE`/`DISBANDED`, bộ môn tắt: kèo `OPEN` ẩn khỏi tìm kiếm, chặn gửi/chấp nhận; không tự huỷ; đội `INACTIVE` vẫn huỷ / từ chối / rút | §1.2, 2.2, 2.6, 2.8, 2.15 |
+| Chi phí: chỉ đội tác giả sửa, chỉ khi `OPEN`; bỏ `CUSTOM` của `cost_type` | 2.4, §4.1 |
+| Trận ≤ 12h; ≤ 10 khoản tự nhập; `skillLevels` ≤ 3, rỗng = mọi trình độ; `ageNote` ≤100, `matchNature` ≤200, `reason` ≤500 (bắt buộc khi huỷ/rút sau ghép); số tiền ≤ 1 000 000 000; `LOSER_PAYS_DRINKS` chỉ khi có tiền nước | 2.1, 2.4, 2.5, 2.9, 2.10 |
+| Tên field `startsAt` / `endsAt` | 2.1, §4 |
+| API đọc trả trạng thái hiệu lực `EXPIRED` không ghi DB; thao tác ghi / job chuyển `EXPIRED` thật | §1.3 |
+| Một user làm đội trưởng cả đội tác giả lẫn đội gửi (hai đội khác nhau) → cho phép; không kiểm trùng lịch | §1.2, 2.6 |
+| (2026-11-10, đóng `[cần xác nhận #12]`) `costAgreement` lồng trong kèo chi tiết (2.1, 2.3) giữ 5 field như ví dụ đã publish; record riêng `MatchCostAgreementResponse` (§7), response 2.4 giữ `CostAgreementResponse` 7 field | §4.2 |
