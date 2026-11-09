@@ -7,13 +7,34 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + VENUE-001 `Component_Class_Design.md` §4.9 · ADR-0011, ADR-0012, ADR-0013 (`Proposed`) |
 | Ràng buộc dữ liệu | V1 + V5 + `V6__match_flow_a_lifecycle.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
-15 endpoint + 1 scheduled job (2 tác vụ). Mã lỗi: `API_Spec.md` §4; thứ tự guard: `API_Spec.md` §2.0; cấu hình: `Component_Class_Design.md` §8. Số truy vấn tính cho **một lần thử**; JWT không truy vấn DB. Ký hiệu: **S** SELECT, **I** INSERT, **U** UPDATE, **D** DELETE. `now` lấy từ `Clock` một lần ở đầu mỗi lần thử. Không gọi HTTP ra ngoài.
+15 endpoint + 1 scheduled job (2 tác vụ). Mã lỗi: `API_Spec.md` §5; thứ tự guard: §1.1; cấu hình: `Component_Class_Design.md` §8. Số truy vấn tính cho **một lần thử**; JWT không truy vấn DB. Ký hiệu: **S** SELECT, **I** INSERT, **U** UPDATE, **D** DELETE. `now` lấy từ `Clock` một lần ở đầu mỗi lần thử. Không gọi HTTP ra ngoài.
 
 **Lazy check (UC-M09 1a):** API đọc tính trạng thái hiệu lực trong SQL (`Component_Class_Design.md` §5.2), không ghi. API ghi gặp kèo `OPEN` quá `expiresAt` → `MatchExpiry.expireIfDue` (U kèo + U yêu cầu `PENDING`, phát `MatchExpiredEvent`) → lần thử **commit** và trả `Expired` → service ném `MATCH_004` sau commit (`Component_Class_Design.md` §4.7). Ký hiệu **[lazy]** dưới đây là nhánh này.
+
+### 1.1. Thứ tự guard (nguồn duy nhất)
+
+Chuyển từ `API_Spec.md` v1.0 §2.0 (nội bộ BE; `API_Spec.md` chỉ giữ hệ quả FE thấy được — vd kiểm trạng thái trước lý do ở 2.5/2.10). Sau JWT (401/403 ở filter) và Bean Validation (400). Tồn tại → đội (trạng thái rồi quyền, như USER-002 §2.1a) → trạng thái kèo → trạng thái yêu cầu. Quyền đứng trước trạng thái kèo để người không có quyền không kích hoạt chuyển `EXPIRED` (nhánh [lazy]). `MATCH_014` (hết lượt thử của retrier) có thể xảy ra ở 2.4–2.6, 2.8–2.10.
+
+| Endpoint | Thứ tự guard |
+|---|---|
+| 2.1 | `TEAM_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` → `SPORT_001` → `SPORT_002` → `VENUE_001` → `VENUE_002` |
+| 2.3 | `MATCH_001` |
+| 2.4 | `MATCH_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` (đội tác giả) → `MATCH_004` → `MATCH_003` → `MATCH_005` |
+| 2.5 | `MATCH_001` → `TEAM_001` → `TEAM_016` → `TEAM_002` (đội `teamId`) → `MATCH_009` → `MATCH_004` → `MATCH_005` (`CANCELLED`/`ARCHIVED`/`COMPLETED`) → `MATCH_015` (≠ `expectedStatus`) → `OPEN`: `MATCH_010` · `CONFIRMED`: `MATCH_011` → `MATCH_012` |
+| 2.6 | `MATCH_001` → `TEAM_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` (đội `teamId`) → `MATCH_007` → `MATCH_004` → `MATCH_003` → `MATCH_005` → `MATCH_013` (đội tác giả không `ACTIVE`) → `SPORT_002` → `MATCH_006` (khi INSERT) |
+| 2.7 | `MATCH_001` → `TEAM_002` (đội tác giả; đội giải tán → `TEAM_016`) |
+| 2.8 | `MATCH_002` → `TEAM_016` → `TEAM_015` → `TEAM_002` (đội tác giả) → `MATCH_004` → `MATCH_003` → `MATCH_005` → `MATCH_008` → `MATCH_013` (đội gửi không `ACTIVE`) → `SPORT_002` |
+| 2.9 | `MATCH_002` → `TEAM_016` → `TEAM_002` (đội tác giả) → `MATCH_004` (kể cả kèo đã `EXPIRED` trong DB) → `MATCH_008` |
+| 2.10 | `MATCH_002` → `TEAM_016` → `TEAM_002` (đội gửi) → `MATCH_004` → `MATCH_008` (yêu cầu không ở `PENDING`/`ACCEPTED`) → `MATCH_015` (≠ `expectedStatus`) → `PENDING`: `MATCH_015` (khi ghi — yêu cầu đổi trạng thái sau lúc đọc) · `ACCEPTED`: `MATCH_005` (kèo không `CONFIRMED`) → `MATCH_011` → `MATCH_012` |
+| 2.11 | `TEAM_001` |
+| 2.12 | `TEAM_001` → `TEAM_002` (đội giải tán → `TEAM_016`) |
+| 2.15 | `SPORT_001` |
+
+`TEAM_001` của đội tác giả / đội gửi suy ra từ tài nguyên không xảy ra (FK). Đội đã giải tán không còn đội trưởng ACTIVE → trả `TEAM_016` (không phải `TEAM_002`) ở mọi endpoint, gồm cả đọc (2.7, 2.12) — như USER-002 §2.1a.
 
 ## 2. Sequence
 
@@ -138,7 +159,7 @@ Bean Validation (`@ValidCostAgreement`, ≤10 khoản) → lần thử: Q1 `matc
 Lần thử: Q1 `findMatch` → Q2 `requireCaptainAllowInactive(r.teamId, callerId)` → vai trò: `teamId == authorTeamId` → tác giả; `teamId == confirmedOpponentTeamId` (khác null) → đội đã ghép; khác → `MATCH_009` → `isExpiryDue` → [lazy] → `requireNotExpired` (`MATCH_004`) → `CANCELLED`/`ARCHIVED`/`COMPLETED` → `MATCH_005` → `match.status ≠ r.expectedStatus` → `MATCH_015` (kiểm ở **mọi** lần thử, so với giá trị client gửi — bắt cả màn hình cũ trước khi request tới, không chỉ thay đổi giữa các lần thử; không ghi, không trừ điểm).
 - `OPEN` (chỉ tác giả — đội đã ghép không tồn tại khi `OPEN`): Q3 `existsByMatchIdAndStatus(id, PENDING)` → `MATCH_010` → setter `CANCELLED`, `cancelledByTeamId`, `cancelledAt = now`, `cancelReason` (trim, `""` → null) → Q4 CAS lúc commit → `MatchCancelledEvent(previousStatus = OPEN, otherTeamId = null)`. Penalty 0.
 - `CONFIRMED`: `reason` blank → `MATCH_011` → `now ≥ matchStartTime` → `MATCH_012` → `matchCancellation.cancelConfirmed(match, teamId, reason, now)` (`Component_Class_Design.md` §4.13).
-- Penalty theo `TimeBandPenaltyPolicy.MATCH_CANCELLATION` (`API_Spec.md` §1). Bộ đếm Completion Rate không ghi ở đây (`[cần xác nhận #3]`).
+- Penalty theo `TimeBandPenaltyPolicy.MATCH_CANCELLATION` (`API_Spec.md` §1.5). Bộ đếm Completion Rate không ghi ở đây (`[cần xác nhận #3]`).
 
 ### 3.6. `POST …/requests` (retrier `MATCH_014`)
 Lần thử: Q1 `findMatch` → Q2 `requireActiveCaptain(r.teamId, callerId)` → `teamId == authorTeamId` → `MATCH_007` → `isExpiryDue` → [lazy] → `requireOpen` (`MATCH_003` — UC-M03 3a) → Q3 `matchRepository.findAvailability(matchId)`: đội tác giả ≠ `ACTIVE` → `MATCH_013`; bộ môn tắt → `SPORT_002` → Q4 `MatchRequest.builder()` (`PENDING`, `requestedAt = now`) `saveAndFlush`; `idx_match_request_active` → `MATCH_006` (flush tường minh để đổi lỗi ràng buộc, comment tại chỗ) → `matchRepository.forceIncrementVersion(match)` → `MatchRequestSentEvent` → Q5 `UPDATE match SET version = version + 1 WHERE id = ? AND version = ?` lúc commit (lệch → retry).
