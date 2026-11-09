@@ -1,7 +1,8 @@
 // Chép tài liệu FE cần từ ArenaFlow-be sang bản phản chiếu chỉ-đọc.
 // Dùng: node publish-spec.cjs <thư-mục-BE> <thư-mục-đích> [--sha <40 hex>]
 // Exit: 0 thành công · 2 sai tham số · 1 lỗi dữ liệu/an toàn. Mọi kiểm tra (đường dẫn thật, mẫu <MÃ>, SHA,
-// liên kết, kiểu file) chạy xong trước khi xoá gì ở đích; chỉ lỗi I/O khi đang chép mới có thể để đích dở dang.
+// liên kết, kiểu file, nội dung API_Spec/CHANGELOG cho FE) chạy xong trước khi xoá gì ở đích; chỉ lỗi I/O khi
+// đang chép mới có thể để đích dở dang.
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
@@ -12,6 +13,17 @@ const CODE_PATTERN = /^[A-Z][A-Z0-9]*-\d+$/;
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const NONE = '—';
 const BANNER = 'CHỈ ĐỌC — sinh từ ArenaFlow-be bởi workflow publish-spec; mọi thay đổi làm ở ArenaFlow-be';
+// FE chỉ đọc API_Spec/CHANGELOG nên hai file này không được lộ chi tiết nội bộ BE.
+const FE_DOC_PATTERN = /^api\/[^/]+\/(?:API_Spec|CHANGELOG)\.md$/;
+const FE_DOC_RULES = [
+  ['nhắc tài liệu không publish', /Component_Class_Design|Processing_Flow|docs\/database|design-standards|convention-backend|security-backend|non-functional-standards|\.java\b|src\/main/],
+  ['annotation BE', /@(?:Transactional|Entity|Table|Column|Id|Version|Lock|PrePersist|PreUpdate|UuidGenerator|Query|Modifying|Builder|Getter|Setter)\b/],
+  ['tên class nội bộ BE', /\b\w+(?:Repository|ServiceImpl|Retrier)\b/],
+  ['tên migration', /\bV\d+__\w+/],
+];
+// Link inline `[x](đích "title")` / `[x](<đích>)` và link kiểu reference `[x]: đích`.
+const INLINE_LINK_PATTERN = /\]\(\s*<?([^)\s>]+)>?(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g;
+const REFERENCE_LINK_PATTERN = /^\s{0,3}\[[^\]]+\]:\s*<?([^\s>]+)>?/;
 
 class UsageError extends Error {}
 
@@ -131,6 +143,65 @@ function referencedSrs(rows, srsCodes) {
   return [...new Set(codes)].filter(code => srsCodes.includes(code)).sort();
 }
 
+const toPosix = relative => relative.split(path.sep).join('/');
+
+// Thay comment HTML bằng khoảng trắng (giữ xuống dòng) để số dòng báo lỗi vẫn khớp file gốc.
+function blankComments(text) {
+  return text.replace(/<!--[\s\S]*?-->/g, comment => comment.replace(/[^\n]/g, ' '));
+}
+
+// CHANGELOG: kiểm từ đầu file tới hết entry mới nhất (`## [` thứ hai trở đi là entry cũ, không được sửa nên bỏ qua).
+// Không có heading `## [` nào → kiểm cả file, để heading viết lệch chuẩn không làm bỏ sót.
+function lintedLines(text, isChangelog) {
+  const lines = blankComments(text).split(/\r?\n/);
+  if (!isChangelog) return lines;
+  const entries = lines.flatMap((line, index) => (line.startsWith('## [') ? [index] : []));
+  if (entries.length < 2) return lines;
+  return lines.map((line, index) => (index < entries[1] ? line : ''));
+}
+
+function linkTargets(line) {
+  const targets = [...line.matchAll(INLINE_LINK_PATTERN)].map(match => match[1]);
+  const reference = line.match(REFERENCE_LINK_PATTERN);
+  if (reference) targets.push(reference[1]);
+  return targets;
+}
+
+// Link tương đối phải trỏ tới thứ được publish và trỏ đúng chỗ đó cả ở BE lẫn ở đích.
+function linkResolves(copy, target, copies) {
+  // Ổ đĩa Windows (`C:/…`) trông giống scheme 1 ký tự nhưng là đường dẫn tuyệt đối, gãy ở đích.
+  if (/^[a-z]:[\\/]/i.test(target)) return false;
+  if (/^[a-z][a-z0-9+.-]+:/i.test(target) || target.startsWith('#')) return true;
+  const clean = target.split('#')[0].split('?')[0];
+  if (clean === '' || clean.startsWith('/') || clean.startsWith('\\')) return false;
+  const fromBackend = path.resolve(path.dirname(copy.from), clean);
+  const toDest = path.posix.normalize(path.posix.join(path.posix.dirname(toPosix(copy.to)), clean)).replace(/\/$/, '');
+  return copies.some(other => {
+    const otherTo = toPosix(other.to);
+    if (path.resolve(other.from) === fromBackend) return otherTo === toDest;
+    return isInside(other.from, fromBackend) && otherTo.startsWith(`${toDest}/`);
+  });
+}
+
+function lintFeDocs(backend, copies) {
+  const problems = [];
+  for (const copy of copies) {
+    if (!FE_DOC_PATTERN.test(toPosix(copy.to))) continue;
+    const lines = lintedLines(fs.readFileSync(copy.from, 'utf8'), copy.to.endsWith('CHANGELOG.md'));
+    const where = toPosix(path.relative(backend, copy.from));
+    lines.forEach((line, index) => {
+      for (const [label, pattern] of FE_DOC_RULES) {
+        const match = line.match(pattern);
+        if (match) problems.push(`${where}:${index + 1}: ${label}: ${match[0]}`);
+      }
+      for (const target of linkTargets(line)) {
+        if (!linkResolves(copy, target, copies)) problems.push(`${where}:${index + 1}: link không trỏ tới tài liệu được publish: ${target}`);
+      }
+    });
+  }
+  return problems;
+}
+
 function plan({ backend, dest, sha }) {
   assertSeparate(backend, dest);
   const resolvedSha = sha ?? headSha(backend);
@@ -165,6 +236,10 @@ function plan({ backend, dest, sha }) {
   }
   copies.push({ from: apiConvention, to: path.join('api', 'api-convention.md') });
   copies.push(...treeCopies(decisions, 'decisions', name => name.startsWith('_template')));
+  const problems = lintFeDocs(backend, copies);
+  if (problems.length) {
+    throw new Error(`tài liệu cho FE lộ chi tiết nội bộ BE hoặc có link gãy (design-standards.md §11):\n  ${problems.join('\n  ')}`);
+  }
 
   for (const name of GENERATED_FILES) {
     const stat = fs.lstatSync(path.join(dest, name), { throwIfNoEntry: false });
