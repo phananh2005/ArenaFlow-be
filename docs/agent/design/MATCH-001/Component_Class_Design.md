@@ -1,4 +1,4 @@
-# Component & Class Design — Kèo luồng A (đã có sân) & vòng đời kèo
+# Component & Class Design — Kèo (luồng A, luồng B) & vòng đời kèo
 
 | Mục | Giá trị |
 |---|---|
@@ -6,8 +6,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §10; VENUE-001 `Component_Class_Design.md` §4.6 (port), §4.7 (event), §4.9 (retrier overload), §4.13 (audit) · ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0011](../../decisions/0011-domain-events-after-commit.md), [ADR-0012](../../decisions/0012-scheduled-jobs-claim-with-skip-locked.md), [ADR-0013](../../decisions/0013-reputation-columns-atomic-update.md) (cả ba `Proposed`) |
-| Ràng buộc dữ liệu | PostgreSQL ≥ 18 (`uuidv7()` — §5.2) · V1 + V5 (VENUE-001) + `V6__match_flow_a_lifecycle.sql` (§5.1); entity hiện có `domain/.../entity/match/{Match, MatchRequest, CostCustomItem, Sport}`, `team/Team`, `user/User` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | PostgreSQL ≥ 18 (`uuidv7()` — §5.2) · V1 + V5 (VENUE-001) + `V6__match_flow_a_lifecycle.sql` (§5.1) + `V7__match_flow_b_pairing.sql` (MATCH-002 `Component_Class_Design.md` §5.1); entity hiện có `domain/.../entity/match/{Match, MatchRequest, CostCustomItem, Sport}`, `team/Team`, `user/User` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.1** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -18,6 +18,7 @@ Layered theo 4 module Maven (ADR-0006) như USER-001. Hợp đồng: `API_Spec.m
 - **Domain event** `ApplicationEvent` cho thông báo (NOTIFICATION-001) và dữ liệu dẫn xuất tính lại được; không dùng để ghi dữ liệu nghiệp vụ (§4.9, ADR-0011).
 - **Scheduled job** hết hạn + `ARCHIVED` claim lô bằng `FOR NO KEY UPDATE SKIP LOCKED` (§4.10, ADR-0012).
 - **Bộ môn**: đọc + Admin bật/tắt (§4.4).
+- **Kèo luồng B** (v2.0): tạo / tìm / xem / huỷ / hết hạn kèo `NEED_VENUE` ở các thành phần trên (nhánh theo `Match.Type`). Pairing, chat, xác nhận, chi phí + cọc luồng B, migration V7 và repository lựa chọn (`MatchVenueOptionRepository`, `MatchTimeOptionRepository`, `PairingRepository`): MATCH-002 `Component_Class_Design.md`.
 
 **Điều kiện tiên quyết (VENUE-001 code):** `VenueSelectionService`, overload `ConcurrencyConflictRetrier.execute(ErrorCode, Supplier)`, `AdminAuditLog`, `SchedulingConfig`, package `application/event/`, mã `VENUE_001/002`, migration `V5__venue_management.sql` — thiết kế ở VENUE-001, chưa có trong code `[cần xác nhận #5]`.
 
@@ -113,11 +114,15 @@ CostAgreementResponse updateCostAgreement(UUID matchId, UUID callerId, UpdateCos
 MatchCancellationResponse cancelMatch(UUID matchId, UUID callerId, CancelMatchRequest r);     // retrier
 PageResponse<MatchSummaryResponse> listTeamMatches(UUID teamId, MatchStatusFilter s, MatchRoleFilter role, int page, int pageSize); // readOnly
 ```
-Deps: `MatchRepository`, `CostCustomItemRepository`, `SportRepository`, `TeamRepository` (`existsById` cho 2.11), `MatchRequestRepository` (`existsByMatchIdAndStatus`), `MatchGuard`, `TeamGuard`, `MatchExpiry`, `MatchCancellation`, `VenueSelectionService`, `ConcurrencyConflictRetrier`, `MatchMapper`, `PageRequestFactory`, `ApplicationEventPublisher` (`MatchCancelledEvent` khi huỷ `OPEN`), `Clock`.
-- `createMatch`: guard (thứ tự `Processing_Flow.md` §1.1) → `Match.builder()` (`type = HAS_VENUE`, `status = OPEN`) → `save` → `markSelected({venueId}, now)` → `getMatch`-tương đương (`findDetailById`) dựng response.
-- `searchMatches`: chọn `searchOpen` / `searchOpenNearby` theo có toạ độ (§5.2); hộp giới hạn + Haversine như VENUE-001 §5.2.
+Deps: `MatchRepository`, `CostCustomItemRepository`, `SportRepository`, `TeamRepository` (`existsById` cho 2.11), `MatchRequestRepository` (`existsByMatchIdAndStatus`), `MatchVenueOptionRepository`, `MatchTimeOptionRepository`, `PairingRepository` (`supersedeNegotiating`) (MATCH-002 §5.2), `MatchGuard`, `TeamGuard`, `MatchExpiry`, `MatchCancellation`, `VenueSelectionService`, `ConcurrencyConflictRetrier`, `MatchMapper`, `PageRequestFactory`, `ApplicationEventPublisher` (`MatchCancelledEvent` khi huỷ `OPEN`), `Clock`.
+- `createMatch`: guard (thứ tự `Processing_Flow.md` §1.1) → theo `r.type()`:
+  - `HAS_VENUE`: `Match.builder()` (`status = OPEN`) → `save` → `markSelected({venueId}, now)` → `getMatch`-tương đương (`findDetailById`) dựng response.
+  - `NEED_VENUE`: `requireSelectable(venueOptionIds)` trả `SelectableVenueView` → `Match.builder()` (`venueId = null`, `matchStartTime`/`matchEndTime` = khung giờ có `startsAt` nhỏ nhất) → `save` → `matchVenueOptionRepository.insertAll` → `matchTimeOptionRepository.insertAllReturning` → response dựng từ dữ liệu đã nạp (`TeamCaptainContextView`, `Sport`, `SelectableVenueView`, `TimeOptionView`), **không** `findDetailById`, **không** `markSelected` (chỉ lúc ghép — MATCH-002 §4.4). Không phát event.
+- `searchMatches`: chọn `searchOpen` / `searchOpenNearby` theo có toạ độ (§5.2); hộp giới hạn + Haversine như VENUE-001 §5.2; lọc `type` tuỳ chọn.
+- `getMatch`: `findDetailById` → khoản tự nhập theo `match_id` khi kèo A **hoặc** `confirmedPairingId != null` (kèo B đã ghép — khoản được chép từ thương lượng đã chốt lúc ghép, MATCH-002 §4.4; vẫn đúng khi kèo B bị huỷ sau `CONFIRMED`, pairing giữ `CONFIRMED`); kèo B có `confirmedPairingId == null` → bỏ (chưa có khoản) → kèo B: `findOptionRows`.
 - `updateCostAgreement`, `cancelMatch`: trả `MatchWriteOutcome` từ lambda retrier; `Expired` → `MATCH_004` **sau** commit (§4.7).
-- `cancelMatch`: **mọi** lần thử so `match.status` với `r.expectedStatus()` (client gửi, bắt buộc) — khác → `MATCH_015`, không ghi, không trừ điểm. So với giá trị client chứ không với trạng thái server đọc ở lần thử đầu, vì màn hình client có thể đã cũ trước khi request tới (BR-M13). `CONFIRMED` → `MatchCancellation.cancelConfirmed`.
+- `cancelMatch`: **mọi** lần thử so `match.status` với `r.expectedStatus()` (client gửi, bắt buộc) — khác → `MATCH_015`, không ghi, không trừ điểm. So với giá trị client chứ không với trạng thái server đọc ở lần thử đầu, vì màn hình client có thể đã cũ trước khi request tới (BR-M13). `CONFIRMED` → `MatchCancellation.cancelConfirmed`. `OPEN` kèo B: bỏ kiểm `MATCH_010`; sau CAS → `pairingRepository.supersedeNegotiating(matchId, now)`.
+- `updateCostAgreement` và `MatchRequestService.sendRequest` / `listMatchRequests`: kèo `NEED_VENUE` → `MATCH_016` (vị trí: `Processing_Flow.md` §1.1).
 - `updateCostAgreement`: setter các cột chi phí + `setUpdatedAt(now)` (luôn làm entity dirty → `UPDATE match` CAS tăng `version` ngay cả khi chỉ đổi khoản tự nhập; `@PreUpdate` không chạy nếu entity không dirty) → `deleteByMatchId` → `insertAll` (một câu `unnest`, id do DB sinh) → đọc lại khoản tự nhập để lấy `itemId` cho response; bỏ cả `insertAll` lẫn bước đọc khi danh sách rỗng.
 - Luồng chi tiết: `Processing_Flow.md` §3.1–§3.5, §3.11.
 
@@ -140,7 +145,7 @@ Deps: `MatchRepository`, `MatchRequestRepository`, `MatchGuard`, `TeamGuard`, `M
 int expireDueMatches();      // UC-M09, AC-M07 — mỗi lô một TransactionTemplate
 int archiveFinishedMatches();// AC-M08 — mỗi lô một TransactionTemplate
 ```
-Deps: `MatchRepository`, `MatchRequestRepository`, `ApplicationEventPublisher`, `TransactionTemplate`, `MatchLifecycleProperties`, `Clock`. Luồng: `Processing_Flow.md` §3.13.
+Deps: `MatchRepository`, `MatchRequestRepository`, `PairingRepository` (`expireNegotiatingByMatchIds`), `ApplicationEventPublisher`, `TransactionTemplate`, `MatchLifecycleProperties`, `Clock`. Luồng: `Processing_Flow.md` §3.13.
 
 ### 4.4. SportService
 ```java
@@ -163,16 +168,16 @@ Mọi endpoint ghi kiểm hết hạn **trước** kiểm trạng thái khác: q
 
 **`TeamGuard`** (sửa — thêm 2 method, mỗi method **1 truy vấn** `TeamRepository.findCaptainContext`, đọc trạng thái đội + cờ "caller là captain ACTIVE" trong một câu nên không cần `disbandedOr`):
 ```java
-void requireActiveCaptain(UUID teamId, UUID userId);        // TEAM_001 → TEAM_016 → TEAM_015 → TEAM_002
+TeamCaptainContextView requireActiveCaptain(UUID teamId, UUID userId); // TEAM_001 → TEAM_016 → TEAM_015 → TEAM_002; trả dữ liệu đã đọc (tên/ảnh/điểm đội, tên caller) — caller không cần thì bỏ qua
 void requireCaptainAllowInactive(UUID teamId, UUID userId); // TEAM_001 → TEAM_016 → TEAM_002 (INACTIVE được)
 ```
 Đội `DISBANDED` không còn captain ACTIVE (BR-T10) nên `TEAM_016` luôn trả trước `TEAM_002`. Method cũ (`activeTeam`, `requireCaptain`…) giữ nguyên cho USER-001/002.
 
 ### 4.6. MatchExpiry (`application/support`, `@Component`) — lazy check + job dùng chung
 ```java
-boolean expireIfDue(UUID matchId, UUID authorTeamId, OffsetDateTime now); // MANDATORY; true nếu chính lời gọi này chuyển EXPIRED
+boolean expireIfDue(UUID matchId, UUID authorTeamId, Match.Type type, OffsetDateTime now); // MANDATORY; true nếu chính lời gọi này chuyển EXPIRED
 ```
-Q1 `MatchRepository.expireIfDue(id, now)` (`WHERE status = 'OPEN' AND expires_at <= :now`, `version + 1`) → 1 dòng: Q2 `MatchRequestRepository.expirePendingByMatchIds([id], now)` → phát `MatchExpiredEvent`. 0 dòng → `false` (job/request khác đã làm). Job dùng biến thể lô (§4.3) cùng hai câu bulk.
+Q1 `MatchRepository.expireIfDue(id, now)` (`WHERE status = 'OPEN' AND expires_at <= :now`, `version + 1`) → 1 dòng: Q2 `HAS_VENUE` → `MatchRequestRepository.expirePendingByMatchIds([id], now)`; `NEED_VENUE` → `PairingRepository.expireNegotiatingByMatchIds([id], now)` → phát `MatchExpiredEvent`. 0 dòng → `false` (job/request khác đã làm). Job dùng biến thể lô (§4.3) cùng hai câu bulk.
 
 ### 4.7. MatchWriteOutcome — chuyển `EXPIRED` rồi mới báo lỗi
 ```java
@@ -209,10 +214,10 @@ public record TimeBandPenaltyPolicy(int atLeast24h, int from4hTo24h, int under4h
 | Event | Payload | Phát khi | Người nghe dự kiến |
 |---|---|---|---|
 | `MatchRequestSentEvent` | `requestId, matchId, requesterTeamId, authorTeamId, occurredAt` | 2.6 | NOTIFICATION-001 (`MATCH_REQUEST_RECEIVED`) |
-| `MatchConfirmedEvent` | `matchId, acceptedRequestId, authorTeamId, opponentTeamId, occurredAt` | 2.8 | NOTIFICATION-001 (`REQUEST_ACCEPTED`, `MATCH_CONFIRMED`; tự truy vấn yêu cầu `SUPERSEDED` của kèo để báo các đội bị thay thế) |
+| `MatchConfirmedEvent` | `matchId, acceptedRequestId` (null ở kèo B)`, pairingId` (null ở kèo A)`, authorTeamId, opponentTeamId, occurredAt` | 2.8; MATCH-002 2.7 hoàn tất | NOTIFICATION-001 (`REQUEST_ACCEPTED` khi có `acceptedRequestId`, `MATCH_CONFIRMED`; tự truy vấn yêu cầu / pairing `SUPERSEDED` của kèo để báo các đội bị thay thế) |
 | `MatchRequestRejectedEvent` | `requestId, matchId, requesterTeamId, occurredAt` | 2.9 | NOTIFICATION-001 (`REQUEST_REJECTED`) |
 | `MatchRequestWithdrawnEvent` | `requestId, matchId, requesterTeamId, authorTeamId, occurredAt` | 2.10 **chỉ khi rút `PENDING`** | NOTIFICATION-001 (không có loại riêng trong 11 loại — tuỳ chọn) |
-| `MatchCancelledEvent` | `matchId, cancelledByTeamId, otherTeamId` (null khi huỷ `OPEN`)`, previousStatus, cause` (`CANCEL`\|`REQUEST_WITHDRAWN`)`, withdrawnRequestId` (khác null khi đội đã ghép huỷ / rút)`, occurredAt` | 2.5, 2.10 (`ACCEPTED`) | NOTIFICATION-001 (`MATCH_CANCELLED` cho đội còn lại) |
+| `MatchCancelledEvent` | `matchId, cancelledByTeamId, otherTeamId` (null khi huỷ `OPEN`)`, previousStatus, cause` (`CANCEL`\|`REQUEST_WITHDRAWN`)`, withdrawnRequestId` (khác null khi đội đã ghép kèo A huỷ / rút)`, occurredAt` | 2.5, 2.10 (`ACCEPTED`) | NOTIFICATION-001 (`MATCH_CANCELLED` cho đội còn lại; kèo B `OPEN`: tự truy vấn pairing `SUPERSEDED` để báo các đội đang thương lượng) |
 | `MatchExpiredEvent` | `matchId, authorTeamId, occurredAt` | job, lazy check | NOTIFICATION-001 (tự truy vấn yêu cầu `EXPIRED` của kèo — AC-M07) |
 | `MatchArchivedEvent` | `matchId, authorTeamId, opponentTeamId, matchEndTime, occurredAt` | job | NOTIFICATION-001 (push "Trận đấu hôm nay thế nào?…" cho 2 đội trưởng — AC-M08) |
 | `ReliabilityScoreChangedEvent` | `subjectType` (`TEAM`\|`USER`)`, subjectId, delta, reason, referenceId, occurredAt` | `ReputationService` | Thông báo / dữ liệu dẫn xuất tính lại được (vd cache badge); không dùng để ghi điểm, bộ đếm |
@@ -246,7 +251,7 @@ Thêm overload trung tính `void afterCommit(String action, UUID adminId, String
 CancellationResult cancelConfirmed(Match match, UUID cancellingTeamId, String reason, OffsetDateTime now); // MANDATORY
 public record CancellationResult(int reliabilityPenalty) {}
 ```
-Dùng bởi 2.5 (`CONFIRMED`) và 2.10 (`ACCEPTED`): setter `status = CANCELLED`, `cancelledByTeamId`, `cancelledAt`, `cancelReason` → nếu đội huỷ là đội đã ghép: `MatchRequestRepository.withdrawAccepted` (phải = 1 dòng, khác → `IllegalStateException`) → `penalty = MATCH_CANCELLATION.penaltyFor(matchStartTime, now)` → `reputationService.adjustTeamReliability(cancellingTeamId, …)` → `MatchCancelledEvent` (một event duy nhất cho thao tác, §4.9). Gọi `MatchGuard`/kiểm `MATCH_011`, `MATCH_012` **trước** (caller).
+Dùng bởi 2.5 (`CONFIRMED`) và 2.10 (`ACCEPTED`): setter `status = CANCELLED`, `cancelledByTeamId`, `cancelledAt`, `cancelReason` → nếu đội huỷ là đội đã ghép **và** kèo `HAS_VENUE`: `MatchRequestRepository.withdrawAccepted` (phải = 1 dòng, khác → `IllegalStateException`); kèo `NEED_VENUE` không có yêu cầu, pairing đã chốt giữ `CONFIRMED` → `penalty = MATCH_CANCELLATION.penaltyFor(matchStartTime, now)` → `reputationService.adjustTeamReliability(cancellingTeamId, …)` → `MatchCancelledEvent` (một event duy nhất cho thao tác, §4.9). Gọi `MatchGuard`/kiểm `MATCH_011`, `MATCH_012` **trước** (caller).
 
 ## 5. Repository & Data Model
 
@@ -287,7 +292,7 @@ CREATE UNIQUE INDEX idx_cost_custom_item_order ON cost_custom_item(match_id, dis
 ```
 - Chỉ delta cần: `@Version` (Overview "Implementation notes"), trình độ mong muốn (Data_Model_Conceptual §2.3 — V1 thiếu), lý do huỷ / từ chối / rút (§2.3), `format` `VARCHAR(10)` không chứa `ELEVEN_A_SIDE` (13 ký tự), ràng buộc enum/số tiền, unique "1 ACCEPTED" (V1 chỉ có unique theo đội), `display_order` (thứ tự khoản tự nhập; unique `(match_id, display_order)` thay index `(match_id)` của V1 vì có cùng tiền tố). Tên index theo quy ước `idx_*` của V1/V2/V4.
 - `skill_levels` cùng kiểu/converter với `team.skill_levels` (USER-001 §6, `SkillLevelsConverter`).
-- Không đổi `cost_deposit_holder` (MATCH-002), `match_venue_option`/`match_time_option`/`pairing` (MATCH-002).
+- Không đổi `cost_deposit_holder`, `match_venue_option`/`match_time_option`/`pairing` ở V6. V7 (MATCH-002 §5.1) sửa tiếp: `cost_custom_item.match_id` nullable + `pairing_id` (XOR), `match` bỏ `confirmed_venue_id`/`confirmed_match_time`, nới CHECK `match_check2`, thêm `cost_deposit_amount`.
 - Dữ liệu cũ: đã kiểm Neon dev `misty-dew-90700890` ngày 2026-11-09 — `match`, `match_request`, `cost_custom_item` đều 0 dòng; Flyway ở V4; tên constraint/index V6 không trùng với constraint đang có. Môi trường khác có dữ liệu: dòng có `format`/`cost_*` ngoài enum, hoặc `HAS_VENUE` thiếu `format`, hoặc nhiều `ACCEPTED` cùng kèo làm V6 lỗi → dừng, báo, không tự sửa dữ liệu.
 - Index: `idx_match_open_start` cho 2.2 khi không lọc môn (partial khớp literal `'OPEN'`); `idx_match_opponent_status` cho 2.11 vai trò đối thủ. Job dùng `idx_match_expiry (status, expires_at)`, `idx_match_archived (status, match_end_time)` (V1).
 
@@ -299,9 +304,9 @@ Native + interface projection như USER-001 §5; `Page` native có `countQuery`;
 public interface MatchRepository extends JpaRepository<Match, UUID> {
     Optional<MatchDetailView> findDetailById(UUID id, OffsetDateTime now);   // JOIN sport, team tác giả, LEFT JOIN team đối thủ,
                                                                             // venue, LEFT JOIN venue_image ảnh chính
-    Page<MatchSummaryView> searchOpen(UUID sportId, String format, String skillLevel, OffsetDateTime startsAtFrom,
-            OffsetDateTime startsAtTo, OffsetDateTime now, Pageable p);
-    Page<MatchSummaryView> searchOpenNearby(UUID sportId, String format, String skillLevel, OffsetDateTime startsAtFrom,
+    Page<MatchSummaryView> searchOpen(String type /* null = cả hai */, UUID sportId, String format, String skillLevel,
+            OffsetDateTime startsAtFrom, OffsetDateTime startsAtTo, OffsetDateTime now, Pageable p);
+    Page<MatchSummaryView> searchOpenNearby(String type, UUID sportId, String format, String skillLevel, OffsetDateTime startsAtFrom,
             OffsetDateTime startsAtTo, OffsetDateTime now, double lat, double lng, double radiusKm,
             double minLat, double maxLat, double minLng, double maxLng, Pageable p);
     Page<MatchSummaryView> findTeamMatches(UUID teamId, String role /* null = ALL */, String status /* null = ALL */,
@@ -339,7 +344,7 @@ public interface SportRepository extends JpaRepository<Sport, UUID> {
     Page<Sport> findAllByOrderByNameAscIdAsc(Pageable p);
 }
 // TeamRepository (sửa)
-Optional<TeamCaptainContextView> findCaptainContext(UUID teamId, UUID userId); // status + EXISTS captain ACTIVE = userId
+Optional<TeamCaptainContextView> findCaptainContext(UUID teamId, UUID userId); // status + EXISTS captain ACTIVE = userId + name, avatar_url, reliability_score + tên/cờ đã xoá của userId
 @Modifying int adjustReliability(UUID id, int delta);
 // UserRepository (sửa)
 @Modifying int adjustReliability(UUID id, int delta);
@@ -351,8 +356,11 @@ Ghi chú SQL:
 - `expirePendingByMatchIds`: `SET status = 'EXPIRED' WHERE match_id IN (:ids) AND status = 'PENDING'`.
 - `claimDueFor*`: `SELECT id, author_team_id, confirmed_opponent_team_id, match_end_time FROM match WHERE status = :s AND <expires_at|match_end_time> <= :now ORDER BY <cột thời gian>, id LIMIT :limit FOR NO KEY UPDATE SKIP LOCKED` (native, đọc → không `@Modifying`). `markExpired/markArchived`: `WHERE id IN (:ids)` lặp điều kiện trạng thái.
 - `adjustReliability`: `UPDATE team SET reliability_score = LEAST(100, GREATEST(0, reliability_score + :delta)) WHERE id = :id` — **không** tăng `version` (cột `updatable = false`, ADR-0013); `user` tương tự.
-- `findCaptainContext`: `SELECT t.status, EXISTS (SELECT 1 FROM team_member m WHERE m.team_id = t.id AND m.user_id = :userId AND m.role = 'CAPTAIN' AND m.status = 'ACTIVE') AS captain FROM team t WHERE t.id = :teamId`.
-- Tìm kèo: `m.status = 'OPEN'` (literal) `AND m.expires_at > :now AND m.type = 'HAS_VENUE'` + `JOIN team t ON t.id = m.author_team_id AND t.status = 'ACTIVE'` + `JOIN sport s ON s.id = m.sport_id AND s.is_active`; `skillLevel`: `(:skillLevel IS NULL OR m.skill_levels = '[]' OR jsonb_exists(m.skill_levels::jsonb, :skillLevel))` (không dùng toán tử `?` — xung đột placeholder JDBC). Nearby: hộp + Haversine trên `venue.latitude/longitude` như VENUE-001 §5.2.
+- `findCaptainContext`: `SELECT t.status, t.name, t.avatar_url, t.reliability_score, EXISTS (SELECT 1 FROM team_member m WHERE m.team_id = t.id AND m.user_id = :userId AND m.role = 'CAPTAIN' AND m.status = 'ACTIVE') AS captain, u.display_name AS user_display_name, (u.deleted_at IS NOT NULL) AS user_deleted FROM team t LEFT JOIN "user" u ON u.id = :userId WHERE t.id = :teamId` (tên/ảnh/điểm cho response dựng từ dữ liệu đã nạp: tạo kèo B, MATCH-002 2.1; `user_*` = tên đội trưởng hiện tại khi `captain = true` — `captainName` của MATCH-002 2.1).
+- `findAvailability`: thêm `LEFT JOIN team_member cm ON cm.team_id = m.author_team_id AND cm.role = 'CAPTAIN' AND cm.status = 'ACTIVE' LEFT JOIN "user" cu ON cu.id = cm.user_id` → `authorCaptainName`, `authorCaptainDeleted` (MATCH-002 2.1); cùng câu.
+- `claimDueForExpiry` trả thêm `type`; lô tách id theo loại → `expirePendingByMatchIds` (kèo A) và `PairingRepository.expireNegotiatingByMatchIds` (kèo B), bỏ câu khi danh sách rỗng.
+- `findDetailById`: `LEFT JOIN venue` (kèo B chưa ghép không có `venue_id`), `LEFT JOIN pairing p ON p.match_id = m.id AND p.status = 'CONFIRMED'` → `confirmedPairingId`; thêm `cost_deposit_amount`, `cost_deposit_holder`.
+- Tìm kèo: `m.status = 'OPEN'` (literal) `AND m.expires_at > :now AND (:type IS NULL OR m.type = :type)` + `JOIN team t ON t.id = m.author_team_id AND t.status = 'ACTIVE'` + `JOIN sport s ON s.id = m.sport_id AND s.is_active` + `LEFT JOIN venue v ON v.id = m.venue_id` (kèo B chưa ghép: `null`); khoảng giờ: kèo A so `m.match_start_time`, kèo B `EXISTS (SELECT 1 FROM match_time_option t WHERE t.match_id = m.id AND t.proposed_start_time BETWEEN …)`; `venueOptionCount`/`timeOptionCount`: subquery `count(*)` theo `match_id` (chỉ kèo B); nearby kèo B: `LATERAL (SELECT min(Haversine) FROM match_venue_option o JOIN venue v2 … WHERE o.match_id = m.id AND v2 trong hộp)` → khoảng cách tới lựa chọn gần nhất, lọc `≤ radiusKm` (vẫn 1 câu trang + 1 câu count); `skillLevel`: `(:skillLevel IS NULL OR m.skill_levels = '[]' OR jsonb_exists(m.skill_levels::jsonb, :skillLevel))` (không dùng toán tử `?` — xung đột placeholder JDBC). Nearby: hộp + Haversine trên `venue.latitude/longitude` như VENUE-001 §5.2.
 - `findTeamMatches`: `(m.author_team_id = :teamId OR m.confirmed_opponent_team_id = :teamId)` theo `role`; lọc `status` trên biểu thức trạng thái hiệu lực.
 - `insertAll` (user chốt 2026-11-09 — một câu bất kể số khoản, không bật JDBC batch toàn ứng dụng): `INSERT INTO cost_custom_item (id, match_id, item_name, amount, display_order, created_at) SELECT uuidv7(), :matchId, t.name, t.amount, t.ord, :now FROM unnest(CAST(:names AS text[]), CAST(:amounts AS bigint[])) WITH ORDINALITY AS t(name, amount, ord)`. Id do hàm built-in `uuidv7()` của **PostgreSQL ≥ 18** sinh (cùng định dạng v7 với entity — ADR-0008 Sửa đổi 2026-11-09); `ord` = 1..n theo thứ tự mảng = thứ tự request. Neon dev đã kiểm 2026-11-09: `server_version = 18.6`, có `uuidv7` `[cần xác nhận #11]` cho môi trường khác. Chạy sau `deleteByMatchIdBulk` (Hibernate tự flush `UPDATE match` trước câu native đầu tiên). Id do DB sinh → response đọc lại `findByMatchIdOrderByDisplayOrderAsc` (1 câu). Danh sách rỗng → không gọi insert lẫn bước đọc `[cần xác nhận #1]`.
 - `forceIncrementVersion` (fragment, tiền lệ USER-002 dùng `OPTIMISTIC_FORCE_INCREMENT` cho invite): đặt trong repository để service không cầm `EntityManager`; chỉ gọi trên nhánh thành công của 2.6 (sau mọi guard), để nhánh lazy-expiry (bulk `version + 1`) không bị kiểm version lần hai lúc commit.
@@ -361,14 +369,14 @@ Ghi chú SQL:
 
 | Projection | Cột |
 |---|---|
-| `MatchDetailView` | cột `match` cho `MatchResponse` (gồm `effectiveStatus`, `skillLevels` JSON thô) + `sportName`, tác giả/đối thủ (`id`, `name`, `avatarUrl`, `reliabilityScore`), venue (`name`, `address`, `latitude`, `longitude`, `status`, `primaryImageUrl`) |
-| `MatchSummaryView` | cột `MatchSummaryResponse` + `distanceKm` (`Double`) |
+| `MatchDetailView` | cột `match` cho `MatchResponse` (gồm `type`, `effectiveStatus`, `skillLevels` JSON thô, `costDepositAmount`, `costDepositHolder`) + `sportName`, tác giả/đối thủ (`id`, `name`, `avatarUrl`, `reliabilityScore`), venue nullable (`name`, `address`, `latitude`, `longitude`, `status`, `primaryImageUrl`), `confirmedPairingId` |
+| `MatchSummaryView` | cột `MatchSummaryResponse` (gồm `type`, venue nullable, `venueOptionCount`, `timeOptionCount`) + `distanceKm` (`Double`) |
 | `MatchRequestView` | cột `MatchRequestResponse` (gồm `effectiveStatus`) + ngữ cảnh kèo cho 2.12 |
 | `MatchRequestContextView` | request (`id`, `matchId`, `requesterTeamId`, `status`) + match (`authorTeamId`, `status`, `expiresAt`, `matchStartTime`) + đội gửi (`name`, `status`, `reliabilityScore`) + `sportActive` |
-| `MatchAvailabilityView` | `authorTeamStatus`, `sportActive` |
-| `MatchAuthorAccessView` | `authorTeamId`, `authorTeamStatus`, `callerIsCaptain` |
-| `DueMatchView` | `id`, `authorTeamId`, `opponentTeamId`, `matchEndTime` |
-| `TeamCaptainContextView` | `status`, `captain` |
+| `MatchAvailabilityView` | `authorTeamStatus`, `sportActive` + `authorTeamName`, `authorTeamAvatarUrl`, `authorTeamReliabilityScore`, `authorCaptainName`, `authorCaptainDeleted` (response MATCH-002 2.1) |
+| `MatchAuthorAccessView` | `authorTeamId`, `authorTeamStatus`, `callerIsCaptain`, `type` (`MATCH_016` ở 2.7, MATCH-002 2.2) |
+| `DueMatchView` | `id`, `type`, `authorTeamId`, `opponentTeamId`, `matchEndTime` |
+| `TeamCaptainContextView` | `status`, `captain`, `name`, `avatarUrl`, `reliabilityScore`, `userDisplayName`, `userDeleted` |
 
 Thời gian là `Instant`, mapper chuyển UTC (USER-001 §5).
 
@@ -381,6 +389,7 @@ Thời gian là `Instant`, mapper chuyển UTC (USER-001 §5).
 | `team.Team`, `user.User` | `reliabilityScore`: thêm `updatable = false` — chỉ `ReputationService` ghi bằng `UPDATE` nguyên tử (ADR-0013); `insertable` giữ (`@Builder.Default 80`) |
 | `match.CostCustomItem` | + `displayOrder` (`Integer`, `display_order`, `nullable = false`) — ghi bằng câu native `insertAll` (id do DB sinh), entity dùng để đọc; giữ `@UuidGenerator(VERSION_7)` trên `id` (ADR-0008, `EntityIdGenerationTest`) |
 | `match.Sport` | Giữ |
+| `match.Match`, `match.CostCustomItem` (v2.0) | Thay đổi cho luồng B: MATCH-002 `Component_Class_Design.md` §6 |
 
 Giữ Lombok/builder/`@PrePersist` (`convention-backend.md` §6, §6.1); `src/main` không gán `id`, `version`, `createdAt`, `updatedAt` qua builder. Kiểm bằng migration integration test (`ddl-auto=validate` sau V6).
 
@@ -388,13 +397,14 @@ Giữ Lombok/builder/`@PrePersist` (`convention-backend.md` §6, §6.1); `src/ma
 
 - Chuỗi trong request được `trim()` ở service; field tuỳ chọn gửi `""` → lưu `null` (chuyển từ `API_Spec.md` v1.0 §3).
 - DTO là `record`; enum dạng chuỗi dùng `@OneOf`; `skillLevels` dùng `@ValidSkillLevels` (USER-001).
-- **`@ValidMatchSchedule`** (mức lớp, `CreateMatchRequest`): quy tắc thời gian `API_Spec.md` §2.1 (Request body), `now` từ `Clock` (validator là Spring bean qua `LocalValidatorFactoryBean`); lỗi gắn property node theo tên field của request (`startsAt` / `endsAt` / `expiresAt`) vì `GlobalExceptionHandler` chỉ đọc `getFieldErrors()` (như VENUE-001 `@ValidGeoQuery`). Bỏ qua khi field liên quan `null` (để `@NotNull` báo).
+- **`CreateMatchRequest`** (v2.0): + `type` (`@OneOf({"HAS_VENUE","NEED_VENUE"})`, vắng → `HAS_VENUE` qua compact constructor), `venueOptionIds` (`List<UUID>`), `timeOptions` (`List<@Valid TimeOptionRequest>`, `TimeOptionRequest(@NotNull startsAt, @NotNull endsAt)`); `venueId`, `startsAt`, `endsAt` bỏ `@NotNull` (bắt buộc theo luồng trong `@ValidMatchSchedule`).
+- **`@ValidMatchSchedule`** (mức lớp, `CreateMatchRequest`): quy tắc thời gian `API_Spec.md` §2.1 (Request body) theo `type` — luồng A như cũ; luồng B: field luồng A phải `null`, 1..`MAX_VENUE_OPTIONS` địa điểm không trùng, 1..`MAX_TIME_OPTIONS` khung giờ không trùng `startsAt`, mỗi khung theo `MIN_LEAD_TIME`/`MAX_DURATION`, `expiresAt` trong [sớm nhất − `MAX_POSTING_WINDOW`, sớm nhất]; lỗi gắn `timeOptions[i].startsAt` …, `now` từ `Clock` (validator là Spring bean qua `LocalValidatorFactoryBean`); lỗi gắn property node theo tên field của request (`startsAt` / `endsAt` / `expiresAt`) vì `GlobalExceptionHandler` chỉ đọc `getFieldErrors()` (như VENUE-001 `@ValidGeoQuery`). Bỏ qua khi field liên quan `null` (để `@NotNull` báo).
 - **`@ValidCostAgreement`** (mức lớp, `UpdateCostAgreementRequest`): quan hệ `costType` ↔ số tiền ↔ `costSplit` (`API_Spec.md` §2.4).
 - `CancelMatchRequest.expectedStatus` `@NotNull @OneOf({"OPEN","CONFIRMED"})`; `WithdrawMatchRequestRequest.expectedStatus` `@NotNull @OneOf({"PENDING","ACCEPTED"})`.
 - **`SearchMatchRequest`**: compact constructor gán mặc định (`page = 1`, `pageSize = 20`, `radiusKm = 10` khi có toạ độ) trước Bean Validation; `@ValidMatchSearch` kiểm cặp `lat`/`lng`, `radiusKm` cần toạ độ, `startsAtFrom ≤ startsAtTo`. Developer xem có tổng quát được `@ValidGeoQuery` (VENUE-001) qua interface chung không (reuse-scan).
-- Hằng nghiệp vụ một nơi (`MatchRules` trong `application/support/match`): `MIN_LEAD_TIME = 1h`, `MAX_POSTING_WINDOW = 7d`, `MAX_DURATION = 12h`, `MAX_CUSTOM_ITEMS = 10`, `MAX_AMOUNT = 1_000_000_000`. Khung trừ điểm ở `TimeBandPenaltyPolicy.MATCH_CANCELLATION`.
+- Hằng nghiệp vụ một nơi (`MatchRules` trong `application/support/match`): `MIN_LEAD_TIME = 1h`, `MAX_POSTING_WINDOW = 7d`, `MAX_DURATION = 12h`, `MAX_CUSTOM_ITEMS = 10`, `MAX_AMOUNT = 1_000_000_000`, `MAX_VENUE_OPTIONS = 5`, `MAX_TIME_OPTIONS = 5` (v2.0). Khung trừ điểm ở `TimeBandPenaltyPolicy.MATCH_CANCELLATION`.
 - Tên field API khác tên entity: `startsAt` ↔ `matchStartTime`, `endsAt` ↔ `matchEndTime` (cột V1 giữ nguyên; `api-convention.md` §10 hậu tố `At`).
-- `MatchMapper` (`componentModel = "spring"`, `uses`/`imports` `MapperSupport`, `unmappedTargetPolicy = ERROR`): `toResponse(MatchDetailView, List<CostCustomItem>)` (`costAgreement` = `MatchCostAgreementResponse`: `costType`, `costSplit`, `venueAmount`, `drinksAmount`, `customItems` — record lồng riêng, **không** dùng `CostAgreementResponse` 7 field của 2.4; user chốt 2026-11-10, đóng `[cần xác nhận #12]`), `toSummary(MatchSummaryView)` (`distanceKm` HALF_UP 2 chữ số), `toRequest(MatchRequestView)`, `toCreatedRequest(MatchRequest, MatchRequestContext…)`, `toCostAgreement(Match, List<CostCustomItem>)`, `toAccept(…)`, `toCancellation(Match, int penalty)`, `toWithdrawal(…)`. `skillLevels` JSON → list qua `SkillLevelsConverter`. `SportMapper.toResponse(Sport)`.
+- `MatchMapper` (`componentModel = "spring"`, `uses`/`imports` `MapperSupport`, `unmappedTargetPolicy = ERROR`): `toResponse(MatchDetailView, List<CostCustomItem>, List<MatchOptionRowView>)` (v2.0: + `venueOptions`, `timeOptions`, `confirmedPairingId`; danh sách rỗng ở kèo A), `toCreatedNeedVenue(Match, TeamCaptainContextView, Sport, List<SelectableVenueView>, List<TimeOptionView>)` (kèo B, không đọc lại); `costAgreement` = `MatchCostAgreementResponse`: `costType`, `costSplit`, `venueAmount`, `drinksAmount`, `depositAmount`, `depositHolder` (v2.0), `customItems` — record lồng riêng, **không** dùng `CostAgreementResponse` 7 field của 2.4; user chốt 2026-11-10, đóng `[cần xác nhận #12]`), `toSummary(MatchSummaryView)` (`distanceKm` HALF_UP 2 chữ số), `toRequest(MatchRequestView)`, `toCreatedRequest(MatchRequest, MatchRequestContext…)`, `toCostAgreement(Match, List<CostCustomItem>)`, `toAccept(…)`, `toCancellation(Match, int penalty)`, `toWithdrawal(…)`. `skillLevels` JSON → list qua `SkillLevelsConverter`. `SportMapper.toResponse(Sport)`.
 
 ## 8. Cấu hình (nguồn duy nhất cho giá trị) & Dependencies
 
@@ -479,3 +489,4 @@ Chuyển từ `API_Spec.md` v1.0 §6.1 (bảng truy vết thiết kế, không p
 | API đọc trả trạng thái hiệu lực `EXPIRED` không ghi DB; thao tác ghi / job chuyển `EXPIRED` thật | §1.3 |
 | Một user làm đội trưởng cả đội tác giả lẫn đội gửi (hai đội khác nhau) → cho phép; không kiểm trùng lịch | §1.2, 2.6 |
 | (2026-11-10, đóng `[cần xác nhận #12]`) `costAgreement` lồng trong kèo chi tiết (2.1, 2.3) giữ 5 field như ví dụ đã publish; record riêng `MatchCostAgreementResponse` (§7), response 2.4 giữ `CostAgreementResponse` 7 field | §4.2 |
+| (2026-11-10, v2.0) Kèo luồng B dùng chung 2.1/2.2/2.3/2.5/2.11; `costAgreement` lồng thêm `depositAmount`, `depositHolder`; 2.4/2.6/2.7 trên kèo B → `MATCH_016`; huỷ kèo B `OPEN` → pairing `SUPERSEDED`; "gần tôi" kèo B = lựa chọn địa điểm gần nhất (chi tiết MATCH-002 `Component_Class_Design.md` §13) | 2.1–2.7, 2.11, §4 |

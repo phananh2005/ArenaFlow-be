@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway · Cloudinary |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + `Component_Class_Design.md` §4.9 |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v1.3** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -179,7 +179,7 @@ Q1–Q2 `lockForImageWrite` (`VENUE_001`) → `requireOwnerOrAdmin` (`VENUE_013`
 **Dự phòng** nếu `UPDATE … RETURNING` không chạy qua Spring Data `[cần xác nhận #11]`: S id/name cùng điều kiện + U `WHERE id IN (:ids)` lặp điều kiện. Đánh đổi: cảnh báo thừa nếu địa điểm vừa thoát điều kiện giữa hai câu. Báo lại trước khi dùng.
 
 ### 3.15. Port MATCH-001
-`requireSelectable`: Q1 `findStatusesByIdIn` → thiếu → `VENUE_001`; có `INACTIVE` → `VENUE_002`; rỗng → không truy vấn. `markSelected`: Q1 bulk; tăng `version` vì Hibernate ghi **mọi cột** `Venue` khi flush — luồng admin giữ bản cũ sẽ lệch CAS và retry thay vì ghi đè `last_selected_at`. **Ghi chú cho MATCH-001:** `UPDATE … WHERE id IN (…)` khoá nhiều dòng `venue`; hai kèo luồng B cùng chọn các địa điểm chung theo thứ tự khác nhau có thể khoá chéo → `markSelected` sắp `venueIds` theo thứ tự cố định (UUID tăng dần) trước khi gọi và khoá theo thứ tự đó (vd `SELECT … ORDER BY id FOR NO KEY UPDATE` hoặc bảo đảm thứ tự quét) [Inference — PostgreSQL không bảo đảm thứ tự khoá theo danh sách `IN`; MATCH-001 kiểm bằng test đồng thời].
+`requireSelectable`: Q1 `findSelectableByIdIn` (một câu, `LEFT JOIN` ảnh chính như `VenueSummaryView`; sắp lại theo thứ tự `venueIds` trong bộ nhớ) → thiếu → `VENUE_001`; có `INACTIVE` → `VENUE_002`; rỗng → không truy vấn. `markSelected`: Q1 bulk; tăng `version` vì Hibernate ghi **mọi cột** `Venue` khi flush — luồng admin giữ bản cũ sẽ lệch CAS và retry thay vì ghi đè `last_selected_at`. Mọi caller hiện tại truyền **một** địa điểm: kèo luồng A khi tạo (MATCH-001 2.1), kèo luồng B chỉ địa điểm của phương án đã chốt lúc ghép (MATCH-002 2.7) — mỗi lần gọi khoá một dòng `venue`, không có khoá chéo nhiều dòng. Caller sau này truyền nhiều id → phải sắp theo thứ tự cố định và kiểm thứ tự khoá trước khi dùng [Inference — PostgreSQL không bảo đảm thứ tự khoá theo danh sách `IN`].
 
 ### 3.16. Job dọn asset Cloudinary (`cleanupOrphanAssets`)
 
