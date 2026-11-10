@@ -1,4 +1,4 @@
-# API Specification — Kèo luồng A (đã có sân) & vòng đời kèo
+# API Specification — Kèo (luồng A, luồng B) & vòng đời kèo
 
 <!-- File này được publish cho FE (ADR-0010). Viết theo design-standards.md §11:
      không tên class/bảng/cột/migration/transaction/khoá/số truy vấn; không trỏ Component_Class_Design.md,
@@ -9,15 +9,17 @@
 | Mã chức năng | `MATCH-001` |
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo | ArenaFlow-be |
-| Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1; mã lỗi `TEAM_*` dùng lại từ USER-001/USER-002 `API_Spec.md`, `VENUE_*` từ VENUE-001 `API_Spec.md` |
-| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.3) — UC-M01, M03, M04, M08, M09, UC-C01, C02; BR-M01, M02, M04–M06, BR-M09..M18, BR-C01..C04; Business_Rules §2.1, §2.2, §3.1, §4 (BC-M01..M07), §5.2, §5.4, §7.3; AC-M01, M03, M06..M12, AC-C01; Scenario 1, 4, 5, 6, 10, 11 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
+| Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1; mã lỗi `TEAM_*` dùng lại từ USER-001/USER-002 `API_Spec.md`, `VENUE_*` từ VENUE-001 `API_Spec.md`; ghép kèo luồng B (thương lượng, chat) và mã `MATCH_016`: MATCH-002 `API_Spec.md` |
+| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.5) — UC-M01, M02, M03, M04, M08, M09, UC-C01, C02; BR-M01..M06, BR-M09..M18, BR-C01..C05; Business_Rules §2.1, §2.2, §3.1, §4 (BC-M01..M07), §5.2, §5.4, §7.3; AC-M01..M03, M06..M12, AC-C01; Scenario 1, 2 (tạo kèo), 4, 5, 6, 10, 11 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.1** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
 Đội trưởng tạo kèo **luồng A** (đội đã tự đặt sân) cho một bộ môn đang bật. Đội khác tìm kèo và gửi yêu cầu ghép; đội tạo kèo chấp nhận đúng một yêu cầu → kèo `CONFIRMED`, các yêu cầu đang chờ khác → `SUPERSEDED`. Đội tạo kèo nhập thoả thuận chi phí khi kèo còn mở (chỉ để hiển thị — ArenaFlow không thu/giữ tiền). Huỷ kèo hoặc rút yêu cầu **sau khi đã ghép** bị trừ điểm uy tín của đội thực hiện (§1.5). Kèo tự hết hạn / tự lưu trữ theo thời gian (§1.3). Admin bật/tắt bộ môn.
 
-**Ngoài phạm vi:** luồng B — kèo chưa có sân, ghép cặp, chat, tiền cọc (MATCH-002) · đánh giá trận, `ARCHIVED → COMPLETED`, Completion Rate (REPUTATION-001) · tuyển người lẻ (mercenary) · gửi thông báo đẩy (NOTIFICATION-001) · **sửa nội dung kèo sau khi tạo**: không có endpoint sửa; muốn đổi thì huỷ rồi tạo kèo mới (BR-M02, BR-M04) · header `Idempotency-Key` (`api-convention.md` §13) chưa hỗ trợ — FE chặn bấm lặp nút tạo kèo.
+Kèo **luồng B** (`type = NEED_VENUE` — đội chưa có sân) được tạo, tìm, xem, huỷ bằng chính các endpoint ở đây, với 1–5 lựa chọn địa điểm và 1–5 khung giờ thay cho một địa điểm + một giờ. Kèo B **không** nhận yêu cầu ghép (2.6–2.10) và không dùng 2.4: đội khác "nhận kèo" để mở thương lượng, hai đội trưởng chat, chốt địa điểm/giờ, chi phí và tiền cọc, rồi cùng xác nhận — theo MATCH-002 `API_Spec.md`. Khi thương lượng hoàn tất, kèo B `CONFIRMED` có một địa điểm, một khung giờ, một đội đã ghép như kèo A.
+
+**Ngoài phạm vi:** ghép kèo luồng B — thương lượng, chat, chốt địa điểm/giờ, chi phí và tiền cọc của luồng B (MATCH-002) · đánh giá trận, `ARCHIVED → COMPLETED`, Completion Rate (REPUTATION-001) · tuyển người lẻ (mercenary) · gửi thông báo đẩy (NOTIFICATION-001) · **sửa nội dung kèo sau khi tạo**: không có endpoint sửa; muốn đổi thì huỷ rồi tạo kèo mới (BR-M02, BR-M04) · header `Idempotency-Key` (`api-convention.md` §13) chưa hỗ trợ — FE chặn bấm lặp nút tạo kèo.
 
 ### 1.1. Quy ước chung
 
@@ -54,6 +56,7 @@
 - Màn hình mở lâu có thể vượt `expiresAt` mà chưa tải lại → FE so `expiresAt` với giờ hiện tại để ẩn nút thao tác; nhận `MATCH_004` → tải lại chi tiết kèo (2.3).
 - Kèo `CONFIRMED` tự chuyển `ARCHIVED` sau `endsAt`. Hệ thống cập nhật theo chu kỳ 5 phút, nên trong vài phút sau `endsAt` API có thể vẫn trả `CONFIRMED`.
 - Từ `startsAt` trở đi kèo vẫn `CONFIRMED` nhưng không huỷ/rút được nữa (`422 MATCH_012`) → FE ẩn nút huỷ/rút khi giờ hiện tại ≥ `startsAt`.
+- Kèo luồng B: `startsAt` / `endsAt` là khung giờ **sớm nhất** khi chưa ghép, là khung giờ **đã chốt** sau khi ghép. Kèo B hết hạn → thương lượng đang trao đổi cũng `EXPIRED` (MATCH-002 `API_Spec.md` §1.3).
 
 ### 1.4. Huỷ / rút theo trạng thái đang hiển thị (`expectedStatus`)
 
@@ -87,13 +90,13 @@ Huỷ kèo (2.5) và rút yêu cầu (2.10) **bắt buộc** gửi `expectedStat
 
 | # | Method + Path | Dùng khi | Ai gọi được | Thành công |
 |---|---|---|---|---|
-| 2.1 | `POST /api/v1/matches` | Tạo kèo | Đội trưởng của đội tạo kèo | 201 |
+| 2.1 | `POST /api/v1/matches` | Tạo kèo (luồng A hoặc B) | Đội trưởng của đội tạo kèo | 201 |
 | 2.2 | `GET /api/v1/matches` | Tìm kèo đang mở | Người dùng đã đăng nhập | 200 |
 | 2.3 | `GET /api/v1/matches/{matchId}` | Xem chi tiết kèo | Người dùng đã đăng nhập | 200 |
-| 2.4 | `PUT /api/v1/matches/{matchId}/cost-agreement` | Lưu thoả thuận chi phí | Đội trưởng đội tạo kèo | 200 |
+| 2.4 | `PUT /api/v1/matches/{matchId}/cost-agreement` | Lưu thoả thuận chi phí (luồng A) | Đội trưởng đội tạo kèo | 200 |
 | 2.5 | `POST /api/v1/matches/{matchId}/cancel` | Huỷ kèo | Đội trưởng đội tạo kèo, hoặc đội đã ghép (khi `CONFIRMED`) | 200 |
-| 2.6 | `POST /api/v1/matches/{matchId}/requests` | Gửi yêu cầu ghép kèo | Đội trưởng của đội gửi | 201 |
-| 2.7 | `GET /api/v1/matches/{matchId}/requests` | Xem yêu cầu gửi tới kèo của mình | Đội trưởng đội tạo kèo | 200 |
+| 2.6 | `POST /api/v1/matches/{matchId}/requests` | Gửi yêu cầu ghép kèo (luồng A) | Đội trưởng của đội gửi | 201 |
+| 2.7 | `GET /api/v1/matches/{matchId}/requests` | Xem yêu cầu gửi tới kèo của mình (luồng A) | Đội trưởng đội tạo kèo | 200 |
 | 2.8 | `POST /api/v1/match-requests/{requestId}/accept` | Chấp nhận yêu cầu | Đội trưởng đội tạo kèo | 200 |
 | 2.9 | `POST /api/v1/match-requests/{requestId}/reject` | Từ chối yêu cầu | Đội trưởng đội tạo kèo | 204 |
 | 2.10 | `POST /api/v1/match-requests/{requestId}/withdraw` | Rút yêu cầu đã gửi | Đội trưởng đội gửi | 200 |
@@ -109,25 +112,32 @@ Lỗi chung `400 VALIDATION_ERROR`, `401 AUTH_001` (§1.1) áp dụng cho mọi 
 
 ### 2.1. Tạo kèo — `POST /api/v1/matches`
 
-**Dùng khi:** đội trưởng đã đặt sân, đăng kèo tìm đối (UC-M01, AC-M01).
+**Dùng khi:** đội trưởng đăng kèo tìm đối — đã đặt sân (luồng A: UC-M01, AC-M01) hoặc chưa có sân, đưa nhiều lựa chọn địa điểm/giờ (luồng B: UC-M02, AC-M02).
 **Ai gọi được:** đội trưởng của đội `teamId`; đội phải `ACTIVE` (§1.2).
 
 **Request body**
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
 |---|---|---|---|---|
+| `type` | string (enum) | Không | `HAS_VENUE` (luồng A, mặc định khi vắng) \| `NEED_VENUE` (luồng B) | `"NEED_VENUE"` |
 | `teamId` | string (UUID) | Có | Đội tạo kèo | `"01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01"` |
 | `sportId` | string (UUID) | Có | Bộ môn đang bật (2.13) | `"01930000-0000-7000-8000-000000000001"` |
-| `venueId` | string (UUID) | Có | Địa điểm đang hoạt động (VENUE-001) | `"01933a10-4b5c-7d6e-8f70-81a2b3c4d5e1"` |
+| `venueId` | string (UUID) | Luồng A: có · Luồng B: **không gửi** | Địa điểm đang hoạt động (VENUE-001) | `"01933a10-4b5c-7d6e-8f70-81a2b3c4d5e1"` |
+| `venueOptionIds` | string[] (UUID) | Luồng B: có · Luồng A: **không gửi** | 1..5 địa điểm khác nhau, đều đang hoạt động; giữ đúng thứ tự gửi | xem ví dụ luồng B |
 | `format` | string (enum) | Có | `FIVE_A_SIDE` \| `SEVEN_A_SIDE` \| `ELEVEN_A_SIDE` | `"SEVEN_A_SIDE"` |
-| `startsAt` | string (thời gian) | Có | ≥ giờ hiện tại + 1 giờ (BR-M01) | `"2026-11-12T11:00:00Z"` |
-| `endsAt` | string (thời gian) | Có | > `startsAt` và ≤ `startsAt` + 12 giờ | `"2026-11-12T13:00:00Z"` |
-| `expiresAt` | string (thời gian) | Có | > giờ hiện tại; `startsAt` − 7 ngày ≤ `expiresAt` ≤ `startsAt` (BR-M02) | `"2026-11-12T05:00:00Z"` |
+| `startsAt` | string (thời gian) | Luồng A: có · Luồng B: **không gửi** | ≥ giờ hiện tại + 1 giờ (BR-M01) | `"2026-11-12T11:00:00Z"` |
+| `endsAt` | string (thời gian) | Luồng A: có · Luồng B: **không gửi** | > `startsAt` và ≤ `startsAt` + 12 giờ | `"2026-11-12T13:00:00Z"` |
+| `timeOptions` | array | Luồng B: có · Luồng A: **không gửi** | 1..5 khung giờ, `startsAt` không trùng nhau | xem ví dụ luồng B |
+| `timeOptions[].startsAt` | string (thời gian) | Có | ≥ giờ hiện tại + 1 giờ | `"2026-11-12T11:00:00Z"` |
+| `timeOptions[].endsAt` | string (thời gian) | Có | > `startsAt` và ≤ `startsAt` + 12 giờ | `"2026-11-12T13:00:00Z"` |
+| `expiresAt` | string (thời gian) | Có | > giờ hiện tại. Luồng A: `startsAt` − 7 ngày ≤ `expiresAt` ≤ `startsAt` (BR-M02). Luồng B: S − 7 ngày ≤ `expiresAt` ≤ S, với S = `startsAt` sớm nhất trong `timeOptions` (BR-M03) | `"2026-11-12T05:00:00Z"` |
 | `skillLevels` | string[] | Không | ≤ 3 nhãn, không trùng, thuộc 9 nhãn trình độ (§4.1); vắng hoặc `[]` = nhận mọi trình độ | `["Nhiệt tình"]` |
 | `ageNote` | string | Không | ≤ 100 ký tự | `"U23"` |
 | `matchNature` | string | Không | ≤ 200 ký tự | `"Giao hữu"` |
 
-Vi phạm quy tắc thời gian → `400 VALIDATION_ERROR`, `validationErrors[].field` là field vi phạm (`startsAt` / `endsAt` / `expiresAt`). Message của `expiresAt`: "Thời hạn phải trong khoảng tối đa 7 ngày trước giờ đá đến giờ bắt đầu".
+Vi phạm quy tắc thời gian → `400 VALIDATION_ERROR`, `validationErrors[].field` là field vi phạm (`startsAt` / `endsAt` / `expiresAt`; luồng B: `timeOptions[i].startsAt` / `timeOptions[i].endsAt`). Message của `expiresAt`: luồng A "Thời hạn phải trong khoảng tối đa 7 ngày trước giờ đá đến giờ bắt đầu"; luồng B muộn hơn khung giờ sớm nhất: "Thời hạn không được muộn hơn giờ bắt đầu trận sớm nhất" (UC-M02 4a1). Gửi field của luồng kia (vd `venueId` khi `type = NEED_VENUE`), thiếu field bắt buộc của luồng, trùng địa điểm / trùng giờ bắt đầu, quá 5 lựa chọn → `400 VALIDATION_ERROR` gắn field đó.
+
+Ví dụ luồng A:
 
 ```json
 {
@@ -144,7 +154,25 @@ Vi phạm quy tắc thời gian → `400 VALIDATION_ERROR`, `validationErrors[].
 }
 ```
 
-**Response 201** — đối tượng Kèo (§4.2): `status = OPEN`, `opponentTeam = null`, thoả thuận chi phí rỗng. Tạo kèo thành công cũng cập nhật `lastSelectedAt` của địa điểm (VENUE-001).
+Ví dụ luồng B:
+
+```json
+{
+  "type": "NEED_VENUE",
+  "teamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01",
+  "sportId": "01930000-0000-7000-8000-000000000001",
+  "venueOptionIds": ["01933a10-4b5c-7d6e-8f70-81a2b3c4d5e2", "01933a10-4b5c-7d6e-8f70-81a2b3c4d5e3"],
+  "format": "SEVEN_A_SIDE",
+  "timeOptions": [
+    { "startsAt": "2026-11-12T11:00:00Z", "endsAt": "2026-11-12T13:00:00Z" },
+    { "startsAt": "2026-11-12T12:00:00Z", "endsAt": "2026-11-12T14:00:00Z" }
+  ],
+  "expiresAt": "2026-11-12T05:00:00Z",
+  "skillLevels": []
+}
+```
+
+**Response 201** — đối tượng Kèo (§4.2): `status = OPEN`, `opponentTeam = null`, thoả thuận chi phí rỗng. Luồng A: tạo kèo thành công cũng cập nhật `lastSelectedAt` của địa điểm (VENUE-001). Luồng B: `venue = null`, `venueOptions` / `timeOptions` có dữ liệu (`timeOptionId` dùng ở MATCH-002), `startsAt` / `endsAt` = khung giờ sớm nhất; `lastSelectedAt` chỉ cập nhật cho địa điểm được chốt khi ghép. Ví dụ luồng A:
 
 ```json
 {
@@ -177,11 +205,16 @@ Vi phạm quy tắc thời gian → `400 VALIDATION_ERROR`, `validationErrors[].
       "venueStatus": "ACTIVE",
       "primaryImageUrl": null
     },
+    "venueOptions": [],
+    "timeOptions": [],
+    "confirmedPairingId": null,
     "costAgreement": {
       "costType": null,
       "costSplit": null,
       "venueAmount": null,
       "drinksAmount": null,
+      "depositAmount": null,
+      "depositHolder": null,
       "customItems": []
     },
     "cancelledByTeamId": null,
@@ -193,19 +226,50 @@ Vi phạm quy tắc thời gian → `400 VALIDATION_ERROR`, `validationErrors[].
 }
 ```
 
+Ví dụ luồng B (chỉ các field khác luồng A; field còn lại như trên):
+
+```json
+{
+  "data": {
+    "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b02",
+    "type": "NEED_VENUE",
+    "status": "OPEN",
+    "startsAt": "2026-11-12T11:00:00Z",
+    "endsAt": "2026-11-12T13:00:00Z",
+    "expiresAt": "2026-11-12T05:00:00Z",
+    "venue": null,
+    "venueOptions": [
+      { "venueId": "01933a10-4b5c-7d6e-8f70-81a2b3c4d5e2", "venueName": "Sân Y", "address": "10 Lê Lợi, Phường Bến Nghé, TP.HCM",
+        "latitude": 10.7769, "longitude": 106.7009, "venueStatus": "ACTIVE", "primaryImageUrl": null },
+      { "venueId": "01933a10-4b5c-7d6e-8f70-81a2b3c4d5e3", "venueName": "Sân Z", "address": "5 Nguyễn Huệ, Phường Bến Nghé, TP.HCM",
+        "latitude": 10.7740, "longitude": 106.7035, "venueStatus": "ACTIVE", "primaryImageUrl": null }
+    ],
+    "timeOptions": [
+      { "timeOptionId": "01933b70-1a2b-7c3d-8e4f-5a6b7c8d9e11", "startsAt": "2026-11-12T11:00:00Z", "endsAt": "2026-11-12T13:00:00Z" },
+      { "timeOptionId": "01933b70-1a2b-7c3d-8e4f-5a6b7c8d9e12", "startsAt": "2026-11-12T12:00:00Z", "endsAt": "2026-11-12T14:00:00Z" }
+    ],
+    "confirmedPairingId": null,
+    "costAgreement": {
+      "costType": null, "costSplit": null, "venueAmount": null, "drinksAmount": null,
+      "depositAmount": null, "depositHolder": null, "customItems": []
+    }
+  }
+}
+```
+
 **Lỗi**
 
 | HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
-| 400 | `VALIDATION_ERROR` | Sai field / quy tắc thời gian / nhãn trình độ | Hiện lỗi cạnh field |
+| 400 | `VALIDATION_ERROR` | Sai field / quy tắc thời gian / nhãn trình độ / field không đúng luồng / số lựa chọn | Hiện lỗi cạnh field |
 | 403 | `TEAM_002` | Người dùng không phải đội trưởng của `teamId` | Chỉ cho chọn đội mình làm đội trưởng; tải lại danh sách đội |
 | 404 | `TEAM_001` | Không có đội `teamId` | Tải lại danh sách đội |
 | 404 | `SPORT_001` | Không có bộ môn `sportId` | Tải lại danh sách bộ môn (2.13) |
-| 404 | `VENUE_001` | Không có địa điểm `venueId` | Cho chọn lại địa điểm |
+| 404 | `VENUE_001` | Không có địa điểm `venueId` (hoặc một trong `venueOptionIds`) | Cho chọn lại địa điểm |
 | 422 | `TEAM_015` | Đội đang tạm ngưng | Hiện message; không cho tạo kèo bằng đội này |
 | 422 | `TEAM_016` | Đội đã giải tán | Hiện message; tải lại danh sách đội |
 | 422 | `SPORT_002` | Bộ môn đang tắt | Hiện message; tải lại 2.13 |
-| 422 | `VENUE_002` | Địa điểm đã ngừng hoạt động | Hiện message; cho chọn địa điểm khác |
+| 422 | `VENUE_002` | Địa điểm (hoặc một lựa chọn địa điểm) đã ngừng hoạt động | Hiện message; cho chọn địa điểm khác |
 
 ---
 
@@ -214,34 +278,36 @@ Vi phạm quy tắc thời gian → `400 VALIDATION_ERROR`, `validationErrors[].
 **Dùng khi:** màn hình tìm kèo (UC-M03 bước 1).
 **Ai gọi được:** mọi người dùng đã đăng nhập.
 
-Chỉ trả kèo **đang nhận yêu cầu**: `OPEN`, chưa quá `expiresAt`, đội tạo kèo đang `ACTIVE`, bộ môn đang bật.
+Chỉ trả kèo **đang tìm đối**: `OPEN`, chưa quá `expiresAt`, đội tạo kèo đang `ACTIVE`, bộ môn đang bật — cả luồng A và luồng B (lọc bằng `type`).
 
 **Query params**
 
 | Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
 |---|---|---|---|---|
+| `type` | string (enum) | Không | `HAS_VENUE` \| `NEED_VENUE`; vắng = cả hai | `NEED_VENUE` |
 | `sportId` | string (UUID) | Không | — | `01930000-0000-7000-8000-000000000001` |
 | `format` | string (enum) | Không | `FIVE_A_SIDE` \| `SEVEN_A_SIDE` \| `ELEVEN_A_SIDE` | `SEVEN_A_SIDE` |
 | `skillLevel` | string | Không | 1 trong 9 nhãn (§4.1). Khớp kèo có nhãn này **hoặc** kèo nhận mọi trình độ (`skillLevels = []`) | `Nhiệt tình` |
-| `startsAtFrom` | string (thời gian) | Không | Lọc `startsAt` ≥ giá trị này; ≤ `startsAtTo` | `2026-11-12T00:00:00Z` |
-| `startsAtTo` | string (thời gian) | Không | Lọc `startsAt` ≤ giá trị này | `2026-11-13T00:00:00Z` |
+| `startsAtFrom` | string (thời gian) | Không | Lọc `startsAt` ≥ giá trị này; ≤ `startsAtTo`. Kèo B khớp khi **có một** khung giờ thoả | `2026-11-12T00:00:00Z` |
+| `startsAtTo` | string (thời gian) | Không | Lọc `startsAt` ≤ giá trị này (kèo B: có một khung giờ thoả) | `2026-11-13T00:00:00Z` |
 | `lat` | number | Không | [-90, 90]; gửi cùng `lng` | `10.78` |
 | `lng` | number | Không | [-180, 180]; gửi cùng `lat` | `106.70` |
 | `radiusKm` | number | Không | 0.1..50; mặc định `10` khi có toạ độ; chỉ gửi khi có toạ độ | `5` |
 | `page` | integer | Không | ≥ 1, mặc định 1 | `1` |
 | `pageSize` | integer | Không | 1..100, mặc định 20 | `20` |
 
-Có toạ độ: khoảng cách tính tới toạ độ địa điểm của kèo, chỉ trả kèo trong bán kính.
+Có toạ độ: khoảng cách tính tới toạ độ địa điểm của kèo — kèo B: tới lựa chọn địa điểm **gần nhất**; chỉ trả kèo trong bán kính.
 
-**Thứ tự:** có toạ độ → `distanceKm` ↑, `startsAt` ↑, `matchId` ↑; không toạ độ → `startsAt` ↑, `matchId` ↑.
+**Thứ tự:** có toạ độ → `distanceKm` ↑, `startsAt` ↑, `matchId` ↑; không toạ độ → `startsAt` ↑, `matchId` ↑. Kèo B dùng `startsAt` = khung giờ sớm nhất.
 
-**Response 200** — mảng Kèo rút gọn (§4.3) + `pagination`.
+**Response 200** — mảng Kèo rút gọn (§4.3) + `pagination`. Ví dụ một kèo A và một kèo B:
 
 ```json
 {
   "data": [
     {
       "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b01",
+      "type": "HAS_VENUE",
       "status": "OPEN",
       "sportId": "01930000-0000-7000-8000-000000000001",
       "sportName": "Bóng đá",
@@ -258,11 +324,37 @@ Có toạ độ: khoảng cách tính tới toạ độ địa điểm của kè
       "venueId": "01933a10-4b5c-7d6e-8f70-81a2b3c4d5e1",
       "venueName": "Sân bóng Hoa Lư",
       "venueAddress": "2 Đinh Tiên Hoàng, Phường Đa Kao, TP.HCM",
+      "venueOptionCount": null,
+      "timeOptionCount": null,
       "distanceKm": 1.25,
       "createdAt": "2026-11-09T03:00:00Z"
+    },
+    {
+      "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b02",
+      "type": "NEED_VENUE",
+      "status": "OPEN",
+      "sportId": "01930000-0000-7000-8000-000000000001",
+      "sportName": "Bóng đá",
+      "format": "SEVEN_A_SIDE",
+      "skillLevels": [],
+      "startsAt": "2026-11-12T11:00:00Z",
+      "endsAt": "2026-11-12T13:00:00Z",
+      "expiresAt": "2026-11-12T05:00:00Z",
+      "authorTeamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01",
+      "authorTeamName": "Team Alpha",
+      "authorTeamReliabilityScore": 80,
+      "opponentTeamId": null,
+      "opponentTeamName": null,
+      "venueId": null,
+      "venueName": null,
+      "venueAddress": null,
+      "venueOptionCount": 2,
+      "timeOptionCount": 2,
+      "distanceKm": 1.4,
+      "createdAt": "2026-11-10T03:00:00Z"
     }
   ],
-  "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
+  "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 2 }
 }
 ```
 
@@ -270,7 +362,7 @@ Có toạ độ: khoảng cách tính tới toạ độ địa điểm của kè
 
 | HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
-| 400 | `VALIDATION_ERROR` | Chỉ gửi một trong `lat`/`lng`; `radiusKm` khi không có toạ độ; `startsAtFrom` > `startsAtTo`; giá trị ngoài khoảng | Sửa bộ lọc; luôn gửi `lat` + `lng` cùng nhau |
+| 400 | `VALIDATION_ERROR` | Chỉ gửi một trong `lat`/`lng`; `radiusKm` khi không có toạ độ; `startsAtFrom` > `startsAtTo`; giá trị ngoài khoảng; `type` sai | Sửa bộ lọc; luôn gửi `lat` + `lng` cùng nhau |
 
 ---
 
@@ -285,7 +377,7 @@ Có toạ độ: khoảng cách tính tới toạ độ địa điểm của kè
 |---|---|---|---|---|
 | `matchId` | string (UUID) | Có | — | `01933b6e-8f10-7a2c-9d41-2f6c1a7e5b01` |
 
-**Response 200** — đối tượng Kèo (§4.2). `status` là trạng thái hiển thị (§1.3). `venue` luôn là thông tin địa điểm **mới nhất**, kể cả khi địa điểm đã ngừng hoạt động (BR-V10). Ví dụ kèo đã ghép, có thoả thuận chi phí:
+**Response 200** — đối tượng Kèo (§4.2). `status` là trạng thái hiển thị (§1.3). `venue` và `venueOptions` luôn là thông tin địa điểm **mới nhất**, kể cả khi địa điểm đã ngừng hoạt động (BR-V10). Kèo B chưa ghép: `venue = null`, xem `venueOptions` / `timeOptions` (ví dụ ở 2.1). Kèo B đã ghép: `venue`, `startsAt`, `endsAt`, `costAgreement` (gồm tiền cọc) là phương án và thoả thuận đã chốt; `confirmedPairingId` là thương lượng đã chốt (mở lịch sử chat — MATCH-002). Ví dụ kèo A đã ghép, có thoả thuận chi phí:
 
 ```json
 {
@@ -323,11 +415,16 @@ Có toạ độ: khoảng cách tính tới toạ độ địa điểm của kè
       "venueStatus": "ACTIVE",
       "primaryImageUrl": null
     },
+    "venueOptions": [],
+    "timeOptions": [],
+    "confirmedPairingId": null,
     "costAgreement": {
       "costType": "BOTH",
       "costSplit": "FIFTY_FIFTY",
       "venueAmount": 600000,
       "drinksAmount": 100000,
+      "depositAmount": null,
+      "depositHolder": null,
       "customItems": [
         { "itemId": "01933c30-6e7f-7a80-9b1c-2d3e4f5a6b01", "itemName": "Tiền trọng tài", "amount": 200000 }
       ]
@@ -351,10 +448,10 @@ Có toạ độ: khoảng cách tính tới toạ độ địa điểm của kè
 
 ### 2.4. Lưu thoả thuận chi phí — `PUT /api/v1/matches/{matchId}/cost-agreement`
 
-**Dùng khi:** đội tạo kèo nhập / sửa / xoá thoả thuận chi phí trên trang kèo (UC-C01, UC-C02, AC-C01).
+**Dùng khi:** đội tạo kèo **luồng A** nhập / sửa / xoá thoả thuận chi phí trên trang kèo (UC-C01, UC-C02, AC-C01). Kèo luồng B: chi phí + tiền cọc nhập trong thương lượng (MATCH-002 2.6); gọi 2.4 nhận `422 MATCH_016`.
 **Ai gọi được:** đội trưởng đội tạo kèo; đội phải `ACTIVE`; chỉ khi kèo `OPEN` (trước khi ghép) (BR-C03).
 
-Mỗi lần gửi **thay toàn bộ** thoả thuận cũ, kể cả danh sách khoản tự nhập. Gửi lại cùng nội dung cho cùng nội dung thoả thuận; `itemId`, `updatedAt` đổi mỗi lần lưu. Xoá thoả thuận: gửi `costType`, `costSplit`, `venueAmount`, `drinksAmount` là `null` và `customItems: []`. Tiền cọc thuộc MATCH-002.
+Mỗi lần gửi **thay toàn bộ** thoả thuận cũ, kể cả danh sách khoản tự nhập. Gửi lại cùng nội dung cho cùng nội dung thoả thuận; `itemId`, `updatedAt` đổi mỗi lần lưu. Xoá thoả thuận: gửi `costType`, `costSplit`, `venueAmount`, `drinksAmount` là `null` và `customItems: []`. Kèo A không có tiền cọc.
 
 **Request body**
 
@@ -409,6 +506,7 @@ Mỗi lần gửi **thay toàn bộ** thoả thuận cũ, kể cả danh sách k
 | 409 | `MATCH_004` | Kèo đã hết hạn | Tải lại kèo (2.3) |
 | 409 | `MATCH_005` | Kèo đã huỷ / lưu trữ / hoàn thành | Tải lại kèo (2.3) |
 | 409 | `MATCH_014` | Có thao tác khác đang cập nhật kèo cùng lúc | Hiện message; tải lại kèo rồi cho bấm lưu lại |
+| 422 | `MATCH_016` | Kèo luồng B | Nhập chi phí trong thương lượng (MATCH-002 2.6) |
 | 422 | `TEAM_015` | Đội tạo kèo đang tạm ngưng | Hiện message |
 | 422 | `TEAM_016` | Đội tạo kèo đã giải tán | Hiện message; tải lại kèo |
 
@@ -419,13 +517,14 @@ Mỗi lần gửi **thay toàn bộ** thoả thuận cũ, kể cả danh sách k
 **Dùng khi:** nút "Huỷ kèo" trên trang chi tiết kèo (UC-M08, AC-M06, Scenario 4).
 **Ai gọi được:** đội trưởng của đội `teamId`, với `teamId` là:
 - kèo `OPEN`: đội tạo kèo;
-- kèo `CONFIRMED`: đội tạo kèo **hoặc** đội đã ghép. Đội đã ghép huỷ = rút yêu cầu đã được chấp nhận (yêu cầu → `WITHDRAWN`), cùng kết quả với 2.10, trừ điểm một lần (BR-M12).
+- kèo `CONFIRMED`: đội tạo kèo **hoặc** đội đã ghép. Kèo A: đội đã ghép huỷ = rút yêu cầu đã được chấp nhận (yêu cầu → `WITHDRAWN`), cùng kết quả với 2.10, trừ điểm một lần (BR-M12). Kèo B: đội đã ghép là đội nhận kèo của thương lượng đã chốt; thương lượng giữ `CONFIRMED`.
 
 Đội `INACTIVE` vẫn huỷ được (§1.2).
 
 | Kèo đang | Điều kiện | Lý do `reason` | Trừ điểm |
 |---|---|---|---|
-| `OPEN` | Không còn yêu cầu `PENDING` — phải từ chối hết trước (2.9) (BR-M05) | Tuỳ chọn | Không |
+| `OPEN` (luồng A) | Không còn yêu cầu `PENDING` — phải từ chối hết trước (2.9) (BR-M05) | Tuỳ chọn | Không |
+| `OPEN` (luồng B) | Không cần đóng thương lượng trước; mọi thương lượng đang trao đổi → `SUPERSEDED` | Tuỳ chọn | Không |
 | `CONFIRMED` | Trước `startsAt` | **Bắt buộc** | Đội huỷ, theo §1.5 |
 
 Server kiểm trạng thái kèo (`MATCH_004`, `MATCH_005`, `MATCH_015`) **trước** khi kiểm lý do (`MATCH_011`) và giờ trận (`MATCH_012`).
@@ -479,7 +578,7 @@ Server kiểm trạng thái kèo (`MATCH_004`, `MATCH_005`, `MATCH_015`) **trư�
 | 409 | `MATCH_005` | Kèo đã huỷ / lưu trữ / hoàn thành (kể cả bấm huỷ lần hai) | Tải lại kèo (2.3); ẩn nút huỷ |
 | 409 | `MATCH_014` | Có thao tác khác đang cập nhật kèo cùng lúc | Tải lại kèo rồi cho bấm lại |
 | 409 | `MATCH_015` | Trạng thái kèo khác `expectedStatus` (§1.4) — không huỷ, không trừ điểm | Hiện message, tải lại (2.3); người dùng tự bấm lại |
-| 422 | `MATCH_010` | Huỷ kèo `OPEN` khi còn yêu cầu `PENDING` | Hiện message; mở danh sách yêu cầu (2.7) để từ chối hết |
+| 422 | `MATCH_010` | Huỷ kèo A `OPEN` khi còn yêu cầu `PENDING` (không áp cho kèo B) | Hiện message; mở danh sách yêu cầu (2.7) để từ chối hết |
 | 422 | `MATCH_011` | Huỷ kèo `CONFIRMED` không có lý do | Bắt buộc nhập lý do trên hộp xác nhận |
 | 422 | `MATCH_012` | Trận đã bắt đầu (giờ hiện tại ≥ `startsAt`) | Hiện message; ẩn nút huỷ |
 | 422 | `TEAM_016` | Đội `teamId` đã giải tán | Hiện message; tải lại kèo |
@@ -488,7 +587,7 @@ Server kiểm trạng thái kèo (`MATCH_004`, `MATCH_005`, `MATCH_015`) **trư�
 
 ### 2.6. Gửi yêu cầu ghép kèo — `POST /api/v1/matches/{matchId}/requests`
 
-**Dùng khi:** nút "Gửi yêu cầu" trên kèo đang mở (UC-M03).
+**Dùng khi:** nút "Gửi yêu cầu" trên kèo **luồng A** đang mở (UC-M03). Kèo luồng B dùng "Nhận kèo" (MATCH-002 2.1).
 **Ai gọi được:** đội trưởng của đội `teamId`; đội phải `ACTIVE`; không phải đội tạo kèo.
 
 Tạo yêu cầu `PENDING`. Mỗi đội có tối đa một yêu cầu đang hiệu lực cho một kèo: sau khi rút (`WITHDRAWN`) hoặc hết hạn (`EXPIRED`) được gửi lại; sau khi bị từ chối (`REJECTED`) hoặc bị thay thế (`SUPERSEDED`) thì không (`409 MATCH_006`). Hai đội có cùng đội trưởng vẫn gửi được cho nhau (BR-M18).
@@ -540,6 +639,7 @@ Tạo yêu cầu `PENDING`. Mỗi đội có tối đa một yêu cầu đang hi
 | 409 | `MATCH_014` | Có thao tác khác đang cập nhật kèo cùng lúc | Cho bấm gửi lại |
 | 422 | `MATCH_007` | `teamId` là đội tạo kèo | Ẩn nút gửi trên kèo của đội mình |
 | 422 | `MATCH_013` | Đội tạo kèo không còn hoạt động | Hiện message; tải lại kết quả tìm kèo |
+| 422 | `MATCH_016` | Kèo luồng B | Dùng "Nhận kèo" (MATCH-002 2.1) |
 | 422 | `SPORT_002` | Bộ môn của kèo đang tắt | Hiện message; tải lại kết quả tìm kèo |
 | 422 | `TEAM_015` | Đội gửi đang tạm ngưng | Hiện message |
 | 422 | `TEAM_016` | Đội gửi đã giải tán | Hiện message; tải lại danh sách đội |
@@ -548,7 +648,7 @@ Tạo yêu cầu `PENDING`. Mỗi đội có tối đa một yêu cầu đang hi
 
 ### 2.7. Xem yêu cầu gửi tới kèo — `GET /api/v1/matches/{matchId}/requests`
 
-**Dùng khi:** đội tạo kèo xem danh sách đội muốn ghép để chấp nhận / từ chối (UC-M04 bước 1).
+**Dùng khi:** đội tạo kèo **luồng A** xem danh sách đội muốn ghép để chấp nhận / từ chối (UC-M04 bước 1). Kèo luồng B: xem thương lượng (MATCH-002 2.2).
 **Ai gọi được:** đội trưởng đội tạo kèo (đội `INACTIVE` vẫn xem được).
 
 **Query params**
@@ -592,6 +692,7 @@ Tạo yêu cầu `PENDING`. Mỗi đội có tối đa một yêu cầu đang hi
 | 400 | `VALIDATION_ERROR` | `status` ngoài `PENDING`/`ALL`; phân trang sai | Sửa tham số |
 | 403 | `TEAM_002` | Không phải đội trưởng đội tạo kèo | Ẩn mục "Yêu cầu" với người không phải đội trưởng |
 | 404 | `MATCH_001` | Không có kèo | Quay lại danh sách |
+| 422 | `MATCH_016` | Kèo luồng B | Mở danh sách thương lượng (MATCH-002 2.2) |
 | 422 | `TEAM_016` | Đội tạo kèo đã giải tán | Hiện message |
 
 ---
@@ -767,13 +868,14 @@ Bấm rút hai lần: lần sau nhận `MATCH_008` (gửi lần lượt) hoặc 
 
 **Thứ tự:** `startsAt` ↓, `matchId` ↓ (trận gần nhất / tương lai xa nhất lên trước).
 
-**Response 200** — mảng Kèo rút gọn (§4.3) + `pagination`; `distanceKm` luôn `null`.
+**Response 200** — mảng Kèo rút gọn (§4.3) + `pagination` (cả kèo A và B); `distanceKm` luôn `null`.
 
 ```json
 {
   "data": [
     {
       "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b01",
+      "type": "HAS_VENUE",
       "status": "CONFIRMED",
       "sportId": "01930000-0000-7000-8000-000000000001",
       "sportName": "Bóng đá",
@@ -790,6 +892,8 @@ Bấm rút hai lần: lần sau nhận `MATCH_008` (gửi lần lượt) hoặc 
       "venueId": "01933a10-4b5c-7d6e-8f70-81a2b3c4d5e1",
       "venueName": "Sân bóng Hoa Lư",
       "venueAddress": "2 Đinh Tiên Hoàng, Phường Đa Kao, TP.HCM",
+      "venueOptionCount": null,
+      "timeOptionCount": null,
       "distanceKm": null,
       "createdAt": "2026-11-09T03:00:00Z"
     }
@@ -963,7 +1067,8 @@ Cột vai trò = **đội trưởng** của đội đó (§1.2); thành viên th
 
 | Trạng thái (hiển thị) | Đội tạo kèo | Đội đã ghép | Đội khác |
 |---|---|---|---|
-| `OPEN` | Sửa chi phí (2.4) · xem yêu cầu (2.7) · chấp nhận (2.8) / từ chối (2.9) yêu cầu `PENDING` · huỷ (2.5, `expectedStatus = OPEN`) khi không còn yêu cầu `PENDING`, không trừ điểm | — (chưa có) | Gửi yêu cầu (2.6) nếu đội chưa có yêu cầu đang hiệu lực / bị từ chối / bị thay thế; rút yêu cầu của mình khi `PENDING` (2.10) |
+| `OPEN` (luồng A) | Sửa chi phí (2.4) · xem yêu cầu (2.7) · chấp nhận (2.8) / từ chối (2.9) yêu cầu `PENDING` · huỷ (2.5, `expectedStatus = OPEN`) khi không còn yêu cầu `PENDING`, không trừ điểm | — (chưa có) | Gửi yêu cầu (2.6) nếu đội chưa có yêu cầu đang hiệu lực / bị từ chối / bị thay thế; rút yêu cầu của mình khi `PENDING` (2.10) |
+| `OPEN` (luồng B) | Xem thương lượng, chat, chốt phương án, chi phí, xác nhận (MATCH-002) · huỷ (2.5, `expectedStatus = OPEN`) bất kể thương lượng đang mở, không trừ điểm | — (chưa có) | Nhận kèo (MATCH-002 2.1) nếu đội chưa nhận kèo này |
 | `CONFIRMED`, trước `startsAt` | Huỷ (2.5, `expectedStatus = CONFIRMED`, lý do bắt buộc, trừ điểm §1.5) | Huỷ (2.5, `teamId` = đội mình) **hoặc** rút yêu cầu đã chấp nhận (2.10, `expectedStatus = ACCEPTED`) — cùng kết quả, lý do bắt buộc, trừ điểm §1.5 | — |
 | `CONFIRMED`, từ `startsAt` | — (huỷ → `MATCH_012`) | — (huỷ/rút → `MATCH_012`) | — |
 | `ARCHIVED` | — (đánh giá trận thuộc REPUTATION-001) | — (như đội tạo kèo) | — |
@@ -972,7 +1077,9 @@ Cột vai trò = **đội trưởng** của đội đó (§1.2); thành viên th
 | `CANCELLED` | — | — | — |
 
 Ghi chú hiển thị nút:
-- Kèo `OPEN` của đội tạo kèo không `ACTIVE` hoặc bộ môn đang tắt không xuất hiện ở tìm kèo (2.2); nếu mở từ link khác, gửi yêu cầu → `MATCH_013` / `SPORT_002`.
+- Kèo `OPEN` của đội tạo kèo không `ACTIVE` hoặc bộ môn đang tắt không xuất hiện ở tìm kèo (2.2); nếu mở từ link khác, gửi yêu cầu / nhận kèo → `MATCH_013` / `SPORT_002`.
+- Kèo `CONFIRMED` trở đi: hành động như nhau cho cả hai luồng; với kèo B, "đội đã ghép" huỷ bằng 2.5 (không có 2.10).
+- Gọi thao tác của luồng kia (2.4, 2.6, 2.7 trên kèo B; nhận kèo trên kèo A) → `422 MATCH_016`.
 - Đội tạo kèo `INACTIVE`: vẫn huỷ, từ chối được; không sửa chi phí, không chấp nhận (`TEAM_015`) — §1.2.
 - Mã lỗi khi gọi thao tác ở ô "—":
   - Huỷ (2.5) với `teamId` không phải đội tạo kèo, cũng không phải đội đã ghép → `MATCH_009`.
@@ -999,7 +1106,8 @@ Gọi thao tác trên yêu cầu không ở trạng thái cho phép → `MATCH_0
 
 | Kiểu / enum | Giá trị | Ý nghĩa |
 |---|---|---|
-| `type` (kèo) | `HAS_VENUE` | Luồng A — đội tạo kèo đã có sân. (`NEED_VENUE` thuộc MATCH-002, không xuất hiện ở mã này) |
+| `type` (kèo) | `HAS_VENUE` | Luồng A — đội tạo kèo đã có sân |
+| | `NEED_VENUE` | Luồng B — chưa có sân, nhiều lựa chọn địa điểm / khung giờ; ghép qua thương lượng (MATCH-002) |
 | `status` (kèo) | `OPEN` | Đang nhận yêu cầu |
 | | `CONFIRMED` | Đã ghép với một đội |
 | | `ARCHIVED` | Đã qua giờ kết thúc, chờ đánh giá |
@@ -1031,19 +1139,22 @@ Không có loại chi phí "tuỳ chỉnh" — khoản khác nhập qua `customI
 | Field | Kiểu | Ý nghĩa |
 |---|---|---|
 | `matchId` | string (UUID) | |
-| `type` | string | Luôn `HAS_VENUE` |
+| `type` | string | `HAS_VENUE` \| `NEED_VENUE` |
 | `status` | string | Trạng thái hiển thị (§1.3) |
 | `sportId`, `sportName` | string | Bộ môn |
 | `format` | string | §4.1 |
 | `skillLevels` | string[] | Trình độ mong muốn; `[]` = nhận mọi trình độ |
 | `ageNote` | string \| null | Ghi chú độ tuổi |
 | `matchNature` | string \| null | Tính chất trận |
-| `startsAt`, `endsAt` | string (thời gian) | Giờ bắt đầu / kết thúc dự kiến |
-| `expiresAt` | string (thời gian) | Hạn nhận yêu cầu |
+| `startsAt`, `endsAt` | string (thời gian) | Giờ bắt đầu / kết thúc dự kiến. Kèo B chưa ghép: khung giờ sớm nhất; đã ghép: khung giờ đã chốt |
+| `expiresAt` | string (thời gian) | Hạn nhận đối (yêu cầu / thương lượng) |
 | `authorTeam` | object Đội | Đội tạo kèo |
 | `opponentTeam` | object Đội \| null | Đội đã ghép; khác `null` khi kèo đã ghép (`CONFIRMED`, `ARCHIVED`, `COMPLETED`, hoặc `CANCELLED` sau khi ghép) |
-| `venue` | object Địa điểm | Thông tin địa điểm mới nhất |
-| `costAgreement` | object | Thoả thuận chi phí; chưa có → mọi field `null`, `customItems: []` |
+| `venue` | object Địa điểm \| null | Thông tin địa điểm mới nhất. Kèo A: luôn có. Kèo B: `null` khi chưa ghép; địa điểm đã chốt khi đã ghép |
+| `venueOptions` | mảng object Địa điểm | Kèo B: lựa chọn địa điểm, đúng thứ tự đội tạo kèo nhập. Kèo A: `[]` |
+| `timeOptions` | mảng `{ timeOptionId, startsAt, endsAt }` | Kèo B: lựa chọn khung giờ, `startsAt` ↑. Kèo A: `[]` |
+| `confirmedPairingId` | string (UUID) \| null | Kèo B đã ghép: thương lượng đã chốt (MATCH-002). Còn lại: `null` |
+| `costAgreement` | object | Thoả thuận chi phí; chưa có → mọi field `null`, `customItems: []`. Kèo B: rỗng khi chưa ghép; khi đã ghép = bản chép thoả thuận của thương lượng đã chốt tại lúc ghép (khoản tự nhập có `itemId` mới, khác `itemId` trong thương lượng — MATCH-002) |
 | `cancelledByTeamId` | string (UUID) \| null | Đội đã huỷ |
 | `cancelledAt` | string (thời gian) \| null | |
 | `cancelReason` | string \| null | |
@@ -1053,23 +1164,25 @@ Không có loại chi phí "tuỳ chỉnh" — khoản khác nhập qua `customI
 
 **Object Địa điểm** (`venue`): `venueId` string (UUID) · `venueName` string · `address` string · `latitude` number · `longitude` number · `venueStatus` `ACTIVE` \| `INACTIVE` · `primaryImageUrl` string \| null (chưa có ảnh). Địa điểm đã ngừng vẫn hiện trên kèo cũ.
 
-**Object `costAgreement`**: `costType`, `costSplit` (enum \| null) · `venueAmount`, `drinksAmount` (integer \| null) · `customItems` (mảng `{ itemId, itemName, amount }`, đúng thứ tự đội tạo kèo nhập). Chỉ 5 field này — **không** có `matchId`, `updatedAt` (khác response 2.4, §4.5).
+**Object `costAgreement`**: `costType`, `costSplit` (enum \| null) · `venueAmount`, `drinksAmount` (integer \| null) · `depositAmount` (integer \| null — tiền cọc, chỉ kèo B; kèo A luôn `null`) · `depositHolder` (string \| null — người giữ cọc, chỉ kèo B) · `customItems` (mảng `{ itemId, itemName, amount }`, đúng thứ tự đã nhập). Chỉ 7 field này — **không** có `matchId`, `updatedAt` (khác response 2.4, §4.5).
 
 ### 4.3. Kèo rút gọn — phần tử danh sách 2.2, 2.11
 
 | Field | Kiểu | Ý nghĩa |
 |---|---|---|
 | `matchId` | string (UUID) | |
+| `type` | string | `HAS_VENUE` \| `NEED_VENUE` |
 | `status` | string | Trạng thái hiển thị (§1.3) |
 | `sportId`, `sportName` | string | |
 | `format` | string | |
 | `skillLevels` | string[] | `[]` = mọi trình độ |
-| `startsAt`, `endsAt`, `expiresAt` | string (thời gian) | |
+| `startsAt`, `endsAt`, `expiresAt` | string (thời gian) | Kèo B chưa ghép: `startsAt` / `endsAt` = khung giờ sớm nhất |
 | `authorTeamId`, `authorTeamName` | string | Đội tạo kèo |
 | `authorTeamReliabilityScore` | integer | 0..100 |
 | `opponentTeamId`, `opponentTeamName` | string \| null | Đội đã ghép; `null` khi chưa ghép |
-| `venueId`, `venueName`, `venueAddress` | string | Địa điểm (thông tin mới nhất) |
-| `distanceKm` | number \| null | Làm tròn 2 chữ số; `null` khi không gửi toạ độ (luôn `null` ở 2.11) |
+| `venueId`, `venueName`, `venueAddress` | string \| null | Địa điểm (thông tin mới nhất); kèo B chưa ghép: `null` |
+| `venueOptionCount`, `timeOptionCount` | integer \| null | Kèo B: số lựa chọn địa điểm / khung giờ (1..5). Kèo A: `null` |
+| `distanceKm` | number \| null | Làm tròn 2 chữ số; kèo B chưa ghép: tới lựa chọn địa điểm gần nhất; `null` khi không gửi toạ độ (luôn `null` ở 2.11) |
 | `createdAt` | string (thời gian) | |
 
 ### 4.4. Yêu cầu ghép kèo — response 2.6, 2.7, 2.12
@@ -1146,9 +1259,10 @@ Mã dùng lại (message theo `API_Spec.md` của mã gốc):
 | `TEAM_016` | 422 | "Đội đã giải tán" | USER-002 | 2.1, 2.4–2.10, 2.12 |
 | `VENUE_001` | 404 | "Không tìm thấy địa điểm" | VENUE-001 | 2.1 |
 | `VENUE_002` | 422 | "Địa điểm đã ngừng hoạt động" | VENUE-001 | 2.1 |
+| `MATCH_016` | 422 | "Thao tác không áp dụng cho loại kèo này" | MATCH-002 | 2.4, 2.6, 2.7 (gọi trên kèo luồng B) |
 
 Lỗi hệ thống `SYS_*` theo `api-convention.md` §6. `MATCH_009` (403 nghiệp vụ: đội không liên quan tới kèo) khác `AUTH_004` (403 không phải admin).
 
 ## 6. Danh sách [cần xác nhận]
 
-Không còn mục mở. Quyết định nghiệp vụ chốt 2026-11-09 đã đồng bộ vào SRS `SYSTEM-001` v1.3 (BR-M09..BR-M18, BR-C03..BR-C04; AC-M06, AC-M09..AC-M12). `costAgreement` lồng trong Kèo (chi tiết) giữ 5 field (§4.2) — user chốt 2026-11-10.
+Không còn mục mở. Quyết định nghiệp vụ chốt 2026-11-09 đã đồng bộ vào SRS `SYSTEM-001` v1.3 (BR-M09..BR-M18, BR-C03..BR-C04; AC-M06, AC-M09..AC-M12). `costAgreement` lồng trong Kèo (chi tiết): 5 field (user chốt 2026-11-10), từ v2.0 thêm `depositAmount`, `depositHolder` cho kèo luồng B (§4.2). Luồng B chốt 2026-11-10 (MATCH-002); các câu SRS liên quan sẽ được cập nhật sau.

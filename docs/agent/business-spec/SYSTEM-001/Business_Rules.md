@@ -25,22 +25,25 @@
 | **MATCH** | | |
 | BR-M01 | Giờ đá phải trong tương lai (≥ thời điểm hiện tại + 1 giờ) | Khi tạo Match |
 | BR-M02 | Thời hạn bài đăng luồng A: `expires_at ≤ scheduled_start_time` (giờ bắt đầu trận). Không cho đổi ngày trận sau khi Match OPEN; muốn đổi phải hủy và tạo lại. | Khi tạo Match luồng A |
-| BR-M03 | Thời hạn bài đăng luồng B: không muộn hơn giờ bắt đầu trận sớm nhất trong các lựa chọn | Khi tạo Match luồng B |
+| BR-M03 | Luồng B: 1–5 lựa chọn địa điểm và 1–5 khung giờ (hai danh sách riêng). Thời hạn bài đăng: sau thời điểm hiện tại, không muộn hơn giờ bắt đầu sớm nhất trong các khung giờ và không sớm hơn giờ bắt đầu sớm nhất − 7 ngày (2026-11-10) | Khi tạo Match luồng B |
 | BR-M04 | Match CONFIRMED không được sửa giờ/sân/trình độ | Khi cố gắng sửa Match CONFIRMED |
 | BR-M05 | Hủy Match OPEN: phải từ chối tất cả Match_Request PENDING trước | Khi hủy Match OPEN |
 | BR-M06 | Tối đa 1 Match_Request ACCEPTED mỗi Match (ràng buộc dữ liệu) | Khi chấp nhận Match_Request |
-| BR-M07 | Pairing confirmation: cả 2 đội trưởng phải xác nhận qua UI riêng (không phải chat) | Khi xác nhận Pairing |
+| BR-M07 | Pairing confirmation: cả 2 đội trưởng phải xác nhận qua UI riêng (không phải chat). Xác nhận áp cho **gói** đang hiển thị (BR-M19); Pairing chưa có phương án chốt → không xác nhận được (2026-11-10) | Khi xác nhận Pairing |
 | BR-M08 | Luồng B có thể có nhiều Pairing đồng thời (Match vẫn OPEN trong lúc trao đổi) | Khi tạo Pairing |
 | BR-M09 | Hủy Match CONFIRMED hoặc rút Match_Request đã ACCEPTED: chỉ **đội** thực hiện bị trừ Reliability Score của đội; không trừ điểm cá nhân của đội trưởng; đội còn lại không bị trừ (2026-11-09) | Khi hủy Match CONFIRMED, rút request ACCEPTED |
 | BR-M10 | Mức trừ tính theo khoảng cách từ lúc hủy/rút đến giờ bắt đầu trận: từ đủ 24 giờ trở lên → -2; từ đủ 4 giờ đến dưới 24 giờ → -5; dưới 4 giờ → -10 (hủy đúng 24 giờ trước → -2; đúng 4 giờ trước → -5) (2026-11-09) | Khi hủy Match CONFIRMED, rút request ACCEPTED |
 | BR-M11 | Không được hủy Match CONFIRMED hoặc rút Match_Request đã ACCEPTED khi trận đã bắt đầu (đã đến giờ bắt đầu); hệ thống báo "Trận đã bắt đầu, không thể hủy" (2026-11-09) | Khi hủy/rút |
 | BR-M12 | Đội đã ghép rút Match_Request đã ACCEPTED = đội đó hủy kèo: Match chuyển CANCELLED, request chuyển WITHDRAWN, chỉ đội rút bị trừ (BR-M09, BR-M10). Đội đã ghép chọn "Hủy kèo" cho cùng kết quả. Mỗi lần hủy chỉ trừ điểm một lần (2026-11-09) | Khi đội đã ghép rút request / hủy kèo |
 | BR-M13 | Khi hủy kèo hoặc rút request, hệ thống so với trạng thái mà đội trưởng **đang thấy** trên màn hình (kèo: đang mở / đã ghép; request: đang chờ / đã được chấp nhận), kể cả khi màn hình đã cũ từ trước lúc bấm. Trạng thái hiện tại khác (vd kèo đang mở đã được ghép; request đang chờ đã được chấp nhận) → hệ thống từ chối, báo "Trạng thái đã thay đổi, vui lòng tải lại", không hủy/rút và không trừ điểm (2026-11-09) | Khi hủy kèo, rút request |
-| BR-M14 | Đội tạo kèo hoặc đội gửi request đang tạm ngưng (INACTIVE) hoặc đã giải tán: Match OPEN của đội tạo kèo không hiển thị trong tìm kèo; không gửi được request mới; không chấp nhận được request (cả khi đội gửi không còn hoạt động). Hệ thống không tự hủy Match; Match OPEN hết hạn theo thời hạn bài đăng, Match CONFIRMED tiếp tục vòng đời. Đội tạm ngưng vẫn được hủy kèo, từ chối và rút request (2026-11-09) | Khi tìm kèo, gửi/chấp nhận/từ chối/rút request, hủy kèo |
-| BR-M15 | Chỉ tạo kèo cho bộ môn đang bật. Bộ môn bị tắt: Match OPEN của bộ môn không hiển thị trong tìm kèo, không gửi/chấp nhận được request; không tự hủy; Match CONFIRMED tiếp tục vòng đời (2026-11-09) | Khi tạo kèo, tìm kèo, gửi/chấp nhận request, Admin tắt bộ môn |
+| BR-M14 | Đội tạo kèo hoặc đội gửi request đang tạm ngưng (INACTIVE) hoặc đã giải tán: Match OPEN của đội tạo kèo không hiển thị trong tìm kèo; không gửi được request mới; không chấp nhận được request (cả khi đội gửi không còn hoạt động). Hệ thống không tự hủy Match; Match OPEN hết hạn theo thời hạn bài đăng, Match CONFIRMED tiếp tục vòng đời. Đội tạm ngưng vẫn được hủy kèo, từ chối và rút request (2026-11-09). **Luồng B (2026-11-11):** xem thương lượng, nhắn tin và đánh dấu đã đọc luôn được phép. Đội của mình đang tạm ngưng → không nhận kèo, không chốt phương án, không sửa chi phí, không xác nhận ("Đội đang tạm ngưng hoạt động"). Đội còn lại của thương lượng không còn hoạt động → không nhận kèo, không xác nhận ("Đội đối phương hiện không hoạt động"); vẫn chốt phương án và sửa chi phí được | Khi tìm kèo, gửi/chấp nhận/từ chối/rút request, hủy kèo; luồng B: nhận kèo, chốt phương án, sửa chi phí, xác nhận, nhắn tin |
+| BR-M15 | Chỉ tạo kèo cho bộ môn đang bật. Bộ môn bị tắt: Match OPEN của bộ môn không hiển thị trong tìm kèo, không gửi/chấp nhận được request; không tự hủy; Match CONFIRMED tiếp tục vòng đời (2026-11-09). **Luồng B (2026-11-11):** bộ môn của kèo bị tắt → không ai nhận kèo hay xác nhận được ("Bộ môn hiện không được hỗ trợ"); chốt phương án, sửa chi phí, xem và nhắn tin vẫn được | Khi tạo kèo, tìm kèo, gửi/chấp nhận request, Admin tắt bộ môn; luồng B: nhận kèo, xác nhận |
 | BR-M16 | Giới hạn khi tạo kèo: giờ kết thúc dự kiến sau giờ bắt đầu và không quá 12 giờ; trình độ mong muốn tối đa 3 trong 9 nhãn, không chọn = nhận mọi trình độ; ghi chú độ tuổi ≤100 ký tự; tính chất trận ≤200 ký tự. Lý do hủy/từ chối/rút ≤500 ký tự; bắt buộc nhập lý do khi hủy Match CONFIRMED hoặc rút request ACCEPTED (2026-11-09) | Khi tạo kèo, hủy kèo, từ chối/rút request |
-| BR-M17 | Match OPEN đã quá thời hạn bài đăng được hiển thị là EXPIRED ngay khi có người xem, kể cả trước lần cập nhật định kỳ; mọi thao tác trên Match đó (gửi/chấp nhận/từ chối/rút request, hủy, sửa chi phí) bị từ chối với thông báo "Kèo đã hết hạn" và Match chuyển EXPIRED ngay (2026-11-09) | Khi xem/thao tác trên Match quá hạn |
+| BR-M17 | Match OPEN đã quá thời hạn bài đăng được hiển thị là EXPIRED ngay khi có người xem, kể cả trước lần cập nhật định kỳ; mọi thao tác trên Match đó (gửi/chấp nhận/từ chối/rút request, hủy, sửa chi phí; luồng B: nhận kèo, chốt phương án, sửa chi phí của Pairing, xác nhận, nhắn tin) bị từ chối với thông báo "Kèo đã hết hạn" và Match chuyển EXPIRED ngay, kể cả trước lần cập nhật định kỳ; luồng B: các Pairing NEGOTIATING của Match cũng chuyển EXPIRED ngay (2026-11-09, luồng B 2026-11-11) | Khi xem/thao tác trên Match quá hạn |
 | BR-M18 | Hai đội khác nhau có cùng một đội trưởng vẫn được gửi/chấp nhận request cho nhau; hệ thống không kiểm trùng lịch thi đấu giữa các Match của một đội (2026-11-09) | Khi gửi/chấp nhận request |
+| BR-M19 | **Gói thương lượng** (luồng B) = phương án chốt + thỏa thuận chi phí + tiền cọc (kể cả khoản tự nhập) của một Pairing; mỗi Pairing có gói riêng. Phương án chốt = 1 địa điểm trong danh sách lựa chọn địa điểm + 1 khung giờ trong danh sách khung giờ của Match; một trong hai đội trưởng chốt khi Pairing NEGOTIATING. Mỗi lần gói đổi (chốt phương án khác, lưu chi phí) → **xoá xác nhận của cả hai bên**; chốt lại đúng phương án đang có không làm đổi gói. Chốt phương án, lưu chi phí và xác nhận chỉ áp cho gói mà đội trưởng đang thấy: gói đã đổi → từ chối "Phương án đã thay đổi, vui lòng tải lại", đội trưởng xem gói mới rồi tự thao tác lại (2026-11-10) | Khi chốt phương án, lưu chi phí, xác nhận Pairing |
+| BR-M20 | Địa điểm đã ngừng hoạt động không chốt được làm phương án và không xác nhận được phương án đang chứa địa điểm đó ("Địa điểm đã ngừng hoạt động"); hai bên chốt lại địa điểm khác rồi xác nhận lại — nhất quán luồng A (2026-11-10) | Khi chốt phương án, xác nhận Pairing |
+| BR-M21 | Mỗi đội chỉ có một Pairing cho một Match. Không có thao tác rút hay kết thúc Pairing; Pairing chỉ kết thúc khi CONFIRMED, SUPERSEDED hoặc EXPIRED (2026-11-10) | Khi nhận kèo luồng B |
 | **REPUTATION** | | |
 | BR-R01 | Mỗi cặp (Match, đội đánh giá, đội được đánh giá) chỉ được đánh giá 1 lần | Khi đánh giá đối phương |
 | BR-R02 | Chỉ hiển thị Completion Rate khi ≥5 trận đã chốt; trước đó hiển thị "Mới tham gia X/5 trận" | Khi hiển thị Completion Rate |
@@ -69,9 +72,11 @@
 | BR-C02 | Số tiền phải > 0 | Khi nhập thỏa thuận chi phí |
 | BR-C03 | Luồng A: chỉ đội trưởng đội tạo kèo nhập/sửa thỏa thuận chi phí, và chỉ khi Match đang OPEN; mỗi lần lưu thay toàn bộ thỏa thuận cũ (kể cả danh sách khoản tự nhập) (2026-11-09) | Khi nhập thỏa thuận chi phí luồng A |
 | BR-C04 | Loại chi phí chỉ gồm: tiền sân, tiền nước, hoặc cả hai (không có loại "tùy chỉnh"). Khoản tự nhập là danh sách riêng, tối đa 10 khoản; tên khoản ≤100 ký tự; mọi số tiền > 0 và ≤ 1.000.000.000 VND. Cách chia "đội thua trả toàn bộ tiền nước" chỉ chọn được khi có tiền nước (2026-11-09) | Khi nhập thỏa thuận chi phí |
+| BR-C05 | Luồng B: thỏa thuận chi phí thuộc Pairing trong lúc thương lượng; hai đội trưởng của Pairing đều nhập/sửa được khi Pairing NEGOTIATING; mỗi lần lưu thay toàn bộ thỏa thuận cũ (kể cả khoản tự nhập) và xoá xác nhận của cả hai bên (BR-M19). Tiền cọc (chỉ luồng B): số tiền cọc 1..1.000.000.000 VND hoặc không có cọc; "ai giữ tiền cọc" (văn bản ≤100 ký tự) chỉ nhập khi có số tiền cọc; không chia tiền cọc. Khi Pairing CONFIRMED, chi phí + tiền cọc + khoản tự nhập được **chép** sang Match (Pairing giữ nguyên thỏa thuận của mình) (2026-11-10, chép khoản tự nhập 2026-11-11) | Khi nhập thỏa thuận chi phí luồng B, khi ghép kèo luồng B |
 | **NOTIFICATION** | | |
-| BR-N01 | Chat lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED) | Khi lưu chat |
+| BR-N01 | Chat lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED/EXPIRED) — vd kèo luồng B hết hạn 12/11/2026 → chat của các thương lượng trên kèo đó bị xóa ngày 10/02/2027 (EXPIRED bổ sung 2026-11-11) | Khi lưu chat |
 | BR-N02 | Notification lưu 30 ngày | Khi tạo notification |
+| BR-N03 | Tin nhắn chat (luồng B): nội dung 1..1000 ký tự. Mỗi tin hiển thị tên đội gửi (tên hiện tại của đội) + tên và ảnh của **người thực sự đã gửi**; tin cũ giữ người gửi lúc đó dù đội đã chuyển quyền đội trưởng; người gửi đã xóa tài khoản → "Người dùng đã xóa", không ảnh. Đầu phòng chat hiển thị tên hai đội + đội trưởng hiện tại của mỗi đội (2026-11-10) | Khi gửi và hiển thị tin nhắn |
 
 ---
 
@@ -147,9 +152,9 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     [*] --> NEGOTIATING: Đội nhận bài đăng luồng B
-    NEGOTIATING --> CONFIRMED: Cả 2 đội trưởng xác nhận
+    NEGOTIATING --> CONFIRMED: Cả 2 đội trưởng xác nhận cùng gói
     NEGOTIATING --> EXPIRED: Match hết hạn
-    NEGOTIATING --> SUPERSEDED: Pairing khác CONFIRMED / Match CONFIRMED/CANCELLED
+    NEGOTIATING --> SUPERSEDED: Pairing khác CONFIRMED / Match CANCELLED (khi OPEN)
     CONFIRMED --> [*]
     EXPIRED --> [*]
     SUPERSEDED --> [*]
@@ -159,14 +164,14 @@ stateDiagram-v2
 
 | Từ | Đến | Điều kiện | Actor | Ghi chú |
 |---|---|---|---|---|
-| — | NEGOTIATING | Đội nhận bài đăng luồng B | Team Captain | Khởi tạo; mở chat |
-| NEGOTIATING | CONFIRMED | Cả 2 đội trưởng xác nhận qua UI riêng | Team Captain (cả 2) | Match chuyển CONFIRMED |
+| — | NEGOTIATING | Đội nhận bài đăng luồng B (mỗi đội một Pairing cho một Match — BR-M21) | Team Captain | Khởi tạo; mở chat |
+| NEGOTIATING | CONFIRMED | Cả 2 đội trưởng xác nhận cùng gói qua UI riêng; Pairing đã có phương án chốt (BR-M07, BR-M19) | Team Captain (cả 2) | Match chuyển CONFIRMED |
 | NEGOTIATING | EXPIRED | Match hết hạn (`expires_at` ≤ now) | System | Theo expires_at của Match |
-| NEGOTIATING | SUPERSEDED | Pairing khác CONFIRMED hoặc Match chuyển CONFIRMED/CANCELLED | System | Race condition: pairing có timestamp xác nhận cuối sớm hơn thắng |
+| NEGOTIATING | SUPERSEDED | Pairing khác của Match CONFIRMED, hoặc Match bị hủy khi OPEN | System | Race condition: Pairing hoàn tất trước thắng (xem dưới). Pairing không có trạng thái CANCELLED; đội tạo kèo không phải đóng Pairing trước khi hủy (BC-M04) |
 
-**Race condition:** Nếu 2 pairing cùng được xác nhận gần đồng thời, pairing có **timestamp xác nhận cuối sớm hơn thắng**; pairing kia chuyển SUPERSEDED.
+**Race condition:** Nếu 2 pairing của cùng Match được hoàn tất gần đồng thời, pairing **hoàn tất trước** (lần xác nhận của bên thứ hai được ghi nhận trước) thắng; thời điểm hoàn tất được lưu trên pairing thắng. Pairing kia chuyển SUPERSEDED; lần xác nhận của nó bị từ chối với "Thương lượng đã kết thúc".
 
-> **Implementation note:** Optimistic Lock với JPA `@Version` trên entity Match, retry max 3 lần khi conflict. Frontend không gửi version; backend tự đọc version hiện tại khi xử lý request.
+> **Implementation note:** FE gửi `revision` (phiên bản gói) đang hiển thị khi chốt phương án, lưu chi phí, xác nhận; lệch → từ chối "Phương án đã thay đổi, vui lòng tải lại". Pairing cập nhật bằng CAS trên trạng thái + `revision`, Match bằng CAS trên version; retry tối đa 3 lần khi xung đột (ADR-0003 Sửa đổi 2026-11-10).
 
 **Trạng thái terminal:** CONFIRMED, EXPIRED, SUPERSEDED
 
@@ -350,7 +355,7 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 | BC-M01 | Match CONFIRMED: không được sửa giờ/sân/trình độ; muốn thay đổi phải hủy |
 | BC-M02 | Hủy Match OPEN: phải từ chối mọi Match_Request PENDING trước khi Match có thể chuyển CANCELLED |
 | BC-M03 | Tối đa 1 Match_Request ACCEPTED mỗi Match (ràng buộc dữ liệu: unique constraint hoặc check) |
-| BC-M04 | Khi Match chuyển CONFIRMED hoặc CANCELLED: mọi Pairing đang NEGOTIATING và mọi Match_Request PENDING tự chuyển SUPERSEDED (nếu CONFIRMED) hoặc CANCELLED (nếu Match CANCELLED). **Làm rõ 2026-11-09:** Match_Request không có trạng thái CANCELLED; luồng A không còn request PENDING khi Match bị hủy (OPEN phải từ chối hết trước — BR-M05; CONFIRMED đã không còn request PENDING) |
+| BC-M04 | Khi Match chuyển CONFIRMED: mọi Pairing đang NEGOTIATING khác và mọi Match_Request PENDING tự chuyển SUPERSEDED. Khi Match bị hủy lúc OPEN (luồng B): mọi Pairing đang NEGOTIATING tự chuyển **SUPERSEDED**; đội tạo kèo không phải đóng Pairing trước khi hủy. **Làm rõ 2026-11-09:** Match_Request không có trạng thái CANCELLED; luồng A không còn request PENDING khi Match bị hủy (OPEN phải từ chối hết trước — BR-M05; CONFIRMED đã không còn request PENDING). **Sửa 2026-11-10:** Pairing không có trạng thái CANCELLED |
 | BC-M05 | Thời gian lưu theo UTC trong DB; frontend convert theo timezone thiết bị |
 | BC-M06 | Pairing hết hạn theo `expires_at` của bài đăng |
 | BC-M07 | Match_Request hết hạn theo `expires_at` của bài đăng; không có timeout riêng |
@@ -373,16 +378,16 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 | BC-V02 | Chỉ 1 ảnh is_primary=true mỗi venue (unique constraint hoặc check) |
 | BC-V03 | Report địa điểm không tự ẩn địa điểm; admin xác minh rồi đánh dấu ngừng hoạt động |
 | BC-V04 | Địa điểm ngừng hoạt động bị loại khỏi gợi ý mặc định; Match cũ giữ tham chiếu |
-| BC-V05 | Admin cảnh báo 1 lần khi địa điểm không được chọn trong 180 ngày hoặc có báo cáo ngừng hoạt động; không nhắc định kỳ |
+| BC-V05 | Admin cảnh báo 1 lần khi địa điểm không được chọn trong 180 ngày hoặc có báo cáo ngừng hoạt động; không nhắc định kỳ. Luồng B: địa điểm "được chọn" = địa điểm của phương án đã chốt, tính tại lúc kèo được ghép (không tính các lựa chọn địa điểm lúc tạo kèo) (2026-11-10) |
 | BC-V06 | Chỉ người tạo địa điểm hoặc Admin được sửa địa điểm và xóa ảnh; người khác dùng report "thông tin sai" |
 | BC-V07 | Không trùng report chờ xử lý cho cùng (user, địa điểm, lý do) |
 | **COST** | |
 | BC-C01 | ArenaFlow chỉ lưu thỏa thuận để hiển thị; không thu/giữ tiền hay xử lý thanh toán |
 | BC-C02 | Tiền tệ mặc định VND trong MVP |
 | **NOTIFICATION & CHAT** | |
-| BC-N01 | Chat lưu 90 ngày sau khi Match kết thúc (COMPLETED, ARCHIVED, hoặc CANCELLED) |
+| BC-N01 | Chat lưu 90 ngày sau khi Match kết thúc (COMPLETED, ARCHIVED, CANCELLED hoặc EXPIRED) |
 | BC-N02 | Notification lưu 30 ngày |
-| BC-N03 | Thời điểm bắt đầu retention chat: khi Match chuyển sang COMPLETED, ARCHIVED, hoặc CANCELLED (tính từ lúc hủy) |
+| BC-N03 | Thời điểm bắt đầu retention chat: khi Match chuyển sang COMPLETED, ARCHIVED, CANCELLED (tính từ lúc hủy) hoặc EXPIRED (tính từ lúc hết hạn — bổ sung 2026-11-11) |
 
 ---
 
@@ -415,7 +420,8 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 | Tạo kèo (luồng A hoặc B) | Tạo kèo cho đội khác |
 | Gửi Match Request cho kèo của đội khác | Chấp nhận request cho kèo của đội khác |
 | Chấp nhận/Từ chối Match Request cho kèo của mình | Chấp nhận nhiều request (tối đa 1 ACCEPTED) |
-| Tạo Pairing (luồng B) | — |
+| Tạo Pairing (luồng B) | Tạo Pairing cho kèo của đội mình; tạo Pairing thứ hai cho cùng kèo (BR-M21) |
+| Chốt phương án, nhập/sửa thỏa thuận chi phí + tiền cọc của Pairing mà đội mình tham gia, khi Pairing NEGOTIATING — cả đội tạo kèo lẫn đội nhận (luồng B — BR-M19, BR-C05) | Thao tác trên Pairing mà đội mình không tham gia |
 | Xác nhận Pairing (cả 2 bên phải xác nhận) | Xác nhận 1 bên (cần cả 2) |
 | Hủy kèo đội mình tạo (OPEN hoặc CONFIRMED) hoặc kèo đội mình đã ghép (CONFIRMED), trước giờ bắt đầu trận (BR-M11) | Hủy kèo không liên quan đến đội mình |
 | Nhập/sửa thỏa thuận chi phí kèo đội mình tạo khi kèo đang OPEN (luồng A — BR-C03) | Sửa thỏa thuận chi phí kèo của đội khác |
@@ -458,7 +464,7 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 | Chuyển Match sang ARCHIVED khi đến giờ kết thúc dự kiến | Chuyển sang COMPLETED (phải có đánh giá) |
 | Gửi push notification "Trận đấu hôm nay thế nào?" | — |
 | Tự động chấp nhận report và trừ Reliability Score | Tự bác report (chỉ admin qua tranh chấp) |
-| Chuyển Pairing/Request PENDING sang SUPERSEDED khi Match CONFIRMED | — |
+| Chuyển Pairing/Request PENDING sang SUPERSEDED khi Match CONFIRMED; chuyển Pairing NEGOTIATING sang SUPERSEDED khi Match bị hủy lúc OPEN (BC-M04) | — |
 | Xóa chat/notification hết retention | Xóa trước retention |
 | Reset bộ đếm số lần report sau 5 trận sạch | — |
 | Cấp/thu hồi Verification Badge | — |
@@ -545,8 +551,8 @@ Sau khi hoàn thành **5 trận sạch liên tiếp**, tất cả bộ đếm s�
 ## 8. Quyết định bổ sung đã chốt
 
 ### 8.1. Cost Agreement (Luồng B)
-- **Quyết định:** Một bên đề xuất thỏa thuận chi phí, bên kia xem trong chat/bảng tin. Không cần xác nhận riêng.
-- **Lý do:** Xác nhận Pairing đã là đồng ý cả package (giờ/sân/chi phí). Thêm bước xác nhận riêng cho chi phí làm phức tạp UX không cần thiết.
+- **Quyết định:** Một trong hai đội trưởng nhập/sửa thỏa thuận chi phí trên Pairing, bên kia xem trên màn hình thương lượng. Không cần xác nhận riêng; sửa chi phí xoá xác nhận của cả hai bên (BR-C05, BR-M19 — sửa 2026-11-10).
+- **Lý do:** Xác nhận Pairing đã là đồng ý cả gói (giờ/sân/chi phí/tiền cọc). Thêm bước xác nhận riêng cho chi phí làm phức tạp UX không cần thiết.
 
 ### 8.2. Verification Badge Revocation
 - **Quyết định:** Thu hồi badge ngay lập tức khi điều kiện không còn đủ (Reliability <70, rating ≤3, phone unlinked, hoặc ≤5 trận).

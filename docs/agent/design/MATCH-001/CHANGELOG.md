@@ -1,4 +1,44 @@
-# CHANGELOG — MATCH-001 Kèo luồng A (đã có sân) & vòng đời kèo
+# CHANGELOG — MATCH-001 Kèo (luồng A, luồng B) & vòng đời kèo
+
+## [v2.1] — 2026-11-11
+
+**Type:** MINOR (không đổi endpoint, method, field, kiểu, mã thành công, mã lỗi, message) · **Tóm tắt:** Ghi rõ khoản tự nhập của kèo luồng B đã ghép là bản chép từ thương lượng; cập nhật tài liệu nội bộ BE cho MATCH-002.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | §4.2 `costAgreement` — response 2.1, 2.3 | Ghi rõ | Kèo B đã ghép: "thoả thuận của thương lượng đã chốt" → bản chép tại lúc ghép; `customItems[].itemId` là id mới, khác `itemId` trong thương lượng (MATCH-002 2.4) | Kèo đã ghép hiển thị thoả thuận chi phí ở một chỗ (trên kèo) cho cả hai luồng | Không so `itemId` giữa kèo và thương lượng |
+| 1a | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | MATCH-002 hiển thị đội trưởng hiện tại của hai đội; kèo đọc khoản tự nhập theo kèo cho cả hai luồng | Không |
+| 2 | Tiêu đề `CHANGELOG.md` | Sửa | "Kèo luồng A (đã có sân) & vòng đời kèo" → "Kèo (luồng A, luồng B) & vòng đời kèo" | Khớp phạm vi từ v2.0 và tiêu đề `API_Spec.md` | Không |
+| 3 | Header tài liệu thiết kế MATCH-001 | Ghi nhận | v2.0 → v2.1 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- Hợp đồng API: không đổi field / mã; chỉ ghi rõ nguồn khoản tự nhập của kèo B đã ghép.
+- Nghiệp vụ / SRS: khoản tự nhập chép sang kèo khi ghép — câu SRS liên quan cập nhật riêng (MATCH-002).
+
+## [v2.0] — 2026-11-10
+
+**Type:** MAJOR (response kèo đổi cấu trúc: field mới, `venue` và field địa điểm có thể `null`, `type` có thêm giá trị) · **Tóm tắt:** Thêm kèo luồng B (`NEED_VENUE` — chưa có sân) vào tạo / tìm / xem / huỷ kèo; ghép kèo luồng B theo MATCH-002.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | 2.1 request | Thêm | — → `type` (`HAS_VENUE` mặc định \| `NEED_VENUE`), `venueOptionIds` (1..5), `timeOptions` (1..5 `{startsAt, endsAt}`); `venueId`, `startsAt`, `endsAt` chỉ bắt buộc ở luồng A, không gửi ở luồng B; luồng B: `expiresAt` trong [khung giờ sớm nhất − 7 ngày, khung giờ sớm nhất] | UC-M02, AC-M02, BR-M03 (user chốt 2026-11-10: 1–5 lựa chọn, cận 7 ngày) | Luồng A không phải đổi (vắng `type` = `HAS_VENUE`). Màn hình "Chưa có sân" gửi theo ví dụ luồng B |
+| 2 | §4.2 Kèo (chi tiết) — response 2.1, 2.3 | Sửa | `type` luôn `HAS_VENUE` → `HAS_VENUE` \| `NEED_VENUE`; `venue` luôn có → `null` ở kèo B chưa ghép; thêm `venueOptions`, `timeOptions` (`[]` ở kèo A), `confirmedPairingId`; `costAgreement` 5 → 7 field (thêm `depositAmount`, `depositHolder`, chỉ kèo B) | Hiển thị kèo B và phương án đã chốt | Xử lý `venue = null`; đọc thêm field mới; kèo B chưa ghép hiển thị danh sách lựa chọn |
+| 3 | §4.3 Kèo rút gọn — 2.2, 2.11 | Sửa | Thêm `type`, `venueOptionCount`, `timeOptionCount` (`null` ở kèo A); `venueId`, `venueName`, `venueAddress` string → string \| null (`null` ở kèo B chưa ghép) | Danh sách có cả kèo B | Xử lý field địa điểm `null`; hiện "Nhiều lựa chọn" cho kèo B |
+| 4 | 2.2 | Sửa | Chỉ kèo A → cả kèo A và B; thêm query `type`; kèo B khớp `startsAtFrom`/`startsAtTo` khi có một khung giờ thoả; `distanceKm` kèo B = tới lựa chọn địa điểm gần nhất | UC-M02 "hiển thị trong danh sách tìm kèo" | Lọc `type=HAS_VENUE` nếu màn hình chỉ muốn kèo A |
+| 5 | §1.3, §4.2 | Ghi rõ | Kèo B: `startsAt`/`endsAt` = khung giờ sớm nhất khi chưa ghép, khung giờ đã chốt khi đã ghép | Kèo B chưa có một giờ cố định | Hiển thị theo `type` |
+| 6 | 2.4, 2.6, 2.7 | Thêm | — → `422 MATCH_016` khi gọi trên kèo B (mã định nghĩa ở MATCH-002) | Kèo B ghép và nhập chi phí qua thương lượng | Ẩn các nút này trên kèo B; dùng MATCH-002 |
+| 7 | 2.5 | Thêm | Huỷ kèo B `OPEN`: không cần đóng thương lượng trước, mọi thương lượng đang trao đổi → `SUPERSEDED`; `MATCH_010` chỉ áp cho kèo A. Huỷ kèo B `CONFIRMED`: như kèo A, đội đã ghép = đội nhận kèo | User chốt 2026-11-10 | Không đổi cách gọi |
+| 8 | §3.1 | Thêm | Hàng `OPEN` (luồng B) và ghi chú cho kèo B | Bảng hành động theo trạng thái | Dùng để hiện nút cho kèo B |
+| 9 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE ngoài các mục trên | — | — |
+| 10 | Header `API_Spec.md` | Ghi nhận | v1.1 → v2.0 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract: đổi cấu trúc response 2.1, 2.2, 2.3, 2.11 (MAJOR); thêm field request 2.1 và mã lỗi `MATCH_016` (tương thích ngược với cách gọi luồng A).
+- Nghiệp vụ / SRS: luồng B chốt 2026-11-10; câu SRS `SYSTEM-001` liên quan được cập nhật riêng.
 
 ## [v1.1] — 2026-11-10
 

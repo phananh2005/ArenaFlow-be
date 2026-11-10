@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · Cloudinary (ký/xác minh cục bộ trong request; Admin API chỉ trong job dọn asset) |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §10 · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) (`Proposed`) |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (§5.1); entity hiện có `domain/.../entity/venue/{Venue,VenueImage,VenueReport}` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v1.3** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -28,7 +28,7 @@ common/        com.phananh.arenaflow.common
 domain/        com.phananh.arenaflow.domain
 ├── entity/venue/    Venue, VenueImage, VenueReport (sửa — §6)
 ├── repository/      VenueRepository, VenueImageRepository, VenueReportRepository (mới)
-└── projection/      VenueDetailView, VenueSummaryView, VenueImageStatsView, VenueStatusView,
+└── projection/      VenueDetailView, VenueSummaryView, VenueImageStatsView, SelectableVenueView,
                      StaleVenueView, AdminVenueReportView (mới)
 
 application/   com.phananh.arenaflow.application
@@ -170,10 +170,11 @@ public record SignedPublicId(String scopePath, Instant signedAt, String nonce, S
 
 ### 4.6. VenueSelectionService — port cho MATCH-001
 ```java
-void requireSelectable(Collection<UUID> venueIds);                    // readOnly; thiếu id → VENUE_001; có INACTIVE → VENUE_002; 1 truy vấn
+List<SelectableVenueView> requireSelectable(Collection<UUID> venueIds); // readOnly; thiếu id → VENUE_001; có INACTIVE → VENUE_002; 1 truy vấn;
+                                                                       // trả thông tin hiển thị theo thứ tự venueIds
 void markSelected(Collection<UUID> venueIds, OffsetDateTime selectedAt); // MANDATORY; 1 truy vấn bulk, reset cổng 180 ngày
 ```
-`MANDATORY` để `last_selected_at` rollback cùng kèo. Thời điểm "được chọn" do MATCH-001 quyết định.
+`MANDATORY` để `last_selected_at` rollback cùng kèo. Thời điểm "được chọn" do MATCH-001 quyết định (luồng B: chỉ địa điểm đã chốt, lúc hoàn tất xác nhận — MATCH-002 `Component_Class_Design.md` §4.4). `requireSelectable` trả `SelectableVenueView` để kèo luồng B dựng response 2.1 (MATCH-001) không cần đọc lại địa điểm; caller không cần thông tin hiển thị thì bỏ qua giá trị trả về.
 
 ### 4.7. Domain event (`application/event`)
 ```java
@@ -238,7 +239,10 @@ public record AssetPage(List<String> publicIds, String nextCursor) {}
 ### 5.1. Migration `V5__venue_management.sql`
 
 ```sql
--- venue: khoá lạc quan, cổng cảnh báo 1 lần, loại sân, nhất quán INACTIVE
+-- venue: người tạo không mất khi xoá user, khoá lạc quan, cổng cảnh báo 1 lần, loại sân, nhất quán INACTIVE
+ALTER TABLE venue DROP CONSTRAINT venue_created_by_user_id_fkey;
+ALTER TABLE venue ADD CONSTRAINT venue_created_by_user_id_fkey
+    FOREIGN KEY (created_by_user_id) REFERENCES "user"(id) ON DELETE RESTRICT;
 ALTER TABLE venue ADD COLUMN version BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE venue ADD COLUMN stale_alerted_at TIMESTAMPTZ;
 ALTER TABLE venue ADD COLUMN closure_alerted_at TIMESTAMPTZ;
@@ -257,7 +261,10 @@ UPDATE venue_image SET public_id = 'legacy/' || id::text WHERE public_id IS NULL
 ALTER TABLE venue_image ALTER COLUMN public_id SET NOT NULL;
 CREATE UNIQUE INDEX uq_venue_image_public_id ON venue_image(public_id);
 
--- venue_report: lý do dạng mã + chi tiết, trạng thái xử lý, chống trùng
+-- venue_report: người báo cáo không mất khi xoá user (NOT NULL), lý do dạng mã + chi tiết, trạng thái xử lý, chống trùng
+ALTER TABLE venue_report DROP CONSTRAINT venue_report_reporter_id_fkey;
+ALTER TABLE venue_report ADD CONSTRAINT venue_report_reporter_id_fkey
+    FOREIGN KEY (reporter_id) REFERENCES "user"(id) ON DELETE RESTRICT;
 ALTER TABLE venue_report ADD COLUMN detail TEXT;
 UPDATE venue_report SET detail = reason, reason = 'OTHER';
 ALTER TABLE venue_report ALTER COLUMN reason TYPE VARCHAR(20);
@@ -274,7 +281,9 @@ CREATE UNIQUE INDEX uq_venue_report_pending ON venue_report(reporter_id, venue_i
 ```
 - Chỉ delta spec/thiết kế cần: khoá + cổng cảnh báo (BC-V05), CHECK loại sân (BR-V05; giữ kiểu cột V1), `public_id` (ADR-0009), trạng thái report (Data Model §2.4), chống trùng report (BR-V09).
 - Dữ liệu cũ (chưa kiểm số dòng Neon dev — developer kiểm khi lập kế hoạch): `UPDATE` giữ migration chạy được; `venue_type` lạ → `NULL`; report trùng `(reporter_id, venue_id, 'OTHER')` sẽ làm `uq_venue_report_pending` lỗi → dừng, báo, không tự xoá.
-- `handled_by ON DELETE RESTRICT` nhất quán `team.disbanded_by`. Không ràng buộc ≤5 ảnh / unique `display_order` ở DB (tuần tự hoá bằng khoá dòng `venue`). Không index cho job 180 ngày (1 lần/ngày). Giữ bất nhất V1 `reporter_id NOT NULL` + `ON DELETE SET NULL` (user chỉ soft-delete).
+- `handled_by ON DELETE RESTRICT` nhất quán `team.disbanded_by`. Không ràng buộc ≤5 ảnh / unique `display_order` ở DB (tuần tự hoá bằng khoá dòng `venue`). Không index cho job 180 ngày (1 lần/ngày).
+- `venue.created_by_user_id`: V1 khai `ON DELETE SET NULL` + CHECK `venue_check` (`created_by_type = 'USER'` ⇒ `created_by_user_id IS NOT NULL`) — cùng mâu thuẫn (xoá cứng user tạo địa điểm sẽ lỗi CHECK). Đổi `ON DELETE RESTRICT`, giữ tên `venue_created_by_user_id_fkey` (Neon dev `misty-dew-90700890`, kiểm 2026-11-11).
+- `reporter_id`: V1 khai `NOT NULL` + `ON DELETE SET NULL` (mâu thuẫn — xoá cứng user sẽ lỗi NOT NULL). Đổi `ON DELETE RESTRICT`: khớp `NOT NULL` và chính sách chỉ xoá mềm user (ADR-0002); cùng thay đổi cho `chat_message.sender_user_id` ở V7 (MATCH-002 §5.1). Giữ tên constraint V1 `venue_report_reporter_id_fkey` (Neon dev `misty-dew-90700890`, kiểm 2026-11-10). Index `idx_venue_report_reporter` của V1 giữ nguyên.
 - **Xoá ảnh = hard-delete** dòng `venue_image` (lệch có chủ đích, §10).
 
 ### 5.2. Repository
@@ -291,7 +300,7 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
             double minLat, double maxLat, double minLng, double maxLng, Pageable p);      // literal 'ACTIVE'
     Page<VenueSummaryView> searchNearbyAny(String status /* null = ALL */, String qPattern, double lat, double lng,
             double radiusKm, double minLat, double maxLat, double minLng, double maxLng, Pageable p);
-    List<VenueStatusView> findStatusesByIdIn(Collection<UUID> ids);
+    List<SelectableVenueView> findSelectableByIdIn(Collection<UUID> ids);  // LEFT JOIN venue_image ảnh chính
     @Modifying int markClosureAlerted(UUID id, OffsetDateTime now);        // WHERE status='ACTIVE' AND closure_alerted_at IS NULL
     @Modifying int reopenClosureAlertIfNoPending(UUID id);                 // WHERE closure_alerted_at IS NOT NULL AND NOT EXISTS report CLOSED PENDING
     @Modifying int markSelected(Collection<UUID> ids, OffsetDateTime selectedAt);
@@ -330,7 +339,7 @@ Ghi chú SQL:
 | `VenueDetailView` | cột `venue` cho `VenueResponse` + `createdByName`, `createdByDeleted` |
 | `VenueSummaryView` | cột `VenueSummaryResponse` + `primaryImageUrl`, `distanceKm` (`Double`) |
 | `VenueImageStatsView` | `imageCount`, `maxDisplayOrder` |
-| `VenueStatusView` | `id`, `status` |
+| `SelectableVenueView` | `id`, `name`, `address`, `latitude`, `longitude`, `status`, `primaryImageUrl` (v1.2 — thay `VenueStatusView`) |
 | `StaleVenueView` | `id`, `name` |
 | `AdminVenueReportView` | cột report + `venueName`, `venueStatus`, `reporterName`, `reporterDeleted`, `handledByName`, `handledByDeleted` |
 

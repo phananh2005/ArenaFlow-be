@@ -1,5 +1,33 @@
 # CHANGELOG — VENUE-001 Quản lý địa điểm sân
 
+## [v1.3] — 2026-11-11
+
+**Type:** MINOR (không đổi endpoint, method, field, kiểu, mã thành công, mã lỗi, message) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE (ràng buộc dữ liệu người tạo / người báo cáo, ghi chú cho kèo luồng B), không ảnh hưởng FE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Người tạo và người báo cáo địa điểm không bị mất khi xoá tài khoản (khớp chính sách xoá mềm); bỏ ghi chú lỗi thời về kèo luồng B | Không |
+| 2 | Header tài liệu thiết kế VENUE-001 | Ghi nhận | v1.2 → v1.3 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- Hợp đồng API, nghiệp vụ, SRS: không đổi.
+
+## [v1.2] — 2026-11-10
+
+**Type:** MINOR (không đổi endpoint, method, field, kiểu, mã thành công, mã lỗi, message) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE cho MATCH-002, không ảnh hưởng FE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Kèo luồng B (MATCH-002) cần thông tin địa điểm khi tạo kèo | Không |
+| 2 | Header tài liệu thiết kế VENUE-001 | Ghi nhận | v1.1 → v1.2 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- Hợp đồng API, nghiệp vụ, SRS: không đổi.
+
 ## [v1.1] — 2026-11-10
 
 **Type:** MINOR (không đổi endpoint, method, field, kiểu, mã thành công, mã lỗi, message) · **Tóm tắt:** Viết lại `API_Spec.md` để FE đọc độc lập, không đổi hợp đồng.
