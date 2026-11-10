@@ -20,7 +20,7 @@
 | **Venue** | Địa điểm sân | active / inactive | — |
 | **Venue_Image** | Ảnh sân (tối đa 5) | Tồn tại khi Venue tồn tại | — |
 | **Venue_Report** | Report địa điểm | Lưu mãi, admin xác minh | — |
-| **Cost_Agreement** | Thỏa thuận chi phí | Gắn với Match | — |
+| **Cost_Agreement** | Thỏa thuận chi phí | Luồng A: gắn với Match. Luồng B: gắn với Pairing khi thương lượng, chép sang Match khi ghép | — |
 | **Mercenary_Posting** | Tin tuyển mercenary | OPEN → FILLED/EXPIRED/CLOSED | — |
 | **Mercenary_Application** | Đơn ứng tuyển | PENDING → APPROVED/REJECTED/WITHDRAWN | Ảnh hưởng Reliability cá nhân khi rút APPROVED |
 | **Rating** | Đánh giá sau trận (đội/cá nhân) | Lưu mãi | Tính vào rating trung bình |
@@ -166,9 +166,9 @@
   - Giờ bắt đầu
   - Giờ kết thúc dự kiến (`scheduled_end_time`; sau giờ bắt đầu, không quá 12 giờ — BR-M16)
 - **Luồng B:**
-  - Nhiều lựa chọn địa điểm (danh sách Venue ID)
-  - Nhiều lựa chọn giờ (danh sách thời gian)
-  - Địa điểm/giờ cuối cùng được chốt (sau khi Pairing CONFIRMED)
+  - Danh sách lựa chọn địa điểm (1–5 Venue) — tập riêng
+  - Danh sách khung giờ (1–5 khung, mỗi khung có giờ bắt đầu + giờ kết thúc) — tập riêng
+  - Địa điểm/giờ cuối cùng được chốt (sau khi Pairing CONFIRMED) = phương án chốt của Pairing thắng
   - Giờ kết thúc dự kiến cuối cùng (`scheduled_end_time`, sau khi chốt)
 - Đội hủy, thời điểm hủy, lý do hủy (nếu CANCELLED; lý do bắt buộc khi hủy Match đã CONFIRMED — BR-M16)
 
@@ -177,8 +177,7 @@
 - 1 Match có 1 Team (đội tham gia, sau khi CONFIRMED)
 - 1 Match có nhiều Match_Request (N, luồng A)
 - 1 Match có nhiều Pairing (N, luồng B)
-- 1 Match có nhiều Chat_Message (N, luồng B)
-- 1 Match có 1 Cost_Agreement (0..1)
+- 1 Match có 1 Cost_Agreement (0..1) — luồng A: nhập trên Match; luồng B: bản chép từ Pairing thắng khi ghép (BR-C05)
 - 1 Match có nhiều Mercenary_Posting (N)
 - 1 Match có nhiều Rating (N)
 - 1 Match có nhiều Report (N)
@@ -218,22 +217,26 @@
 - Đội nhận (Team ID, đội nhận bài đăng)
 - Trạng thái (NEGOTIATING, CONFIRMED, SUPERSEDED, EXPIRED)
 - Ngày tạo
-- Đội tạo đã xác nhận (boolean)
-- Đội nhận đã xác nhận (boolean)
-- Timestamp xác nhận đội tạo
-- Timestamp xác nhận đội nhận
-- Timestamp xác nhận cuối (max của 2 timestamp trên, dùng để xử lý race condition)
+- Phương án chốt: 1 lựa chọn địa điểm + 1 khung giờ trong danh sách của Match (chưa chốt = trống — BR-M19)
+- Phiên bản gói (`revision`; tăng mỗi lần chốt phương án khác hoặc lưu chi phí — BR-M19)
+- Thời điểm xác nhận của đội tạo (trống = chưa xác nhận; xoá khi gói đổi)
+- Thời điểm xác nhận của đội nhận (trống = chưa xác nhận; xoá khi gói đổi)
+- Thời điểm hoàn tất (lúc Pairing CONFIRMED)
+- Thỏa thuận chi phí + tiền cọc + khoản tự nhập của Pairing (Cost_Agreement, 0..1 — BR-C05)
+- Ngày cập nhật
 
 **Relationships:**
 - N Pairing thuộc về 1 Match
-- 1 Pairing thuộc về 1 Team (đội nhận)
+- 1 Pairing thuộc về 1 Team (đội nhận); mỗi đội tối đa 1 Pairing cho một Match (BR-M21)
 - 1 Pairing có nhiều Chat_Message (N)
+- 1 Pairing có 1 Cost_Agreement (0..1)
+- 1 Pairing tham chiếu 0..1 lựa chọn địa điểm và 0..1 khung giờ của Match (phương án chốt)
 
 **Lifecycle:** Xem Business_Rules.md §2.3
 
-**Ghi chú:** Race condition — pairing có timestamp xác nhận cuối sớm hơn thắng.
+**Ghi chú:** Race condition — Pairing **hoàn tất trước** (lần xác nhận của bên thứ hai được ghi nhận trước) thắng; thời điểm hoàn tất = thời điểm hoàn tất của Pairing thắng; Pairing kia → SUPERSEDED, lần xác nhận của nó bị từ chối ("Thương lượng đã kết thúc").
 
-> **Implementation note:** Optimistic Lock với JPA `@Version` trên entity Match, retry max 3 lần khi conflict. Frontend không gửi version; backend tự đọc version hiện tại khi xử lý request.
+> **Implementation note:** FE gửi `revision` của gói khi chốt phương án, lưu chi phí, xác nhận (lệch → từ chối "Phương án đã thay đổi, vui lòng tải lại"). Pairing cập nhật bằng CAS trên trạng thái + `revision`, Match bằng CAS trên version; retry tối đa 3 lần khi xung đột (ADR-0003 Sửa đổi 2026-11-10).
 
 ---
 
@@ -241,21 +244,21 @@
 
 **Attributes:**
 - ID
-- Match ID (khóa ngoại)
 - Pairing ID (khóa ngoại)
-- Người gửi (User ID, đội trưởng)
-- Người nhận (User ID, đội trưởng)
-- Nội dung
-- Timestamp
+- Đội gửi (Team ID — đội tạo hoặc đội nhận của Pairing)
+- Người thực sự gửi (User ID — đội trưởng của đội gửi tại lúc gửi; không đổi khi đội chuyển quyền đội trưởng sau đó)
+- Nội dung (1..1000 ký tự — BR-N03)
+- Thời điểm gửi
 - Trạng thái đọc (boolean)
 
 **Relationships:**
-- N Chat_Message thuộc về 1 Match
-- N Chat_Message thuộc về 1 Pairing
+- N Chat_Message thuộc về 1 Pairing (Match lấy qua Pairing)
+- N Chat_Message thuộc về 1 Team (đội gửi); người nhận = đội còn lại của Pairing (không lưu riêng)
+- N Chat_Message thuộc về 1 User (người thực sự gửi)
 
-**Ghi chú:** Lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED).
+**Ghi chú:** Lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED/EXPIRED). Hiển thị: tên đội gửi + tên/ảnh người thực sự gửi; người gửi đã xóa tài khoản → "Người dùng đã xóa", không ảnh (BR-N03).
 
-> **Implementation note:** Chat real-time dùng WebSocket + SockJS (Spring Boot `.withSockJS()`). SockJS tự động fallback Long Polling nếu WebSocket bị firewall chặn.
+> **Implementation note:** Gửi tin và đọc lịch sử qua REST; nhận tin ngay qua STOMP/WebSocket (SockJS tuỳ kết quả kiểm khi cài đặt — MATCH-002 `[cần xác nhận #1]`, ADR-0014). Lịch sử phân trang theo con trỏ để bù tin sau khi kết nối lại.
 
 ---
 
@@ -330,20 +333,20 @@
 
 **Attributes:**
 - ID
-- Match ID (khóa ngoại, 1:1)
+- Thuộc về: Match (luồng A; luồng B sau khi ghép) hoặc Pairing (luồng B, trong lúc thương lượng)
 - Loại chi phí (tiền sân, tiền nước, hoặc cả hai; không có loại "tùy chỉnh" — BR-C04)
 - Số tiền sân (VND)
 - Số tiền nước (VND)
 - Cách chia (50-50, 70-30 chủ nhà bao 70%, 70-30 thua bao 70%, thua trả toàn bộ tiền nước)
-- Thỏa thuận cọc (boolean, chỉ luồng B)
-- Số tiền cọc (VND, nếu có)
-- Ai giữ tiền cọc (văn bản, vd: "Đội chủ nhà")
+- Số tiền cọc (VND, 1..1.000.000.000; trống = không có cọc; chỉ luồng B — BR-C05)
+- Ai giữ tiền cọc (văn bản ≤100 ký tự, vd: "Đội chủ nhà"; chỉ khi có số tiền cọc)
 - Khoản tự nhập (danh sách riêng, tối đa 10 khoản, mỗi khoản có tên + số tiền — BR-C04)
 
 **Relationships:**
-- 1 Cost_Agreement thuộc về 1 Match (0..1)
+- Luồng A: 1 Cost_Agreement thuộc về 1 Match (mỗi Match 0..1)
+- Luồng B: 1 Cost_Agreement thuộc về 1 Pairing trong lúc thương lượng (mỗi Pairing 0..1); khi Pairing CONFIRMED được **chép** sang Match (Match đã ghép có 0..1 như luồng A; Pairing giữ bản của mình)
 
-**Ghi chú:** ArenaFlow chỉ lưu để hiển thì; không thu/giữ tiền.
+**Ghi chú:** ArenaFlow chỉ lưu để hiển thị; không thu/giữ tiền (kể cả tiền cọc); không chia tiền cọc.
 
 ---
 
@@ -546,11 +549,13 @@ erDiagram
     MATCH ||--o{ MATCH_REQUEST : receives
     MATCH ||--o{ PAIRING : has
     MATCH ||--o| COST_AGREEMENT : has
+    PAIRING ||--o| COST_AGREEMENT : negotiates
+    TEAM ||--o{ PAIRING : joins
     MATCH ||--o{ MERCENARY_POSTING : has
-    MATCH ||--o{ CHAT_MESSAGE : has
     MATCH ||--o{ RATING : has
     MATCH ||--o{ REPORT : has
     PAIRING ||--o{ CHAT_MESSAGE : has
+    USER ||--o{ CHAT_MESSAGE : sends
     VENUE ||--o{ VENUE_IMAGE : has
     VENUE ||--o{ VENUE_REPORT : receives
     VENUE ||--o{ MATCH : referenced_by
@@ -584,7 +589,7 @@ erDiagram
 | Team | Match | Một đội tạo nhiều kèo |
 | Match | Match_Request | Một kèo nhận nhiều request (luồng A) |
 | Match | Pairing | Một kèo có nhiều pairing (luồng B) |
-| Match | Chat_Message | Một kèo có nhiều tin nhắn (luồng B) |
+| Pairing | Chat_Message | Một pairing có nhiều tin nhắn (luồng B); tin nhắn của kèo lấy qua pairing |
 | Match | Rating | Một trận có nhiều đánh giá (đội/cá nhân) |
 | Match | Report | Một trận có nhiều report (đội/cá nhân) |
 | Match | Mercenary_Posting | Một kèo có nhiều tin tuyển |
@@ -599,7 +604,8 @@ erDiagram
 | Bên A | Bên B | Ghi chú |
 |---|---|---|
 | User | Profile | Hồ sơ cá nhân |
-| Match | Cost_Agreement | Thỏa thuận chi phí (0..1) |
+| Match | Cost_Agreement | Thỏa thuận chi phí (0..1); luồng B: bản chép từ Pairing thắng khi ghép |
+| Pairing | Cost_Agreement | Thỏa thuận chi phí + tiền cọc của thương lượng (0..1, luồng B) |
 | Team | Reliability_Score | Đội có 1 điểm uy tín |
 | User | Reliability_Score | Cá nhân có 1 điểm uy tín (mercenary) |
 | Team | Completion_Rate | Đội có 1 tỉ lệ hoàn thành |
@@ -630,7 +636,7 @@ erDiagram
 
 | Entity | Retention | Thời điểm bắt đầu | Hành động sau retention |
 |---|---|---|---|
-| Chat_Message | 90 ngày | Khi Match chuyển COMPLETED/ARCHIVED/CANCELLED | Xóa |
+| Chat_Message | 90 ngày | Khi Match chuyển COMPLETED/ARCHIVED/CANCELLED/EXPIRED (vd hết hạn 12/11/2026 → xóa 10/02/2027) | Xóa |
 | Notification | 30 ngày | Khi tạo notification | Xóa |
 | User (soft-deleted) | Giữ mãi | — | **[cần xác nhận: hard-delete policy]** |
 | Team_Member (left) | Giữ mãi | — | Không xóa (lịch sử) |
@@ -654,7 +660,8 @@ erDiagram
 | Match | CONFIRMED không được sửa giờ/sân/trình độ | Application logic (reject update) |
 | Match_Request | Request hết hạn theo Match `expires_at` | System job + lazy check |
 | Pairing | Cả 2 đội trưởng phải xác nhận | Application logic |
-| Pairing | Race condition: timestamp xác nhận cuối sớm hơn thắng | **[cần xác nhận: optimistic lock / DB constraint]** |
+| Pairing | Race condition: Pairing hoàn tất trước thắng; tối đa 1 Pairing CONFIRMED mỗi Match | CAS trên kèo (version) + ràng buộc một Pairing CONFIRMED mỗi kèo (2026-11-10) |
+| Pairing | Mỗi đội tối đa 1 Pairing cho một Match (BR-M21) | Ràng buộc dữ liệu |
 | Venue_Image | Tối đa 5 ảnh mỗi venue | Check trước khi insert |
 | Venue_Image | Chỉ 1 ảnh `is_primary=true` | Unique constraint hoặc trigger |
 | Rating | Unique trên (`match_id`, `rater_type`, `rater_id`, `ratee_type`, `ratee_id`) | Unique constraint |
@@ -683,7 +690,7 @@ erDiagram
 
 ## 9. Quyết định bổ sung đã chốt
 
-1. **Cost agreement (luồng B):** Một bên đề xuất, bên kia xem. Không cần xác nhận riêng.
+1. **Cost agreement (luồng B):** Một trong hai đội trưởng nhập/sửa trên Pairing, bên kia xem. Không cần xác nhận riêng; sửa → xoá xác nhận của cả hai bên; ghép → chép sang Match (BR-C05 — sửa 2026-11-10/11).
 2. **Verification Badge revocation:** Thu hồi ngay lập tức khi điều kiện không đủ.
 3. **GPS permission revocation:** Fallback sang khu vực hồ sơ ngay. Thông báo "Bật GPS để tìm kèo gần bạn hơn".
 4. **Report cooldown:** Không giới hạn. Mỗi trận chỉ report 1 lần/loại.
@@ -696,9 +703,9 @@ erDiagram
 11. **Notification push delivery status:** Không lưu delivery status (sent/delivered/failed) trong MVP. FCM/APNs có log riêng nếu cần debug.
 
 > **Implementation notes đã chốt:**
-> - Match luồng B: JSONB fields `location_option_ids` (array of venue IDs) và `time_options` (array of objects `[{"start": "...", "end": "..."}]`)
-> - Concurrent pairing: Optimistic Lock với JPA `@Version`, retry max 3 lần
-> - Chat: WebSocket + SockJS, fallback Long Polling
+> - Match luồng B: danh sách lựa chọn địa điểm (1–5) và danh sách khung giờ (1–5) là hai tập riêng; phương án chốt của Pairing tham chiếu một phần tử mỗi tập (sửa 2026-11-10, thay JSONB `location_option_ids` / `time_options`)
+> - Concurrent pairing: Pairing CAS trên trạng thái + `revision` (FE gửi `revision` của gói), Match CAS trên version; retry tối đa 3 lần (ADR-0003 Sửa đổi 2026-11-10)
+> - Chat: gửi / đọc lịch sử qua REST; nhận ngay qua STOMP/WebSocket (SockJS tuỳ MATCH-002 `[cần xác nhận #1]`, ADR-0014); lịch sử phân trang theo con trỏ để bù tin
 
 ---
 

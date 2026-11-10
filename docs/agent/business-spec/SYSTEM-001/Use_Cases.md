@@ -291,20 +291,20 @@
 **Main Flow:**
 1. Đội trưởng chọn "Tạo kèo"
 2. Đội trưởng chọn "Chưa có sân"
-3. Đội trưởng nhập thông tin (nhiều lựa chọn địa điểm, nhiều lựa chọn giờ, định dạng, trình độ, thời hạn bài đăng ≤ giờ trận sớm nhất)
+3. Đội trưởng nhập thông tin (1–5 lựa chọn địa điểm, 1–5 khung giờ, định dạng, trình độ, thời hạn bài đăng — BR-M03)
 4. Đội trưởng submit
 5. Hệ thống tạo Match với trạng thái OPEN
 6. Hệ thống hiển thị "Kèo đã được tạo"
 
 **Postconditions:**
 - Match được tạo với trạng thái OPEN
-- Match có nhiều lựa chọn địa điểm/giờ
+- Match có danh sách lựa chọn địa điểm và danh sách khung giờ (hai danh sách riêng); phương án chốt sau này lấy một phần tử của mỗi danh sách (UC-M06)
 - Match hiển thị trong danh sách tìm kèo
 
 **Exception Flows:**
 
-**4a. Thời hạn muộn hơn giờ trận sớm nhất:**
-- 4a1. Hệ thống hiển thị "Thời hạn không được muộn hơn giờ bắt đầu trận sớm nhất"
+**4a. Thời hạn không hợp lệ (BR-M03):** không sau thời điểm hiện tại, muộn hơn giờ bắt đầu sớm nhất, hoặc sớm hơn giờ bắt đầu sớm nhất quá 7 ngày
+- 4a1. Hệ thống hiển thị "Thời hạn không được muộn hơn giờ bắt đầu trận sớm nhất" (hoặc lỗi tương ứng)
 - 4a2. Quay về bước 3
 
 ---
@@ -411,9 +411,10 @@
 5. Hệ thống gửi notification cho tác giả Match
 
 **Postconditions:**
-- Pairing được tạo với trạng thái NEGOTIATING
+- Pairing được tạo với trạng thái NEGOTIATING, chưa có phương án chốt và chưa có thỏa thuận chi phí
 - Chat giữa 2 đội trưởng được kích hoạt
 - Match vẫn ở OPEN (cho phép đội khác cũng nhận)
+- Mỗi đội chỉ có một Pairing cho một Match; không có thao tác rút hay kết thúc Pairing — Pairing chỉ kết thúc khi CONFIRMED, SUPERSEDED hoặc EXPIRED (BR-M21)
 
 ---
 
@@ -428,11 +429,22 @@
 1. Đội trưởng gửi tin nhắn trong chat
 2. Hệ thống lưu tin nhắn
 3. Hệ thống gửi tin nhắn real-time cho đội trưởng kia
-4. Hai bên trao đổi để thống nhất địa điểm/giờ
+4. Hai bên trao đổi để thống nhất địa điểm/giờ; một trong hai đội trưởng **chốt phương án**: chọn 1 địa điểm trong danh sách lựa chọn địa điểm + 1 khung giờ trong danh sách khung giờ của Match (BR-M19). Chốt lại phương án khác thay phương án cũ và xoá xác nhận của cả hai bên; chốt lại đúng phương án đang có không đổi gì
 
 **Postconditions:**
 - Tin nhắn được lưu (retention 90 ngày sau khi Match kết thúc)
+- Pairing có phương án chốt (nếu đã chốt) để hai bên xác nhận (UC-M07)
 - Hai bên có thể thương lượng cho đến khi xác nhận hoặc hết hạn
+
+**Exception Flows:**
+
+**4a. Địa điểm được chọn đã ngừng hoạt động (BR-M20):**
+- 4a1. Hệ thống hiển thị "Địa điểm đã ngừng hoạt động"; không chốt phương án
+- 4a2. Đội trưởng chọn địa điểm khác trong danh sách lựa chọn
+
+**4b. Gói thương lượng đã thay đổi so với màn hình đội trưởng đang thấy (bên kia vừa chốt phương án / sửa chi phí — BR-M19):**
+- 4b1. Hệ thống hiển thị "Phương án đã thay đổi, vui lòng tải lại"; không chốt phương án
+- 4b2. Đội trưởng xem gói mới rồi tự chọn lại
 
 ---
 
@@ -442,15 +454,15 @@
 
 **Preconditions:**
 - Pairing đang ở trạng thái NEGOTIATING
-- Hai bên đã thống nhất địa điểm/giờ qua chat
+- Pairing đã có **phương án chốt** (1 lựa chọn địa điểm + 1 khung giờ của Match — UC-M06, BR-M19)
 
 **Main Flow:**
-1. Đội trưởng A chọn "Xác nhận" (qua UI riêng, không phải tin nhắn)
-2. Hệ thống đánh dấu đội trưởng A đã xác nhận, lưu timestamp
-3. Đội trưởng B chọn "Xác nhận"
-4. Hệ thống kiểm tra cả 2 đã xác nhận
-5. Hệ thống chuyển Pairing sang CONFIRMED
-6. Hệ thống chuyển Match sang CONFIRMED
+1. Đội trưởng A xem **gói thương lượng** đang hiển thị (phương án chốt + thỏa thuận chi phí + tiền cọc) và chọn "Xác nhận" (qua UI riêng, không phải tin nhắn — BR-M07)
+2. Hệ thống ghi nhận đội A đã xác nhận gói đó, lưu thời điểm xác nhận của đội A; Pairing vẫn NEGOTIATING
+3. Đội trưởng B xem cùng gói và chọn "Xác nhận"
+4. Hệ thống kiểm tra cả 2 đã xác nhận cùng gói
+5. Hệ thống chuyển Pairing sang CONFIRMED, lưu thời điểm hoàn tất (= lúc xác nhận của bên thứ hai được ghi nhận)
+6. Hệ thống chuyển Match sang CONFIRMED: đội đã ghép = đội nhận; địa điểm và giờ = phương án chốt; thỏa thuận chi phí + tiền cọc + khoản tự nhập của Pairing được chép sang Match (BR-C05)
 7. Hệ thống chuyển các Pairing/Request khác sang SUPERSEDED
 8. Hệ thống gửi notification cho 2 đội và các đội bị superseded
 
@@ -459,15 +471,26 @@
 - Các Pairing/Request khác SUPERSEDED
 - Match không được sửa giờ/sân/trình độ
 
-**Exception Flows:**
+**Exception Flows:** (2a–2c áp dụng cho cả lần xác nhận của đội B ở bước 3–4)
 
-**5a. Race condition — 2 pairing cùng được xác nhận gần đồng thời:**
-- 5a1. Hệ thống so sánh timestamp xác nhận cuối
-- 5a2. Pairing có timestamp xác nhận cuối sớm hơn thắng
-- 5a3. Pairing kia chuyển SUPERSEDED
-- 5a4. Tiếp tục bước 6
+**2a. Chưa có phương án chốt (BR-M19):**
+- 2a1. Hệ thống hiển thị "Chưa chốt địa điểm và giờ"; không ghi xác nhận
+- 2a2. Đội trưởng chốt phương án (UC-M06 bước 4) trước
 
-> **Implementation note:** Optimistic Lock với JPA `@Version` trên entity Match, retry max 3 lần khi conflict. Frontend không gửi version; backend tự đọc version hiện tại khi xử lý request.
+**2b. Gói đã thay đổi so với màn hình đội trưởng đang thấy (bên kia vừa chốt lại phương án / sửa chi phí — BR-M19):**
+- 2b1. Hệ thống hiển thị "Phương án đã thay đổi, vui lòng tải lại"; không ghi xác nhận
+- 2b2. Đội trưởng xem gói mới rồi tự chọn "Xác nhận" lại
+
+**2c. Địa điểm của phương án đã ngừng hoạt động sau khi chốt (BR-M20):**
+- 2c1. Hệ thống hiển thị "Địa điểm đã ngừng hoạt động"; không ghi xác nhận
+- 2c2. Đội trưởng chốt lại địa điểm khác (UC-M06 bước 4); hai bên xác nhận lại
+
+**5a. Race condition — 2 pairing của cùng Match được hoàn tất gần đồng thời:**
+- 5a1. Pairing **hoàn tất trước** (lần xác nhận của bên thứ hai được ghi nhận trước) thắng; thời điểm hoàn tất của Pairing thắng được lưu
+- 5a2. Pairing kia chuyển SUPERSEDED; lần xác nhận của nó bị từ chối với "Thương lượng đã kết thúc"
+- 5a3. Tiếp tục bước 6 với Pairing thắng
+
+> **Implementation note:** FE gửi `revision` (phiên bản gói) đang hiển thị khi xác nhận; lệch với gói hiện tại → từ chối "Phương án đã thay đổi, vui lòng tải lại" (2b). Pairing cập nhật bằng CAS trên trạng thái + `revision`, Match bằng CAS trên version; retry tối đa 3 lần khi xung đột (ADR-0003 Sửa đổi 2026-11-10).
 
 ---
 
@@ -501,6 +524,7 @@
 - Match chuyển sang CANCELLED
 - (Nếu CONFIRMED) Đội hủy bị trừ Reliability Score theo khoảng cách giờ trận (BR-M09, BR-M10); đội còn lại không bị trừ
 - (Nếu đội đã ghép hủy) Match_Request đã ACCEPTED của đội đó chuyển WITHDRAWN (BR-M12)
+- (Luồng B, Match OPEN) Mọi Pairing NEGOTIATING chuyển SUPERSEDED; đội tạo kèo không phải đóng Pairing trước khi hủy (BC-M04)
 - (Nếu CANCELLED ≥24h trước) Match loại khỏi mẫu số Completion Rate
 
 **Exception Flows:**
@@ -549,7 +573,7 @@
 **Alternative Flow (Lazy check):**
 - 1a. API được gọi (vd: xem chi tiết Match)
 - 1a1. System kiểm tra `expires_at`
-- 1a2. Nếu hết hạn và chưa EXPIRED (BR-M17): khi xem → hiển thị EXPIRED ngay; khi thao tác trên Match (gửi/chấp nhận/từ chối/rút request, hủy, sửa chi phí) → chuyển Match sang EXPIRED ngay, request PENDING chuyển EXPIRED, và báo "Kèo đã hết hạn"
+- 1a2. Nếu hết hạn và chưa EXPIRED (BR-M17): khi xem → hiển thị EXPIRED ngay; khi thao tác trên Match (gửi/chấp nhận/từ chối/rút request, hủy, sửa chi phí; luồng B: nhận kèo, chốt phương án, sửa chi phí của Pairing, xác nhận, nhắn tin) → chuyển Match sang EXPIRED ngay, request PENDING và Pairing NEGOTIATING chuyển EXPIRED, và báo "Kèo đã hết hạn"
 - 1a3. Tiếp tục xử lý (xem) hoặc kết thúc (thao tác)
 
 ---
@@ -1059,7 +1083,7 @@
 **Actor:** Team Captain (cả 2 bên, luồng B) hoặc Team Captain (tác giả, luồng A)
 
 **Preconditions:**
-- Match đang ở trạng thái NEGOTIATING (luồng B) hoặc trước khi CONFIRMED (luồng A)
+- Pairing đang NEGOTIATING (luồng B) — hai đội trưởng của Pairing đều nhập/sửa được (BR-C05); hoặc trước khi CONFIRMED (luồng A)
 - (Luồng A) Người nhập là đội trưởng đội tạo kèo; Match đang OPEN — BR-C03
 
 **Main Flow:**
@@ -1067,15 +1091,17 @@
 2. Đội trưởng chọn loại chi phí (tiền sân, tiền nước, hoặc cả hai)
 3. Đội trưởng nhập số tiền cụ thể (VND)
 4. Đội trưởng chọn cách chia (50-50, 70-30 đội chủ nhà bao 70%, 70-30 ai thua bao 70%, đội thua trả toàn bộ tiền nước)
-5. (Nếu luồng B) Đội trưởng nhập thỏa thuận cọc (ai giữ tiền cọc, số tiền)
+5. (Nếu luồng B) Đội trưởng nhập tiền cọc nếu có: số tiền cọc và ai giữ tiền cọc (BR-C05); không chia tiền cọc
 6. Đội trưởng submit
-7. Hệ thống lưu thỏa thuận để hiển thị trên bảng tin Match
-8. (Nếu luồng B) Đối phương xem và xác nhận thỏa thuận qua chat
+7. Hệ thống lưu thỏa thuận:
+   - Luồng A: trên Match, hiển thị trên bảng tin Match
+   - Luồng B: trên Pairing (thay toàn bộ thỏa thuận cũ, kể cả khoản tự nhập); mỗi lần lưu xoá xác nhận của cả hai bên (BR-M19)
+8. (Nếu luồng B) Đối phương xem thỏa thuận trên màn hình thương lượng và đồng ý bằng nút "Xác nhận" (UC-M07), không qua chat. Khi ghép thành công, chi phí + tiền cọc + khoản tự nhập được chép sang Match và hiển thị trên bảng tin Match như luồng A (BR-C05)
 
 **Postconditions:**
-- Thỏa thuận chi phí được lưu
-- Hiển thị trên bảng tin Match
-- ArenaFlow không thu/giữ tiền; hai đội thanh toán bên ngoài
+- Thỏa thuận chi phí được lưu (luồng A: trên Match; luồng B: trên Pairing, chép sang Match khi ghép)
+- Hiển thị trên bảng tin Match (luồng B: sau khi ghép)
+- ArenaFlow không thu/giữ tiền (kể cả tiền cọc); hai đội thanh toán bên ngoài
 
 ---
 
@@ -1116,18 +1142,20 @@
 - Pairing đang ở trạng thái NEGOTIATING
 
 **Main Flow:**
-1. Đội trưởng A gửi tin nhắn
-2. Hệ thống lưu tin nhắn (sender, receiver, content, timestamp)
-3. Hệ thống gửi tin nhắn real-time cho đội trưởng B (WebSocket/polling)
+1. Đội trưởng A gửi tin nhắn (1..1000 ký tự — BR-N03)
+2. Hệ thống lưu tin nhắn thuộc Pairing: đội gửi, người thực sự gửi (đội trưởng của đội gửi lúc gửi), nội dung, thời điểm gửi, trạng thái đã đọc. Không lưu người nhận (người nhận = đội còn lại của Pairing)
+3. Hệ thống gửi tin nhắn real-time cho đội trưởng B
 4. Đội trưởng B nhận tin nhắn
-5. (Lặp lại cho cuộc hội thoại)
+5. Hệ thống hiển thị mỗi tin với **tên đội gửi + tên (và ảnh) người thực sự đã gửi** (BR-N03); đầu phòng chat hiển thị tên hai đội + **đội trưởng hiện tại** của mỗi đội
+6. (Lặp lại cho cuộc hội thoại)
 
 **Postconditions:**
 - Tin nhắn được lưu
-- Retention: 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED)
+- Tin cũ giữ người gửi lúc đó dù đội đã chuyển quyền đội trưởng (vd đội Beta: tin của Nam vẫn hiển thị "Beta · Nam" sau khi Lan làm đội trưởng; đầu phòng hiển thị Lan); người gửi đã xóa tài khoản → "Người dùng đã xóa", không ảnh
+- Retention: 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED/EXPIRED)
 - Chat không hỗ trợ tìm kiếm/xuất trong MVP
 
-> **Implementation note:** WebSocket + SockJS (Spring Boot `.withSockJS()`). SockJS tự động fallback Long Polling nếu WebSocket bị firewall chặn.
+> **Implementation note:** Gửi tin và đọc lịch sử qua REST; nhận tin ngay qua STOMP/WebSocket (SockJS tuỳ kết quả kiểm khi cài đặt — MATCH-002 `[cần xác nhận #1]`, ADR-0014). Lịch sử chat phân trang theo con trỏ; sau khi kết nối lại, ứng dụng đọc lịch sử để bù tin bị lỡ.
 
 ---
 
@@ -1159,7 +1187,7 @@
 
 **Main Flow:**
 1. Scheduled job chạy hàng ngày
-2. System query chat có `Match.end_time + 90 ngày < now`
+2. System query chat có `Match.end_time + 90 ngày < now` (`end_time` = lúc Match chuyển COMPLETED/ARCHIVED/CANCELLED/EXPIRED — BC-N03; vd kèo hết hạn 12/11/2026 → chat xóa 10/02/2027)
 3. System xóa chat hết retention
 4. System query notification có `created_at + 30 ngày < now`
 5. System xóa notification hết retention
@@ -1172,7 +1200,7 @@
 
 ## Quyết định bổ sung đã chốt
 
-1. **Cost agreement (luồng B):** Một bên đề xuất, bên kia xem trong chat/bảng tin. Không cần xác nhận riêng vì xác nhận Pairing = đồng ý cả package.
+1. **Cost agreement (luồng B):** Một trong hai đội trưởng nhập/sửa trên Pairing, bên kia xem trên màn hình thương lượng. Không cần xác nhận riêng vì xác nhận Pairing = đồng ý cả gói (phương án + chi phí + tiền cọc); sửa chi phí xoá xác nhận của cả hai bên (BR-C05, BR-M19 — 2026-11-10).
 2. **Verification Badge revocation:** Thu hồi ngay lập tức khi điều kiện không đủ (Reliability <70, rating ≤3, phone unlinked, ≤5 trận).
 3. **GPS permission revocation:** Fallback sang khu vực hồ sơ (phường/xã) ngay lập tức. Hiển thị thông báo "Bật GPS để tìm kèo gần bạn hơn".
 4. **Report cooldown:** Không giới hạn. Mỗi trận chỉ report đối phương 1 lần/loại là đủ chống spam.

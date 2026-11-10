@@ -67,11 +67,12 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 - Tối đa 1 request ACCEPTED mỗi Match
 
 ### Match Management (Luồng B — chưa có sân)
-- Đội trưởng tạo kèo với nhiều lựa chọn địa điểm và giờ
-- Nhiều đội có thể nhận bài đăng và tạo Pairing đồng thời
+- Đội trưởng tạo kèo với 1–5 lựa chọn địa điểm và 1–5 khung giờ
+- Nhiều đội có thể nhận bài đăng và tạo Pairing đồng thời (mỗi đội một Pairing cho một kèo; không rút / kết thúc Pairing)
 - Chat giữa 2 đội trưởng để thương lượng
-- Cả 2 xác nhận qua UI riêng (không phải chat) → Match CONFIRMED
-- Race condition: pairing có timestamp xác nhận cuối sớm hơn thắng
+- Một trong hai đội trưởng chốt phương án (1 địa điểm + 1 khung giờ của kèo) và nhập chi phí + tiền cọc trên Pairing; gói đổi → xoá xác nhận của cả hai
+- Cả 2 xác nhận gói qua UI riêng (không phải chat) → Match CONFIRMED (chi phí + tiền cọc + khoản tự nhập chép sang Match)
+- Race condition: Pairing hoàn tất trước (lần xác nhận của bên thứ hai được ghi nhận trước) thắng; Pairing kia → SUPERSEDED
 
 ### Match Lifecycle
 - Trạng thái: OPEN, CONFIRMED, ARCHIVED, COMPLETED, EXPIRED, CANCELLED
@@ -127,10 +128,10 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 - Cách chia: 50-50, 70-30 (đội chủ nhà bao 70% hoặc ai thua bao 70%), đội thua trả toàn bộ tiền nước
 - Lưu số tiền cụ thể (VND trong MVP)
 - Khoản tự nhập: danh sách các khoản phí khác (tên + số tiền), tối đa 10 khoản
-- Luồng B: có thể có thỏa thuận chia đôi tiền cọc; cọc do thỏa thuận bên ngoài, có trường "ai giữ tiền cọc"
+- Luồng B: có thể có tiền cọc — số tiền cọc (không bắt buộc) + "ai giữ tiền cọc" (văn bản, chỉ khi có số tiền); không chia tiền cọc; cọc do thỏa thuận bên ngoài, ArenaFlow không thu/giữ
 
 ### Notification & Chat
-- Chat giữa 2 đội trưởng (luồng B): lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED)
+- Chat giữa 2 đội trưởng (luồng B): lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED/EXPIRED)
 - Notification: lưu 30 ngày
 - 11 loại notification: Match request nhận, request được chấp nhận/từ chối, Match confirmed, Match cancelled, Pairing mới, reminder trước trận, Match completed (kèm lời nhắc đánh giá), rating nhận, report nhận, mercenary application, invitation vào đội
 
@@ -197,7 +198,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 
 ## 9. Quyết định bổ sung đã chốt
 
-1. **Cost agreement (luồng B):** Một bên đề xuất, bên kia xem. Không cần xác nhận riêng vì xác nhận Pairing = đồng ý cả package.
+1. **Cost agreement (luồng B):** Một trong hai đội trưởng nhập/sửa trên Pairing, bên kia xem. Không cần xác nhận riêng vì xác nhận Pairing = đồng ý cả gói; sửa → xoá xác nhận của cả hai bên (BR-C05 — sửa 2026-11-10).
 2. **Verification Badge revocation:** Thu hồi ngay lập tức khi điều kiện không đủ.
 3. **GPS permission revocation:** Fallback sang khu vực hồ sơ ngay. Thông báo "Bật GPS để tìm kèo gần bạn hơn".
 4. **Report cooldown:** Không giới hạn. Mỗi trận chỉ report 1 lần/loại là đủ.
@@ -206,16 +207,16 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 7. **Admin panel:** 4 chức năng MVP: bật/tắt bộ môn, tranh chấp report bùng, xác minh venue report, đánh dấu INACTIVE.
 
 > **Implementation notes đã chốt (từ phiên trước):**
-> - Optimistic Lock: JPA `@Version` trên Match entity, retry max 3 lần. Frontend không gửi version.
-> - JSONB fields trong Match (luồng B): `location_option_ids` (array of venue IDs: `[123, 456]`), `time_options` (array of objects: `[{"start": "...", "end": "..."}]`)
-> - Chat: WebSocket + SockJS (Spring Boot `.withSockJS()`), tự động fallback Long Polling khi WebSocket bị chặn
+> - Đồng thời (luồng B): Pairing CAS trên trạng thái + `revision` (FE gửi `revision` của gói khi chốt phương án / lưu chi phí / xác nhận), Match CAS trên version; retry tối đa 3 lần (ADR-0003 Sửa đổi 2026-11-10)
+> - Match luồng B: danh sách lựa chọn địa điểm (1–5) và danh sách khung giờ (1–5) là hai tập riêng; phương án chốt của Pairing tham chiếu một phần tử mỗi tập (sửa 2026-11-10, thay JSONB `location_option_ids` / `time_options`)
+> - Chat: gửi / đọc lịch sử qua REST; nhận ngay qua STOMP/WebSocket (SockJS tuỳ MATCH-002 `[cần xác nhận #1]`, ADR-0014); lịch sử phân trang theo con trỏ để bù tin
 > - Luồng A expires_at: `expires_at ≤ scheduled_start_time`, không cho đổi ngày trận sau khi Match OPEN (phải hủy và tạo lại)
 
 ---
 
 ## 10. Trạng thái tài liệu
 
-**Phiên bản:** v1.0 (baseline) → v1.1 (hoàn chỉnh) → v1.2 (2026-11-09: bổ sung UC-V05 sửa địa điểm, UC-V06 xóa ảnh, BR-V05..V10, AC-V04/V05 — cho `VENUE-001`) → v1.3 (2026-11-09: BR-M09..BR-M18, BR-C03..BR-C04, làm rõ BC-M04, sửa §2.1/§2.2/§5.2/§7.3 Business_Rules, UC-M01/M03/M04/M08/M09/C01/C02, sửa AC-M06/AC-C01, thêm AC-M09..AC-M12 — cho `MATCH-001`)  
+**Phiên bản:** v1.0 (baseline) → v1.1 (hoàn chỉnh) → v1.2 (2026-11-09: bổ sung UC-V05 sửa địa điểm, UC-V06 xóa ảnh, BR-V05..V10, AC-V04/V05 — cho `VENUE-001`) → v1.3 (2026-11-09: BR-M09..BR-M18, BR-C03..BR-C04, làm rõ BC-M04, sửa §2.1/§2.2/§5.2/§7.3 Business_Rules, UC-M01/M03/M04/M08/M09/C01/C02, sửa AC-M06/AC-C01, thêm AC-M09..AC-M12 — cho `MATCH-001`) → v1.5 (2026-11-11: luồng B — hai đội xác nhận một gói rõ ràng (phương án chốt + chi phí + tiền cọc) thay vì "đã thống nhất qua chat", gói đổi thì xác nhận lại; Pairing hoàn tất trước thắng; chi phí/cọc thuộc Pairing và chép sang Match khi ghép; chat hiển thị người thực sự gửi; quy tắc đội tạm ngưng / bộ môn tắt / kèo quá hạn áp cho thao tác luồng B; chat của kèo hết hạn cũng bị xóa sau 90 ngày; thêm BR-M19..BR-M21, BR-C05, BR-N03; sửa BR-M03, BR-M07, BR-M14, BR-M15, BR-M17, BR-N01, BC-M04, BC-N01, BC-N03, BC-V05, §2.3/§5.2/§5.5/§8.1 Business_Rules, UC-M02/M05/M06/M07/M08/M09/C01/N01/N03, AC-M02/M04/M05/C01/N01, Scenario 2/3, Data_Model Match/Pairing/Chat_Message/Cost_Agreement/§6 — cho `MATCH-002`)  
 **Ngày hoàn thiện:** 2026-11-02  
 **Trạng thái:** ✅ **Hoàn chỉnh** — Tất cả quyết định nghiệp vụ đã được chốt, không còn [cần xác nhận]  
 **Sẵn sàng cho:** Solution design (thiết kế kỹ thuật chi tiết)

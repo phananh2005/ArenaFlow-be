@@ -37,7 +37,7 @@
 - [ ] Luồng A và B hoạt động độc lập
 - [ ] Match CONFIRMED không được sửa giờ/sân/trình độ
 - [ ] Tối đa 1 Match_Request ACCEPTED mỗi Match (ràng buộc dữ liệu)
-- [ ] Race condition Pairing được xử lý đúng (timestamp xác nhận cuối)
+- [ ] Race condition Pairing được xử lý đúng (Pairing hoàn tất trước thắng)
 - [ ] Scheduled job cập nhật trạng thái hết hạn chạy đúng mỗi 5 phút
 - [ ] Lazy check khi API gọi hoạt động đúng
 - [ ] Trừ Reliability đúng đội hủy, đúng biên khung giờ; không hủy/rút khi trận đã bắt đầu (BR-M09..BR-M11)
@@ -175,11 +175,11 @@
 
 **Given:** User là đội trưởng
 
-**When:** Đội trưởng nhập nhiều lựa chọn địa điểm/giờ, thời hạn ≤ giờ trận sớm nhất, và submit
+**When:** Đội trưởng nhập 1–5 lựa chọn địa điểm, 1–5 khung giờ, thời hạn sau hiện tại, ≤ giờ trận sớm nhất và ≥ giờ trận sớm nhất − 7 ngày (BR-M03), và submit
 
 **Then:**
 - Match được tạo với trạng thái OPEN
-- Match có nhiều lựa chọn địa điểm/giờ
+- Match có danh sách lựa chọn địa điểm và danh sách khung giờ
 - Match hiển thị trong danh sách tìm kèo
 
 ---
@@ -201,15 +201,17 @@
 
 ### AC-M04: Xác nhận Pairing (luồng B, cả 2 bên)
 
-**Given:** Pairing đang NEGOTIATING; 2 đội trưởng đã thương lượng qua chat
+**Given:** Pairing đang NEGOTIATING và đã có phương án chốt (1 lựa chọn địa điểm + 1 khung giờ của Match)
 
-**When:** Cả 2 đội trưởng xác nhận qua UI riêng (không phải chat)
+**When:** Cả 2 đội trưởng xác nhận cùng gói (phương án + chi phí + tiền cọc) qua UI riêng (không phải chat)
 
 **Then:**
-- Pairing chuyển CONFIRMED
-- Match chuyển CONFIRMED
+- Pairing chuyển CONFIRMED; thời điểm hoàn tất được lưu
+- Match chuyển CONFIRMED với địa điểm + giờ của phương án chốt; chi phí + tiền cọc + khoản tự nhập được chép từ Pairing sang Match (BR-C05)
 - Các Pairing/Request khác chuyển SUPERSEDED
-- Timestamp xác nhận cuối được lưu (để xử lý race condition)
+- Chưa có phương án chốt → không xác nhận được ("Chưa chốt địa điểm và giờ")
+- Gói đổi (chốt phương án khác / lưu chi phí) sau khi một bên đã xác nhận → xác nhận của cả hai bị xoá; lần xác nhận trên gói cũ bị từ chối "Phương án đã thay đổi, vui lòng tải lại" (BR-M19)
+- Địa điểm của phương án đã ngừng hoạt động → không chốt được phương án đó và không xác nhận được ("Địa điểm đã ngừng hoạt động" — BR-M20)
 
 ---
 
@@ -220,8 +222,8 @@
 **When:** Cả 2 pairing cùng được cả 2 bên xác nhận gần đồng thời (trong vài giây)
 
 **Then:**
-- Pairing có timestamp xác nhận cuối sớm hơn thắng → CONFIRMED
-- Pairing kia chuyển SUPERSEDED
+- Pairing **hoàn tất trước** (lần xác nhận của bên thứ hai được ghi nhận trước) thắng → CONFIRMED; thời điểm hoàn tất được lưu trên Pairing thắng
+- Pairing kia chuyển SUPERSEDED; lần xác nhận của nó bị từ chối với "Thương lượng đã kết thúc"
 - Match chuyển CONFIRMED với pairing thắng
 - Cả 2 cặp đội nhận notification (thắng: "Match confirmed", thua: "Pairing superseded")
 
@@ -528,15 +530,16 @@
 
 ### AC-C01: Thỏa thuận chi phí (chỉ hiển thị)
 
-**Given:** Match đang NEGOTIATING (luồng B) hoặc trước CONFIRMED (luồng A)
+**Given:** Pairing đang NEGOTIATING (luồng B) — hai đội trưởng của Pairing đều sửa được; hoặc trước CONFIRMED (luồng A)
 
-**When:** Đội trưởng nhập thỏa thuận chi phí (loại, số tiền, cách chia) và submit
+**When:** Đội trưởng nhập thỏa thuận chi phí (loại, số tiền, cách chia; luồng B thêm tiền cọc nếu có) và submit
 
 **Then:**
 - Thỏa thuận được lưu
-- Hiển thị trên bảng tin Match
-- ArenaFlow KHÔNG thu/giữ tiền; 2 đội thanh toán bên ngoài
+- Hiển thị trên bảng tin Match (luồng B: sau khi ghép)
+- ArenaFlow KHÔNG thu/giữ tiền (kể cả tiền cọc); 2 đội thanh toán bên ngoài
 - (Luồng A) Chỉ đội trưởng đội tạo kèo nhập/sửa, chỉ khi Match OPEN; lưu lại thay toàn bộ thỏa thuận cũ (BR-C03)
+- (Luồng B) Lưu trên Pairing, thay toàn bộ thỏa thuận cũ (kể cả khoản tự nhập) và xoá xác nhận của cả hai bên; đối phương đồng ý bằng nút "Xác nhận" (UC-M07), không qua chat; tiền cọc: số tiền 1..1.000.000.000 VND hoặc không cọc, "ai giữ" ≤100 ký tự chỉ khi có số tiền, không chia cọc; khi ghép, chi phí + tiền cọc + khoản tự nhập được chép sang Match (BR-C05)
 - Loại chi phí chỉ: tiền sân, tiền nước, cả hai; tối đa 10 khoản tự nhập; số tiền > 0 và ≤ 1.000.000.000 VND (BR-C04)
 
 ---
@@ -548,9 +551,11 @@
 **When:** Đội trưởng A gửi tin nhắn
 
 **Then:**
-- Tin nhắn được lưu (sender, receiver, content, timestamp)
+- Tin nhắn được lưu thuộc Pairing: đội gửi, người thực sự gửi, nội dung (1..1000 ký tự), thời điểm gửi, trạng thái đã đọc; không lưu người nhận (= đội còn lại của Pairing)
 - Tin nhắn được gửi real-time cho đội trưởng B (độ trễ <1s)
-- Chat lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED)
+- Mỗi tin hiển thị tên đội gửi + tên (và ảnh) người thực sự đã gửi; tin cũ giữ người gửi lúc đó sau khi đội chuyển quyền đội trưởng (vd đội Beta: tin của Nam vẫn "Beta · Nam" sau khi Lan làm đội trưởng); người gửi đã xóa tài khoản → "Người dùng đã xóa", không ảnh (BR-N03)
+- Đầu phòng chat hiển thị tên hai đội + đội trưởng hiện tại của mỗi đội
+- Chat lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED/EXPIRED)
 
 ---
 
@@ -580,7 +585,7 @@
 | API xác nhận Pairing | Response time | <1s | Bao gồm xử lý race condition |
 | API đánh giá/report | Response time | <1s | Bao gồm cập nhật Reliability Score |
 | Scheduled job (cập nhật hết hạn) | Interval | Mỗi 5 phút | Xử lý ≤10000 Match/Request/Pairing |
-| Chat real-time | Latency | <1s | WebSocket hoặc polling |
+| Chat real-time | Latency | <1s | Nhận qua STOMP/WebSocket; bù tin bằng lịch sử theo con trỏ khi kết nối lại |
 | Concurrent requests | Throughput | ≥100 req/s | Load test với 100 concurrent users |
 
 ### 3.2. Security
@@ -639,19 +644,20 @@
 
 ### Scenario 2: Happy path — Tạo kèo luồng B, thương lượng, xác nhận
 
-1. User A tạo kèo luồng B (nhiều lựa chọn sân Y/Z, giờ 18:00/19:00, chưa chốt)
+1. User A tạo kèo luồng B (lựa chọn sân Y/Z, khung giờ 18:00/19:00, chưa chốt)
 2. User B nhận bài đăng → Pairing NEGOTIATING → chat mở
 3. User A và B chat: "18:00 sân Y được không?" — "OK" — "50-50 tiền sân?" — "OK"
-4. User A xác nhận qua UI (timestamp T1)
-5. User B xác nhận qua UI (timestamp T2, T2 > T1)
-6. → Pairing CONFIRMED (timestamp xác nhận cuối = T2); Match CONFIRMED
-7. → Match chốt sân Y, 18:00
+4. User B chốt phương án sân Y + khung 18:00; User A nhập chi phí 50-50 tiền sân (mỗi lần gói đổi, xác nhận của cả hai bị xoá)
+5. User A xác nhận gói qua UI (thời điểm T1)
+6. User B xác nhận cùng gói qua UI (thời điểm T2, T2 > T1)
+7. → Pairing CONFIRMED (thời điểm hoàn tất = T2); Match CONFIRMED
+8. → Match chốt sân Y, 18:00; chi phí 50-50 tiền sân chép sang Match
 
 **Expected:**
 - Pairing lifecycle: NEGOTIATING → CONFIRMED
 - Match lifecycle: OPEN → CONFIRMED
 - Chat lưu 90 ngày sau Match kết thúc
-- Timestamp xác nhận cuối được lưu (T2)
+- Thời điểm hoàn tất được lưu (T2)
 
 ---
 
@@ -659,9 +665,9 @@
 
 1. User A tạo kèo luồng B
 2. User B và User C cùng nhận bài đăng → 2 Pairing (B và C)
-3. Pairing B: cả 2 xác nhận gần đồng thời (TB_last = 10:00:05.123)
-4. Pairing C: cả 2 xác nhận gần đồng thời (TC_last = 10:00:05.456)
-5. → Pairing B thắng (TB_last < TC_last); Pairing C chuyển SUPERSEDED
+3. Pairing B: cả 2 xác nhận gần đồng thời; lần xác nhận của bên thứ hai được ghi nhận lúc 10:00:05.123
+4. Pairing C: cả 2 xác nhận gần đồng thời; lần xác nhận của bên thứ hai đến lúc 10:00:05.456
+5. → Pairing B hoàn tất trước nên thắng; Pairing C chuyển SUPERSEDED, lần xác nhận cuối của C bị từ chối "Thương lượng đã kết thúc"
 6. → Match CONFIRMED với Pairing B
 
 **Expected:**
@@ -669,7 +675,7 @@
 - Pairing thua chuyển SUPERSEDED
 - User C nhận notification "Pairing superseded"
 
-> **Implementation note:** Optimistic Lock với JPA `@Version` trên entity Match, retry max 3 lần khi conflict. Frontend không gửi version; backend tự đọc version hiện tại khi xử lý request.
+> **Implementation note:** Pairing cập nhật bằng CAS trên trạng thái + `revision` (FE gửi `revision` của gói), Match bằng CAS trên version; retry tối đa 3 lần khi xung đột (ADR-0003 Sửa đổi 2026-11-10).
 
 ---
 
@@ -799,7 +805,7 @@
 
 ## 5. Quyết định bổ sung đã chốt
 
-1. **Cost agreement (luồng B):** Một bên đề xuất, bên kia xem. Không test xác nhận riêng cho chi phí.
+1. **Cost agreement (luồng B):** Một trong hai đội trưởng nhập/sửa trên Pairing, bên kia xem. Không test xác nhận riêng cho chi phí; test sửa chi phí xoá xác nhận của cả hai bên và chép sang Match khi ghép (BR-C05 — sửa 2026-11-10/11).
 2. **Verification Badge revocation:** Thu hồi ngay lập tức khi điều kiện không đủ. Test scenario: Reliability giảm <70 → badge thu hồi ngay + notification.
 3. **GPS permission revocation:** Fallback sang khu vực hồ sơ ngay. Test scenario: User thu hồi GPS → tìm kèo dựa khu vực hồ sơ + thông báo "Bật GPS...".
 4. **Report cooldown:** Không giới hạn. Test scenario: User report 3 trận khác nhau trong 1 ngày → cả 3 report đều được chấp nhận.
@@ -817,8 +823,8 @@
 8. **Load test scale:** 100 req/s đủ cho MVP (ước tính ~10K active users). Điều chỉnh nếu scale lớn hơn sau khi launch.
 
 > **Implementation notes đã chốt:**
-> - Concurrent pairing: Optimistic Lock + retry, test scenario race condition (Scenario 3) đã phản ánh cơ chế này
-> - Chat: WebSocket + SockJS, latency target <1s (WebSocket) hoặc ~300ms (Long Polling fallback)
+> - Concurrent pairing: CAS (Pairing: trạng thái + `revision`; Match: version) + retry, test scenario race condition (Scenario 3) đã phản ánh cơ chế này
+> - Chat: gửi / đọc lịch sử qua REST; nhận ngay qua STOMP/WebSocket (SockJS tuỳ MATCH-002 `[cần xác nhận #1]`, ADR-0014), latency target <1s; lịch sử phân trang theo con trỏ để bù tin sau khi kết nối lại
 
 ---
 
