@@ -161,6 +161,12 @@ Mã thành công chọn theo **kết quả** của thao tác, không theo HTTP m
 | `POST /teams/{id}/disband` | 200 | B3 (`disbandedAt`, `disbandedByName`), B4 (đội giải tán vẫn xem được) |
 | `POST /invitations/{id}/reject` | 204 | N1 |
 | `POST /teams/{id}/members/leave`, `DELETE /profile` | 204 | N1 |
+| `POST /matches/{matchId}/pairings` (nhận kèo B), `POST /pairings/{id}/messages` (gửi tin) | 201 | B2 |
+| `GET /matches/{matchId}/pairings`, `GET /teams/{teamId}/pairings`, `GET /pairings/{id}`, `GET /pairings/{id}/messages` | 200 | B1 |
+| `PUT /pairings/{id}/proposal` | 200 | B3 (`revision`, `updatedAt`), B4 |
+| `PUT /pairings/{id}/cost-agreement` | 200 | B3 (`revision`, `itemId`, `updatedAt`), B4 |
+| `POST /pairings/{id}/confirm` | 200 | B3 (`…ConfirmedAt`, `confirmedAt`, `status`, `matchStatus`) |
+| `POST /pairings/{id}/messages/read` | 204 | N1 |
 
 ### Client Error (4xx)
 - `400 Bad Request` — request không hợp lệ (validation fail)
@@ -202,10 +208,15 @@ Lỗi 400 do framework phát hiện (thiếu query param bắt buộc, sai kiể
 - `BOOKING_002` — Booking phải đặt tối thiểu 2h trước
 - `AUTH_001` — Token không hợp lệ
 - `USER_001` — User không tồn tại
+- `MATCH_016` — Thao tác không áp dụng cho loại kèo này (luồng A gọi endpoint luồng B hoặc ngược lại)
+- `PAIRING_001`..`PAIRING_008` — Thương lượng ghép kèo (luồng B): không tìm thấy, quyền, trùng, tự nhận, đã kết thúc, revision lệch, chưa chốt, ngoài lựa chọn
+- `CHAT_001` — Tin nhắn mốc không thuộc cuộc trò chuyện
 
 ---
 
 ## 7. Pagination
+
+### 7.1. Offset-based (mặc định)
 
 **Query params:**
 - `page` — số trang (bắt đầu từ 1)
@@ -228,6 +239,42 @@ GET /api/v1/arenas?page=2&pageSize=20
   }
 }
 ```
+
+### 7.2. Cursor-based
+
+Dùng cho danh sách thêm phần tử liên tục (vd chat) — offset trôi khi có phần tử mới.
+
+**Query params:**
+- `before` — id phần tử mốc; lấy phần tử **cũ hơn** mốc
+- `after` — id phần tử mốc; lấy phần tử **mới hơn** mốc
+- `limit` — số phần tử tối đa (default: 50, max: 100)
+
+Không gửi đồng thời `before` và `after` (`400 VALIDATION_ERROR`).
+
+**Response:**
+```json
+{
+  "data": {
+    "items": [...],
+    "hasMore": true
+  }
+}
+```
+
+| Gửi | Trả | Thứ tự `items` | `hasMore = true` khi |
+|---|---|---|---|
+| Không con trỏ | `limit` phần tử mới nhất | Mới nhất trước | Còn phần tử cũ hơn |
+| `before` | `limit` phần tử ngay trước mốc | Mới nhất trước | Còn phần tử cũ hơn |
+| `after` | `limit` phần tử ngay sau mốc | **Cũ nhất trước** | Còn phần tử mới hơn |
+
+Bản thân phần tử mốc (`before` / `after`) không có trong kết quả. Không có `pagination` (không có `totalItems` / `totalPages`).
+
+**Áp dụng cho endpoint hiện có:**
+
+| Endpoint | Kiểu | Con trỏ |
+|---|---|---|
+| Mọi danh sách trừ bảng dưới | Offset (`page`/`pageSize`) | — |
+| `GET /pairings/{id}/messages` (lịch sử chat) | Cursor | `before` / `after` = `messageId` |
 
 ---
 
@@ -334,7 +381,7 @@ Cùng key → trả về resource đã tạo trước đó (không tạo duplica
 - [ ] Response wrap trong `data` (success) hoặc `error` (fail)
 - [ ] Field names dùng camelCase
 - [ ] Error có `code` + `message` + `timestamp` + `path`
-- [ ] Pagination có `page`, `pageSize`, `totalPages`, `totalItems`
+- [ ] Pagination: offset (`page`, `pageSize`, `totalPages`, `totalItems`) hoặc cursor (`before`/`after`, `limit`, `items`, `hasMore`) — chọn đúng kiểu theo §7
 - [ ] Auth dùng `Authorization: Bearer <token>`
 - [ ] Status code đúng (200/201/204/400/401/403/404/409/500); mã thành công theo tiêu chí B1–B4 / N1 (§5), có dòng trong bảng "Áp dụng cho endpoint hiện có"
 - [ ] `201` không kèm header `Location`

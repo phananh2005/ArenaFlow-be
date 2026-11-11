@@ -30,6 +30,7 @@ _(Chưa có file kiến trúc/thuật ngữ — thêm khi dự án phát triển
 | Làm việc với giải tán đội / quy tắc xoá tài khoản đội trưởng / lịch sử thành viên (Admin) (USER-002) | `docs/agent/design/USER-002/` |
 | Làm việc với địa điểm sân / ảnh sân (Cloudinary) / report địa điểm / cảnh báo admin (VENUE-001) | `docs/agent/design/VENUE-001/` |
 | Làm việc với kèo luồng A / Match Request / huỷ kèo & trừ Reliability / job hết hạn–ARCHIVED / thoả thuận chi phí / bật-tắt bộ môn (MATCH-001) | `docs/agent/design/MATCH-001/` |
+| Làm việc với thương lượng ghép kèo luồng B / pairing / chat realtime / tiền cọc / xác nhận ghép kèo (MATCH-002) | `docs/agent/design/MATCH-002/` |
 | Publish SRS/API_Spec cho FE (repo `ArenaFlow-spec`, workflow `publish-spec`) | `docs/agent/README.md` mục "Publish tài liệu cho FE" |
 
 ---

@@ -26,10 +26,12 @@ ArenaFlow-be/
 │   ├── mapper/              # Entity ↔ DTO mappers (MapStruct)
 │   ├── validation/          # Custom constraint annotation + validator
 │   └── support/             # Thành phần hỗ trợ service: guard, retry, phân trang
+│       ├── chat/            # Port realtime (ChatRealtimeGateway) — không phụ thuộc spring-websocket
 │       └── security/        # JwtTokenService, JwtProperties (service gọi trực tiếp)
 └── api/                     # com.phananh.arenaflow (ArenaFlowApplication) + com.phananh.arenaflow.api
     ├── <nhóm>/              # REST Controllers (@RestController) theo nhóm: auth/, profile/, team/…
     ├── config/              # @Configuration, SecurityConfig, WebMvcConfig, GlobalExceptionHandler
+    ├── realtime/            # WebSocket/STOMP config, interceptor, gateway adapter (kênh realtime)
     └── security/            # Filter/handler/argument resolver của Spring Security
 ```
 
