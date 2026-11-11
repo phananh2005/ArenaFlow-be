@@ -345,7 +345,7 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 |---|---|
 | **USER & TEAM** | |
 | BC-U01 | User ≥13 tuổi mới được đăng ký |
-| BC-U02 | Soft-delete tài khoản: giữ mãi trong DB, có thể khôi phục; lịch sử hiển thị "Người dùng đã xóa" |
+| BC-U02 | Soft-delete tài khoản: giữ mãi trong DB, có thể khôi phục; lịch sử hiển thị "Người dùng đã xóa" (ảnh ẩn). Ngoại lệ: Admin xem lịch sử thành viên đội (tên thành viên) và report địa điểm (tên người report) thấy tên thật kèm nhãn "đã xóa", ảnh vẫn ẩn; các tên khác vẫn che (user chốt 2026-11-11) |
 | BC-T01 | Tên đội được phép trùng (không có unique constraint) |
 | BC-T02 | **Sửa bởi `USER-002`:** chỉ admin khoá đội (INACTIVE); đội trưởng giải tán đội (UC-T06); hệ thống không tự chuyển trạng thái đội — chi tiết `USER-002/Business_Rules.md` |
 | BC-T03 | Chuyển đội trưởng: người được chọn bắt buộc nhận, không có quyền từ chối |

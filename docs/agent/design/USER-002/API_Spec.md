@@ -11,9 +11,9 @@
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
-| Spec nghiệp vụ | `docs/agent/business-spec/USER-002/` (UC-T06, UC-U03 sửa, UC-T05 sửa; BR-T06..BR-T14, BC-T02, BC-T06) |
+| Spec nghiệp vụ | `docs/agent/business-spec/USER-002/` (UC-T06, UC-U03 sửa, UC-T05 sửa; BR-T06..BR-T14, BC-T02, BC-T06) · `docs/agent/business-spec/SYSTEM-001/` (v1.6) — BC-U02 |
 | Phụ thuộc | [`USER-001/API_Spec.md`](../USER-001/API_Spec.md) — hợp đồng gốc của đội, lời mời, hồ sơ; file này chỉ mô tả phần USER-002 thêm/đổi |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.8** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -22,7 +22,7 @@
 **Quy ước chung cho mọi endpoint của mã này:**
 - Kế thừa toàn bộ quy ước chung của USER-001 (mục "Quy ước chung cho mọi endpoint"): xác thực `Authorization: Bearer <access token>` (thiếu/sai/hết hạn → `401 AUTH_001`), ID là chuỗi UUID, envelope `data` / `error` / `pagination`, giá trị enum **UPPERCASE**, phân trang `page` (≥ 1, mặc định 1) · `pageSize` (1..100, mặc định 20).
 - Field thời điểm (`…At`) của mã này là chuỗi ISO-8601 UTC, vd `"2026-11-05T09:15:00Z"`.
-- Tên và ảnh của **user đã xoá tài khoản** được che: tên → `"Người dùng đã xóa"`, ảnh → `null`; id của user vẫn giữ nguyên.
+- Mọi endpoint, kể cả endpoint Admin, che tên và ảnh của user đã xoá tài khoản: tên → `"Người dùng đã xóa"`, ảnh → `null`; id vẫn giữ nguyên. Ngoại lệ duy nhất của mã này: lịch sử thành viên Admin §2.4 trả tên thật cùng `isUserDeleted = true` để gắn nhãn đã xoá; ảnh vẫn `null` (ADR-0002).
 - Thao tác ghi lên đội va chạm với thao tác khác cùng lúc → `409 TEAM_014`; FE cho người dùng bấm lại.
 
 **Ngoài phạm vi:** frontend; trận đấu/ghép kèo/lính đánh thuê gắn với đội; thông báo; khôi phục đội đã giải tán. Header `Idempotency-Key` (`api-convention.md` §13) **chưa hỗ trợ** cho `POST /teams` và `POST /teams/{teamId}/disband` — gửi kèm header không có tác dụng.
@@ -190,6 +190,7 @@ Chỉ gồm người **đã từng tham gia** đội (thành viên `ACTIVE` ho�
       "userId": "0193a5c0-1b2c-7d3e-8f40-5a6b7c8d9e01",
       "displayName": "Nguyễn Văn A",
       "avatarUrl": "https://res.cloudinary.com/demo/image/upload/a.jpg",
+      "isUserDeleted": false,
       "role": "CAPTAIN",
       "status": "LEFT",
       "joinedAt": "2026-11-02T11:00:00Z",
@@ -199,8 +200,9 @@ Chỉ gồm người **đã từng tham gia** đội (thành viên `ACTIVE` ho�
       "memberId": "0193a5c3-0a11-7b22-8c33-1d44e55f6602",
       "teamId": "0193a5c2-7e41-7c3a-9f12-4b8e6d2a1c01",
       "userId": "0193a5c0-1b2c-7d3e-8f40-5a6b7c8d9e02",
-      "displayName": "Người dùng đã xóa",
+      "displayName": "Trần Thị B",
       "avatarUrl": null,
+      "isUserDeleted": true,
       "role": "MEMBER",
       "status": "LEFT",
       "joinedAt": "2026-11-03T08:00:00Z",
@@ -359,7 +361,8 @@ Field USER-001 giữ nguyên (bản Admin có thêm `inactiveReason` như USER-0
 | `memberId` | UUID | Id tư cách thành viên |
 | `teamId` | UUID | Id đội |
 | `userId` | UUID | Id user; giữ nguyên kể cả khi user đã xoá tài khoản |
-| `displayName` | string | Tên hiển thị; `"Người dùng đã xóa"` nếu user đã xoá tài khoản |
+| `displayName` | string | Tên hiển thị; Admin nhận tên thật kể cả khi user đã xoá tài khoản |
+| `isUserDeleted` | boolean | `true` nếu user đã xoá tài khoản; FE Admin dùng để gắn nhãn “đã xoá” |
 | `avatarUrl` | string \| null | Ảnh đại diện; `null` nếu chưa có hoặc user đã xoá tài khoản |
 | `role` | enum | `CAPTAIN` \| `MEMBER` — vai trò hiện tại, hoặc vai trò lúc rời đội nếu đã `LEFT` |
 | `status` | enum | `ACTIVE` \| `LEFT` |

@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · Cloudinary (ký/xác minh cục bộ trong request; Admin API chỉ trong job dọn asset) |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §10 · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) (`Proposed`) |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (§5.1); entity hiện có `domain/.../entity/venue/{Venue,VenueImage,VenueReport}` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v1.3** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -360,7 +360,7 @@ Giữ Lombok/builder/`@PrePersist` (`convention-backend.md` §6, §6.1); `src/ma
 - DTO là `record`; enum dạng chuỗi dùng `@OneOf` (phân biệt hoa thường).
 - **Field tuỳ chọn chấp nhận `""`** (cả tạo và sửa — `API_Spec.md` §1, §2.1, §2.12): `venueType` `@OneOf({"FIVE_A_SIDE","SEVEN_A_SIDE","ELEVEN_A_SIDE",""})`; `phone` `@Pattern(regexp = "^$|^0[0-9]{9,10}$")`; `website` `@URL(regexp = "^$|^https?://.*")` + `@Size(max = 500)` ([Inference] `@URL` của Hibernate Validator coi `""` hợp lệ — có test). Service đổi `""` → `null` (tạo) hoặc xoá giá trị (sửa). `UpdateVenueRequest.venueName/address`: `@Size` + `@Pattern(regexp = "(?s).*\\S.*")` (null hợp lệ, chỉ khoảng trắng → 400).
 - **`SearchVenueRequest`** (record, bind `@ModelAttribute`): `page`, `pageSize` kiểu `Integer`, `status` kiểu `VenueStatusFilter`; compact constructor gán mặc định khi `null` (`page = 1`, `pageSize = 20`, `status = ACTIVE`, `radiusKm = 5` nếu có toạ độ) **trước** Bean Validation (`@Min/@Max` chạy trên giá trị sau mặc định). `@ValidGeoQuery` mức lớp gắn lỗi vào property node (`lat` / `radiusKm`) vì `GlobalExceptionHandler` chỉ đọc `getFieldErrors()`. Test bắt buộc: không gửi `page`/`pageSize`/`status` → 1/20/`ACTIVE`; `pageSize=101` → 400. `pageSize` tối đa 100 (không theo 50 của AC §3.4): user chốt 2026-11-09 để nhất quán `PageRequestFactory` dùng chung.
-- `VenueMapper` (`componentModel = "spring"`, `uses`/`imports` `MapperSupport`, `unmappedTargetPolicy = ERROR`): `toResponse(VenueDetailView, List<VenueImage>)`, `toCreatedResponse(Venue, String creatorName)`, `toSummary(VenueSummaryView)` (`distanceKm` HALF_UP 2 chữ số), `toImage(VenueImage)` (không map `publicId`), `toReport(VenueReport)`, `toAdminReport(AdminVenueReportView)` (che tên), `toSignatureResponse(UploadSignature)`.
+- `VenueMapper` (`componentModel = "spring"`, `uses`/`imports` `MapperSupport`, `unmappedTargetPolicy = ERROR`): `toResponse(VenueDetailView, List<VenueImage>)`, `toCreatedResponse(Venue, String creatorName)`, `toSummary(VenueSummaryView)` (`distanceKm` HALF_UP 2 chữ số), `toImage(VenueImage)` (không map `publicId`), `toReport(VenueReport)`, `toAdminReport(AdminVenueReportView)` (giữ `reporterName` gốc và ánh xạ cờ projection `reporterDeleted` → `isReporterDeleted` bằng `@Mapping(target = "isReporterDeleted", source = "reporterDeleted")`; tiếp tục mask `handledByName`), `toSignatureResponse(UploadSignature)`. Response report Admin không có avatar reporter.
 
 ## 8. Cấu hình (nguồn duy nhất cho giá trị) & Dependencies
 

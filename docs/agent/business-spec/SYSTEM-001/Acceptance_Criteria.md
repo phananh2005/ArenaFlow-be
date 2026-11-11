@@ -111,7 +111,7 @@
 
 **Then:**
 - Tài khoản chuyển soft-deleted
-- Lịch sử hiển thị "Người dùng đã xóa"
+- Lịch sử hiển thị "Người dùng đã xóa"; riêng Admin xem lịch sử thành viên đội (tên thành viên) và report địa điểm (tên người report) thấy tên thật kèm nhãn "đã xóa", ảnh vẫn ẩn; các tên khác vẫn che (BC-U02)
 - Điểm/đánh giá lịch sử của đội khác giữ nguyên
 - Không đội nào tự đổi trạng thái (`USER-002` BR-T14)
 - User bị đăng xuất

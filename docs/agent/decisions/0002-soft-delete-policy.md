@@ -5,8 +5,8 @@
 | **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-02 |
 | **Người quyết định** | Product Owner (chốt chính sách) · solution-architect (đề xuất cách thực hiện) |
-| **Liên quan** | ADR-0001 · UC-U03, BR-T06, AC-U03 · Use_Cases "Quyết định bổ sung" #5 (không hard-delete) · `docs/agent/design/USER-001/` · §Quyết định #4 thay bởi [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) |
-| **Sửa đổi** | 2026-11-06 — §Quyết định #4 (captain duy nhất xoá tài khoản → đội tự `INACTIVE`) hết hiệu lực, thay bởi ADR-0005 |
+| **Liên quan** | ADR-0001 · UC-U03, BR-T06, AC-U03, BC-U02 · Use_Cases "Quyết định bổ sung" #5 (không hard-delete) · `docs/agent/design/USER-001/`, `docs/agent/design/USER-002/`, `docs/agent/design/VENUE-001/` · §Quyết định #4 thay bởi [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) |
+| **Sửa đổi** | 2026-11-06 — §Quyết định #4 (captain duy nhất xoá tài khoản → đội tự `INACTIVE`) hết hiệu lực, thay bởi ADR-0005 · 2026-11-11 — ngoại lệ §Quyết định #2 cho Admin (mục "Sửa đổi 2026-11-11" cuối file) |
 
 ## Bối cảnh (Context)
 - UC-U03/AC-U03: tài khoản soft-delete; lịch sử hiển thị "Người dùng đã xóa"; điểm/đánh giá của đội khác giữ nguyên; tài khoản "có thể khôi phục sau này"; captain duy nhất xoá → đội INACTIVE.
@@ -47,3 +47,15 @@ Chúng tôi soft-delete bằng `"user".deleted_at` và **không** xoá/ẩn danh
 
 - [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) (Accepted) thay §Quyết định #4: captain ACTIVE của bất kỳ đội chưa giải tán nào — kể cả người duy nhất — bị chặn xoá tài khoản (`422 USER_003`); hệ thống không tự chuyển đội sang `INACTIVE`. Đội có trạng thái cuối `DISBANDED`.
 - Các quyết định còn lại của ADR này (soft-delete, giữ hồ sơ và lịch sử, che danh tính khi hiển thị, không hard-delete) giữ nguyên.
+
+## Sửa đổi 2026-11-11 — Ngoại lệ hiển thị cho Admin
+
+- **Bối cảnh:** Admin cần nhận diện người đã xoá tài khoản khi rà lịch sử thành viên đội và xử lý report địa điểm; chuỗi `"Người dùng đã xóa"` không phân biệt được các user đã xoá với nhau (user chốt 2026-11-11, SRS SYSTEM-001 BC-U02 v1.6).
+- **Ngoại lệ §Quyết định #2**, chỉ áp dụng cho đúng 2 field:
+  - USER-002 `API_Spec.md` §2.4 (lịch sử thành viên Admin): `displayName` trả tên thật, kèm `isUserDeleted`.
+  - VENUE-001 `API_Spec.md` §2.8–2.9 (report địa điểm Admin): `reporterName` trả tên thật, kèm `isReporterDeleted`.
+  - Cờ `true` khi user đã xoá tài khoản; FE dùng để gắn nhãn "đã xoá". Ảnh đại diện của user đã xoá vẫn `null`.
+- **Không thuộc ngoại lệ, vẫn che theo §Quyết định #2:** `createdByName` (người tạo địa điểm), `handledByName` (Admin xử lý report), `disbandedByName` (người giải tán đội, kể cả trong danh sách đội Admin), và mọi endpoint khác.
+- **Điều kiện:** cả 2 endpoint nằm dưới `/api/v1/admin/**`, chỉ role `ADMIN` gọi được (kiểm ở server, không dựa vào việc ẩn trên UI). Mở rộng ngoại lệ sang field/endpoint khác → sửa đổi mới của ADR này.
+- **Hệ quả:** thu hẹp phạm vi §Quyết định #2: phạm vi Admin có 2 field ngoại lệ, nên Admin đọc được tên người đã xoá tài khoản ở 2 field đó. Cộng thêm vào rủi ro quyền riêng tư ở §Hệ quả: khi có ADR purge/ẩn danh, phải xét lại ngoại lệ này.
+- Các quyết định còn lại giữ nguyên.

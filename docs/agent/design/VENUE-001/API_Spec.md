@@ -11,8 +11,8 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); USER-001 `API_Spec.md` §1.1 "Quy ước chung" và §1.2 "Lỗi chung" |
 | Quyết định liên quan | [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) (`Proposed`) — ảnh lưu trên Cloudinary, FE upload thẳng lên Cloudinary bằng chữ ký backend cấp |
-| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.2) — UC-V01..V06, BR-V01..V10, BC-V01..V07, Business_Rules §2.6, §5.1/§5.4, AC-V01..V05 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v1.3** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.6) — UC-V01..V06, BR-V01..V10, BC-V01..V07, BC-U02, Business_Rules §2.6, §5.1/§5.4, AC-V01..V05 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -26,6 +26,7 @@ Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ du
 - **Admin** = tài khoản có role `ADMIN` trong access token. **Người tạo** = user có id bằng `createdById` của địa điểm. FE so `createdById` với id user đang đăng nhập và role để quyết định hiện nút (§3); backend vẫn kiểm lại.
 - Id là UUID dạng chuỗi. Thời gian là chuỗi ISO-8601 UTC (vd `"2026-11-09T03:00:00Z"`). Toạ độ là số thập phân.
 - Enum viết UPPERCASE, phân biệt hoa thường (§4.1); riêng `format` ảnh viết thường.
+- Mọi endpoint, kể cả endpoint Admin, che tên và ảnh của user đã xoá tài khoản. Ngoại lệ duy nhất của mã này: report Admin §2.8–2.9 trả tên thật người report cùng `isReporterDeleted` để gắn nhãn “đã xoá”; các field tên khác (người tạo địa điểm, người xử lý report) vẫn che theo quy tắc chung. Không có avatar reporter trong hợp đồng report.
 - Chuỗi được cắt khoảng trắng đầu/cuối trước khi lưu. Field tuỳ chọn gửi `""`: ở request tạo coi như không nhập (lưu `null`, không báo lỗi); ở `PATCH /venues/{venueId}` (2.12) nghĩa là xoá giá trị.
 - Danh sách: `page` (≥ 1, mặc định 1), `pageSize` (1..100, mặc định 20); response có `pagination` (`api-convention.md` §7). Thứ tự sắp xếp cố định, ghi ở từng endpoint; không có tham số `sort`.
 - Lỗi trả theo envelope `error` (`api-convention.md` §4.4). Sai định dạng / độ dài / enum / thiếu field bắt buộc / id trên path không phải UUID → `400 VALIDATION_ERROR` kèm `validationErrors[].field` (`api-convention.md` §11).
@@ -490,6 +491,7 @@ GET /api/v1/admin/venue-reports?status=PENDING&page=1&pageSize=20
       "venueStatus": "ACTIVE",
       "reporterId": "01935f77-3c2d-7e1f-8a9b-0c1d2e3f4a5b",
       "reporterName": "Trần Thị B",
+      "isReporterDeleted": false,
       "reason": "CLOSED",
       "detail": "Sân đã đóng cửa",
       "status": "PENDING",
@@ -542,6 +544,7 @@ Không đổi trạng thái địa điểm — muốn ngừng hoạt động đ�
     "venueStatus": "ACTIVE",
     "reporterId": "01935f77-3c2d-7e1f-8a9b-0c1d2e3f4a5b",
     "reporterName": "Trần Thị B",
+    "isReporterDeleted": false,
     "reason": "CLOSED",
     "detail": "Sân đã đóng cửa",
     "status": "REJECTED",
@@ -881,7 +884,8 @@ Không trả `publicId`.
 | `venueName` | string | |
 | `venueStatus` | enum | Trạng thái hiện tại của địa điểm |
 | `reporterId` | UUID | |
-| `reporterName` | string | Người report đã xoá tài khoản → `"Người dùng đã xóa"` |
+| `reporterName` | string | Tên thật người report; Admin nhận tên gốc cả khi tài khoản đã xoá |
+| `isReporterDeleted` | boolean | `true` nếu người report đã xoá tài khoản; FE Admin dùng để gắn nhãn “đã xoá” |
 | `reason`, `detail`, `status`, `createdAt` | | Cùng nghĩa §4.6 |
 | `handledById`, `handledByName`, `handledAt` | UUID / string / datetime | Admin chốt report và thời điểm chốt; cả ba `null` khi `PENDING`; admin đã xoá tài khoản → `handledByName` = `"Người dùng đã xóa"` |
 

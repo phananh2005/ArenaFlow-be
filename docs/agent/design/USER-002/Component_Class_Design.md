@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` · kiến trúc hiện hành theo USER-001 |
 | Ràng buộc dữ liệu | USER-001 schema V1/V2/V3; delta USER-002 dưới đây cần migration Flyway |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v1.8** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -69,7 +69,7 @@ Mở rộng filter trạng thái hỗ trợ `DISBANDED`, không đổi `ACTIVE` 
 
 ### 4.2. AdminTeamService
 
-Thêm `PageResponse<MemberHistoryResponse> listMemberHistory(UUID teamId, MemberHistoryStatusFilter status, int page, int pageSize)`: `existsById` → `TEAM_001`, rồi `findMemberHistory` (§5.2). Mapper ánh xạ `MemberHistoryView` → `MemberHistoryResponse`, che tên qua `MapperSupport`; không expose entity. `listTeams` giữ nguyên, projection thêm người giải tán.
+Thêm `PageResponse<MemberHistoryResponse> listMemberHistory(UUID teamId, MemberHistoryStatusFilter status, int page, int pageSize)`: `existsById` → `TEAM_001`, rồi `findMemberHistory` (§5.2). Mapper ánh xạ `MemberHistoryView` → `MemberHistoryResponse`; Admin nhận `displayName` gốc và `isUserDeleted` (từ cờ `userDeleted` của projection), avatar của user đã xoá được đặt `null`. Projection đã có đủ dữ liệu; không thêm truy vấn. Mapping `MemberResponse` thông thường tiếp tục che tên/ảnh. Không expose entity. `listTeams` giữ nguyên, projection thêm người giải tán.
 
 ### 4.3. ProfileService
 
@@ -137,7 +137,8 @@ Bổ sung trạng thái `DISBANDED`; fields tương ứng `disbandReason`, `disb
 
 - `TeamResponse`: thêm `disbandedAt`, `disbandedById`, `disbandedByName`, `disbandReason`.
 - `TeamSummaryResponse`, `AdminTeamSummaryResponse`: trạng thái mới và `disbandedByName`.
-- `MemberHistoryResponse` (mới): field của `MemberResponse` + `leftAt`.
+- `MemberHistoryResponse` (mới): field của `MemberResponse` + `isUserDeleted` + `leftAt`; endpoint Admin giữ `displayName` gốc, avatar user đã xoá vẫn `null`.
+- `MembershipMapper.toMemberHistory`: không che tên; `@Mapping(target = "isUserDeleted", source = "userDeleted")` (tên projection khác tên response), mask avatar. `toMember` cho endpoint user thường tiếp tục che tên/ảnh.
 - `TeamMapper`: ánh xạ projection/fields mới; `disbandedByName` che qua `MapperSupport`/`DeletedUserMasking` dựa trên cờ deleted của người giải tán trong projection. Không expose entity.
 
 ## 8. Dependencies
@@ -165,3 +166,5 @@ Cập nhật sau khi mọi phase code xong và test PASS (CLAUDE.md §8), ghi v�
 | `docs/agent/api-convention.md` §2.1 | Ngoại lệ endpoint hành động (action sub-resource), qua `workflow-adapt` | Chưa — qua `chore/agent-framework-*` |
 | `docs/agent/decisions/0002-*.md` | §Quyết định #4 (captain duy nhất xoá tài khoản → đội tự `INACTIVE`) thay bởi ADR-0005 | ✅ PR #19 — giữ `Accepted` + hàng/mục `Sửa đổi 2026-11-06`, không chuyển `Superseded` (thay một phần §Quyết định #4; `decisions/README.md` không có hàng cho thay thế một phần nên PR #19 dùng `Sửa đổi`) |
 | `docs/agent/decisions/0003-*.md` | Hệ quả "không deadlock" chưa tính trường hợp nhiều dòng `team_member` bị khoá theo thứ tự khác nhau (`Processing_Flow.md` §5); thêm mục Sửa đổi + liên kết USER-002/ADR-0005 ở "Liên quan" | ✅ PR #19 (`Sửa đổi` ngoại lệ `deleteAccount` + liên kết ADR-0007) · PR #34 (`Sửa đổi` "Phạm vi của 'không deadlock'" trỏ ADR-0007 §Hệ quả + liên kết USER-002/ADR-0005); Hệ quả gốc không viết lại |
+| `docs/agent/decisions/0002-*.md` | §Quyết định #2 "che ở mọi chỗ" chưa có ngoại lệ Admin (lịch sử thành viên USER-002, report VENUE-001) | `feature/USER-002-admin-deleted-user-display` — ✅ mục `Sửa đổi 2026-11-11`; §Quyết định không viết lại |
+| `docs/agent/design/USER-001/API_Spec.md` §1.1 | Quy tắc che tên user đã xoá chưa trỏ tới ngoại lệ Admin | `feature/USER-002-admin-deleted-user-display` — ✅ USER-001 v3.8 |

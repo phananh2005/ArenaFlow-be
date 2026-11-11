@@ -1,5 +1,19 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v3.8] — 2026-11-11
+
+**Type:** MINOR (không đổi endpoint, field, kiểu, status code, mã lỗi, message của USER-001) · **Tóm tắt:** Quy tắc che tên user đã xoá ở §1.1 trỏ tới 2 ngoại lệ dành cho Admin.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | `API_Spec.md` §1.1 | Thêm | "Che tên ở mọi chỗ hiển thị người khác" → thêm ngoại lệ Admin: USER-002 `API_Spec.md` §2.4 (`displayName` + `isUserDeleted`), VENUE-001 `API_Spec.md` §2.8–2.9 (`reporterName` + `isReporterDeleted`) | Quy tắc chung không mâu thuẫn với USER-002 v2.0, VENUE-001 v2.0 (ADR-0002, sửa đổi 2026-11-11) | Không, với endpoint USER-001; màn Admin xem CHANGELOG USER-002 v2.0, VENUE-001 v2.0 |
+| 2 | Header 3 tài liệu thiết kế | Ghi nhận | v3.7 → v3.8 | Phiên bản ở header khớp entry mới nhất | Không |
+
+### Ảnh hưởng
+- Endpoint USER-001: hợp đồng và hành vi giữ nguyên.
+
 ## [v3.7] — 2026-11-10
 
 **Type:** MINOR (không đổi endpoint, field, kiểu, status code, mã lỗi, message) · **Tóm tắt:** Viết lại `API_Spec.md` để FE đọc độc lập; không đổi hợp đồng, FE không phải sửa code đang chạy.
