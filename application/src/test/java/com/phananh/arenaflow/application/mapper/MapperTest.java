@@ -248,7 +248,7 @@ class MapperTest {
     }
 
     @Test
-    void membershipMapperBuildsMemberHistoryWithLeftAtAndMasksDeletedUser() {
+    void membershipMapperBuildsAdminMemberHistoryWithOriginalNameAndDeletedFlag() {
         Map<String, Object> values = new HashMap<>();
         values.put("memberId", UUID.randomUUID());
         values.put("teamId", UUID.randomUUID());
@@ -263,7 +263,8 @@ class MapperTest {
 
         MemberHistoryResponse response = membershipMapper.toMemberHistory(projection(MemberHistoryView.class, values));
 
-        assertThat(response.displayName()).isEqualTo("Người dùng đã xóa");
+        assertThat(response.displayName()).isEqualTo("Gone");
+        assertThat(response.isUserDeleted()).isTrue();
         assertThat(response.avatarUrl()).isNull();
         assertThat(response.role()).isEqualTo("CAPTAIN");
         assertThat(response.status()).isEqualTo("LEFT");
