@@ -1,0 +1,28 @@
+# Bí mật — không bao giờ đưa vào build context
+.env
+.env.*
+!.env.example
+
+# Build output, IDE, công cụ
+**/target/
+.idea/
+*.iml
+.vscode/
+node_modules/
+.neon/
+
+# Không cần để build image
+.git/
+.github/
+.githooks/
+.claude/
+.agent-bootstrap/
+docs/
+*.md
+neon.ts
+package.json
+package-lock.json
+publish-spec.yml
+.mcp.json
+Dockerfile
+.dockerignore
