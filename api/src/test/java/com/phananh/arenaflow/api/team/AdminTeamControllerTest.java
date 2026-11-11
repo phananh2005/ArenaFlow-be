@@ -7,11 +7,13 @@ import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.entity.user.User;
 import org.junit.jupiter.api.Test;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -88,7 +90,9 @@ class AdminTeamControllerTest extends ApiIntegrationTest {
         mockMvc.perform(as(admin, get(url)).param("status", "ACTIVE"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(2))
-                .andExpect(jsonPath("$.data[0].leftAt").doesNotExist());
+                .andExpect(jsonPath("$.data[0].leftAt").doesNotExist())
+                .andExpect(jsonPath("$.data[0].isUserDeleted").value(false))
+                .andExpect(jsonPath("$.data[1].isUserDeleted").value(false));
 
         mockMvc.perform(as(captain, post("/api/v1/teams/" + team.getId() + "/disband"))).andExpect(status().isOk());
 
@@ -102,6 +106,30 @@ class AdminTeamControllerTest extends ApiIntegrationTest {
         mockMvc.perform(as(admin, get(url)).param("status", "ACTIVE"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    @Test
+    void memberHistoryShowsDeletedUserRealNameWithFlagAndHiddenAvatarToAdmin() throws Exception {
+        User admin = saveUser("Deleted History Admin", User.Role.ADMIN);
+        User captain = saveUser("Deleted History Captain");
+        User gone = saveUser("Nguyễn Văn Đã Xoá");
+        gone.setAvatarUrl("https://res.cloudinary.com/demo/image/upload/gone.jpg");
+        gone.setDeletedAt(OffsetDateTime.now());
+        userRepository.save(gone);
+        Team team = saveTeam("Team Deleted History", captain);
+        TeamMember left = saveMember(team, gone, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
+        left.setStatus(TeamMember.Status.LEFT);
+        left.setLeftAt(OffsetDateTime.now());
+        teamMemberRepository.save(left);
+        flush();
+
+        mockMvc.perform(as(admin, get("/api/v1/admin/teams/" + team.getId() + "/members")).param("status", "LEFT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].userId").value(gone.getId().toString()))
+                .andExpect(jsonPath("$.data[0].displayName").value("Nguyễn Văn Đã Xoá"))
+                .andExpect(jsonPath("$.data[0].isUserDeleted").value(true))
+                .andExpect(jsonPath("$.data[0].avatarUrl").value(nullValue()));
     }
 
     @Test

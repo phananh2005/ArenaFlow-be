@@ -29,9 +29,8 @@ public interface MembershipMapper {
             expression = "java(MapperSupport.maskAvatar(view.getAvatarUrl(), view.getUserDeleted()))")
     MemberResponse toMember(MemberView view);
 
-    /** Như {@link #toMember}: che tên/avatar của user đã xoá; leftAt null khi membership còn ACTIVE. */
-    @Mapping(target = "displayName",
-            expression = "java(MapperSupport.maskName(view.getDisplayName(), view.getUserDeleted()))")
+    /** Admin nhận tên thật kèm cờ xoá; avatar của user đã xoá vẫn bị ẩn. */
+    @Mapping(target = "isUserDeleted", source = "userDeleted")
     @Mapping(target = "avatarUrl",
             expression = "java(MapperSupport.maskAvatar(view.getAvatarUrl(), view.getUserDeleted()))")
     MemberHistoryResponse toMemberHistory(MemberHistoryView view);

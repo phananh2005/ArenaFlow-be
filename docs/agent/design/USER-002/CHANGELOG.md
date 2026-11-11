@@ -1,5 +1,21 @@
 # CHANGELOG — USER-002 Giải tán đội & quy tắc xoá tài khoản đội trưởng
 
+## [v2.0] — 2026-11-11
+
+**Type:** MAJOR (đổi shape response lịch sử thành viên Admin: thêm field `isUserDeleted`; `displayName` của user đã xoá tài khoản đổi từ `"Người dùng đã xóa"` sang tên thật) · **Tóm tắt:** Admin xem tên thật của thành viên đã xoá tài khoản kèm cờ để gắn nhãn "đã xoá"; ảnh vẫn ẩn.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | `API_Spec.md` §1, §2.4, §5.3 | Đổi | User đã xoá tài khoản: `displayName` = `"Người dùng đã xóa"` → tên thật + `isUserDeleted = true`; `avatarUrl` vẫn `null` | Admin cần nhận diện thành viên trong lịch sử và phân biệt tài khoản đã xoá (ADR-0002, ngoại lệ 2026-11-11) | Màn lịch sử thành viên Admin: hiện nhãn "đã xoá" khi `isUserDeleted = true`; không dựa vào chuỗi `"Người dùng đã xóa"` |
+| 2 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Khớp hợp đồng mới | Không |
+| 3 | Header tài liệu thiết kế USER-002 | Ghi nhận | v1.8 → v2.0 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- Chỉ endpoint lịch sử thành viên Admin đổi. Các endpoint khác (danh sách thành viên, lịch sử đội trưởng, người giải tán…) vẫn trả `"Người dùng đã xóa"` và ảnh `null`.
+- SRS SYSTEM-001 v1.6 cập nhật BC-U02, UC-U03, AC-U03.
+
 ## [v1.8] — 2026-11-10
 
 **Type:** MINOR (không đổi endpoint, method, field, kiểu, status, mã lỗi, message) · **Tóm tắt:** Viết lại `API_Spec.md` để FE đọc độc lập, không đổi hợp đồng.

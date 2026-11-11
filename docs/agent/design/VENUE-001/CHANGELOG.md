@@ -1,5 +1,21 @@
 # CHANGELOG — VENUE-001 Quản lý địa điểm sân
 
+## [v2.0] — 2026-11-11
+
+**Type:** MAJOR (đổi shape response report Admin: thêm field `isReporterDeleted`; `reporterName` của người report đã xoá tài khoản đổi từ `"Người dùng đã xóa"` sang tên thật) · **Tóm tắt:** Admin xem tên thật người report đã xoá tài khoản kèm cờ để gắn nhãn "đã xoá"; tên người khác vẫn che.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | `API_Spec.md` §1, §2.8–2.9, §4.7 | Đổi | Người report đã xoá tài khoản: `reporterName` = `"Người dùng đã xóa"` → tên thật + `isReporterDeleted = true`; `handledByName`, `createdByName` vẫn che | Admin cần nhận diện người report và phân biệt tài khoản đã xoá (ADR-0002, ngoại lệ 2026-11-11) | Màn report Admin: hiện nhãn "đã xoá" khi `isReporterDeleted = true` |
+| 2 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Khớp hợp đồng mới | Không |
+| 3 | Header tài liệu thiết kế VENUE-001 | Ghi nhận | v1.3 → v2.0 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- Chỉ response report Admin (§2.8–2.9) đổi; response report không có avatar người report.
+- SRS SYSTEM-001 v1.6 cập nhật BC-U02, UC-U03, AC-U03.
+
 ## [v1.3] — 2026-11-11
 
 **Type:** MINOR (không đổi endpoint, method, field, kiểu, mã thành công, mã lỗi, message) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE (ràng buộc dữ liệu người tạo / người báo cáo, ghi chú cho kèo luồng B), không ảnh hưởng FE.

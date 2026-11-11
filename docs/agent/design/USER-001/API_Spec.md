@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (UC-U01..U03, UC-T01..T05, BR-U01..U06, BR-T01..T06) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.7** (solution-architect · 2026-11-10) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.8** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -32,7 +32,7 @@
 - **Chuỗi:** giới hạn độ dài tính trên chuỗi FE gửi. BE cắt khoảng trắng đầu/cuối trước khi lưu ở `displayName`, `teamName`, `reason` (tạm ngưng đội).
 - **PATCH:** field vắng mặt hoặc `null` → giữ nguyên giá trị cũ.
 - **Phân trang:** `page` (≥ 1, mặc định 1), `pageSize` (1..100, mặc định 20). Thứ tự sắp xếp cố định theo từng endpoint, chưa có tham số `sort`. Trang vượt quá → `data: []`.
-- **User đã xoá tài khoản** (ADR-0002): ở mọi chỗ hiển thị người khác — `captainName`, `fromUserName`, `toUserName`, `displayName`/`avatarUrl` của thành viên, `disbandedByName` — trả tên `"Người dùng đã xóa"` và ảnh `null`; id giữ nguyên.
+- **User đã xoá tài khoản** (ADR-0002): ở mọi chỗ hiển thị người khác — `captainName`, `fromUserName`, `toUserName`, `displayName`/`avatarUrl` của thành viên, `disbandedByName` — trả tên `"Người dùng đã xóa"` và ảnh `null`; id giữ nguyên. Ngoại lệ chỉ dành cho Admin: USER-002 `API_Spec.md` §2.4 (`displayName` + `isUserDeleted`) và VENUE-001 `API_Spec.md` §2.8–2.9 (`reporterName` + `isReporterDeleted`) trả tên thật kèm cờ đã xoá; ảnh vẫn `null`.
 - **Thứ tự lỗi:** 401 luôn trả trước 400. Bảng lỗi mỗi endpoint xếp theo thứ tự BE kiểm — nhiều điều kiện cùng sai thì nhận mã ở dòng trên cùng (nguồn: USER-002 `API_Spec.md` §2.1a).
 
 ### 1.2. Lỗi chung
