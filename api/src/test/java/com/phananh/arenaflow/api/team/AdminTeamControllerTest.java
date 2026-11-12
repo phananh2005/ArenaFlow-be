@@ -13,7 +13,6 @@ import java.util.UUID;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -46,7 +45,10 @@ class AdminTeamControllerTest extends ApiIntegrationTest {
         mockMvc.perform(as(admin, patch(base + "/mark-inactive")).content("{\"reason\":\"Vi phạm\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("INACTIVE"))
-                .andExpect(jsonPath("$.data.inactiveReason").value("Vi phạm"));
+                .andExpect(jsonPath("$.data.inactiveReason").value("Vi phạm"))
+                .andExpect(jsonPath("$.data.captainName").value("Captain Adm"))
+                .andExpect(jsonPath("$.data.isCaptainDeleted").value(false))
+                .andExpect(jsonPath("$.data.isDisbandedByDeleted").value(false));
         flush();
         mockMvc.perform(as(admin, patch(base + "/mark-inactive")).content("{\"reason\":\"Again\"}"))
                 .andExpect(status().isConflict())
@@ -59,7 +61,9 @@ class AdminTeamControllerTest extends ApiIntegrationTest {
         mockMvc.perform(as(admin, patch(base + "/reactivate")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.data.inactiveReason").doesNotExist());
+                .andExpect(jsonPath("$.data.inactiveReason").doesNotExist())
+                .andExpect(jsonPath("$.data.isCaptainDeleted").value(false))
+                .andExpect(jsonPath("$.data.isDisbandedByDeleted").value(false));
         flush();
         mockMvc.perform(as(admin, patch(base + "/reactivate")))
                 .andExpect(status().isConflict())
@@ -109,7 +113,7 @@ class AdminTeamControllerTest extends ApiIntegrationTest {
     }
 
     @Test
-    void memberHistoryShowsDeletedUserRealNameWithFlagAndHiddenAvatarToAdmin() throws Exception {
+    void memberHistoryShowsDeletedUserRealNameAvatarAndFlagToAdmin() throws Exception {
         User admin = saveUser("Deleted History Admin", User.Role.ADMIN);
         User captain = saveUser("Deleted History Captain");
         User gone = saveUser("Nguyễn Văn Đã Xoá");
@@ -129,7 +133,33 @@ class AdminTeamControllerTest extends ApiIntegrationTest {
                 .andExpect(jsonPath("$.data[0].userId").value(gone.getId().toString()))
                 .andExpect(jsonPath("$.data[0].displayName").value("Nguyễn Văn Đã Xoá"))
                 .andExpect(jsonPath("$.data[0].isUserDeleted").value(true))
-                .andExpect(jsonPath("$.data[0].avatarUrl").value(nullValue()));
+                .andExpect(jsonPath("$.data[0].avatarUrl")
+                        .value("https://res.cloudinary.com/demo/image/upload/gone.jpg"));
+    }
+
+    @Test
+    void adminTeamListShowsDeletedDisbanderRealNameWithFlagWhileUserListMasks() throws Exception {
+        User admin = saveUser("Disband List Admin", User.Role.ADMIN);
+        User viewer = saveUser("Disband List Viewer");
+        User captain = saveUser("Người Giải Tán Đã Xoá");
+        Team team = saveTeam("Team Disbanded By Deleted", captain);
+        flush();
+        mockMvc.perform(as(captain, post("/api/v1/teams/" + team.getId() + "/disband"))).andExpect(status().isOk());
+        User gone = userRepository.findById(captain.getId()).orElseThrow();
+        gone.setDeletedAt(OffsetDateTime.now());
+        userRepository.save(gone);
+        flush();
+        String row = "$.data[?(@.teamId == '" + team.getId() + "')]";
+
+        mockMvc.perform(as(admin, get("/api/v1/admin/teams")).param("status", "DISBANDED").param("pageSize", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(row + ".disbandedByName").value("Người Giải Tán Đã Xoá"))
+                .andExpect(jsonPath(row + ".isDisbandedByDeleted").value(true))
+                .andExpect(jsonPath(row + ".isCaptainDeleted").value(false));
+        mockMvc.perform(as(viewer, get("/api/v1/teams")).param("status", "DISBANDED").param("pageSize", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(row + ".disbandedByName").value("Người dùng đã xóa"))
+                .andExpect(jsonPath(row + ".isDisbandedByDeleted").doesNotExist());
     }
 
     @Test

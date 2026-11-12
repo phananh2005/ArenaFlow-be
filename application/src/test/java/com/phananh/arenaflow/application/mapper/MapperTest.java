@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.application.mapper;
 
+import com.phananh.arenaflow.application.dto.response.AdminTeamResponse;
 import com.phananh.arenaflow.application.dto.response.AdminTeamSummaryResponse;
 import com.phananh.arenaflow.application.dto.response.CaptainHistoryResponse;
 import com.phananh.arenaflow.application.dto.response.InvitationResponse;
@@ -243,12 +244,72 @@ class MapperTest {
 
         assertThat(teamMapper.toSummary(kept).disbandedByName()).isEqualTo("Captain Y");
         assertThat(teamMapper.toAdminSummary(kept).disbandedByName()).isEqualTo("Captain Y");
+        assertThat(teamMapper.toAdminSummary(kept).isDisbandedByDeleted()).isFalse();
         assertThat(teamMapper.toSummary(masked).disbandedByName()).isEqualTo("Người dùng đã xóa");
-        assertThat(teamMapper.toAdminSummary(masked).disbandedByName()).isEqualTo("Người dùng đã xóa");
+    }
+
+    // ---------- Admin: không che user đã xoá, kèm cờ ----------
+
+    @Test
+    void teamMapperAdminSummaryKeepsDeletedCaptainAndDisbanderNamesWithFlags() {
+        Map<String, Object> values = new HashMap<>();
+        values.put("teamId", UUID.randomUUID());
+        values.put("teamName", "Team Gone");
+        values.put("skillLevels", "[]");
+        values.put("status", "INACTIVE");
+        values.put("captainName", "Captain Deleted");
+        values.put("captainDeleted", true);
+        values.put("memberCount", 1L);
+        values.put("createdAt", CREATED);
+        values.put("disbandedByName", "Disbander Deleted");
+        values.put("disbandedByDeleted", true);
+        TeamSummaryView view = projection(TeamSummaryView.class, values);
+
+        AdminTeamSummaryResponse admin = teamMapper.toAdminSummary(view);
+
+        assertThat(admin.captainName()).isEqualTo("Captain Deleted");
+        assertThat(admin.isCaptainDeleted()).isTrue();
+        assertThat(admin.disbandedByName()).isEqualTo("Disbander Deleted");
+        assertThat(admin.isDisbandedByDeleted()).isTrue();
+        assertThat(teamMapper.toSummary(view).captainName()).isEqualTo("Người dùng đã xóa");
+        assertThat(teamMapper.toSummary(view).disbandedByName()).isEqualTo("Người dùng đã xóa");
     }
 
     @Test
-    void membershipMapperBuildsAdminMemberHistoryWithOriginalNameAndDeletedFlag() {
+    void teamMapperAdminResponseKeepsDeletedNamesWithFlagsWhileUserResponseMasks() {
+        UUID captainId = UUID.randomUUID();
+        Map<String, Object> values = new HashMap<>();
+        values.put("teamId", UUID.randomUUID());
+        values.put("teamName", "Team Alpha");
+        values.put("skillLevels", "[\"Nhiệt tình\"]");
+        values.put("status", "INACTIVE");
+        values.put("inactiveReason", "Vi phạm");
+        values.put("captainId", captainId);
+        values.put("captainName", "Nguyễn Văn A");
+        values.put("captainDeleted", true);
+        values.put("memberCount", 5L);
+        values.put("createdAt", CREATED);
+        values.put("updatedAt", CREATED);
+        values.put("disbandedByName", "Trần B");
+        values.put("disbandedByDeleted", false);
+        TeamDetailView view = projection(TeamDetailView.class, values);
+
+        AdminTeamResponse admin = teamMapper.toAdminResponse(view);
+
+        assertThat(admin.captainId()).isEqualTo(captainId);
+        assertThat(admin.captainName()).isEqualTo("Nguyễn Văn A");
+        assertThat(admin.isCaptainDeleted()).isTrue();
+        assertThat(admin.disbandedByName()).isEqualTo("Trần B");
+        assertThat(admin.isDisbandedByDeleted()).isFalse();
+        assertThat(admin.inactiveReason()).isEqualTo("Vi phạm");
+        assertThat(admin.skillLevels()).containsExactly("Nhiệt tình");
+        assertThat(admin.memberCount()).isEqualTo(5L);
+        assertThat(admin.createdAt()).isEqualTo(CREATED_UTC);
+        assertThat(teamMapper.toResponse(view).captainName()).isEqualTo("Người dùng đã xóa");
+    }
+
+    @Test
+    void membershipMapperBuildsAdminMemberHistoryWithOriginalNameAvatarAndDeletedFlag() {
         Map<String, Object> values = new HashMap<>();
         values.put("memberId", UUID.randomUUID());
         values.put("teamId", UUID.randomUUID());
@@ -265,7 +326,7 @@ class MapperTest {
 
         assertThat(response.displayName()).isEqualTo("Gone");
         assertThat(response.isUserDeleted()).isTrue();
-        assertThat(response.avatarUrl()).isNull();
+        assertThat(response.avatarUrl()).isEqualTo("https://cdn.example.com/x.png");
         assertThat(response.role()).isEqualTo("CAPTAIN");
         assertThat(response.status()).isEqualTo("LEFT");
         assertThat(response.joinedAt()).isEqualTo(CREATED_UTC);

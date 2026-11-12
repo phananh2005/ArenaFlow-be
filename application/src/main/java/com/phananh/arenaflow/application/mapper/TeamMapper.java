@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.application.mapper;
 
+import com.phananh.arenaflow.application.dto.response.AdminTeamResponse;
 import com.phananh.arenaflow.application.dto.response.AdminTeamSummaryResponse;
 import com.phananh.arenaflow.application.dto.response.CaptainHistoryResponse;
 import com.phananh.arenaflow.application.dto.response.TeamResponse;
@@ -32,12 +33,15 @@ public interface TeamMapper {
             expression = "java(MapperSupport.maskName(view.getDisbandedByName(), view.getDisbandedByDeleted()))")
     TeamSummaryResponse toSummary(TeamSummaryView view);
 
-    /** Như {@link #toSummary} nhưng kèm inactiveReason (danh sách đội của Admin). */
-    @Mapping(target = "captainName",
-            expression = "java(MapperSupport.maskName(view.getCaptainName(), view.getCaptainDeleted()))")
-    @Mapping(target = "disbandedByName",
-            expression = "java(MapperSupport.maskName(view.getDisbandedByName(), view.getDisbandedByDeleted()))")
+    /** Danh sách đội của Admin: kèm inactiveReason; không che tên user đã xoá, trả cờ đã xoá. */
+    @Mapping(target = "isCaptainDeleted", source = "captainDeleted")
+    @Mapping(target = "isDisbandedByDeleted", source = "disbandedByDeleted")
     AdminTeamSummaryResponse toAdminSummary(TeamSummaryView view);
+
+    /** Chi tiết đội của Admin: như {@link #toResponse(TeamDetailView)} nhưng không che tên, trả cờ đã xoá. */
+    @Mapping(target = "isCaptainDeleted", source = "captainDeleted")
+    @Mapping(target = "isDisbandedByDeleted", source = "disbandedByDeleted")
+    AdminTeamResponse toAdminResponse(TeamDetailView view);
 
     /** Che tên người chuyển/nhận quyền đã xoá tài khoản; fromUserId null = lần tạo đội. */
     @Mapping(target = "fromUserName",

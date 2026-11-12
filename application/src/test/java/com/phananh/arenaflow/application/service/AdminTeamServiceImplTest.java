@@ -5,7 +5,7 @@ import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.dto.request.MarkInactiveRequest;
 import com.phananh.arenaflow.application.dto.response.AdminTeamSummaryResponse;
 import com.phananh.arenaflow.application.dto.response.PageResponse;
-import com.phananh.arenaflow.application.dto.response.TeamResponse;
+import com.phananh.arenaflow.application.dto.response.AdminTeamResponse;
 import com.phananh.arenaflow.domain.entity.team.Team;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.common.exception.BusinessException;
@@ -48,7 +48,6 @@ class AdminTeamServiceImplTest {
     private final TeamRepository teamRepository = mock(TeamRepository.class);
     private final TeamMemberRepository teamMemberRepository = mock(TeamMemberRepository.class);
     private final ConcurrencyConflictRetrier retrier = mock(ConcurrencyConflictRetrier.class);
-    private final TeamService teamService = mock(TeamService.class);
     private final TeamMapper teamMapper = Mappers.getMapper(TeamMapper.class);
     private final SpelAwareProxyProjectionFactory projections = new SpelAwareProxyProjectionFactory();
     private final UUID teamId = UUID.randomUUID();
@@ -60,10 +59,11 @@ class AdminTeamServiceImplTest {
     void setUp() {
         service = new AdminTeamServiceImpl(teamRepository, teamMemberRepository, retrier, teamMapper,
                 Mappers.getMapper(MembershipMapper.class), new PageRequestFactory(),
-                new TeamGuard(teamRepository, teamMemberRepository), teamService);
+                new TeamGuard(teamRepository, teamMemberRepository));
         when(retrier.execute(any())).thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(0)).get());
-        when(teamService.getTeam(teamId)).thenReturn(teamMapper.toResponse(projections.createProjection(
-                TeamDetailView.class, Map.of("teamId", teamId, "skillLevels", "[]", "memberCount", 1L))));
+        when(teamRepository.findDetailById(teamId)).thenReturn(Optional.of(projections.createProjection(
+                TeamDetailView.class, Map.of("teamId", teamId, "skillLevels", "[]", "memberCount", 1L,
+                        "captainName", "Gone Captain", "captainDeleted", true))));
     }
 
     private Team team(Team.TeamStatus status) {
@@ -90,12 +90,14 @@ class AdminTeamServiceImplTest {
         Team team = team(Team.TeamStatus.ACTIVE);
         when(teamRepository.findById(teamId)).thenReturn(Optional.of(team));
 
-        TeamResponse response = service.markInactive(teamId, new MarkInactiveRequest("  Vi phạm  "));
+        AdminTeamResponse response = service.markInactive(teamId, new MarkInactiveRequest("  Vi phạm  "));
 
         assertThat(team.getStatus()).isEqualTo(Team.TeamStatus.INACTIVE);
         assertThat(team.getInactiveReason()).isEqualTo("Vi phạm");
         verify(teamRepository).save(team);
         assertThat(response.teamId()).isEqualTo(teamId);
+        assertThat(response.captainName()).isEqualTo("Gone Captain");
+        assertThat(response.isCaptainDeleted()).isTrue();
     }
 
     @Test
@@ -121,11 +123,13 @@ class AdminTeamServiceImplTest {
         when(teamMemberRepository.findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE))
                 .thenReturn(Optional.of(TeamMember.builder().build()));
 
-        service.reactivate(teamId);
+        AdminTeamResponse response = service.reactivate(teamId);
 
         assertThat(team.getStatus()).isEqualTo(Team.TeamStatus.ACTIVE);
         assertThat(team.getInactiveReason()).isNull();
         verify(teamRepository).save(team);
+        assertThat(response.captainName()).isEqualTo("Gone Captain");
+        assertThat(response.isCaptainDeleted()).isTrue();
     }
 
     @Test

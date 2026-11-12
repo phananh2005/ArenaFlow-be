@@ -1,11 +1,11 @@
 package com.phananh.arenaflow.api.team;
 
 import com.phananh.arenaflow.application.dto.request.MarkInactiveRequest;
+import com.phananh.arenaflow.application.dto.response.AdminTeamResponse;
 import com.phananh.arenaflow.application.dto.response.AdminTeamSummaryResponse;
 import com.phananh.arenaflow.application.dto.response.ApiResponse;
 import com.phananh.arenaflow.application.dto.response.MemberHistoryResponse;
 import com.phananh.arenaflow.application.dto.response.PageResponse;
-import com.phananh.arenaflow.application.dto.response.TeamResponse;
 import com.phananh.arenaflow.application.service.AdminTeamService;
 import com.phananh.arenaflow.application.service.MemberHistoryStatusFilter;
 import com.phananh.arenaflow.application.service.TeamStatusFilter;
@@ -35,13 +35,13 @@ public class AdminTeamController {
     private final AdminTeamService adminTeamService;
 
     @PatchMapping("/{teamId}/mark-inactive")
-    public ResponseEntity<ApiResponse<TeamResponse>> markInactive(@PathVariable UUID teamId,
+    public ResponseEntity<ApiResponse<AdminTeamResponse>> markInactive(@PathVariable UUID teamId,
                                                   @Valid @RequestBody MarkInactiveRequest request) {
         return ResponseEntity.ok(ApiResponse.of(adminTeamService.markInactive(teamId, request)));
     }
 
     @PatchMapping("/{teamId}/reactivate")
-    public ResponseEntity<ApiResponse<TeamResponse>> reactivate(@PathVariable UUID teamId) {
+    public ResponseEntity<ApiResponse<AdminTeamResponse>> reactivate(@PathVariable UUID teamId) {
         return ResponseEntity.ok(ApiResponse.of(adminTeamService.reactivate(teamId)));
     }
 
