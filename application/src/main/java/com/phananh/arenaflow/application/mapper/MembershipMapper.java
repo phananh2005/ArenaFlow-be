@@ -29,9 +29,7 @@ public interface MembershipMapper {
             expression = "java(MapperSupport.maskAvatar(view.getAvatarUrl(), view.getUserDeleted()))")
     MemberResponse toMember(MemberView view);
 
-    /** Admin nhận tên thật kèm cờ xoá; avatar của user đã xoá vẫn bị ẩn. */
+    /** Admin nhận tên và avatar thật kể cả khi user đã xoá tài khoản, kèm cờ xoá. */
     @Mapping(target = "isUserDeleted", source = "userDeleted")
-    @Mapping(target = "avatarUrl",
-            expression = "java(MapperSupport.maskAvatar(view.getAvatarUrl(), view.getUserDeleted()))")
     MemberHistoryResponse toMemberHistory(MemberHistoryView view);
 }

@@ -15,7 +15,7 @@ public interface TeamDetailView {
     String getInactiveReason();
     UUID getCaptainId();
     String getCaptainName();
-    /** true khi captain đã xoá tài khoản → mapper che tên (DeletedUserMasking). */
+    /** true khi captain đã xoá tài khoản; endpoint thường che tên (DeletedUserMasking), Admin nhận cờ. */
     Boolean getCaptainDeleted();
     Long getMemberCount();
     UUID getCreatedBy();
@@ -25,6 +25,6 @@ public interface TeamDetailView {
     Instant getDisbandedAt();
     UUID getDisbandedById();
     String getDisbandedByName();
-    /** true khi người giải tán đã xoá tài khoản → mapper che tên (DeletedUserMasking). */
+    /** true khi người giải tán đã xoá tài khoản; endpoint thường che tên (DeletedUserMasking), Admin nhận cờ. */
     Boolean getDisbandedByDeleted();
 }

@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · Cloudinary (ký/xác minh cục bộ trong request; Admin API chỉ trong job dọn asset) |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §10 · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) (`Proposed`) |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (§5.1); entity hiện có `domain/.../entity/venue/{Venue,VenueImage,VenueReport}` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -45,7 +45,7 @@ application/   com.phananh.arenaflow.application
 ├── validation/      ValidGeoQuery + ValidGeoQueryValidator (mới); OneOf (tái dùng)
 ├── dto/request/     CreateVenueRequest, UpdateVenueRequest, SearchVenueRequest, AddVenueImageRequest,
 │                    ReportVenueRequest, ResolveVenueReportRequest
-├── dto/response/    VenueResponse, VenueSummaryResponse, VenueImageResponse,
+├── dto/response/    VenueResponse, AdminVenueResponse, VenueSummaryResponse, VenueImageResponse,
 │                    VenueImageUploadSignatureResponse, VenueReportResponse, AdminVenueReportResponse
 └── mapper/          VenueMapper (MapStruct); MapperSupport (tái dùng)
 
@@ -92,7 +92,7 @@ Quy ước như USER-001 §3 (`@Validated`, `ResponseEntity<ApiResponse<…>>`, 
 ```java
 VenueResponse createVenue(UUID callerId, CreateVenueRequest request);                     // @Transactional
 PageResponse<VenueSummaryResponse> searchVenues(SearchVenueRequest request);             // readOnly
-VenueResponse getVenue(UUID venueId);                                                     // readOnly; dùng lại ở 2.10–2.12
+VenueResponse getVenue(UUID venueId);                                                     // readOnly; dùng lại ở 2.12
 VenueReportResponse reportVenue(UUID venueId, CurrentActor actor, ReportVenueRequest r); // @Transactional
 VenueResponse updateVenue(UUID venueId, CurrentActor actor, UpdateVenueRequest r);       // retrier(VENUE_011)
 ```
@@ -118,12 +118,14 @@ Deps: `VenueGuard`, `VenueImageRepository`, `ImageUploadSigner`, `VenueMapper`, 
 
 ### 4.3. AdminVenueService
 ```java
-VenueResponse markInactive(UUID venueId, UUID adminId);                                    // retrier(VENUE_011)
-VenueResponse reactivate(UUID venueId, UUID adminId);                                      // retrier(VENUE_011)
+AdminVenueResponse markInactive(UUID venueId, UUID adminId);                               // retrier(VENUE_011)
+AdminVenueResponse reactivate(UUID venueId, UUID adminId);                                 // retrier(VENUE_011)
 PageResponse<AdminVenueReportResponse> listReports(VenueReportStatusFilter s, UUID venueId, int page, int pageSize); // readOnly
 AdminVenueReportResponse resolveReport(UUID reportId, UUID adminId, ResolveVenueReportRequest r); // retrier(VENUE_011)
 ```
-Deps: `VenueGuard`, `VenueRepository`, `VenueReportRepository`, `VenueService` (`getVenue`), `ConcurrencyConflictRetrier`, `VenueMapper`, `PageRequestFactory`, `AdminAuditLog` (§4.13).
+Deps: `VenueGuard`, `VenueRepository`, `VenueReportRepository`, `VenueImageRepository`, `ConcurrencyConflictRetrier`, `VenueMapper`, `PageRequestFactory`, `AdminAuditLog` (§4.13). Không phụ thuộc `VenueService`.
+- Response Admin không che user đã xoá, kèm cờ `is…Deleted` (`API_Spec.md` §1, ADR-0002 sửa đổi 2026-11-12).
+- `markInactive`/`reactivate` đọc lại qua helper private `adminDetail(venueId)`: `venueRepository.findDetailById` (`VENUE_001` nếu rỗng) + `venueImageRepository.findByVenueIdOrderByDisplayOrderAsc` → `venueMapper.toAdminResponse(view, images)` — cùng 2 truy vấn như `VenueService#getVenue`, không gọi `getVenue` vì method đó trả `VenueResponse` đã che (tiền lệ USER-001 `AdminTeamServiceImpl#adminDetail`).
 
 ### 4.4. VenueGuard (`application/support`, `@Component`)
 ```java
@@ -336,12 +338,12 @@ Ghi chú SQL:
 
 | Projection | Cột |
 |---|---|
-| `VenueDetailView` | cột `venue` cho `VenueResponse` + `createdByName`, `createdByDeleted` |
+| `VenueDetailView` | cột `venue` cho `VenueResponse` / `AdminVenueResponse` + `createdByName`, `createdByDeleted` (`false` khi không có người tạo) |
 | `VenueSummaryView` | cột `VenueSummaryResponse` + `primaryImageUrl`, `distanceKm` (`Double`) |
 | `VenueImageStatsView` | `imageCount`, `maxDisplayOrder` |
 | `SelectableVenueView` | `id`, `name`, `address`, `latitude`, `longitude`, `status`, `primaryImageUrl` (v1.2 — thay `VenueStatusView`) |
 | `StaleVenueView` | `id`, `name` |
-| `AdminVenueReportView` | cột report + `venueName`, `venueStatus`, `reporterName`, `reporterDeleted`, `handledByName`, `handledByDeleted` |
+| `AdminVenueReportView` | cột report + `venueName`, `venueStatus`, `reporterName`, `reporterDeleted`, `handledByName`, `handledByDeleted` (`false` khi chưa có người xử lý) |
 
 Thời gian trong projection là `Instant`, mapper chuyển UTC (USER-001 §5).
 
@@ -360,7 +362,8 @@ Giữ Lombok/builder/`@PrePersist` (`convention-backend.md` §6, §6.1); `src/ma
 - DTO là `record`; enum dạng chuỗi dùng `@OneOf` (phân biệt hoa thường).
 - **Field tuỳ chọn chấp nhận `""`** (cả tạo và sửa — `API_Spec.md` §1, §2.1, §2.12): `venueType` `@OneOf({"FIVE_A_SIDE","SEVEN_A_SIDE","ELEVEN_A_SIDE",""})`; `phone` `@Pattern(regexp = "^$|^0[0-9]{9,10}$")`; `website` `@URL(regexp = "^$|^https?://.*")` + `@Size(max = 500)` ([Inference] `@URL` của Hibernate Validator coi `""` hợp lệ — có test). Service đổi `""` → `null` (tạo) hoặc xoá giá trị (sửa). `UpdateVenueRequest.venueName/address`: `@Size` + `@Pattern(regexp = "(?s).*\\S.*")` (null hợp lệ, chỉ khoảng trắng → 400).
 - **`SearchVenueRequest`** (record, bind `@ModelAttribute`): `page`, `pageSize` kiểu `Integer`, `status` kiểu `VenueStatusFilter`; compact constructor gán mặc định khi `null` (`page = 1`, `pageSize = 20`, `status = ACTIVE`, `radiusKm = 5` nếu có toạ độ) **trước** Bean Validation (`@Min/@Max` chạy trên giá trị sau mặc định). `@ValidGeoQuery` mức lớp gắn lỗi vào property node (`lat` / `radiusKm`) vì `GlobalExceptionHandler` chỉ đọc `getFieldErrors()`. Test bắt buộc: không gửi `page`/`pageSize`/`status` → 1/20/`ACTIVE`; `pageSize=101` → 400. `pageSize` tối đa 100 (không theo 50 của AC §3.4): user chốt 2026-11-09 để nhất quán `PageRequestFactory` dùng chung.
-- `VenueMapper` (`componentModel = "spring"`, `uses`/`imports` `MapperSupport`, `unmappedTargetPolicy = ERROR`): `toResponse(VenueDetailView, List<VenueImage>)`, `toCreatedResponse(Venue, String creatorName)`, `toSummary(VenueSummaryView)` (`distanceKm` HALF_UP 2 chữ số), `toImage(VenueImage)` (không map `publicId`), `toReport(VenueReport)`, `toAdminReport(AdminVenueReportView)` (giữ `reporterName` gốc và ánh xạ cờ projection `reporterDeleted` → `isReporterDeleted` bằng `@Mapping(target = "isReporterDeleted", source = "reporterDeleted")`; tiếp tục mask `handledByName`), `toSignatureResponse(UploadSignature)`. Response report Admin không có avatar reporter.
+- `VenueMapper` (`componentModel = "spring"`, `uses`/`imports` `MapperSupport`, `unmappedTargetPolicy = ERROR`): `toResponse(VenueDetailView, List<VenueImage>)` (che `createdByName`), `toAdminResponse(VenueDetailView, List<VenueImage>)` (không che; `@Mapping(target = "isCreatedByDeleted", source = "createdByDeleted")`), `toCreatedResponse(Venue, String creatorName)`, `toSummary(VenueSummaryView)` (`distanceKm` HALF_UP 2 chữ số), `toImage(VenueImage)` (không map `publicId`), `toReport(VenueReport)`, `toAdminReport(AdminVenueReportView)` (không che: giữ `reporterName`, `handledByName` gốc; ánh xạ cờ `reporterDeleted` → `isReporterDeleted`, `handledByDeleted` → `isHandledByDeleted` bằng `@Mapping(target = "is…Deleted", source = "…Deleted")`), `toSignatureResponse(UploadSignature)`. Response report Admin không có avatar reporter.
+- `AdminVenueResponse` (record): field như `VenueResponse` + `boolean isCreatedByDeleted` (sau `createdByName`); record tách riêng để `VenueResponse` (2.1, 2.3, 2.12) giữ nguyên hợp đồng. `AdminVenueReportResponse`: thêm `boolean isHandledByDeleted` (sau `handledByName`). Method mapper cho Admin không gọi `MapperSupport.maskName`.
 
 ## 8. Cấu hình (nguồn duy nhất cho giá trị) & Dependencies
 
@@ -411,7 +414,7 @@ Không thêm Maven dependency: `MessageDigest`/`Mac`/`HexFormat`/`Base64` của 
 | Quy ước | Thiết kế | Lý do | Trạng thái |
 |---|---|---|---|
 | `api-convention.md` §12, `convention-backend.md` §10: soft delete | Hard-delete `venue_image` (2.13) | Spec không có khôi phục ảnh; không bảng nào tham chiếu; job dọn xoá asset nên khôi phục dòng DB cũng không lấy lại ảnh; soft-delete buộc mọi truy vấn ảnh + 2 unique index thêm `deleted_at IS NULL` | Đã được user duyệt 2026-11-09 |
-| `non-functional-standards.md` §3: không đọc lại dữ liệu đã nạp | 2.10–2.12 nạp entity `Venue` rồi đọc `VenueDetailView` cho response | Response cần tên người tạo (join `"user"`) và dữ liệu sau flush; dựng từ entity vẫn cần 1 SELECT user → cùng số truy vấn; dùng chung mapper với 2.3 nên response nhất quán (tiền lệ USER-001 `PATCH /profile`) | Ghi nhận trong thiết kế |
+| `non-functional-standards.md` §3: không đọc lại dữ liệu đã nạp | 2.10–2.12 nạp entity `Venue` rồi đọc `VenueDetailView` cho response | Response cần tên người tạo (join `"user"`) và dữ liệu sau flush; dựng từ entity vẫn cần 1 SELECT user → cùng số truy vấn; dùng chung projection với 2.3 nên response nhất quán (2.12 dùng `toResponse`, 2.10–2.11 dùng `toAdminResponse`; tiền lệ USER-001 `PATCH /profile`) | Ghi nhận trong thiết kế |
 | ADR-0003: optimistic lock + retry, không khoá trước | Ghi ảnh (2.5, 2.6, 2.13) khoá dòng `venue` bằng `UPDATE` không so version, không retrier | Kiểm `@Version` lúc commit để hai request cùng đặt ảnh chính đụng unique index → 500 (`Processing_Flow.md` §5) | Ghi vào ADR-0003 Sửa đổi 2026-11-09 |
 | `convention-backend.md` §9: `@Transactional(readOnly)` mức class | Transaction theo method | Kế thừa USER-001 §4.6 | Đã có tiền lệ |
 

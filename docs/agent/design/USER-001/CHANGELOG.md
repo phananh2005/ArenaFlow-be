@@ -1,5 +1,26 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v4.0] — 2026-11-12
+
+**Type:** MAJOR (đổi shape response 2.19, 2.20, 2.21: thêm field `isCaptainDeleted`, `isDisbandedByDeleted`; `captainName`, `disbandedByName` của user đã xoá tài khoản đổi từ `"Người dùng đã xóa"` sang tên thật) · **Tóm tắt:** Mọi endpoint Admin không che user đã xoá tài khoản — trả tên thật kèm cờ đã xoá cho từng field tên; endpoint thường giữ nguyên.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | `API_Spec.md` §1.1 | Đổi | Quy tắc user đã xoá: "che ở mọi chỗ, ngoại lệ 2 field Admin" → tách 2 nhóm: endpoint thường (ngoài `/api/v1/admin/**`, kể cả khi người gọi là Admin) vẫn che; **mọi** endpoint `/api/v1/admin/**` trả tên thật (và ảnh thật nếu có field ảnh user), mỗi field tên user có cờ `is…Deleted` | User chốt 2026-11-12 (ADR-0002 sửa đổi 2026-11-12, SYSTEM-001 v1.7 BC-U02) | Màn Admin: gắn nhãn "đã xoá" theo cờ, không so chuỗi `"Người dùng đã xóa"` |
+| 2 | `API_Spec.md` 2.19, 2.20, §4.2 | Đổi | Response `TeamResponse` → `AdminTeamResponse`: cùng field, thêm `isCaptainDeleted` (sau `captainName`), `isDisbandedByDeleted` (sau `disbandedByName`); 2 tên này không che. Thêm JSON ví dụ ở 2.19 | Như #1 | Màn quản lý đội Admin, sau tạm ngưng / kích hoạt lại: đọc 2 cờ để gắn nhãn; cập nhật kiểu dữ liệu response nếu FE khai báo chặt |
+| 3 | `API_Spec.md` 2.21, §4.2 | Đổi | Phần tử `AdminTeamSummaryResponse`: thêm `isCaptainDeleted` (sau `captainName`), `isDisbandedByDeleted` (cuối); `captainName`, `disbandedByName` không che | Như #1 | Danh sách đội Admin: gắn nhãn "đã xoá" theo cờ (vd người giải tán đã xoá tài khoản) |
+| 4 | `API_Spec.md` 2.7 | Sửa câu chữ | "Người khác thấy `"Người dùng đã xóa"`" → thêm "màn Admin thấy tên thật kèm cờ" | Khớp #1 | Không |
+| 5 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Khớp hợp đồng mới | Không |
+| 6 | Header 3 tài liệu thiết kế | Ghi nhận | v3.8 → v4.0 | Phiên bản ở header khớp entry mới nhất | Không |
+
+### Ảnh hưởng
+- Đổi hợp đồng: 2.19, 2.20, 2.21 (chỉ thêm field và đổi giá trị tên của user đã xoá; path, method, status code, mã lỗi giữ nguyên).
+- Endpoint thường (2.8–2.18): hợp đồng và quy tắc che giữ nguyên.
+- Mã khác cùng đổi: USER-002 v3.0 (lịch sử thành viên Admin trả ảnh thật; danh sách đội Admin), VENUE-001 v3.0 (report Admin, ngừng hoạt động / kích hoạt lại địa điểm).
+- SRS SYSTEM-001 v1.7 cập nhật BC-U02, UC-U03, AC-U03.
+
 ## [v3.8] — 2026-11-11
 
 **Type:** MINOR (không đổi endpoint, field, kiểu, status code, mã lỗi, message của USER-001) · **Tóm tắt:** Quy tắc che tên user đã xoá ở §1.1 trỏ tới 2 ngoại lệ dành cho Admin.

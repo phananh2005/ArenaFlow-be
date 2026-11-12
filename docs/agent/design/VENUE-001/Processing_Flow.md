@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway · Cloudinary |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + `Component_Class_Design.md` §4.9 |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -156,16 +156,16 @@ Q1–Q2 `lockForImageWrite` (`VENUE_001`) → `requireWritable` (`VENUE_002`) �
 `actor.admin()` → `VENUE_015` → Q1 `activeVenue` (`VENUE_001`, `VENUE_002`) → Q2 `saveAndFlush` report (`PENDING`); `uq_venue_report_pending` → `VENUE_014` (index là nguồn duy nhất, không SELECT kiểm trước) → nếu `reason = CLOSED` và `closureAlertedAt == null` (đọc ở Q1): Q3 `markClosureAlerted` (`WHERE status = 'ACTIVE' AND closure_alerted_at IS NULL`, `version + 1`); 1 dòng → `VenueAdminAlertEvent(CLOSURE_REPORTED)` → luôn `VenueReportedEvent` `[cần xác nhận #1, #2]`.
 
 ### 3.8. `GET /admin/venue-reports`
-Q1 `findAdminReports` (JOIN venue, LEFT JOIN user reporter/handler) + Q2 count.
+Q1 `findAdminReports` (JOIN venue, LEFT JOIN user reporter/handler) + Q2 count. `toAdminReport` không che tên reporter/handler, trả cờ đã xoá (cột cờ đã có trong projection — không thêm truy vấn).
 
 ### 3.9. `PATCH …/resolve` (retrier `VENUE_011`)
 Q1 `findById` → `VENUE_009`; ≠ `PENDING` → `VENUE_010` → Q2 `resolveIfPending`: 0 dòng → `VENUE_010` → nếu `CLOSED`: Q3 `reopenClosureAlertIfNoPending` → Q4 `findAdminViewById` → `adminAuditLog.afterCommit(RESOLVE_REPORT, …)` (ghi khi commit).
 
 ### 3.10. `PATCH …/mark-inactive` (retrier)
-Q1 `findVenue` → `VENUE_001`; đã `INACTIVE` → `VENUE_007` → setter `status`, `adminVerifiedInactiveAt` → Q2 UPDATE CAS (Hibernate tự flush trước native Q3) → Q3 `verifyPendingClosureReports` → Q4–Q5 `getVenue` → `adminAuditLog.afterCommit(MARK_INACTIVE, …)`. Không đụng `match`.
+Q1 `findVenue` → `VENUE_001`; đã `INACTIVE` → `VENUE_007` → setter `status`, `adminVerifiedInactiveAt` → Q2 UPDATE CAS (Hibernate tự flush trước native Q3) → Q3 `verifyPendingClosureReports` → Q4–Q5 `adminDetail` (`findDetailById` + ảnh → `toAdminResponse`, không che tên) → `adminAuditLog.afterCommit(MARK_INACTIVE, …)`. Không đụng `match`.
 
 ### 3.11. `PATCH …/reactivate` (retrier)
-Q1 `findVenue`; đang `ACTIVE` → `VENUE_008` → setter `ACTIVE`, `adminVerifiedInactiveAt = null`, cả hai `*_alertedAt = null` → Q2 CAS → Q3–Q4 `getVenue`. Địa điểm có `last_selected_at` > 180 ngày sẽ được cảnh báo lại ở lần chạy job sau `[cần xác nhận #2]`. `adminAuditLog.afterCommit(REACTIVATE, …)`.
+Q1 `findVenue`; đang `ACTIVE` → `VENUE_008` → setter `ACTIVE`, `adminVerifiedInactiveAt = null`, cả hai `*_alertedAt = null` → Q2 CAS → Q3–Q4 `adminDetail` (như §3.10). Địa điểm có `last_selected_at` > 180 ngày sẽ được cảnh báo lại ở lần chạy job sau `[cần xác nhận #2]`. `adminAuditLog.afterCommit(REACTIVATE, …)`.
 
 ### 3.12. `PATCH /venues/{venueId}` (retrier)
 Q1 `findVenue` → `VENUE_001` → `requireOwnerOrAdmin` → `VENUE_013` → `requireWritable` → `VENUE_002` (BR-V06) → setter (`null` bỏ qua; trim; `""` → xoá `venueType`/`phone`/`website`) → Q2 UPDATE CAS khi flush (không đổi gì → không `UPDATE`) → Q3–Q4 `getVenue`. Không chặn theo kèo (BR-V10). Admin không phải người tạo → `adminAuditLog.afterCommit(ADMIN_UPDATE_VENUE, …)` trong lambda retrier.

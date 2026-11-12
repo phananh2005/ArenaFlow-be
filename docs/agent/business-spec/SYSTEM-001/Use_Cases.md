@@ -83,7 +83,7 @@
 
 **Postconditions:**
 - Tài khoản chuyển sang trạng thái soft-deleted
-- Lịch sử hiển thị "Người dùng đã xóa"; riêng Admin xem lịch sử thành viên đội (tên thành viên) và report địa điểm (tên người report) thấy tên thật kèm nhãn "đã xóa", ảnh vẫn ẩn; các tên khác vẫn che (BC-U02)
+- Endpoint thường hiển thị "Người dùng đã xóa" và ảnh `null`; mọi endpoint `/api/v1/admin/**` hiển thị tên thật kèm cờ `is…Deleted`; chỉ trả ảnh thật nếu response đã có field ảnh user và còn đường dẫn. FE Admin gắn nhãn "đã xóa" theo cờ; không tự thêm field ảnh user vào response chưa có field đó (BC-U02)
 - Điểm/đánh giá lịch sử của đội khác được giữ nguyên
 - Tài khoản có thể khôi phục sau này
 

@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (UC-U01..U03, UC-T01..T05, BR-U01..U06, BR-T01..T06) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.8** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.0** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -32,7 +32,9 @@
 - **Chuỗi:** giới hạn độ dài tính trên chuỗi FE gửi. BE cắt khoảng trắng đầu/cuối trước khi lưu ở `displayName`, `teamName`, `reason` (tạm ngưng đội).
 - **PATCH:** field vắng mặt hoặc `null` → giữ nguyên giá trị cũ.
 - **Phân trang:** `page` (≥ 1, mặc định 1), `pageSize` (1..100, mặc định 20). Thứ tự sắp xếp cố định theo từng endpoint, chưa có tham số `sort`. Trang vượt quá → `data: []`.
-- **User đã xoá tài khoản** (ADR-0002): ở mọi chỗ hiển thị người khác — `captainName`, `fromUserName`, `toUserName`, `displayName`/`avatarUrl` của thành viên, `disbandedByName` — trả tên `"Người dùng đã xóa"` và ảnh `null`; id giữ nguyên. Ngoại lệ chỉ dành cho Admin: USER-002 `API_Spec.md` §2.4 (`displayName` + `isUserDeleted`) và VENUE-001 `API_Spec.md` §2.8–2.9 (`reporterName` + `isReporterDeleted`) trả tên thật kèm cờ đã xoá; ảnh vẫn `null`.
+- **User đã xoá tài khoản** (ADR-0002, sửa đổi 2026-11-12; SYSTEM-001 v1.7 BC-U02):
+  - **Endpoint thường** (ngoài `/api/v1/admin/**`, kể cả khi người gọi là Admin): ở mọi chỗ hiển thị người khác — `captainName`, `fromUserName`, `toUserName`, `displayName`/`avatarUrl` của thành viên, `disbandedByName` — trả tên `"Người dùng đã xóa"` và ảnh `null`; id giữ nguyên.
+  - **Mọi endpoint `/api/v1/admin/**`:** không che — trả tên thật (và ảnh thật nếu response có field ảnh của user), **mỗi field tên user có cờ boolean `is…Deleted` đi kèm** (`true` = user đó đã xoá tài khoản; `false` cả khi field tên là `null`). FE Admin gắn nhãn "đã xoá" theo cờ, không so chuỗi tên. Ở mã này: 2.19–2.20 (`AdminTeamResponse`), 2.21 (`AdminTeamSummaryResponse`) — §4.2. Mã khác: USER-002 `API_Spec.md` §2.4, VENUE-001 `API_Spec.md` §2.8–2.11.
 - **Thứ tự lỗi:** 401 luôn trả trước 400. Bảng lỗi mỗi endpoint xếp theo thứ tự BE kiểm — nhiều điều kiện cùng sai thì nhận mã ở dòng trên cùng (nguồn: USER-002 `API_Spec.md` §2.1a).
 
 ### 1.2. Lỗi chung
@@ -318,7 +320,7 @@ Tài khoản vừa tạo: `displayName` = `"User "` + 6 ký tự cuối của `u
 **Ai gọi được:** người đã đăng nhập.
 
 - Còn là đội trưởng của **bất kỳ** đội nào chưa giải tán (kể cả đội chỉ có mình, kể cả đội đang `INACTIVE`) → `422 USER_003`, không có gì thay đổi. Phải chuyển quyền (2.15) hoặc giải tán đội (USER-002 `API_Spec.md` §2.1) trước.
-- Thành công: rời mọi đội đang tham gia (`ACTIVE` → `LEFT`), mọi lời mời đang chờ thành `REJECTED`; trạng thái các đội không đổi. Người khác thấy tên `"Người dùng đã xóa"` (§1.1).
+- Thành công: rời mọi đội đang tham gia (`ACTIVE` → `LEFT`), mọi lời mời đang chờ thành `REJECTED`; trạng thái các đội không đổi. Người khác thấy tên `"Người dùng đã xóa"`; màn Admin thấy tên thật kèm cờ đã xoá (§1.1).
 - Gọi lại khi đã xoá → vẫn `204`.
 - Sau khi xoá: access token cũ còn dùng được tới khi hết hạn (tối đa 1 giờ) nhưng `GET/PATCH /profile` trả `USER_001`, refresh/đăng nhập lại trả `AUTH_003`. FE nên xoá token đã lưu ngay sau `204`.
 
@@ -796,7 +798,33 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
 { "reason": "Vi phạm quy định đặt tên" }
 ```
 
-**Response 200** — `TeamResponse` (§4.2) với `status = "INACTIVE"`, `inactiveReason` = lý do đã gửi; cùng dạng ví dụ 2.9.
+**Response 200** — `AdminTeamResponse` (§4.2): như `TeamResponse` nhưng tên không che, kèm `isCaptainDeleted`, `isDisbandedByDeleted` (§1.1). `status = "INACTIVE"`, `inactiveReason` = lý do đã gửi.
+
+```json
+{
+  "data": {
+    "teamId": "0193a1c0-1111-7abc-9def-0123456789ab",
+    "teamName": "Team Alpha",
+    "avatarUrl": null,
+    "description": "Đá giao lưu tối thứ 4",
+    "skillLevels": ["Nhiệt tình", "Rèn luyện"],
+    "status": "INACTIVE",
+    "inactiveReason": "Vi phạm quy định đặt tên",
+    "captainId": "0193a1b2-c3d4-7e5f-8a6b-1c2d3e4f5a01",
+    "captainName": "Nguyễn Văn A",
+    "isCaptainDeleted": false,
+    "memberCount": 5,
+    "createdBy": "0193a1b2-c3d4-7e5f-8a6b-1c2d3e4f5a01",
+    "createdAt": "2026-11-02T11:00:00Z",
+    "updatedAt": "2026-11-05T09:00:00Z",
+    "disbandedAt": null,
+    "disbandedById": null,
+    "disbandedByName": null,
+    "isDisbandedByDeleted": false,
+    "disbandReason": null
+  }
+}
+```
 
 **Lỗi**
 
@@ -819,7 +847,7 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
 
 **Request:** không body.
 
-**Response 200** — `TeamResponse` (§4.2) với `status = "ACTIVE"`, `inactiveReason = null`; cùng dạng ví dụ 2.8.
+**Response 200** — `AdminTeamResponse` (§4.2) với `status = "ACTIVE"`, `inactiveReason = null`; cùng dạng ví dụ 2.19.
 
 **Lỗi**
 
@@ -849,7 +877,7 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
 
 **Sắp xếp:** như 2.10.
 
-**Response 200** — `data`: `AdminTeamSummaryResponse[]` (§4.2) + `pagination`
+**Response 200** — `data`: `AdminTeamSummaryResponse[]` (§4.2) + `pagination`. Tên không che, kèm cờ đã xoá (§1.1). Ví dụ: đội thứ hai đã giải tán, người giải tán sau đó đã xoá tài khoản.
 
 ```json
 {
@@ -862,12 +890,28 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
       "status": "INACTIVE",
       "inactiveReason": "Vi phạm quy định đặt tên",
       "captainName": "Nguyễn Văn A",
+      "isCaptainDeleted": false,
       "memberCount": 5,
       "createdAt": "2026-11-02T11:00:00Z",
-      "disbandedByName": null
+      "disbandedByName": null,
+      "isDisbandedByDeleted": false
+    },
+    {
+      "teamId": "0193a1c0-2222-7abc-9def-0123456789ab",
+      "teamName": "Team Beta",
+      "avatarUrl": null,
+      "skillLevels": [],
+      "status": "DISBANDED",
+      "inactiveReason": null,
+      "captainName": null,
+      "isCaptainDeleted": false,
+      "memberCount": 0,
+      "createdAt": "2026-11-01T08:00:00Z",
+      "disbandedByName": "Trần Văn C",
+      "isDisbandedByDeleted": true
     }
   ],
-  "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
+  "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 2 }
 }
 ```
 
@@ -961,7 +1005,7 @@ Kiểu `datetime` = chuỗi ISO-8601 kèm offset (§1.1). "Null?" = có thể l�
 | `ward` | object | Có | `{ "wardId": UUID, "wardName": string, "provinceId": UUID, "provinceName": string }`; `null` khi chưa chọn |
 | `createdAt`, `updatedAt` | datetime | Không | |
 
-**`TeamResponse`** (2.8, 2.9, 2.11, 2.19, 2.20)
+**`TeamResponse`** (2.8, 2.9, 2.11)
 
 | Field | Kiểu | Null? | Ý nghĩa |
 |---|---|---|---|
@@ -979,7 +1023,14 @@ Kiểu `datetime` = chuỗi ISO-8601 kèm offset (§1.1). "Null?" = có thể l�
 
 **`TeamSummaryResponse`** (2.10): `teamId`, `teamName`, `avatarUrl`, `skillLevels`, `status`, `captainName`, `memberCount`, `createdAt`, `disbandedByName` — cùng nghĩa `TeamResponse`.
 
-**`AdminTeamSummaryResponse`** (2.21): field của `TeamSummaryResponse` + `inactiveReason`.
+**`AdminTeamResponse`** (2.19, 2.20) — chi tiết đội cho Admin: mọi field của `TeamResponse`, cùng thứ tự, thêm 2 cờ; `captainName`, `disbandedByName` là tên thật kể cả khi user đã xoá tài khoản (§1.1).
+
+| Field | Kiểu | Null? | Ý nghĩa |
+|---|---|---|---|
+| `isCaptainDeleted` | boolean | Không | Ngay sau `captainName`. `true` khi đội trưởng đã xoá tài khoản; `false` khi `captainName = null` |
+| `isDisbandedByDeleted` | boolean | Không | Ngay sau `disbandedByName`. `true` khi người giải tán đã xoá tài khoản; `false` khi `disbandedByName = null` |
+
+**`AdminTeamSummaryResponse`** (2.21): field của `TeamSummaryResponse` + `inactiveReason` (sau `status`) + `isCaptainDeleted` (sau `captainName`) + `isDisbandedByDeleted` (cuối) — 2 cờ cùng nghĩa `AdminTeamResponse`; `captainName`, `disbandedByName` là tên thật.
 
 **`InvitationResponse`** (2.12)
 

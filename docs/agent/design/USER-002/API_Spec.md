@@ -11,9 +11,9 @@
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
-| Spec nghiệp vụ | `docs/agent/business-spec/USER-002/` (UC-T06, UC-U03 sửa, UC-T05 sửa; BR-T06..BR-T14, BC-T02, BC-T06) · `docs/agent/business-spec/SYSTEM-001/` (v1.6) — BC-U02 |
+| Spec nghiệp vụ | `docs/agent/business-spec/USER-002/` (UC-T06, UC-U03 sửa, UC-T05 sửa; BR-T06..BR-T14, BC-T02, BC-T06) · `docs/agent/business-spec/SYSTEM-001/` (v1.7) — BC-U02 |
 | Phụ thuộc | [`USER-001/API_Spec.md`](../USER-001/API_Spec.md) — hợp đồng gốc của đội, lời mời, hồ sơ; file này chỉ mô tả phần USER-002 thêm/đổi |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -22,7 +22,9 @@
 **Quy ước chung cho mọi endpoint của mã này:**
 - Kế thừa toàn bộ quy ước chung của USER-001 (mục "Quy ước chung cho mọi endpoint"): xác thực `Authorization: Bearer <access token>` (thiếu/sai/hết hạn → `401 AUTH_001`), ID là chuỗi UUID, envelope `data` / `error` / `pagination`, giá trị enum **UPPERCASE**, phân trang `page` (≥ 1, mặc định 1) · `pageSize` (1..100, mặc định 20).
 - Field thời điểm (`…At`) của mã này là chuỗi ISO-8601 UTC, vd `"2026-11-05T09:15:00Z"`.
-- Mọi endpoint, kể cả endpoint Admin, che tên và ảnh của user đã xoá tài khoản: tên → `"Người dùng đã xóa"`, ảnh → `null`; id vẫn giữ nguyên. Ngoại lệ duy nhất của mã này: lịch sử thành viên Admin §2.4 trả tên thật cùng `isUserDeleted = true` để gắn nhãn đã xoá; ảnh vẫn `null` (ADR-0002).
+- User đã xoá tài khoản (ADR-0002 sửa đổi 2026-11-12, SYSTEM-001 v1.7 BC-U02; quy tắc chung: USER-001 mục "Quy ước chung cho mọi endpoint"):
+  - Endpoint thường (ngoài `/api/v1/admin/**`, kể cả khi người gọi là Admin): che tên → `"Người dùng đã xóa"`, ảnh → `null`; id vẫn giữ nguyên.
+  - **Mọi endpoint `/api/v1/admin/**`:** không che — tên thật, ảnh thật (còn đường dẫn thì trả), mỗi field tên user có cờ `is…Deleted` đi kèm (`true` = đã xoá tài khoản; `false` cả khi field tên là `null`). Ở mã này: §2.4 (`displayName` + `isUserDeleted`, `avatarUrl` thật), §2.6 (`captainName` + `isCaptainDeleted`, `disbandedByName` + `isDisbandedByDeleted`).
 - Thao tác ghi lên đội va chạm với thao tác khác cùng lúc → `409 TEAM_014`; FE cho người dùng bấm lại.
 
 **Ngoài phạm vi:** frontend; trận đấu/ghép kèo/lính đánh thuê gắn với đội; thông báo; khôi phục đội đã giải tán. Header `Idempotency-Key` (`api-convention.md` §13) **chưa hỗ trợ** cho `POST /teams` và `POST /teams/{teamId}/disband` — gửi kèm header không có tác dụng.
@@ -179,7 +181,7 @@ Chỉ gồm người **đã từng tham gia** đội (thành viên `ACTIVE` ho�
 
 **Sắp xếp:** cố định `joinedAt` tăng dần, rồi `memberId` tăng dần; không nhận tham số `sort`.
 
-**Response 200** — mảng Lịch sử thành viên (mục 5.3) + `pagination`.
+**Response 200** — mảng Lịch sử thành viên (mục 5.3) + `pagination`. Thành viên đã xoá tài khoản vẫn có tên và ảnh thật, kèm `isUserDeleted = true` (phần tử thứ hai trong ví dụ).
 
 ```json
 {
@@ -201,7 +203,7 @@ Chỉ gồm người **đã từng tham gia** đội (thành viên `ACTIVE` ho�
       "teamId": "0193a5c2-7e41-7c3a-9f12-4b8e6d2a1c01",
       "userId": "0193a5c0-1b2c-7d3e-8f40-5a6b7c8d9e02",
       "displayName": "Trần Thị B",
-      "avatarUrl": null,
+      "avatarUrl": "https://res.cloudinary.com/demo/image/upload/b.jpg",
       "isUserDeleted": true,
       "role": "MEMBER",
       "status": "LEFT",
@@ -248,7 +250,7 @@ Mã `USER_003` giữ nguyên từ USER-001, chỉ mở rộng điều kiện và
 |---|---|---|---|---|
 | `status` | enum | Không | `ACTIVE` \| `INACTIVE` \| `DISBANDED` \| `ALL`; mặc định `ALL` | `INACTIVE` |
 
-**Thay đổi:** thêm giá trị filter `DISBANDED`; mặc định `ALL` **nay gồm cả đội đã giải tán**; mỗi phần tử (Đội — tóm tắt Admin, mục 5.2) thêm `disbandedByName`.
+**Thay đổi:** thêm giá trị filter `DISBANDED`; mặc định `ALL` **nay gồm cả đội đã giải tán**; mỗi phần tử (Đội — tóm tắt Admin, mục 5.2) thêm `disbandedByName` + `isDisbandedByDeleted` và `isCaptainDeleted`; tên không che (mục 1). Ví dụ: người giải tán đã xoá tài khoản.
 
 ```json
 {
@@ -261,9 +263,11 @@ Mã `USER_003` giữ nguyên từ USER-001, chỉ mở rộng điều kiện và
       "status": "DISBANDED",
       "inactiveReason": "Vi phạm quy định sân",
       "captainName": null,
+      "isCaptainDeleted": false,
       "memberCount": 0,
       "createdAt": "2026-11-02T11:00:00Z",
-      "disbandedByName": "Nguyễn Văn A"
+      "disbandedByName": "Nguyễn Văn A",
+      "isDisbandedByDeleted": true
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -335,13 +339,15 @@ Mã mới hoặc đổi ở USER-002 (mã khác giữ nguyên theo USER-001):
 
 ### 5.1. Đội — chi tiết (response của 2.1, 2.2 và các endpoint USER-001 trả chi tiết đội)
 
+Bản Admin (USER-001 tạm ngưng / kích hoạt lại đội) là đối tượng riêng của USER-001: thêm cờ `isCaptainDeleted`, `isDisbandedByDeleted` và không che tên — xem USER-001 mục "Đối tượng response".
+
 Field USER-001 giữ nguyên. Thêm:
 
 | Field | Kiểu | Ý nghĩa |
 |---|---|---|
 | `disbandedAt` | string (ISO-8601 UTC) \| null | Thời điểm giải tán; `null` nếu chưa giải tán |
 | `disbandedById` | UUID \| null | User đã giải tán; `null` nếu chưa giải tán. Giữ nguyên kể cả khi user đó đã xoá tài khoản |
-| `disbandedByName` | string \| null | Tên người giải tán để hiển thị; `null` nếu chưa giải tán; `"Người dùng đã xóa"` nếu người đó đã xoá tài khoản |
+| `disbandedByName` | string \| null | Tên người giải tán để hiển thị; `null` nếu chưa giải tán; `"Người dùng đã xóa"` nếu người đó đã xoá tài khoản (endpoint Admin: tên thật + `isDisbandedByDeleted`) |
 | `disbandReason` | string \| null | Lý do giải tán; `null` nếu chưa giải tán; đội đã giải tán luôn có giá trị (tối thiểu là lý do mặc định `"Đội trưởng giải tán đội"`) |
 
 Với đội `DISBANDED`: `captainId`, `captainName` = `null`; `memberCount` = 0; `inactiveReason` giữ lý do khoá của Admin nếu đội bị khoá trước khi giải tán.
@@ -352,7 +358,9 @@ Field USER-001 giữ nguyên (bản Admin có thêm `inactiveReason` như USER-0
 
 | Field | Kiểu | Ý nghĩa |
 |---|---|---|
-| `disbandedByName` | string \| null | Như mục 5.1 |
+| `disbandedByName` | string \| null | Như mục 5.1. Bản Admin: tên thật kể cả khi người giải tán đã xoá tài khoản |
+| `isDisbandedByDeleted` | boolean | **Chỉ bản Admin**, cuối phần tử. `true` nếu người giải tán đã xoá tài khoản; `false` khi `disbandedByName = null` |
+| `isCaptainDeleted` | boolean | **Chỉ bản Admin**, ngay sau `captainName` (tên thật). `true` nếu đội trưởng đã xoá tài khoản; `false` khi `captainName = null` |
 
 ### 5.3. Lịch sử thành viên (phần tử của 2.4)
 
@@ -363,7 +371,7 @@ Field USER-001 giữ nguyên (bản Admin có thêm `inactiveReason` như USER-0
 | `userId` | UUID | Id user; giữ nguyên kể cả khi user đã xoá tài khoản |
 | `displayName` | string | Tên hiển thị; Admin nhận tên thật kể cả khi user đã xoá tài khoản |
 | `isUserDeleted` | boolean | `true` nếu user đã xoá tài khoản; FE Admin dùng để gắn nhãn “đã xoá” |
-| `avatarUrl` | string \| null | Ảnh đại diện; `null` nếu chưa có hoặc user đã xoá tài khoản |
+| `avatarUrl` | string \| null | Ảnh đại diện; `null` nếu user chưa có ảnh. Admin nhận ảnh thật kể cả khi user đã xoá tài khoản |
 | `role` | enum | `CAPTAIN` \| `MEMBER` — vai trò hiện tại, hoặc vai trò lúc rời đội nếu đã `LEFT` |
 | `status` | enum | `ACTIVE` \| `LEFT` |
 | `joinedAt` | string (ISO-8601 UTC) | Thời điểm vào đội |

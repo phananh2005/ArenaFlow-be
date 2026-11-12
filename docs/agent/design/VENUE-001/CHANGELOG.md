@@ -1,5 +1,24 @@
 # CHANGELOG — VENUE-001 Quản lý địa điểm sân
 
+## [v3.0] — 2026-11-12
+
+**Type:** MAJOR (đổi shape response Admin: report Admin thêm `isHandledByDeleted`, `handledByName` của admin đã xoá tài khoản đổi sang tên thật; ngừng hoạt động / kích hoạt lại địa điểm đổi response từ Venue sang AdminVenue: thêm `isCreatedByDeleted`, `createdByName` không che) · **Tóm tắt:** Mọi endpoint Admin không che user đã xoá tài khoản — tên thật, mỗi field tên có cờ đã xoá; endpoint thường giữ nguyên.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | `API_Spec.md` §1 | Đổi | "Che ở mọi endpoint, ngoại lệ duy nhất `reporterName`" → endpoint thường vẫn che (kể cả khi Admin gọi 2.3, 2.12); **mọi** endpoint `/api/v1/admin/**` trả tên thật, mỗi field tên user có cờ `is…Deleted` | User chốt 2026-11-12 (ADR-0002 sửa đổi 2026-11-12, SYSTEM-001 v1.7 BC-U02) | Màn Admin: gắn nhãn "đã xoá" theo cờ, không so chuỗi `"Người dùng đã xóa"` |
+| 2 | `API_Spec.md` 2.8, 2.9, §4.7 | Đổi | AdminVenueReport: thêm `isHandledByDeleted` (sau `handledByName`); `handledByName` không che; `reporterName` + `isReporterDeleted` giữ như v2.0 | Như #1 | Màn report Admin: gắn nhãn "đã xoá" cho người xử lý theo `isHandledByDeleted` |
+| 3 | `API_Spec.md` 2.10, 2.11, §4.2, §4.8 (mới) | Đổi | Response Venue (§4.2) → AdminVenue (§4.8): cùng field + `isCreatedByDeleted` (sau `createdByName`); `createdByName` không che. Venue (§4.2) nay chỉ dùng cho 2.1, 2.3, 2.12 | Như #1; Venue dùng chung với endpoint thường nên tách đối tượng Admin | Sau ngừng hoạt động / kích hoạt lại: đọc `isCreatedByDeleted`; cập nhật kiểu response nếu FE khai báo chặt |
+| 4 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Khớp hợp đồng mới | Không |
+| 5 | Header tài liệu thiết kế VENUE-001 | Ghi nhận | v2.0 → v3.0; tham chiếu SRS SYSTEM-001 v1.6 → v1.7 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- Đổi hợp đồng: 2.8–2.11 (chỉ thêm field và đổi giá trị tên của user đã xoá; path, method, status code, mã lỗi giữ nguyên). Response Admin của mã này không có field ảnh user.
+- Endpoint thường (2.1–2.7, 2.12, 2.13): giữ nguyên, vẫn `"Người dùng đã xóa"`.
+- Mã khác cùng đổi: USER-001 v4.0, USER-002 v3.0. SRS SYSTEM-001 v1.7 cập nhật BC-U02, UC-U03, AC-U03.
+
 ## [v2.0] — 2026-11-11
 
 **Type:** MAJOR (đổi shape response report Admin: thêm field `isReporterDeleted`; `reporterName` của người report đã xoá tài khoản đổi từ `"Người dùng đã xóa"` sang tên thật) · **Tóm tắt:** Admin xem tên thật người report đã xoá tài khoản kèm cờ để gắn nhãn "đã xoá"; tên người khác vẫn che.

@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` · kiến trúc hiện hành theo USER-001 |
 | Ràng buộc dữ liệu | USER-001 schema V1/V2/V3; delta USER-002 dưới đây cần migration Flyway |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -69,7 +69,7 @@ Mở rộng filter trạng thái hỗ trợ `DISBANDED`, không đổi `ACTIVE` 
 
 ### 4.2. AdminTeamService
 
-Thêm `PageResponse<MemberHistoryResponse> listMemberHistory(UUID teamId, MemberHistoryStatusFilter status, int page, int pageSize)`: `existsById` → `TEAM_001`, rồi `findMemberHistory` (§5.2). Mapper ánh xạ `MemberHistoryView` → `MemberHistoryResponse`; Admin nhận `displayName` gốc và `isUserDeleted` (từ cờ `userDeleted` của projection), avatar của user đã xoá được đặt `null`. Projection đã có đủ dữ liệu; không thêm truy vấn. Mapping `MemberResponse` thông thường tiếp tục che tên/ảnh. Không expose entity. `listTeams` giữ nguyên, projection thêm người giải tán.
+Thêm `PageResponse<MemberHistoryResponse> listMemberHistory(UUID teamId, MemberHistoryStatusFilter status, int page, int pageSize)`: `existsById` → `TEAM_001`, rồi `findMemberHistory` (§5.2). Mapper ánh xạ `MemberHistoryView` → `MemberHistoryResponse`; Admin nhận `displayName` và `avatarUrl` gốc kèm `isUserDeleted` (từ cờ `userDeleted` của projection) — không che (ADR-0002 sửa đổi 2026-11-12). Projection đã có đủ dữ liệu; không thêm truy vấn. Mapping `MemberResponse` thông thường tiếp tục che tên/ảnh. Không expose entity. `listTeams`: projection thêm người giải tán; `toAdminSummary` không che, map cờ `captainDeleted`/`disbandedByDeleted` → `isCaptainDeleted`/`isDisbandedByDeleted`. `markInactive`/`reactivate` trả `AdminTeamResponse`: USER-001 `Component_Class_Design.md` §4.5.
 
 ### 4.3. ProfileService
 
@@ -136,10 +136,10 @@ Bổ sung trạng thái `DISBANDED`; fields tương ứng `disbandReason`, `disb
 ### 7.2. Response
 
 - `TeamResponse`: thêm `disbandedAt`, `disbandedById`, `disbandedByName`, `disbandReason`.
-- `TeamSummaryResponse`, `AdminTeamSummaryResponse`: trạng thái mới và `disbandedByName`.
-- `MemberHistoryResponse` (mới): field của `MemberResponse` + `isUserDeleted` + `leftAt`; endpoint Admin giữ `displayName` gốc, avatar user đã xoá vẫn `null`.
-- `MembershipMapper.toMemberHistory`: không che tên; `@Mapping(target = "isUserDeleted", source = "userDeleted")` (tên projection khác tên response), mask avatar. `toMember` cho endpoint user thường tiếp tục che tên/ảnh.
-- `TeamMapper`: ánh xạ projection/fields mới; `disbandedByName` che qua `MapperSupport`/`DeletedUserMasking` dựa trên cờ deleted của người giải tán trong projection. Không expose entity.
+- `TeamSummaryResponse`: trạng thái mới và `disbandedByName`. `AdminTeamSummaryResponse`: trạng thái mới, `disbandedByName`, `boolean isCaptainDeleted` (sau `captainName`), `boolean isDisbandedByDeleted` (cuối).
+- `MemberHistoryResponse` (mới): field của `MemberResponse` + `isUserDeleted` + `leftAt`; endpoint Admin giữ `displayName` và `avatarUrl` gốc.
+- `MembershipMapper.toMemberHistory`: không che tên lẫn avatar; `@Mapping(target = "isUserDeleted", source = "userDeleted")` (tên projection khác tên response). `toMember` cho endpoint user thường tiếp tục che tên/ảnh.
+- `TeamMapper`: ánh xạ projection/fields mới. `toResponse`/`toSummary` (endpoint thường) che `captainName`, `disbandedByName` qua `MapperSupport`/`DeletedUserMasking` theo cờ deleted trong projection; `toAdminSummary`/`toAdminResponse` (Admin) không che, map cờ sang `is…Deleted`. Không expose entity.
 
 ## 8. Dependencies
 
@@ -168,3 +168,7 @@ Cập nhật sau khi mọi phase code xong và test PASS (CLAUDE.md §8), ghi v�
 | `docs/agent/decisions/0003-*.md` | Hệ quả "không deadlock" chưa tính trường hợp nhiều dòng `team_member` bị khoá theo thứ tự khác nhau (`Processing_Flow.md` §5); thêm mục Sửa đổi + liên kết USER-002/ADR-0005 ở "Liên quan" | ✅ PR #19 (`Sửa đổi` ngoại lệ `deleteAccount` + liên kết ADR-0007) · PR #34 (`Sửa đổi` "Phạm vi của 'không deadlock'" trỏ ADR-0007 §Hệ quả + liên kết USER-002/ADR-0005); Hệ quả gốc không viết lại |
 | `docs/agent/decisions/0002-*.md` | §Quyết định #2 "che ở mọi chỗ" chưa có ngoại lệ Admin (lịch sử thành viên USER-002, report VENUE-001) | `feature/USER-002-admin-deleted-user-display` — ✅ mục `Sửa đổi 2026-11-11`; §Quyết định không viết lại |
 | `docs/agent/design/USER-001/API_Spec.md` §1.1 | Quy tắc che tên user đã xoá chưa trỏ tới ngoại lệ Admin | `feature/USER-002-admin-deleted-user-display` — ✅ USER-001 v3.8 |
+| `docs/agent/decisions/0002-*.md` | Ngoại lệ 2026-11-11 chỉ có 2 field; mở rộng cho mọi `/api/v1/admin/**` (tên + ảnh thật + cờ `is…Deleted`) | `feature/USER-002-admin-show-deleted-users` — ✅ mục `Sửa đổi 2026-11-12`; §Quyết định và mục 2026-11-11 không viết lại |
+| `docs/agent/design/USER-001/` (3 tài liệu + CHANGELOG) | 2.19–2.20 trả `TeamResponse` đã che; 2.21 che tên, thiếu cờ; §1.1 quy tắc chỉ có 2 field ngoại lệ | `feature/USER-002-admin-show-deleted-users` — ✅ USER-001 v4.0 |
+| `docs/agent/design/VENUE-001/` (3 tài liệu + CHANGELOG) | `handledByName` (2.8–2.9), `createdByName` (2.10–2.11) ở API Admin vẫn che | `feature/USER-002-admin-show-deleted-users` — ✅ VENUE-001 v3.0 (chỉ thiết kế, chưa có code) |
+| `docs/agent/business-spec/SYSTEM-001/` | BC-U02 / UC-U03 / AC-U03 theo quy tắc mới | `feature/USER-002-admin-show-deleted-users` — SYSTEM-001 v1.7 (coordinator cập nhật) |

@@ -345,7 +345,7 @@ Completion Rate = (Tử số / Mẫu số) × 100%
 |---|---|
 | **USER & TEAM** | |
 | BC-U01 | User ≥13 tuổi mới được đăng ký |
-| BC-U02 | Soft-delete tài khoản: giữ mãi trong DB, có thể khôi phục; lịch sử hiển thị "Người dùng đã xóa" (ảnh ẩn). Ngoại lệ: Admin xem lịch sử thành viên đội (tên thành viên) và report địa điểm (tên người report) thấy tên thật kèm nhãn "đã xóa", ảnh vẫn ẩn; các tên khác vẫn che (user chốt 2026-11-11) |
+| BC-U02 | Soft-delete tài khoản: giữ mãi trong DB, có thể khôi phục; endpoint thường hiển thị "Người dùng đã xóa" và ảnh `null`. Ngoại lệ: mọi endpoint `/api/v1/admin/**` trả tên thật; trả ảnh thật nếu response đã có field ảnh user và còn đường dẫn. Mỗi field tên user có cờ `is…Deleted`; FE Admin gắn nhãn "đã xóa" theo cờ. Không tự thêm field ảnh user vào response chưa có field đó. Quy tắc xét theo path, không theo role: endpoint ngoài `/api/v1/admin/**` vẫn che, kể cả khi người gọi là Admin (user chốt 2026-11-11, mở rộng 2026-11-12). |
 | BC-T01 | Tên đội được phép trùng (không có unique constraint) |
 | BC-T02 | **Sửa bởi `USER-002`:** chỉ admin khoá đội (INACTIVE); đội trưởng giải tán đội (UC-T06); hệ thống không tự chuyển trạng thái đội — chi tiết `USER-002/Business_Rules.md` |
 | BC-T03 | Chuyển đội trưởng: người được chọn bắt buộc nhận, không có quyền từ chối |
