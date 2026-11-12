@@ -1,5 +1,25 @@
 # CHANGELOG — USER-002 Giải tán đội & quy tắc xoá tài khoản đội trưởng
 
+## [v3.0] — 2026-11-12
+
+**Type:** MAJOR (đổi shape response danh sách đội Admin: thêm `isCaptainDeleted`, `isDisbandedByDeleted`; `captainName`, `disbandedByName` của user đã xoá tài khoản đổi sang tên thật; lịch sử thành viên Admin: `avatarUrl` của user đã xoá đổi từ `null` sang ảnh thật) · **Tóm tắt:** Mọi endpoint Admin không che user đã xoá tài khoản — tên và ảnh thật, mỗi field tên có cờ đã xoá; endpoint thường giữ nguyên.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | `API_Spec.md` §1 | Đổi | "Che ở mọi endpoint, ngoại lệ duy nhất §2.4" → endpoint thường vẫn che; **mọi** endpoint `/api/v1/admin/**` trả tên + ảnh thật, mỗi field tên user có cờ `is…Deleted` | User chốt 2026-11-12 (ADR-0002 sửa đổi 2026-11-12, SYSTEM-001 v1.7 BC-U02) | Màn Admin: gắn nhãn "đã xoá" theo cờ, không so chuỗi `"Người dùng đã xóa"` |
+| 2 | `API_Spec.md` §2.4, §5.3 | Đổi | Thành viên đã xoá tài khoản: `avatarUrl` `null` → ảnh thật (`null` chỉ khi user chưa có ảnh); `displayName` + `isUserDeleted` giữ như v2.0 | Như #1 | Lịch sử thành viên Admin: hiển thị ảnh như thành viên thường; vẫn gắn nhãn theo `isUserDeleted` |
+| 3 | `API_Spec.md` §2.6, §5.2 | Đổi | Phần tử danh sách đội Admin: thêm `isCaptainDeleted` (sau `captainName`), `isDisbandedByDeleted` (cuối); `captainName`, `disbandedByName` không che | Như #1 | Danh sách đội Admin: gắn nhãn "đã xoá" theo 2 cờ (vd người giải tán đã xoá tài khoản) |
+| 4 | `API_Spec.md` §5.1 | Sửa câu chữ | Ghi chú bản Admin của chi tiết đội (tạm ngưng / kích hoạt lại) là đối tượng riêng của USER-001, có cờ và không che tên | Đối tượng mới ở USER-001 v4.0 | Xem CHANGELOG USER-001 v4.0 |
+| 5 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Khớp hợp đồng mới | Không |
+| 6 | Header tài liệu thiết kế USER-002 | Ghi nhận | v2.0 → v3.0; tham chiếu SRS SYSTEM-001 v1.6 → v1.7 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- Đổi hợp đồng: §2.4 (giá trị `avatarUrl` của user đã xoá), §2.6 (thêm field, đổi giá trị tên của user đã xoá). Path, method, status code, mã lỗi giữ nguyên.
+- Endpoint thường (chi tiết/danh sách đội, danh sách thành viên, lịch sử đội trưởng…): vẫn `"Người dùng đã xóa"` và ảnh `null`.
+- Mã khác cùng đổi: USER-001 v4.0, VENUE-001 v3.0. SRS SYSTEM-001 v1.7 cập nhật BC-U02, UC-U03, AC-U03.
+
 ## [v2.0] — 2026-11-11
 
 **Type:** MAJOR (đổi shape response lịch sử thành viên Admin: thêm field `isUserDeleted`; `displayName` của user đã xoá tài khoản đổi từ `"Người dùng đã xóa"` sang tên thật) · **Tóm tắt:** Admin xem tên thật của thành viên đã xoá tài khoản kèm cờ để gắn nhãn "đã xoá"; ảnh vẫn ẩn.

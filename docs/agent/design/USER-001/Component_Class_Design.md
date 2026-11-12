@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.8** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.0** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -42,7 +42,7 @@ application/   com.phananh.arenaflow.application
 │                   TransferCaptainRequest, MarkInactiveRequest
 ├── dto/response/   ApiResponse<T>, PageResponse<T>, PaginationMeta, AuthResponse, OtpSentResponse,
 │                   ProfileResponse, WardResponse, ProviderResponse, TeamResponse, TeamSummaryResponse,
-│                   AdminTeamSummaryResponse, InvitationResponse, MemberResponse, CaptainTransferResponse,
+│                   AdminTeamResponse, AdminTeamSummaryResponse, InvitationResponse, MemberResponse, CaptainTransferResponse,
 │                   CaptainHistoryResponse
 └── mapper/         ProfileMapper, TeamMapper, MembershipMapper (MapStruct), MapperSupport
 
@@ -149,15 +149,17 @@ Deps: `UserRepository`, `TeamMemberRepository`, `ConcurrencyConflictRetrier`, `M
 
 ### 4.5. AdminTeamService
 ```java
-TeamResponse markInactive(UUID teamId, MarkInactiveRequest request);
-TeamResponse reactivate(UUID teamId);
+AdminTeamResponse markInactive(UUID teamId, MarkInactiveRequest request);
+AdminTeamResponse reactivate(UUID teamId);
 PageResponse<AdminTeamSummaryResponse> listTeams(TeamStatusFilter status, int page, int pageSize);
 ```
-Deps: `TeamRepository`, `TeamMemberRepository`, `ConcurrencyConflictRetrier`, `TeamMapper`, `PageRequestFactory`, `TeamGuard`, `TeamService` (response chi tiết đội dùng lại `TeamService#getTeam`, không dựng song song).
+Deps: `TeamRepository`, `TeamMemberRepository`, `ConcurrencyConflictRetrier`, `TeamMapper`, `MembershipMapper`, `PageRequestFactory`, `TeamGuard` (không phụ thuộc `TeamService`).
+- Response Admin không che user đã xoá, kèm cờ `is…Deleted` (`API_Spec.md` §1.1, ADR-0002 sửa đổi 2026-11-12).
+- `markInactive`/`reactivate` đọc lại chi tiết qua helper private `adminDetail(teamId)`: `teamRepository.findDetailById` (cùng projection `TeamDetailView` với `TeamService#getTeam`) → `TeamMapper#toAdminResponse`; không thấy → `TEAM_001`. Không gọi `TeamService#getTeam` vì method đó trả `TeamResponse` đã che tên.
 
 ### 4.6. Transaction trong ServiceImpl (lệch convention §9 — xem §10)
 - **Không** đặt `@Transactional` ở class level.
-- Method đọc: `@Transactional(readOnly = true)`. Gọi lồng từ method ghi (vd `AdminTeamServiceImpl` → `TeamService#getTeam`) → tham gia transaction của retrier (REQUIRED), `readOnly` không áp.
+- Method đọc: `@Transactional(readOnly = true)`. Gọi lồng từ method ghi (vd `TeamServiceImpl#updateTeam`, `#disbandTeam` → `getTeam`) → tham gia transaction của retrier (REQUIRED), `readOnly` không áp. `AdminTeamServiceImpl` đọc lại qua repository ngay trong lambda retrier (§4.5).
 - Method ghi chạm `team`/`team_member` (`updateProfile` không thuộc nhóm này): **không** annotate; thân method gọi `concurrencyConflictRetrier.execute(() -> …)` — mỗi lần thử là 1 transaction mới.
 - `loginWithOAuth`, `verifyOtp`: **không** annotate; tạo tài khoản trong `transactionTemplate.execute(...)`, bắt `DataIntegrityViolationException` ngoài transaction đã rollback rồi đọc lại — ranh giới, nguồn đụng độ và các nhánh kết quả: `Processing_Flow.md` §4.
 - Method ghi còn lại (`updateProfile`, `createTeam`): `@Transactional`. `inviteMember` chạy qua retrier từ USER-002 (race M1, `OPTIMISTIC_FORCE_INCREMENT`).
@@ -212,7 +214,7 @@ public interface TeamCaptainHistoryRepository extends JpaRepository<TeamCaptainH
 |---|---|---|
 | Thời gian (`timestamptz`) | `Instant` — Spring Data không chuyển native `timestamptz` sang `OffsetDateTime` cho projection | `Instant` → `OffsetDateTime` UTC |
 | `skill_levels` (cột TEXT) | `String` (JSON thô) | JSON → `List<String>` bằng `SkillLevelsConverter` |
-| User đã xoá | Cờ `Boolean *Deleted` (`captainDeleted`, `userDeleted`, `fromUserDeleted`, `toUserDeleted`; `UserAuthView.deleted`) | Che tên/avatar bằng `DeletedUserMasking` |
+| User đã xoá | Cờ `Boolean *Deleted` (`captainDeleted`, `disbandedByDeleted`, `userDeleted`, `fromUserDeleted`, `toUserDeleted`; `UserAuthView.deleted`) — `false` khi LEFT JOIN không có user | Endpoint thường: che tên/avatar bằng `DeletedUserMasking`. Endpoint Admin: không che, ánh xạ cờ sang `is…Deleted` của response |
 
 ## 6. Entity — thay đổi so với hiện trạng
 
@@ -238,14 +240,15 @@ public interface TeamCaptainHistoryRepository extends JpaRepository<TeamCaptainH
 - `SkillLevel`: hằng danh sách 9 nhãn (nguồn duy nhất cho validator).
 - **Enum mapping:** `provider` lưu DB lowercase (`google`, `facebook`, `phone`) → API UPPERCASE (`GOOGLE`, `FACEBOOK`, `PHONE`) — chuyển trong `ProfileMapper` (§8).
 - Thời gian trả ra: `OffsetDateTime` ISO-8601 — cột DB là `TIMESTAMPTZ`. Response dựng từ projection: `Instant` → UTC (`Z`) qua mapper (§5). **Lệch (chưa sửa code):** giá trị lấy thẳng từ `OffsetDateTime.now()` mang offset của timezone JVM — `createdAt`/`updatedAt` của 2.8 (`Team` `@PrePersist`), `invitedAt` của 2.12 (`TeamMember` `@PrePersist`), `transferredAt` của 2.15 (`TeamServiceImpl#transferCaptain`), `error.timestamp` (`ErrorResponse.from`). [Inference] JVM chạy `Asia/Ho_Chi_Minh` → ra `+07:00` (chưa kiểm ở runtime). Hợp đồng ngoài chỉ hứa "ISO-8601 kèm offset" (`API_Spec.md` §1.1). Tech-debt: §12.
-- `DeletedUserMasking`: hàm thuần áp quy tắc tên user đã xoá (`API_Spec.md` §1.1) — chỉ che ở response, DB giữ nguyên hồ sơ (`"user".deleted_at IS NOT NULL` → cờ `*Deleted`). **Chỉ dùng trong mapper** (qua `MapperSupport`), dựa vào cờ `*Deleted` của projection — SQL không che tên, để logic che tên có một nguồn.
+- `DeletedUserMasking`: hàm thuần áp quy tắc tên user đã xoá cho endpoint thường (`API_Spec.md` §1.1) — chỉ che ở response, DB giữ nguyên hồ sơ (`"user".deleted_at IS NOT NULL` → cờ `*Deleted`). **Chỉ dùng trong mapper** (qua `MapperSupport`), dựa vào cờ `*Deleted` của projection — SQL không che tên, để logic che tên có một nguồn. Method mapper cho endpoint Admin (`toAdminResponse`, `toAdminSummary`, USER-002 `toMemberHistory`) không gọi `maskName`/`maskAvatar`; ánh xạ cờ bằng `@Mapping(target = "is…Deleted", source = "…Deleted")`.
+- `AdminTeamResponse` (record): field như `TeamResponse` + `boolean isCaptainDeleted` (sau `captainName`) + `boolean isDisbandedByDeleted` (sau `disbandedByName`). `AdminTeamSummaryResponse`: field `TeamSummaryResponse` + `inactiveReason` + `boolean isCaptainDeleted` (sau `captainName`) + `boolean isDisbandedByDeleted` (cuối). Không kế thừa/bọc `TeamResponse` — record tách riêng để endpoint thường giữ nguyên hợp đồng.
 
 ## 8. Mapper (MapStruct)
 
 | Mapper | Method |
 |---|---|
 | `ProfileMapper` | `ProfileResponse toResponse(ProfileView view, List<OAuthAccount> accounts)` |
-| `TeamMapper` | `TeamResponse toResponse(TeamDetailView view)` · `TeamSummaryResponse toSummary(TeamSummaryView view)` · `AdminTeamSummaryResponse toAdminSummary(TeamSummaryView view)` · `CaptainHistoryResponse toResponse(CaptainHistoryView view)` |
+| `TeamMapper` | `TeamResponse toResponse(TeamDetailView view)` (che) · `TeamSummaryResponse toSummary(TeamSummaryView view)` (che) · `AdminTeamResponse toAdminResponse(TeamDetailView view)` (không che + cờ) · `AdminTeamSummaryResponse toAdminSummary(TeamSummaryView view)` (không che + cờ) · `CaptainHistoryResponse toResponse(CaptainHistoryView view)` (che) |
 | `MembershipMapper` | `InvitationResponse toInvitation(TeamMember m, String teamName)` · `MemberResponse toMember(MemberView view)` |
 
 Cấu hình chung: `@Mapper(componentModel = "spring", uses = MapperSupport.class, unmappedTargetPolicy = ReportingPolicy.ERROR)` (`TeamMapper`, `MembershipMapper` thêm `imports = MapperSupport.class` để gọi trong `expression`). Dependency: §11.

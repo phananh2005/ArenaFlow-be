@@ -126,5 +126,5 @@
 2. **Độ dài tối đa lý do giải tán** (BR-T08): tối đa **100 ký tự** (user chốt 2026-11-04).
 3. **Hiển thị "đội trưởng" của đội đã giải tán**: hiển thị **người giải tán** (user chốt 2026-11-04). Lưu ý người này được ghi nhận là người giải tán; tư cách đội trưởng của mọi thành viên đã kết thúc theo BR-T10.
 4. **Lý do giải tán chỉ gồm khoảng trắng**: bỏ khoảng trắng đầu/cuối; rỗng → dùng lý do mặc định (user chốt 2026-11-05, BR-T08).
-5. **Người giải tán đã xoá tài khoản**: hiển thị "Người dùng đã xóa" thay tên, như quy tắc che tên người dùng đã xoá của SYSTEM-001 (user chốt 2026-11-05).
+5. **Người giải tán đã xoá tài khoản**: hiển thị "Người dùng đã xóa" thay tên, như quy tắc che tên người dùng đã xoá của SYSTEM-001 (user chốt 2026-11-05). Áp dụng cho endpoint thường; endpoint Admin theo BC-U02 SYSTEM-001 v1.7 (tên thật kèm cờ đã xoá).
 6. **Phạm vi lịch sử thành viên cho Admin**: áp dụng cho đội ở mọi trạng thái; chỉ gồm người đã từng tham gia (đang hoạt động hoặc đã rời), không gồm lời mời (user chốt 2026-11-05, BR-T13).

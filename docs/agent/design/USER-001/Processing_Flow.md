@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v3.8** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.0** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan luồng
 
@@ -138,9 +138,9 @@ Ký hiệu truy vấn: **S** = SELECT, **I** = INSERT, **U** = UPDATE. Loại: D
 | 2.16 | `GET /teams/{id}/captain/history` | S tồn tại team (TEAM_001) → S trang history (LEFT JOIN user from/to, che tên đã xoá) → S COUNT | S, S, S | 3 / L4 ✅ |
 | 2.17 | `GET /teams/{id}/members` | S tồn tại team (TEAM_001) → S trang member ACTIVE JOIN user → S COUNT | S, S, S | 3 / L4 ✅ |
 | 2.18 | `POST /teams/{id}/members/leave` | *(retry)* S team (TEAM_001) → **DISBANDED (TEAM_016)**, INACTIVE vẫn rời được → S member ACTIVE của caller (TEAM_010; đội vừa giải tán → TEAM_016) → role CAPTAIN (TEAM_009) → U status=LEFT, `left_at=now` | S, S, U | 3 / W6 ✅ |
-| 2.19 | `PATCH /admin/teams/{id}/mark-inactive` | *(retry)* S team (TEAM_001) → **DISBANDED (TEAM_016)** → đã INACTIVE (TEAM_011) → U status, `inactive_reason` (`@Version`) → S `TeamDetailView` | S, U, S | 3 / W6 ✅ |
-| 2.20 | `PATCH /admin/teams/{id}/reactivate` | *(retry)* S team (TEAM_001) → **DISBANDED (TEAM_016)** → đang ACTIVE (TEAM_012) → S captain ACTIVE (TEAM_013; đội vừa giải tán → TEAM_016) → U status=ACTIVE, `inactive_reason=null` → S `TeamDetailView` | S, S, U, S | 4 / W6 ✅ |
-| 2.21 | `GET /admin/teams` | Như 2.10, mặc định `ALL`, thêm `inactive_reason` | S, S | 2 / L4 ✅ |
+| 2.19 | `PATCH /admin/teams/{id}/mark-inactive` | *(retry)* S team (TEAM_001) → **DISBANDED (TEAM_016)** → đã INACTIVE (TEAM_011) → U status, `inactive_reason` (`@Version`) → S `TeamDetailView` (`findDetailById` → `toAdminResponse`, không che tên) | S, U, S | 3 / W6 ✅ (đo `NfsQueryCountTest`) |
+| 2.20 | `PATCH /admin/teams/{id}/reactivate` | *(retry)* S team (TEAM_001) → **DISBANDED (TEAM_016)** → đang ACTIVE (TEAM_012) → S captain ACTIVE (TEAM_013; đội vừa giải tán → TEAM_016) → U status=ACTIVE, `inactive_reason=null` → S `TeamDetailView` (`findDetailById` → `toAdminResponse`, không che tên) | S, S, U, S | 4 / W6 ✅ (đo `NfsQueryCountTest`) |
+| 2.21 | `GET /admin/teams` | Như 2.10, mặc định `ALL`, thêm `inactive_reason`; `toAdminSummary` không che tên, trả cờ đã xoá | S, S | 2 / L4 ✅ |
 
 **Kết luận:** 21/21 endpoint trong ngưỡng. Endpoint 2.12 (từ USER-002) và 2.15 dùng đủ 6/6 — mọi bổ sung truy vấn cho 2.12/2.15 (audit, notification…) phải gộp hoặc xin duyệt vượt ngưỡng. Thêm guard INACTIVE cho 2.11/2.12/2.13/2.14/2.15 không tăng truy vấn (dùng kết quả đã SELECT).
 

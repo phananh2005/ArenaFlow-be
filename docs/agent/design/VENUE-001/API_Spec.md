@@ -11,8 +11,8 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); USER-001 `API_Spec.md` §1.1 "Quy ước chung" và §1.2 "Lỗi chung" |
 | Quyết định liên quan | [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) (`Proposed`) — ảnh lưu trên Cloudinary, FE upload thẳng lên Cloudinary bằng chữ ký backend cấp |
-| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.6) — UC-V01..V06, BR-V01..V10, BC-V01..V07, BC-U02, Business_Rules §2.6, §5.1/§5.4, AC-V01..V05 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.7) — UC-V01..V06, BR-V01..V10, BC-V01..V07, BC-U02, Business_Rules §2.6, §5.1/§5.4, AC-V01..V05 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -26,7 +26,9 @@ Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ du
 - **Admin** = tài khoản có role `ADMIN` trong access token. **Người tạo** = user có id bằng `createdById` của địa điểm. FE so `createdById` với id user đang đăng nhập và role để quyết định hiện nút (§3); backend vẫn kiểm lại.
 - Id là UUID dạng chuỗi. Thời gian là chuỗi ISO-8601 UTC (vd `"2026-11-09T03:00:00Z"`). Toạ độ là số thập phân.
 - Enum viết UPPERCASE, phân biệt hoa thường (§4.1); riêng `format` ảnh viết thường.
-- Mọi endpoint, kể cả endpoint Admin, che tên và ảnh của user đã xoá tài khoản. Ngoại lệ duy nhất của mã này: report Admin §2.8–2.9 trả tên thật người report cùng `isReporterDeleted` để gắn nhãn “đã xoá”; các field tên khác (người tạo địa điểm, người xử lý report) vẫn che theo quy tắc chung. Không có avatar reporter trong hợp đồng report.
+- User đã xoá tài khoản (ADR-0002 sửa đổi 2026-11-12, SYSTEM-001 v1.7 BC-U02; quy tắc chung: USER-001 `API_Spec.md` §1.1):
+  - Endpoint thường (ngoài `/api/v1/admin/**`, kể cả khi người gọi là Admin — vd 2.3, 2.12): che tên → `"Người dùng đã xóa"`; id giữ nguyên.
+  - **Mọi endpoint `/api/v1/admin/**`:** không che — tên thật, mỗi field tên user có cờ `is…Deleted` đi kèm (`true` = đã xoá tài khoản; `false` cả khi field tên là `null`). Ở mã này: 2.8–2.9 (`reporterName` + `isReporterDeleted`, `handledByName` + `isHandledByDeleted`), 2.10–2.11 (`createdByName` + `isCreatedByDeleted`, đối tượng AdminVenue §4.8). Các response Admin của mã này không có field ảnh của user.
 - Chuỗi được cắt khoảng trắng đầu/cuối trước khi lưu. Field tuỳ chọn gửi `""`: ở request tạo coi như không nhập (lưu `null`, không báo lỗi); ở `PATCH /venues/{venueId}` (2.12) nghĩa là xoá giá trị.
 - Danh sách: `page` (≥ 1, mặc định 1), `pageSize` (1..100, mặc định 20); response có `pagination` (`api-convention.md` §7). Thứ tự sắp xếp cố định, ghi ở từng endpoint; không có tham số `sort`.
 - Lỗi trả theo envelope `error` (`api-convention.md` §4.4). Sai định dạng / độ dài / enum / thiếu field bắt buộc / id trên path không phải UUID → `400 VALIDATION_ERROR` kèm `validationErrors[].field` (`api-convention.md` §11).
@@ -497,6 +499,7 @@ GET /api/v1/admin/venue-reports?status=PENDING&page=1&pageSize=20
       "status": "PENDING",
       "handledById": null,
       "handledByName": null,
+      "isHandledByDeleted": false,
       "handledAt": null,
       "createdAt": "2026-11-09T05:00:00Z"
     }
@@ -550,6 +553,7 @@ Không đổi trạng thái địa điểm — muốn ngừng hoạt động đ�
     "status": "REJECTED",
     "handledById": "01935a02-6e7f-7a1b-9c2d-5e6f7a8b9c0d",
     "handledByName": "Admin ArenaFlow",
+    "isHandledByDeleted": false,
     "handledAt": "2026-11-09T06:00:00Z",
     "createdAt": "2026-11-09T05:00:00Z"
   }
@@ -577,7 +581,7 @@ Không đổi trạng thái địa điểm — muốn ngừng hoạt động đ�
 
 Kết quả: `status` `ACTIVE` → `INACTIVE`, `adminVerifiedInactiveAt` = thời điểm xử lý. Các report `CLOSED` đang `PENDING` của địa điểm tự chuyển `VERIFIED` (người xử lý = admin này); report `WRONG_INFO` / `OTHER` vẫn `PENDING` `[cần xác nhận #4]`. Địa điểm bị loại khỏi danh sách mặc định (2.2), không chọn được cho kèo mới; kèo cũ vẫn giữ tham chiếu và xem được chi tiết địa điểm.
 
-**Response 200** — Venue (§4.2).
+**Response 200** — AdminVenue (§4.8): như Venue (§4.2) nhưng `createdByName` không che, kèm `isCreatedByDeleted`. Ví dụ người tạo địa điểm đã xoá tài khoản.
 
 ```json
 {
@@ -594,6 +598,7 @@ Kết quả: `status` `ACTIVE` → `INACTIVE`, `adminVerifiedInactiveAt` = thờ
     "createdByType": "USER",
     "createdById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
     "createdByName": "Nguyễn Văn A",
+    "isCreatedByDeleted": true,
     "lastSelectedAt": "2026-11-08T12:30:00Z",
     "adminVerifiedInactiveAt": "2026-11-09T06:10:00Z",
     "createdAt": "2026-11-09T03:00:00Z",
@@ -623,7 +628,7 @@ Kết quả: `status` `ACTIVE` → `INACTIVE`, `adminVerifiedInactiveAt` = thờ
 
 Kết quả: `status` `INACTIVE` → `ACTIVE`, `adminVerifiedInactiveAt` = `null`. Report không bị thay đổi.
 
-**Response 200** — Venue (§4.2).
+**Response 200** — AdminVenue (§4.8).
 
 ```json
 {
@@ -640,6 +645,7 @@ Kết quả: `status` `INACTIVE` → `ACTIVE`, `adminVerifiedInactiveAt` = `null
     "createdByType": "USER",
     "createdById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
     "createdByName": "Nguyễn Văn A",
+    "isCreatedByDeleted": false,
     "lastSelectedAt": "2026-11-08T12:30:00Z",
     "adminVerifiedInactiveAt": null,
     "createdAt": "2026-11-09T03:00:00Z",
@@ -809,7 +815,7 @@ User không có endpoint xem lại report của mình; trạng thái report ch�
 | Bộ lọc `status` của 2.8 | `PENDING` \| `VERIFIED` \| `REJECTED` \| `ALL` | `ALL` = mọi trạng thái |
 | `format` (ảnh, chữ thường) | `jpg` \| `jpeg` \| `png` \| `webp` | Định dạng ảnh được nhận |
 
-### 4.2. Venue — chi tiết địa điểm (2.1, 2.3, 2.10, 2.11, 2.12)
+### 4.2. Venue — chi tiết địa điểm (2.1, 2.3, 2.12)
 
 | Field | Kiểu | Ghi chú |
 |---|---|---|
@@ -821,7 +827,7 @@ User không có endpoint xem lại report của mình; trạng thái report ch�
 | `status` | enum | `ACTIVE` \| `INACTIVE` |
 | `createdByType` | enum | `ADMIN` \| `USER` |
 | `createdById` | UUID \| `null` | `null` khi địa điểm không còn gắn người tạo — khi đó chỉ Admin sửa được |
-| `createdByName` | string \| `null` | Người tạo đã xoá tài khoản → `"Người dùng đã xóa"` (quy tắc tên user đã xoá của USER-001 `API_Spec.md`); `null` khi `createdById` = `null` |
+| `createdByName` | string \| `null` | Người tạo đã xoá tài khoản → `"Người dùng đã xóa"` (quy tắc tên user đã xoá của USER-001 `API_Spec.md` §1.1; bản Admin §4.8 trả tên thật); `null` khi `createdById` = `null` |
 | `lastSelectedAt` | datetime \| `null` | Lần gần nhất địa điểm được chọn cho kèo |
 | `adminVerifiedInactiveAt` | datetime \| `null` | Thời điểm admin đánh dấu ngừng hoạt động; `null` khi `ACTIVE` |
 | `createdAt`, `updatedAt` | datetime | |
@@ -887,7 +893,19 @@ Không trả `publicId`.
 | `reporterName` | string | Tên thật người report; Admin nhận tên gốc cả khi tài khoản đã xoá |
 | `isReporterDeleted` | boolean | `true` nếu người report đã xoá tài khoản; FE Admin dùng để gắn nhãn “đã xoá” |
 | `reason`, `detail`, `status`, `createdAt` | | Cùng nghĩa §4.6 |
-| `handledById`, `handledByName`, `handledAt` | UUID / string / datetime | Admin chốt report và thời điểm chốt; cả ba `null` khi `PENDING`; admin đã xoá tài khoản → `handledByName` = `"Người dùng đã xóa"` |
+| `handledById`, `handledByName`, `handledAt` | UUID / string / datetime | Admin chốt report và thời điểm chốt; cả ba `null` khi `PENDING`. `handledByName` là tên thật kể cả khi admin đó đã xoá tài khoản |
+| `isHandledByDeleted` | boolean | Ngay sau `handledByName`. `true` nếu người xử lý đã xoá tài khoản; `false` khi `handledByName = null` (report `PENDING`) |
+
+### 4.8. AdminVenue — chi tiết địa điểm cho admin (2.10, 2.11)
+
+Mọi field của Venue (§4.2), cùng thứ tự, khác ở:
+
+| Field | Kiểu | Ghi chú |
+|---|---|---|
+| `createdByName` | string \| `null` | Tên thật người tạo, kể cả khi đã xoá tài khoản; `null` khi `createdById` = `null` |
+| `isCreatedByDeleted` | boolean | Ngay sau `createdByName`. `true` nếu người tạo đã xoá tài khoản; `false` khi `createdById` = `null` |
+
+Các endpoint không thuộc `/api/v1/admin/**` (2.1, 2.3, 2.12) vẫn trả Venue (§4.2), kể cả khi người gọi là Admin.
 
 ## 5. Mã lỗi
 
