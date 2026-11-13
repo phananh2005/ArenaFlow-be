@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §10; VENUE-001 `Component_Class_Design.md` §4.6 (port), §4.7 (event), §4.9 (retrier overload), §4.13 (audit) · ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0011](../../decisions/0011-domain-events-after-commit.md), [ADR-0012](../../decisions/0012-scheduled-jobs-claim-with-skip-locked.md), [ADR-0013](../../decisions/0013-reputation-columns-atomic-update.md) (cả ba `Proposed`) |
 | Ràng buộc dữ liệu | PostgreSQL ≥ 18 (`uuidv7()` — §5.2) · V1 + V5 (VENUE-001) + `V6__match_flow_a_lifecycle.sql` (§5.1) + `V7__match_flow_b_pairing.sql` (MATCH-002 `Component_Class_Design.md` §5.1); entity hiện có `domain/.../entity/match/{Match, MatchRequest, CostCustomItem, Sport}`, `team/Team`, `user/User` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.1** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.2** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -195,7 +195,7 @@ public interface ReputationService {
     void adjustTeamReliability(UUID teamId, ReliabilityChange change);   // @Transactional(propagation = MANDATORY)
     void adjustUserReliability(UUID userId, ReliabilityChange change);   // @Transactional(propagation = MANDATORY)
 }
-public record ReliabilityChange(int delta, ReliabilityReason reason, UUID referenceId) {}
+public record ReliabilityChange(int delta, ReliabilityReason reason, UUID referenceId, boolean breaksCleanStreak) {} // v2.2: + breaksCleanStreak
 public enum ReliabilityReason { MATCH_CANCELLED_AFTER_CONFIRMED, MATCH_REQUEST_WITHDRAWN_AFTER_ACCEPTED } // REPUTATION-001 thêm giá trị
 
 public record TimeBandPenaltyPolicy(int atLeast24h, int from4hTo24h, int under4h) {   // application/support/reputation
@@ -203,11 +203,11 @@ public record TimeBandPenaltyPolicy(int atLeast24h, int from4hTo24h, int under4h
     public int penaltyFor(OffsetDateTime matchStart, OffsetDateTime at);  // Δ ≥ 24h / 4h ≤ Δ < 24h / Δ < 4h
 }
 ```
-- `delta == 0` → không truy vấn. Còn lại: Q1 `TeamRepository.adjustReliability` / `UserRepository.adjustReliability` (§5.2); 0 dòng → `IllegalStateException` (id phải tồn tại — lỗi lập trình) → phát `ReliabilityScoreChangedEvent`.
+- `delta == 0 && !breaksCleanStreak` → không truy vấn. Còn lại: Q1 `TeamRepository.adjustReliability` / `UserRepository.adjustReliability` (§5.2); 0 dòng → `IllegalStateException` (id phải tồn tại — lỗi lập trình) → phát `ReliabilityScoreChangedEvent`.
 - **Không đọc lại** điểm mới (event chỉ mang `delta`); REPUTATION-001 cần điểm mới thì thêm biến thể đọc.
-- **Mở rộng cho REPUTATION-001 / MERCENARY-001** (không thiết kế ở đây): thêm `ReliabilityReason`, hằng `TimeBandPenaltyPolicy` (vd rút mercenary `-1/-3/-5`), method cho bộ đếm report / chuỗi trận sạch theo cùng mẫu `UPDATE` nguyên tử. MATCH-001 **không** ghi `total_matches_*`, `clean_streak`, `report_count_*` `[cần xác nhận #3]`.
+- **Mở rộng (v2.2):** REPUTATION-001 `Component_Class_Design.md` §4.6 thêm `applyMatchCompletion`, `applyReportPenalty`, `refundReportPenalty` và giá trị `ReliabilityReason`; MERCENARY-001 thêm hằng `TimeBandPenaltyPolicy` (vd rút mercenary `-1/-3/-5`). MATCH-001 chỉ ghi `reliability_score` và — khi huỷ kèo đã ghép — `clean_streak = 0` của đội huỷ (`breaksCleanStreak = true`, user chốt Q3 2026-11-12: huỷ `CONFIRMED` / rút `ACCEPTED` cắt chuỗi trận sạch). Không còn cột `total_matches_*` (REPUTATION-001 V8 xoá — Completion Rate tính khi đọc).
 - MATCH-001 chỉ gọi `adjustTeamReliability`; `adjustUserReliability` có test riêng.
-- **Lưu ý cho REPUTATION-001:** BR-M18 cho phép một người làm đội trưởng hai đội tự ghép kèo với nhau → có thể dùng để cày cộng điểm hoàn thành trận / Completion Rate. MATCH-001 không trừ điểm trong trường hợp này; REPUTATION-001 cân nhắc quy tắc chống lạm dụng khi thiết kế phần cộng điểm.
+- **Lưu ý cho REPUTATION-001:** BR-M18 cho phép một người làm đội trưởng hai đội tự ghép kèo với nhau → có thể dùng để cày cộng điểm hoàn thành trận / Completion Rate. MATCH-001 không trừ điểm trong trường hợp này; REPUTATION-001 chặn đánh giá/report khi người gọi là đội trưởng cả hai đội (Q12) → trận đó không thể `COMPLETED` (REPUTATION-001 `Component_Class_Design.md` §9).
 
 ### 4.9. Domain event (`application/event/…`, ADR-0011)
 
@@ -251,7 +251,7 @@ Thêm overload trung tính `void afterCommit(String action, UUID adminId, String
 CancellationResult cancelConfirmed(Match match, UUID cancellingTeamId, String reason, OffsetDateTime now); // MANDATORY
 public record CancellationResult(int reliabilityPenalty) {}
 ```
-Dùng bởi 2.5 (`CONFIRMED`) và 2.10 (`ACCEPTED`): setter `status = CANCELLED`, `cancelledByTeamId`, `cancelledAt`, `cancelReason` → nếu đội huỷ là đội đã ghép **và** kèo `HAS_VENUE`: `MatchRequestRepository.withdrawAccepted` (phải = 1 dòng, khác → `IllegalStateException`); kèo `NEED_VENUE` không có yêu cầu, pairing đã chốt giữ `CONFIRMED` → `penalty = MATCH_CANCELLATION.penaltyFor(matchStartTime, now)` → `reputationService.adjustTeamReliability(cancellingTeamId, …)` → `MatchCancelledEvent` (một event duy nhất cho thao tác, §4.9). Gọi `MatchGuard`/kiểm `MATCH_011`, `MATCH_012` **trước** (caller).
+Dùng bởi 2.5 (`CONFIRMED`) và 2.10 (`ACCEPTED`): setter `status = CANCELLED`, `cancelledByTeamId`, `cancelledAt`, `cancelReason` → nếu đội huỷ là đội đã ghép **và** kèo `HAS_VENUE`: `MatchRequestRepository.withdrawAccepted` (phải = 1 dòng, khác → `IllegalStateException`); kèo `NEED_VENUE` không có yêu cầu, pairing đã chốt giữ `CONFIRMED` → `penalty = MATCH_CANCELLATION.penaltyFor(matchStartTime, now)` → `reputationService.adjustTeamReliability(cancellingTeamId, new ReliabilityChange(penalty, …, breaksCleanStreak = true))` (v2.2 — cắt chuỗi trận sạch, cùng câu `UPDATE`) → `MatchCancelledEvent` (một event duy nhất cho thao tác, §4.9). Gọi `MatchGuard`/kiểm `MATCH_011`, `MATCH_012` **trước** (caller).
 
 ## 5. Repository & Data Model
 
@@ -345,9 +345,9 @@ public interface SportRepository extends JpaRepository<Sport, UUID> {
 }
 // TeamRepository (sửa)
 Optional<TeamCaptainContextView> findCaptainContext(UUID teamId, UUID userId); // status + EXISTS captain ACTIVE = userId + name, avatar_url, reliability_score + tên/cờ đã xoá của userId
-@Modifying int adjustReliability(UUID id, int delta);
+@Modifying int adjustReliability(UUID id, int delta, boolean breaksCleanStreak);
 // UserRepository (sửa)
-@Modifying int adjustReliability(UUID id, int delta);
+@Modifying int adjustReliability(UUID id, int delta, boolean breaksCleanStreak);
 ```
 
 Ghi chú SQL:
@@ -355,7 +355,7 @@ Ghi chú SQL:
 - `supersedePending`: `SET status = 'SUPERSEDED', responded_at = :now WHERE match_id = :matchId AND status = 'PENDING'` — chạy **sau** `acceptIfPending` (yêu cầu thắng đã rời `PENDING`).
 - `expirePendingByMatchIds`: `SET status = 'EXPIRED' WHERE match_id IN (:ids) AND status = 'PENDING'`.
 - `claimDueFor*`: `SELECT id, author_team_id, confirmed_opponent_team_id, match_end_time FROM match WHERE status = :s AND <expires_at|match_end_time> <= :now ORDER BY <cột thời gian>, id LIMIT :limit FOR NO KEY UPDATE SKIP LOCKED` (native, đọc → không `@Modifying`). `markExpired/markArchived`: `WHERE id IN (:ids)` lặp điều kiện trạng thái.
-- `adjustReliability`: `UPDATE team SET reliability_score = LEAST(100, GREATEST(0, reliability_score + :delta)) WHERE id = :id` — **không** tăng `version` (cột `updatable = false`, ADR-0013); `user` tương tự.
+- `adjustReliability(id, delta, breaksCleanStreak)` (v2.2 thêm tham số): `UPDATE team SET reliability_score = LEAST(100, GREATEST(0, reliability_score + :delta)), clean_streak = CASE WHEN :breaksCleanStreak THEN 0 ELSE clean_streak END WHERE id = :id` — **không** tăng `version` (cột `updatable = false`, ADR-0013); `user` tương tự.
 - `findCaptainContext`: `SELECT t.status, t.name, t.avatar_url, t.reliability_score, EXISTS (SELECT 1 FROM team_member m WHERE m.team_id = t.id AND m.user_id = :userId AND m.role = 'CAPTAIN' AND m.status = 'ACTIVE') AS captain, u.display_name AS user_display_name, (u.deleted_at IS NOT NULL) AS user_deleted FROM team t LEFT JOIN "user" u ON u.id = :userId WHERE t.id = :teamId` (tên/ảnh/điểm cho response dựng từ dữ liệu đã nạp: tạo kèo B, MATCH-002 2.1; `user_*` = tên đội trưởng hiện tại khi `captain = true` — `captainName` của MATCH-002 2.1).
 - `findAvailability`: thêm `LEFT JOIN team_member cm ON cm.team_id = m.author_team_id AND cm.role = 'CAPTAIN' AND cm.status = 'ACTIVE' LEFT JOIN "user" cu ON cu.id = cm.user_id` → `authorCaptainName`, `authorCaptainDeleted` (MATCH-002 2.1); cùng câu.
 - `claimDueForExpiry` trả thêm `type`; lô tách id theo loại → `expirePendingByMatchIds` (kèo A) và `PairingRepository.expireNegotiatingByMatchIds` (kèo B), bỏ câu khi danh sách rỗng.
@@ -413,13 +413,13 @@ arenaflow.match.lifecycle.cron=${MATCH_LIFECYCLE_CRON:0 */5 * * * *}
 arenaflow.match.lifecycle.batch-size=200
 arenaflow.match.lifecycle.max-batches-per-run=50
 # Cấu hình CHUNG toàn ứng dụng (mọi @Scheduled dùng chung pool này, gồm job VENUE-001)
-spring.task.scheduling.pool.size=3
+spring.task.scheduling.pool.size=4
 ```
 
 | Tham số | Lý do giá trị |
 |---|---|
 | `cron` mỗi 5 phút | UC-M09, DoD Match; tắt bằng `-` trong test |
-| `spring.task.scheduling.pool.size` 3 (chung toàn ứng dụng) | Mặc định Spring Boot là 1 luồng cho mọi `@Scheduled` → job dọn asset VENUE-001 (gọi HTTP Cloudinary, có thể chạy lâu) chặn job vòng đời kèo 5 phút. Hiện có 3 job định kỳ: vòng đời kèo (MATCH-001), cảnh báo 180 ngày và dọn asset (VENUE-001) → mỗi job một luồng, không job nào chờ job khác. Thêm job định kỳ mới → tăng giá trị này `[cần xác nhận #10]` |
+| `spring.task.scheduling.pool.size` 4 (chung toàn ứng dụng; v2.2: 3 → 4) | Mặc định Spring Boot là 1 luồng cho mọi `@Scheduled` → job dọn asset VENUE-001 (gọi HTTP Cloudinary, có thể chạy lâu) chặn job vòng đời kèo 5 phút. Hiện có 4 job định kỳ: vòng đời kèo (MATCH-001), cảnh báo 180 ngày và dọn asset (VENUE-001), đối soát huy hiệu (REPUTATION-001) → mỗi job một luồng, không job nào chờ job khác. Thêm job định kỳ mới → tăng giá trị này `[cần xác nhận #10]` |
 | `batch-size` 200 × `max-batches-per-run` 50 | ≤ 10 000 kèo/lần chạy cho mỗi loại (AC §3.1 "≤10000"); lô nhỏ để transaction ngắn, không chặn API |
 
 `ClockConfig`: `@Bean Clock clock() { return Clock.systemUTC(); }` — test thay bằng `Clock.fixed` cho biên khung trừ điểm / hết hạn. Không thêm Maven dependency.
@@ -466,10 +466,10 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 |---|---|---|
 | 1 | `insertAll`: bind mảng Java (`String[]`, `Long[]`) vào native query qua Spring Data / Hibernate 7.2 [Inference — chưa chạy]; không bind được → chạy đúng câu đó bằng `NamedParameterJdbcTemplate` trong cùng transaction (vẫn 1 câu). Lưu ý dự phòng: `JdbcTemplate` không kích auto-flush của Hibernate → phải gọi **sau** một câu native JPA (ở đây `deleteByMatchIdBulk`) để `UPDATE match` đã flush | Không chặn — kiểm bằng integration test đầu tiên của 2.4 |
 | 2 | `reliability_score` `updatable = false`: entity `Team`/`User` đang nằm trong persistence context giữ giá trị cũ sau `adjustReliability` cùng transaction (MATCH-001 không đọc lại) | Không chặn |
-| 3 | Bộ đếm `total_matches_confirmed/completed`, `clean_streak`, `report_count_*` thuộc REPUTATION-001; huỷ `CONFIRMED` có cắt chuỗi trận sạch không (Business_Rules §3.1 "Trận sạch") | Không chặn |
+| 3 | ~~Bộ đếm `total_matches_confirmed/completed`, `clean_streak`, `report_count_*` thuộc REPUTATION-001; huỷ `CONFIRMED` có cắt chuỗi trận sạch không~~ — **Đóng v2.2 (2026-11-12):** user chốt Q3 — huỷ `CONFIRMED` / rút `ACCEPTED` cắt chuỗi trận sạch của đội huỷ (§4.8, §4.13); `total_matches_*` bị xoá (Q5, REPUTATION-001 V8); bộ đếm report do REPUTATION-001 ghi | Đã đóng |
 | 4 | Overload `AdminAuditLog.afterCommit(action, adminId, targetType, targetId)` sửa thiết kế VENUE-001 §4.13 (CHANGELOG MINOR) | Không chặn |
 | 5 | **Thứ tự implement:** MATCH-001 cần code VENUE-001 (`VenueSelectionService`, retrier overload, `AdminAuditLog`, `SchedulingConfig`, `application/event/`, `VENUE_001/002`) **và migration V5**. DB dev đang ở Flyway V4; Flyway không chạy out-of-order → nếu phase 0 của MATCH-001 tự dựng phần VENUE-001 thì phải gồm `V5__venue_management.sql`, hoặc đổi số migration (MATCH-001 thành V5 và VENUE-001 lùi sang V6 — phải sửa thiết kế VENUE-001). Lựa chọn còn lại: implement VENUE-001 trước | **Chặn code** — user chọn thứ tự |
-| 10 | `spring.task.scheduling.pool.size` còn hiệu lực với Spring Boot 4.0.9 (không bật virtual threads) [Inference — tên thuộc tính theo Spring Boot 3, chưa kiểm trên 4.0.9]; kiểm bằng log tên luồng `scheduling-1..3` khi chạy | Không chặn |
+| 10 | `spring.task.scheduling.pool.size` còn hiệu lực với Spring Boot 4.0.9 (không bật virtual threads) [Inference — tên thuộc tính theo Spring Boot 3, chưa kiểm trên 4.0.9]; kiểm bằng log tên luồng `scheduling-1..4` khi chạy | Không chặn |
 | 11 | Phiên bản PostgreSQL production (và môi trường khác ngoài Neon dev) chưa kiểm; `uuidv7()` cần ≥ 18 — thấp hơn thì V6 vẫn chạy nhưng 2.4 lỗi khi có khoản tự nhập | Không chặn — kiểm trước khi deploy |
 
 ## 13. Quyết định đã chốt (user, 2026-11-09 và 2026-11-10)

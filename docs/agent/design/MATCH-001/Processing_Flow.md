@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + VENUE-001 `Component_Class_Design.md` §4.9 · ADR-0011, ADR-0012, ADR-0013 (`Proposed`) |
 | Ràng buộc dữ liệu | V1 + V5 + `V6__match_flow_a_lifecycle.sql` (`Component_Class_Design.md` §5.1) + `V7__match_flow_b_pairing.sql` (MATCH-002 `Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.1** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.2** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -86,8 +86,8 @@ sequenceDiagram
     alt đội huỷ là đội đã ghép
         MC->>DB: U request ACCEPTED → WITHDRAWN (auto-flush CAS match trước)
     end
-    MC->>RP: adjustTeamReliability(team, -2/-5/-10)
-    RP->>DB: U team reliability_score (chặn [0,100])
+    MC->>RP: adjustTeamReliability(team, -2/-5/-10, breaksCleanStreak)
+    RP->>DB: U team reliability_score (chặn [0,100]), clean_streak = 0
     RP->>EP: ReliabilityScoreChangedEvent
     MC->>EP: MatchCancelledEvent
     S-->>C: 200
@@ -163,7 +163,7 @@ Bean Validation (`@ValidCostAgreement`, ≤10 khoản) → lần thử: Q1 `matc
 Lần thử: Q1 `findMatch` → Q2 `requireCaptainAllowInactive(r.teamId, callerId)` → vai trò: `teamId == authorTeamId` → tác giả; `teamId == confirmedOpponentTeamId` (khác null) → đội đã ghép; khác → `MATCH_009` → `isExpiryDue` → [lazy] → `requireNotExpired` (`MATCH_004`) → `CANCELLED`/`ARCHIVED`/`COMPLETED` → `MATCH_005` → `match.status ≠ r.expectedStatus` → `MATCH_015` (kiểm ở **mọi** lần thử, so với giá trị client gửi — bắt cả màn hình cũ trước khi request tới, không chỉ thay đổi giữa các lần thử; không ghi, không trừ điểm).
 - `OPEN` (chỉ tác giả — đội đã ghép không tồn tại khi `OPEN`): kèo A: Q3 `existsByMatchIdAndStatus(id, PENDING)` → `MATCH_010` (kèo B bỏ Q3) → setter `CANCELLED`, `cancelledByTeamId`, `cancelledAt = now`, `cancelReason` (trim, `""` → null) → kèo A: Q4 CAS lúc commit; kèo B: Q3 CAS `match` (Hibernate tự flush trước câu sau — comment tại chỗ) → Q4 `pairingRepository.supersedeNegotiating(id, now)` (pairing tạo đồng thời bị CAS chặn) → `MatchCancelledEvent(previousStatus = OPEN, otherTeamId = null)`. Penalty 0.
 - `CONFIRMED`: `reason` blank → `MATCH_011` → `now ≥ matchStartTime` → `MATCH_012` → `matchCancellation.cancelConfirmed(match, teamId, reason, now)` (`Component_Class_Design.md` §4.13).
-- Penalty theo `TimeBandPenaltyPolicy.MATCH_CANCELLATION` (`API_Spec.md` §1.5). Bộ đếm Completion Rate không ghi ở đây (`[cần xác nhận #3]`).
+- Penalty theo `TimeBandPenaltyPolicy.MATCH_CANCELLATION` (`API_Spec.md` §1.5); cùng câu `UPDATE team` đặt `clean_streak = 0` cho đội huỷ (v2.2, Q3 REPUTATION-001). Completion Rate tính khi đọc (REPUTATION-001) — không ghi bộ đếm ở đây.
 
 ### 3.6. `POST …/requests` (retrier `MATCH_014`)
 Lần thử: Q1 `findMatch` → Q2 `requireActiveCaptain(r.teamId, callerId)` → `teamId == authorTeamId` → `MATCH_007` → `isExpiryDue` → [lazy] → `requireOpen` (`MATCH_003` — UC-M03 3a) → Q3 `matchRepository.findAvailability(matchId)`: đội tác giả ≠ `ACTIVE` → `MATCH_013`; bộ môn tắt → `SPORT_002` → Q4 `MatchRequest.builder()` (`PENDING`, `requestedAt = now`) `saveAndFlush`; `idx_match_request_active` → `MATCH_006` (flush tường minh để đổi lỗi ràng buộc, comment tại chỗ) → `matchRepository.forceIncrementVersion(match)` → `MatchRequestSentEvent` → Q5 `UPDATE match SET version = version + 1 WHERE id = ? AND version = ?` lúc commit (lệch → retry).
