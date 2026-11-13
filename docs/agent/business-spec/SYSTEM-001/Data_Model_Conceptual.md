@@ -407,15 +407,16 @@
 - Rater ID (Team ID hoặc User ID)
 - Ratee type (TEAM, INDIVIDUAL)
 - Ratee ID (Team ID hoặc User ID)
-- Score (1-5 sao)
-- Comment (tùy chọn)
+- "Đội kia không đến" (có/không) — đánh giá "không đến" vẫn là một Rating và làm Match chuyển COMPLETED (user chốt 2026-11-12)
+- Score (sao nguyên 1–5; trống khi "đội kia không đến") (user chốt 2026-11-12)
+- Comment (tùy chọn, ≤500 ký tự)
 - Ngày tạo
 
 **Relationships:**
 - N Rating thuộc về 1 Match
 - Rating liên kết đến Team hoặc User (qua rater_type/rater_id, ratee_type/ratee_id)
 
-**Ghi chú:** Unique constraint trên (`match_id`, `rater_type`, `rater_id`, `ratee_type`, `ratee_id`).
+**Ghi chú:** Unique constraint trên (`match_id`, `rater_type`, `rater_id`, `ratee_type`, `ratee_id`). Không sửa, không xóa sau khi gửi.
 
 ---
 
@@ -429,7 +430,7 @@
 - Reportee type (TEAM, INDIVIDUAL)
 - Reportee ID (Team ID hoặc User ID)
 - Loại (bùng, chơi xấu, giao tiếp tệ, không đúng trình độ)
-- Lý do chi tiết
+- Lý do chi tiết bắt buộc (1–1000 ký tự — BR-R09)
 - Trạng thái (auto_accepted, disputed, confirmed, rejected)
 - Ngày report
 - Ngày cập nhật
@@ -439,7 +440,7 @@
 - Report liên kết đến Team hoặc User (qua reporter_type/reporter_id, reportee_type/reportee_id)
 - 1 Report có 0..1 Dispute (nếu loại bùng và bị tranh chấp)
 
-**Ghi chú:** Tự động chấp nhận ngay khi tạo; trừ Reliability Score theo số lần.
+**Ghi chú:** Tự động chấp nhận ngay khi tạo; trừ Reliability Score theo số lần. Match CANCELLED sau khi đã CONFIRMED chỉ nhận loại "giao tiếp tệ" (BR-R07).
 
 ---
 
@@ -448,12 +449,12 @@
 **Attributes:**
 - ID
 - Report ID (khóa ngoại, 1:1)
-- Bằng chứng từ đội bị report
+- Bằng chứng từ đội bị report (bắt buộc; chỉ văn bản, 1–1000 ký tự; không đính kèm ảnh/tệp — user chốt 2026-11-13)
 - Ngày tranh chấp
 - Trạng thái (pending, resolved)
 - Admin xử lý (Admin ID)
 - Quyết định (confirmed, rejected)
-- Lý do quyết định
+- Lý do quyết định bắt buộc (1–500 ký tự — BR-R09)
 - Ngày xử lý
 
 **Relationships:**
@@ -477,7 +478,7 @@
 **Relationships:**
 - 1 Reliability_Score thuộc về 1 Team hoặc 1 User (1:1)
 
-**Ghi chú:** Chặn trong [0, 100]; reset bộ đếm sau 5 trận sạch. Hủy Match CONFIRMED / rút request ACCEPTED trừ Reliability_Score loại team của đội thực hiện, không trừ loại individual của đội trưởng (BR-M09).
+**Ghi chú:** Chặn trong [0, 100]; reset bộ đếm sau 5 trận sạch. Hủy Match CONFIRMED / rút request ACCEPTED trừ Reliability_Score loại team của đội thực hiện, không trừ loại individual của đội trưởng (BR-M09), và đưa số trận sạch liên tiếp của đội đó về 0. Bị report đưa số trận sạch liên tiếp về 0; Admin bác report hoàn đúng điểm đã thực trừ, giảm 1 bộ đếm bùng, không khôi phục số trận sạch liên tiếp (Business_Rules §3.1, §6.2 — user chốt 2026-11-12).
 
 ---
 
@@ -487,15 +488,14 @@
 - ID
 - Loại (team, individual)
 - Entity ID (Team ID hoặc User ID)
-- Tử số (số Match COMPLETED không bị report bùng)
-- Mẫu số (số Match CONFIRMED, loại trừ CANCELLED ≥24h và ARCHIVED)
+- Tử số (số Match COMPLETED mà đội không bị report bùng chưa bị Admin bác — loại ngay khi report)
+- Mẫu số (số Match COMPLETED + Match CANCELLED sau khi đã CONFIRMED mà hủy <24h trước trận — chỉ của đội hủy + Match ARCHIVED mà đội bị report bùng chưa bị Admin bác)
 - Phần trăm (tử số / mẫu số × 100%)
-- Ngày cập nhật
 
 **Relationships:**
 - 1 Completion_Rate thuộc về 1 Team hoặc 1 User (1:1)
 
-**Ghi chú:** Chỉ hiển thị khi mẫu số ≥5; trước đó hiển thị "Mới tham gia X/5 trận".
+**Ghi chú:** Giá trị dẫn xuất — tính khi hiển thị, không lưu (user chốt 2026-11-12); công thức Business_Rules §3.3. Chỉ hiển thị khi mẫu số ≥5; trước đó hiển thị "Mới tham gia X/5 trận".
 
 ---
 
@@ -512,7 +512,7 @@
 **Relationships:**
 - 1 Verification_Badge thuộc về 1 Team hoặc 1 User (0..1)
 
-**Ghi chú:** Yêu cầu: phone linked + >5 trận + rating >3 sao + Reliability ≥70.
+**Ghi chú:** Yêu cầu (BR-R04): có số điện thoại (đội: đội trưởng hiện tại có số điện thoại; cá nhân: tài khoản có số điện thoại) + >5 trận hoàn thành (tử số Completion Rate) + sao trung bình >3 + Reliability ≥70. Thời điểm cấp/thu hồi: Business_Rules §8.2.
 
 ---
 
@@ -667,7 +667,7 @@ erDiagram
 | Rating | Unique trên (`match_id`, `rater_type`, `rater_id`, `ratee_type`, `ratee_id`) | Unique constraint |
 | Reliability_Score | Chặn trong [0, 100] | Application logic |
 | Completion_Rate | Chỉ hiển thị khi mẫu số ≥5 | Application logic (view layer) |
-| Verification_Badge | 4 điều kiện: phone + >5 trận + rating >3 + Reliability ≥70 | System tự động kiểm tra và cấp/thu hồi |
+| Verification_Badge | 4 điều kiện BR-R04: số điện thoại (đội: đội trưởng hiện tại) + >5 trận hoàn thành + sao trung bình >3 + Reliability ≥70 | System tự động kiểm tra và cấp/thu hồi |
 
 ---
 
@@ -691,7 +691,7 @@ erDiagram
 ## 9. Quyết định bổ sung đã chốt
 
 1. **Cost agreement (luồng B):** Một trong hai đội trưởng nhập/sửa trên Pairing, bên kia xem. Không cần xác nhận riêng; sửa → xoá xác nhận của cả hai bên; ghép → chép sang Match (BR-C05 — sửa 2026-11-10/11).
-2. **Verification Badge revocation:** Thu hồi ngay lập tức khi điều kiện không đủ.
+2. **Verification Badge revocation:** Thu hồi ngay lập tức khi điều kiện không đủ. Ngoại lệ (đội — user chốt 2026-11-12): đội bị trừ điểm do hủy kèo đã ghép / rút Match_Request đã ACCEPTED, đổi đội trưởng, đội trưởng thêm/bỏ số điện thoại → chỉ cập nhật ở lần đối soát hằng ngày (trễ tối đa khoảng 1 ngày).
 3. **GPS permission revocation:** Fallback sang khu vực hồ sơ ngay. Thông báo "Bật GPS để tìm kèo gần bạn hơn".
 4. **Report cooldown:** Không giới hạn. Mỗi trận chỉ report 1 lần/loại.
 5. **Hard-delete policy:** Giữ mãi, không hard-delete. Lịch sử luôn khả dụng.

@@ -523,9 +523,11 @@
 **Postconditions:**
 - Match chuyển sang CANCELLED
 - (Nếu CONFIRMED) Đội hủy bị trừ Reliability Score theo khoảng cách giờ trận (BR-M09, BR-M10); đội còn lại không bị trừ
+- (Nếu CONFIRMED) Chuỗi trận sạch của đội hủy về 0 (Business_Rules §3.1 — user chốt 2026-11-12)
 - (Nếu đội đã ghép hủy) Match_Request đã ACCEPTED của đội đó chuyển WITHDRAWN (BR-M12)
 - (Luồng B, Match OPEN) Mọi Pairing NEGOTIATING chuyển SUPERSEDED; đội tạo kèo không phải đóng Pairing trước khi hủy (BC-M04)
-- (Nếu CANCELLED ≥24h trước) Match loại khỏi mẫu số Completion Rate
+- (Nếu CONFIRMED, hủy ≥24h trước) Match không tính vào mẫu số Completion Rate của đội nào
+- (Nếu CONFIRMED, hủy <24h trước) Match chỉ tính vào mẫu số Completion Rate của **đội hủy** (kể cả đội rút Match_Request đã ACCEPTED); đội còn lại không tính (Business_Rules §3.3 — user chốt 2026-11-12)
 
 **Exception Flows:**
 
@@ -587,23 +589,25 @@
 **Preconditions:**
 - Match đã ARCHIVED hoặc COMPLETED
 - Đội trưởng chưa đánh giá đối phương
+- Người đánh giá không là đội trưởng của cả hai đội trong trận (BR-R08)
+- Đội của đội trưởng đánh giá phải đang ACTIVE; đội INACTIVE hoặc DISBANDED không đánh giá được. Đội được đánh giá ở trạng thái nào cũng được đánh giá (BR-R10)
 
 **Main Flow:**
 1. Đội trưởng nhận push notification "Trận đấu hôm nay thế nào? Hãy nhập tỷ số và đánh giá đồng đội!"
 2. Đội trưởng chọn "Đánh giá"
 3. Đội trưởng chọn 1 trong 2: (a) Đánh giá 1-5 sao, hoặc (b) "Đội kia không đến"
-4. (Nếu chọn a) Đội trưởng nhập rating 1-5 sao và comment (tùy chọn)
-5. (Nếu chọn b) Hệ thống đề xuất "Bạn có muốn report bùng không?" (tách khỏi luồng đánh giá)
-6. Đội trưởng nhập tỷ số (tùy chọn, chỉ để lưu kỷ niệm)
+4. (Nếu chọn a) Đội trưởng chọn số sao nguyên 1–5 và nhập nhận xét (tùy chọn, ≤500 ký tự — BR-R09)
+5. (Nếu chọn b) Đánh giá không có sao và không có tỷ số; đội trưởng có thể nhập nhận xét (tùy chọn, ≤500 ký tự). Sau khi gửi, hệ thống đề xuất "Bạn có muốn report bùng không?" (tách khỏi luồng đánh giá — UC-R02)
+6. (Nếu chọn a) Đội trưởng nhập tỷ số (tùy chọn, chỉ để lưu kỷ niệm)
 7. Đội trưởng submit
-8. Hệ thống lưu rating và chuyển Match sang COMPLETED
-9. (Nếu rating ≥4.5 sao) Hệ thống cộng +1 Reliability Score cho đội được đánh giá
-10. Hệ thống cập nhật rating trung bình của đội được đánh giá
+8. Hệ thống lưu đánh giá (kể cả đánh giá "đội kia không đến") và chuyển Match sang COMPLETED (nếu đang ARCHIVED). Khi Match chuyển COMPLETED: (a) cả hai đội +2 Reliability Score; (b) "đội kia không đến" → đội đánh giá +2, đội vắng 0 và chuỗi trận sạch của đội vắng giữ nguyên (Business_Rules §3.1 — user chốt 2026-11-12)
+9. (Nếu đánh giá 5 sao) Hệ thống cộng +1 Reliability Score cho đội được đánh giá
+10. Sao trung bình của đội được đánh giá phản ánh đánh giá mới (tính khi hiển thị, không lưu; đánh giá "đội kia không đến" không tính vào trung bình)
 
 **Postconditions:**
 - Match chuyển sang COMPLETED (nếu đang ARCHIVED)
-- Rating được lưu
-- Đội được đánh giá nhận +1 Reliability nếu rating ≥4.5
+- Đánh giá được lưu; không sửa, không xóa sau khi gửi
+- Đội được đánh giá nhận +1 Reliability nếu được đánh giá 5 sao
 - Bên đã đánh giá có thể xem rating đối phương cho mình (sau khi đối phương đánh giá)
 
 **Exception Flows:**
@@ -612,6 +616,10 @@
 - 3a1. Hệ thống hiển thị "Bạn đã đánh giá trận này"
 - 3a2. Use case kết thúc
 
+**3b. Người đánh giá là đội trưởng của cả hai đội trong trận (BR-R08):**
+- 3b1. Hệ thống từ chối, không lưu đánh giá
+- 3b2. Use case kết thúc
+
 ---
 
 ### UC-R02: Report đối phương
@@ -619,25 +627,39 @@
 **Actor:** Team Captain
 
 **Preconditions:**
-- Match đã kết thúc (ARCHIVED/COMPLETED/CANCELLED)
+- Match đã ARCHIVED hoặc COMPLETED (cả 4 loại), hoặc CANCELLED sau khi đã CONFIRMED (chỉ "giao tiếp tệ") — BR-R07
 - Đội trưởng chưa report đối phương trong trận này cho loại report này
+- Người report không là đội trưởng của cả hai đội trong trận (BR-R08)
+- Đội của đội trưởng report phải đang ACTIVE; đội INACTIVE hoặc DISBANDED không report được. Đội bị report ở trạng thái nào cũng report được (BR-R10)
 
 **Main Flow:**
 1. Đội trưởng chọn "Report"
 2. Đội trưởng chọn loại report (bùng, chơi xấu, giao tiếp tệ, không đúng trình độ)
-3. Đội trưởng nhập lý do chi tiết
+3. Đội trưởng bắt buộc nhập lý do chi tiết (1–1000 ký tự — BR-R09)
 4. Đội trưởng submit
 5. Hệ thống tự động chấp nhận report
 6. Hệ thống tra số lần bị report loại này của đội bị report
-7. Hệ thống trừ Reliability Score theo mức tăng dần (xem Business_Rules.md §6)
+7. Hệ thống trừ Reliability Score theo mức tăng dần (xem Business_Rules.md §3.2) và đưa chuỗi trận sạch của đội bị report về 0 (Business_Rules §3.1)
 8. Hệ thống gửi notification cho đội bị report
 
 **Postconditions:**
 - Report được lưu và tự động chấp nhận
-- Đội bị report bị trừ Reliability Score
-- (Nếu report bùng) Tranh chấp có thể được mở trong 24h
+- Đội bị report bị trừ Reliability Score; chuỗi trận sạch về 0 (điểm +2 / bonus đã cộng không bị thu hồi)
+- (Nếu report bùng) Match bị loại khỏi tử số Completion Rate của đội bị report ngay (Business_Rules §3.3); tranh chấp có thể được mở trong 24h
 
 **Exception Flows:**
+
+**2a. Match CANCELLED sau khi đã CONFIRMED mà chọn loại khác "giao tiếp tệ" (BR-R07):**
+- 2a1. Hệ thống từ chối, chỉ cho chọn "giao tiếp tệ"
+- 2a2. Quay về bước 2
+
+**2b. Match chưa kết thúc hoặc không có đối phương (OPEN, CONFIRMED, EXPIRED, CANCELLED khi còn OPEN — BR-R07):**
+- 2b1. Hệ thống từ chối, không lưu report
+- 2b2. Use case kết thúc
+
+**2c. Người report là đội trưởng của cả hai đội trong trận (BR-R08):**
+- 2c1. Hệ thống từ chối, không lưu report
+- 2c2. Use case kết thúc
 
 **5a. Report bùng:**
 - 5a1. Tiếp tục bước 6-8
@@ -652,11 +674,12 @@
 **Preconditions:**
 - Đội bị report bùng trong vòng 24h
 - Report chưa qua tranh chấp
+- Đội bị report phải đang ACTIVE mới tranh chấp được; đội INACTIVE hoặc DISBANDED không tranh chấp được (BR-R10) — áp dụng theo trạng thái đội tại thời điểm thao tác.
 
 **Main Flow:**
 1. Đội trưởng bị report nhận notification "Đội [X] report bạn bùng kèo"
 2. Đội trưởng chọn "Tranh chấp"
-3. Đội trưởng nhập bằng chứng/lý do tranh chấp
+3. Đội trưởng bắt buộc nhập bằng chứng/lý do tranh chấp — chỉ văn bản, không đính kèm ảnh/tệp, 1–1000 ký tự (BR-R09 — user chốt 2026-11-13)
 4. Đội trưởng submit
 5. Hệ thống chuyển tranh chấp cho admin xem xét
 6. Hệ thống tạm giữ mức trừ Reliability (chưa hoàn lại)
@@ -682,9 +705,9 @@
 
 **Main Flow:**
 1. Admin xem chi tiết tranh chấp (bằng chứng từ cả 2 bên)
-2. Admin đưa ra quyết định: (a) Xác nhận report đúng, hoặc (b) Bác report
-3. (Nếu a) Hệ thống giữ nguyên mức trừ Reliability, Match không tính tử số Completion Rate
-4. (Nếu b) Hệ thống hoàn lại Reliability đã trừ, Match tính tử số Completion Rate
+2. Admin đưa ra quyết định: (a) Xác nhận report đúng, hoặc (b) Bác report, bắt buộc kèm ghi chú lý do quyết định (1–500 ký tự — BR-R09)
+3. (Nếu a) Hệ thống giữ nguyên mức trừ Reliability, không trừ thêm; Match không tính tử số Completion Rate (user chốt 2026-11-12)
+4. (Nếu b) Hệ thống hoàn đúng số điểm đã thực trừ của report (có thể ít hơn mức trong bảng nếu lúc trừ điểm đã chạm 0) và giảm 1 lần bị report bùng; Match tính lại vào tử số Completion Rate (nếu đã COMPLETED); chuỗi trận sạch không được khôi phục (user chốt 2026-11-12)
 5. Hệ thống gửi notification cho cả 2 bên
 
 **Postconditions:**
@@ -698,15 +721,15 @@
 **Actor:** System
 
 **Preconditions:**
-- Có sự kiện ảnh hưởng Reliability Score (hoàn thành trận, hủy kèo, report, rating ≥4.5)
+- Có sự kiện ảnh hưởng Reliability Score (hoàn thành trận, hủy kèo, report, Admin bác report, nhận đánh giá 5 sao)
 
 **Main Flow:**
 1. System nhận sự kiện (vd: Match COMPLETED, Match CANCELLED, report được chấp nhận)
 2. System tra quy tắc điểm (xem Business_Rules.md §7)
 3. System tính delta điểm
 4. System cập nhật Reliability Score = `Math.max(0, Math.min(100, currentScore + delta))`
-5. (Nếu đạt 5 trận sạch liên tiếp) System cộng thêm +5 bonus
-6. (Nếu đạt 10 trận sạch liên tiếp) System cộng thêm +10 bonus
+5. (Nếu chuỗi trận sạch chạm bội số của 5 nhưng không phải bội số của 10 — trận 5, 15, 25…) System cộng thêm +5 bonus (user chốt 2026-11-12)
+6. (Nếu chuỗi trận sạch chạm bội số của 10 — trận 10, 20, 30…) System cộng thêm +10 bonus (user chốt 2026-11-12)
 7. (Nếu đạt 5 trận sạch liên tiếp) System reset bộ đếm số lần bị report về 0
 
 **Postconditions:**
@@ -721,18 +744,18 @@
 **Actor:** System
 
 **Preconditions:**
-- Match chuyển trạng thái ảnh hưởng Completion Rate (COMPLETED, CANCELLED, ARCHIVED)
+- Người dùng xem uy tín của đội/cá nhân (Completion Rate tính khi hiển thị, không lưu — user chốt 2026-11-12)
 
 **Main Flow:**
-1. System nhận sự kiện Match chuyển trạng thái
-2. System tính mẫu số: Match đã CONFIRMED, loại trừ CANCELLED ≥24h trước và ARCHIVED
-3. System tính tử số: Match COMPLETED có ít nhất 1 đội trưởng đánh giá và không có tranh chấp bùng được xác nhận
+1. Người dùng mở màn hình uy tín; System tính Completion Rate tại thời điểm xem
+2. System tính mẫu số: Match COMPLETED của đội; Match CANCELLED sau khi đã CONFIRMED mà hủy <24h trước trận — chỉ tính cho đội hủy (kể cả đội rút Match_Request đã ACCEPTED); Match ARCHIVED mà đội bị report bùng (chưa bị Admin bác) (Business_Rules §3.3 — user chốt 2026-11-12)
+3. System tính tử số: Match COMPLETED mà đội không bị report bùng (chưa bị Admin bác) — loại ngay khi report; đội bị đánh giá "đội kia không đến" mà không bị report bùng vẫn tính (user chốt 2026-11-12)
 4. System tính Completion Rate = (tử số / mẫu số) × 100%
 5. (Nếu mẫu số < 5) System hiển thị "Mới tham gia X/5 trận"
 6. (Nếu mẫu số ≥ 5) System hiển thị Completion Rate
 
 **Postconditions:**
-- Completion Rate được cập nhật chính xác
+- Completion Rate hiển thị đúng theo dữ liệu tại thời điểm xem
 - Hiển thị đúng theo ngưỡng trận
 
 ---
@@ -742,13 +765,13 @@
 **Actor:** System
 
 **Preconditions:**
-- User hoặc đội có thay đổi ảnh hưởng điều kiện Verification Badge
+- User hoặc đội có thay đổi ảnh hưởng điều kiện Verification Badge (thời điểm cập nhật: Business_Rules §8.2 — với đội, một số thay đổi chỉ được cập nhật ở lần đối soát hằng ngày)
 
 **Main Flow:**
-1. System kiểm tra 4 điều kiện:
-   - Phone linked ✓
-   - Hoàn thành >5 trận ✓
-   - Rating trung bình >3 sao ✓
+1. System kiểm tra 4 điều kiện (BR-R04 — user chốt 2026-11-12):
+   - Có số điện thoại (đội: đội trưởng hiện tại có số điện thoại; cá nhân: tài khoản có số điện thoại) ✓
+   - Hoàn thành >5 trận (tử số Completion Rate) ✓
+   - Sao trung bình >3 ✓
    - Reliability Score ≥70 ✓
 2. (Nếu đủ 4 điều kiện) System cấp Verification Badge
 3. (Nếu thiếu bất kỳ điều kiện nào) System thu hồi Verification Badge (nếu đã có)
@@ -890,7 +913,7 @@
 2. Mercenary đánh giá đội (1-5 sao)
 3. Hệ thống lưu rating (cấu trúc: rater_type, rater_id, ratee_type, ratee_id)
 4. Hệ thống cập nhật rating trung bình cá nhân/đội
-5. (Nếu rating ≥4.5) Hệ thống cộng +1 Reliability
+5. (Nếu được đánh giá 5 sao — sao nguyên 1–5) Hệ thống cộng +1 Reliability (user chốt 2026-11-12)
 
 **Postconditions:**
 - Rating được lưu
@@ -1201,7 +1224,7 @@
 ## Quyết định bổ sung đã chốt
 
 1. **Cost agreement (luồng B):** Một trong hai đội trưởng nhập/sửa trên Pairing, bên kia xem trên màn hình thương lượng. Không cần xác nhận riêng vì xác nhận Pairing = đồng ý cả gói (phương án + chi phí + tiền cọc); sửa chi phí xoá xác nhận của cả hai bên (BR-C05, BR-M19 — 2026-11-10).
-2. **Verification Badge revocation:** Thu hồi ngay lập tức khi điều kiện không đủ (Reliability <70, rating ≤3, phone unlinked, ≤5 trận).
+2. **Verification Badge revocation:** Thu hồi ngay lập tức khi điều kiện không đủ (Reliability <70, sao trung bình ≤3, không có số điện thoại, ≤5 trận hoàn thành). Ngoại lệ (đội — user chốt 2026-11-12): đội bị trừ điểm do hủy kèo đã ghép / rút Match_Request đã ACCEPTED, đổi đội trưởng, đội trưởng thêm/bỏ số điện thoại → chỉ cập nhật ở lần đối soát hằng ngày (trễ tối đa khoảng 1 ngày) — Business_Rules §8.2.
 3. **GPS permission revocation:** Fallback sang khu vực hồ sơ (phường/xã) ngay lập tức. Hiển thị thông báo "Bật GPS để tìm kèo gần bạn hơn".
 4. **Report cooldown:** Không giới hạn. Mỗi trận chỉ report đối phương 1 lần/loại là đủ chống spam.
 5. **Hard-delete policy:** Giữ mãi, không hard-delete. Lịch sử luôn khả dụng.
