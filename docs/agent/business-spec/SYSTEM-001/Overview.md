@@ -7,7 +7,7 @@
 | Stakeholders | Product Owner, Development Team, End Users (cá nhân & đội bóng) |
 | Tác giả | business-analyst agent |
 | Ngày | 2026-11-01 |
-| Phiên bản | v1.7 |
+| Phiên bản | v1.8 |
 
 ## 1. Tổng quan
 
@@ -84,21 +84,21 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 
 ### Reputation System (Đội & Cá nhân độc lập)
 - Reliability Score (0-100, khởi đầu 80, chặn [0,100])
-- Hoàn thành trận: +2; 5 trận sạch liên tiếp: +5 bonus; 10 trận sạch: +10 bonus
-- Rating ≥4.5 sao: +1
-- Hủy Match/rút request đã ACCEPTED: -2/-5/-10 theo khoảng cách giờ trận
+- Hoàn thành trận: +2 (đánh giá "đội kia không đến": đội đánh giá +2, đội vắng 0); chuỗi trận sạch chạm bội số của 5: +5 bonus, bội số của 10: +10 bonus (lặp lại)
+- Nhận đánh giá 5 sao (sao nguyên 1–5): +1
+- Hủy Match/rút request đã ACCEPTED: -2/-5/-10 theo khoảng cách giờ trận; chuỗi trận sạch của đội hủy về 0
 - Mercenary rút sau khi duyệt: -1/-3/-5
-- Bị xác nhận bùng qua tranh chấp: -10
-- Report: mức trừ tăng dần theo số lần (bùng: -5/-8/-12/-15; chơi xấu: -3/-5/-8/-10; giao tiếp tệ: -2/-4/-6/-8; không đúng trình độ: -1/-2/-3/-4)
+- Report: mức trừ tăng dần theo số lần (bùng: -5/-8/-12/-15; chơi xấu: -3/-5/-8/-10; giao tiếp tệ: -2/-4/-6/-8; không đúng trình độ: -1/-2/-3/-4); Admin xác nhận report bùng đúng không trừ thêm; Admin bác report → hoàn đúng điểm đã thực trừ
 - Reset số lần report sau 5 trận sạch
-- Completion Rate: (Match COMPLETED không bị report bùng) / (Match CONFIRMED, loại trừ CANCELLED ≥24h trước và ARCHIVED)
+- Completion Rate (tính khi hiển thị): (Match COMPLETED không bị report bùng) / (Match COMPLETED + CANCELLED <24h trước trận — chỉ của đội hủy + ARCHIVED có report bùng)
 - Chỉ hiển thị Completion Rate khi ≥5 trận; trước đó hiển thị "Mới tham gia X/5 trận"
-- Verification Badge: phone linked + >5 trận + rating >3 sao + Reliability ≥70
+- Verification Badge: có số điện thoại (đội: đội trưởng hiện tại có số điện thoại; cá nhân: tài khoản có số điện thoại) + >5 trận hoàn thành + sao trung bình >3 + Reliability ≥70
 
 ### Rating & Report
 - Đội trưởng đánh giá đối phương: 1-5 sao hoặc "đội kia không đến"
 - Chọn "không đến" → đề xuất report bùng (tách khỏi luồng đánh giá)
-- Report 4 loại: bùng, chơi xấu, giao tiếp tệ, không đúng trình độ
+- Report 4 loại: bùng, chơi xấu, giao tiếp tệ, không đúng trình độ; kèo hủy sau khi đã ghép chỉ report "giao tiếp tệ"
+- Người là đội trưởng của cả hai đội trong trận không được đánh giá/report
 - Report bùng: tự động chấp nhận và trừ điểm; nếu đội bị report phản hồi trong 24h → tranh chấp, admin xem xét
 - Report khác: tự động chấp nhận và trừ điểm
 - Không hiển thị trạng thái "đối phương đã/chưa đánh giá"; bên đã đánh giá mới xem rating đối phương cho mình
@@ -170,7 +170,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 - Hủy Match OPEN: phải từ chối mọi request PENDING trước
 - Reliability Score chặn trong [0, 100]
 - Completion Rate chỉ hiển thị khi ≥5 trận đã chốt
-- Verification Badge yêu cầu: phone linked + >5 trận + rating >3 sao + Reliability ≥70
+- Verification Badge yêu cầu: có số điện thoại (đội: đội trưởng hiện tại; cá nhân: tài khoản) + >5 trận hoàn thành + sao trung bình >3 + Reliability ≥70
 - Tin tuyển mercenary hết hạn khi đến giờ kết thúc dự kiến của Match
 - Chat lưu 90 ngày sau khi Match kết thúc; notification lưu 30 ngày
 - Địa điểm ngừng hoạt động bị loại khỏi gợi ý mặc định
@@ -191,7 +191,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 - Tỉ lệ bùng kèo < 5%
 - Thời gian phản hồi API < 2s (danh sách), < 1s (tạo/cập nhật)
 - Reliability Score phản ánh chính xác hành vi (trừ đúng khi hủy, cộng đúng khi hoàn thành)
-- Completion Rate tính đúng (loại trừ CANCELLED ≥24h và ARCHIVED)
+- Completion Rate tính đúng (Business_Rules §3.3: không tính CANCELLED ≥24h, ARCHIVED không có report bùng; CANCELLED <24h chỉ tính cho đội hủy)
 - Chat giữa 2 đội trưởng hoạt động real-time (độ trễ < 1s)
 - Notification gửi đúng lúc (push trong 1 phút sau sự kiện)
 - Report được xử lý tự động ngay lập tức; tranh chấp được admin xử lý trong 48h
@@ -199,7 +199,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 ## 9. Quyết định bổ sung đã chốt
 
 1. **Cost agreement (luồng B):** Một trong hai đội trưởng nhập/sửa trên Pairing, bên kia xem. Không cần xác nhận riêng vì xác nhận Pairing = đồng ý cả gói; sửa → xoá xác nhận của cả hai bên (BR-C05 — sửa 2026-11-10).
-2. **Verification Badge revocation:** Thu hồi ngay lập tức khi điều kiện không đủ.
+2. **Verification Badge revocation:** Thu hồi ngay lập tức khi điều kiện không đủ. Ngoại lệ (đội — user chốt 2026-11-12): đội bị trừ điểm do hủy kèo đã ghép / rút Match_Request đã ACCEPTED, đổi đội trưởng, đội trưởng thêm/bỏ số điện thoại → chỉ cập nhật ở lần đối soát hằng ngày (trễ tối đa khoảng 1 ngày).
 3. **GPS permission revocation:** Fallback sang khu vực hồ sơ ngay. Thông báo "Bật GPS để tìm kèo gần bạn hơn".
 4. **Report cooldown:** Không giới hạn. Mỗi trận chỉ report 1 lần/loại là đủ.
 5. **Hard-delete policy:** Giữ mãi, không hard-delete.
@@ -216,7 +216,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 
 ## 10. Trạng thái tài liệu
 
-**Phiên bản:** v1.0 (baseline) → v1.1 (hoàn chỉnh) → v1.2 (2026-11-09: bổ sung UC-V05 sửa địa điểm, UC-V06 xóa ảnh, BR-V05..V10, AC-V04/V05 — cho `VENUE-001`) → v1.3 (2026-11-09: BR-M09..BR-M18, BR-C03..BR-C04, làm rõ BC-M04, sửa §2.1/§2.2/§5.2/§7.3 Business_Rules, UC-M01/M03/M04/M08/M09/C01/C02, sửa AC-M06/AC-C01, thêm AC-M09..AC-M12 — cho `MATCH-001`) → v1.5 (2026-11-11: luồng B — hai đội xác nhận một gói rõ ràng (phương án chốt + chi phí + tiền cọc) thay vì "đã thống nhất qua chat", gói đổi thì xác nhận lại; Pairing hoàn tất trước thắng; chi phí/cọc thuộc Pairing và chép sang Match khi ghép; chat hiển thị người thực sự gửi; quy tắc đội tạm ngưng / bộ môn tắt / kèo quá hạn áp cho thao tác luồng B; chat của kèo hết hạn cũng bị xóa sau 90 ngày; thêm BR-M19..BR-M21, BR-C05, BR-N03; sửa BR-M03, BR-M07, BR-M14, BR-M15, BR-M17, BR-N01, BC-M04, BC-N01, BC-N03, BC-V05, §2.3/§5.2/§5.5/§8.1 Business_Rules, UC-M02/M05/M06/M07/M08/M09/C01/N01/N03, AC-M02/M04/M05/C01/N01, Scenario 2/3, Data_Model Match/Pairing/Chat_Message/Cost_Agreement/§6 — cho `MATCH-002`) → v1.6 (2026-11-11: ngoại lệ hiển thị user đã xóa — Admin xem lịch sử thành viên đội (tên thành viên) và report địa điểm (tên người report) thấy tên thật kèm nhãn "đã xóa", ảnh vẫn ẩn; các tên khác vẫn che; sửa BC-U02, UC-U03, AC-U03 — cho `USER-002`, `VENUE-001`) → v1.7 (2026-11-12: mở rộng ngoại lệ BC-U02 — mọi endpoint `/api/v1/admin/**` trả tên thật kèm cờ `is…Deleted`; ảnh thật chỉ khi response đã có field ảnh user và còn đường dẫn; FE gắn nhãn theo cờ, không tự thêm field ảnh; sửa BC-U02, UC-U03, AC-U03 — cho `USER-001`, `USER-002`, `VENUE-001`)
+**Phiên bản:** v1.0 (baseline) → v1.1 (hoàn chỉnh) → v1.2 (2026-11-09: bổ sung UC-V05 sửa địa điểm, UC-V06 xóa ảnh, BR-V05..V10, AC-V04/V05 — cho `VENUE-001`) → v1.3 (2026-11-09: BR-M09..BR-M18, BR-C03..BR-C04, làm rõ BC-M04, sửa §2.1/§2.2/§5.2/§7.3 Business_Rules, UC-M01/M03/M04/M08/M09/C01/C02, sửa AC-M06/AC-C01, thêm AC-M09..AC-M12 — cho `MATCH-001`) → v1.5 (2026-11-11: luồng B — hai đội xác nhận một gói rõ ràng (phương án chốt + chi phí + tiền cọc) thay vì "đã thống nhất qua chat", gói đổi thì xác nhận lại; Pairing hoàn tất trước thắng; chi phí/cọc thuộc Pairing và chép sang Match khi ghép; chat hiển thị người thực sự gửi; quy tắc đội tạm ngưng / bộ môn tắt / kèo quá hạn áp cho thao tác luồng B; chat của kèo hết hạn cũng bị xóa sau 90 ngày; thêm BR-M19..BR-M21, BR-C05, BR-N03; sửa BR-M03, BR-M07, BR-M14, BR-M15, BR-M17, BR-N01, BC-M04, BC-N01, BC-N03, BC-V05, §2.3/§5.2/§5.5/§8.1 Business_Rules, UC-M02/M05/M06/M07/M08/M09/C01/N01/N03, AC-M02/M04/M05/C01/N01, Scenario 2/3, Data_Model Match/Pairing/Chat_Message/Cost_Agreement/§6 — cho `MATCH-002`) → v1.6 (2026-11-11: ngoại lệ hiển thị user đã xóa — Admin xem lịch sử thành viên đội (tên thành viên) và report địa điểm (tên người report) thấy tên thật kèm nhãn "đã xóa", ảnh vẫn ẩn; các tên khác vẫn che; sửa BC-U02, UC-U03, AC-U03 — cho `USER-002`, `VENUE-001`) → v1.7 (2026-11-12: mở rộng ngoại lệ BC-U02 — mọi endpoint `/api/v1/admin/**` trả tên thật kèm cờ `is…Deleted`; ảnh thật chỉ khi response đã có field ảnh user và còn đường dẫn; FE gắn nhãn theo cờ, không tự thêm field ảnh; sửa BC-U02, UC-U03, AC-U03 — cho `USER-001`, `USER-002`, `VENUE-001`) → v1.8 (2026-11-13: uy tín — thêm BR-R07..BR-R10, AC-R07; sửa BR-R04, BC-R05, BC-R07, §2.1/§3.1/§3.3/§6/§7/§8.2 Business_Rules, UC-M08/R01..R07/ME06, AC-M06/M09/R01..R06, Scenario 4/8/9, Data_Model Rating/Report/Dispute/Reliability_Score/Completion_Rate/Verification_Badge — cho `REPUTATION-001`, user chốt 2026-11-12/13)
 **Ngày hoàn thiện:** 2026-11-02  
 **Trạng thái:** ✅ **Hoàn chỉnh** — Tất cả quyết định nghiệp vụ đã được chốt, không còn [cần xác nhận]  
 **Sẵn sàng cho:** Solution design (thiết kế kỹ thuật chi tiết)

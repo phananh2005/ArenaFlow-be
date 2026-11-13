@@ -1,5 +1,21 @@
 # CHANGELOG — MATCH-001 Kèo (luồng A, luồng B) & vòng đời kèo
 
+## [v2.2] — 2026-11-12
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Huỷ kèo đã ghép / rút yêu cầu đã chấp nhận nay cũng làm mất chuỗi trận sạch của đội huỷ; cập nhật tài liệu nội bộ BE cho REPUTATION-001.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Hành vi 2.5 (`CONFIRMED`), 2.10 (`ACCEPTED`) | Thêm | Chỉ trừ điểm theo khung giờ → trừ điểm + chuỗi trận sạch của đội huỷ về 0 (cách tính chuỗi: REPUTATION-001 `API_Spec.md` §1.3) | Business_Rules §3.1 "Trận sạch" — user chốt 2026-11-12 | Không (chuỗi trận sạch không có trong response MATCH-001) |
+| 2 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | REPUTATION-001 mở rộng phần uy tín dùng chung, thêm job định kỳ | Không |
+| 3 | Header tài liệu thiết kế MATCH-001 | Ghi nhận | v2.1 → v2.2 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- Hợp đồng API: không đổi.
+- Nghiệp vụ / SRS: chuỗi trận sạch bị cắt khi huỷ kèo đã ghép — SRS cập nhật cùng REPUTATION-001 (SYSTEM-001 v1.8).
+
 ## [v2.1] — 2026-11-11
 
 **Type:** MINOR (không đổi endpoint, method, field, kiểu, mã thành công, mã lỗi, message) · **Tóm tắt:** Ghi rõ khoản tự nhập của kèo luồng B đã ghép là bản chép từ thương lượng; cập nhật tài liệu nội bộ BE cho MATCH-002.

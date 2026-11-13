@@ -10,8 +10,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1; mã lỗi `TEAM_*` dùng lại từ USER-001/USER-002 `API_Spec.md`, `VENUE_*` từ VENUE-001 `API_Spec.md`; ghép kèo luồng B (thương lượng, chat) và mã `MATCH_016`: MATCH-002 `API_Spec.md` |
-| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.5) — UC-M01, M02, M03, M04, M08, M09, UC-C01, C02; BR-M01..M06, BR-M09..M18, BR-C01..C05; Business_Rules §2.1, §2.2, §3.1, §4 (BC-M01..M07), §5.2, §5.4, §7.3; AC-M01..M03, M06..M12, AC-C01; Scenario 1, 2 (tạo kèo), 4, 5, 6, 10, 11 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.1** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.8) — UC-M01, M02, M03, M04, M08, M09, UC-C01, C02; BR-M01..M06, BR-M09..M18, BR-C01..C05; Business_Rules §2.1, §2.2, §3.1, §4 (BC-M01..M07), §5.2, §5.4, §7.3; AC-M01..M03, M06..M12, AC-C01; Scenario 1, 2 (tạo kèo), 4, 5, 6, 10, 11 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.2** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -85,6 +85,7 @@ Huỷ kèo (2.5) và rút yêu cầu (2.10) **bắt buộc** gửi `expectedStat
 - Điểm đội nằm trong [0, 100]; trừ quá 0 thì điểm dừng ở 0. `reliabilityPenalty` trong response là mức trừ theo bảng.
 - FE có thể tính trước mức trừ từ `startsAt` để hiện cảnh báo trên hộp xác nhận; con số chính thức là `reliabilityPenalty` trong response.
 - Mỗi lần huỷ chỉ trừ điểm một lần: đội đã ghép bấm "Huỷ kèo" (2.5) hay "Rút yêu cầu" (2.10) cho cùng kết quả (BR-M12).
+- Huỷ kèo `CONFIRMED` / rút yêu cầu `ACCEPTED` cũng đưa chuỗi trận sạch của đội huỷ về 0 (cách tính chuỗi: REPUTATION-001 `API_Spec.md` §1.3).
 
 ## 2. Endpoints
 

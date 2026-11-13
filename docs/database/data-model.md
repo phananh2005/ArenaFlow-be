@@ -2,7 +2,7 @@
 
 > Trạng thái: **Đặc tả nghiệp vụ hoàn chỉnh; sẵn sàng thiết kế schema**
 
-> Cập nhật: 2026-11-01 (nội dung nghiệp vụ) · 2026-11-05 (ghi chú đường dẫn multi-module, §2)
+> Cập nhật: 2026-11-01 (nội dung nghiệp vụ) · 2026-11-05 (ghi chú đường dẫn multi-module, §2) · 2026-11-12 (uy tín đội — quyết định user chốt cho REPUTATION-001, §3.4)
 
 > **Phạm vi cốt lõi:** tạo kèo / ghép người chơi. Sân là địa điểm tham chiếu; ArenaFlow không quản lý vận hành, đặt sân hoặc thanh toán.
 
@@ -112,15 +112,16 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
   - Hoàn thành trận: `+2`
   - 5 trận sạch liên tiếp: `+5` (cộng dồn với `+2` → `+7` ở trận thứ 5)
   - 10 trận sạch liên tiếp: `+10` (cộng dồn với `+2` → `+12` ở trận thứ 10)
-  - Rating từ 4.5 sao trở lên: `+1`
+  - Thưởng lặp lại ở mỗi mốc bội số của 5 trận sạch liên tiếp: bội số của 10 → `+10`, bội số khác của 5 → `+5` (vd trận 15 → `+5`, trận 20 → `+10`) (2026-11-12)
+  - Rating 5 sao: `+1` (sao là số nguyên 1–5; sửa 2026-11-12, trước đó "từ 4.5 sao")
   - Hủy Match xác nhận: `-2` (≥24 giờ trước), `-5` (4-24 giờ), `-10` (<4 giờ)
   - Rút Match_Request đã `ACCEPTED`: `-2/-5/-10` theo khoảng cách giờ trận
   - Mercenary rút sau khi được duyệt: `-1` (≥24 giờ), `-3` (4-24 giờ), `-5` (<4 giờ)
-  - Bị xác nhận bùng qua tranh chấp: `-10`
+  - ~~Bị xác nhận bùng qua tranh chấp: `-10`~~ — bỏ 2026-11-12: Admin xác nhận report bùng giữ nguyên mức đã trừ khi report, không trừ thêm
   - Bị report: xem bảng mức trừ theo loại và số lần bên dưới
-- **Trận sạch:** trận hoàn thành không có hủy, bùng, rút mercenary, hoặc report được xác nhận.
-- Có Completion Rate, Reliability Score và rating trung bình 1–5 sao. Rating chỉ để hiển thị reputation, không trừ Reliability Score khi thấp; rating ≥4.5 cộng `+1`.
-- Verification Badge yêu cầu: liên kết số điện thoại, hoàn thành >5 trận, rating trung bình >3 sao, và **Reliability Score ≥70**.
+- ~~**Trận sạch:** trận hoàn thành không có hủy, bùng, rút mercenary, hoặc report được xác nhận.~~ — sửa 2026-11-12: xét lúc Match chuyển `COMPLETED` — đội không bị report nào (chưa bị Admin bác) trong trận → chuỗi trận sạch +1, có → về 0; bị report ở bất kỳ trận nào (kể cả sau `COMPLETED`), hủy Match `CONFIRMED` hoặc rút Match_Request `ACCEPTED` → chuỗi về 0 (không thu hồi điểm đã cộng); đánh giá "đội kia không đến" không đổi chuỗi đội vắng; Admin bác report không khôi phục chuỗi; mercenary rút sau khi được duyệt → không phải trận sạch (SRS SYSTEM-001 v1.8 `Business_Rules.md` §3.1).
+- Có Completion Rate, Reliability Score và rating trung bình 1–5 sao. Rating chỉ để hiển thị reputation, không trừ Reliability Score khi thấp; rating 5 sao cộng `+1` (sửa 2026-11-12).
+- ~~Verification Badge yêu cầu: liên kết số điện thoại, hoàn thành >5 trận, rating trung bình >3 sao, và **Reliability Score ≥70**.~~ — sửa 2026-11-12: đủ 4 điều kiện — (1) số điện thoại: đội — đội trưởng hiện tại có số điện thoại; cá nhân — tài khoản có số điện thoại; (2) >5 trận hoàn thành (số trận tính vào tử số Completion Rate); (3) sao trung bình >3 ("đội kia không đến" không tính); (4) **Reliability Score ≥70** (SRS SYSTEM-001 v1.8 `Business_Rules.md` BR-R04).
 
 **Completion Rate:**
 
@@ -130,8 +131,11 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
   - Chuyển Match sang `ARCHIVED`.
 - Khi có đội trưởng đánh giá (nhập tỷ số và/hoặc đánh giá), Match chuyển từ `ARCHIVED` → `COMPLETED` ngay lập tức.
 - Đội trưởng còn lại vẫn có thể đánh giá sau đó bất cứ lúc nào, không giới hạn thời gian.
-- **Mẫu số:** Match đã `CONFIRMED`, loại trừ Match `CANCELLED` nếu hủy từ 24 giờ trở lên trước trận, và loại trừ Match `ARCHIVED` (không ai đánh giá).
-- **Tử số:** Match `COMPLETED` có ít nhất một đội trưởng đánh giá và không có tranh chấp bùng được xác nhận.
+- ~~**Mẫu số:** Match đã `CONFIRMED`, loại trừ Match `CANCELLED` nếu hủy từ 24 giờ trở lên trước trận, và loại trừ Match `ARCHIVED` (không ai đánh giá).~~ — sửa 2026-11-12: Match `COMPLETED` của đội; Match `CANCELLED` sau `CONFIRMED` hủy dưới 24 giờ (chỉ đội hủy — dòng dưới); Match `ARCHIVED` mà đội bị report bùng chưa bị bác (dòng dưới). Không tính: `CONFIRMED` chưa đá, `EXPIRED`, `CANCELLED` khi còn `OPEN`, `CANCELLED` từ 24 giờ trở lên trước trận, `ARCHIVED` mà đội không bị report bùng (SRS SYSTEM-001 v1.8 `Business_Rules.md` §3.3).
+- Match `CANCELLED` hủy dưới 24 giờ trước trận chỉ tính vào mẫu số của **đội hủy** (hoặc đội rút request đã `ACCEPTED`), không tính cho đội bị hủy kèo (2026-11-12).
+- **Tử số:** Match `COMPLETED` có ít nhất một đội trưởng đánh giá và đội không bị report bùng (report chưa bị Admin bác) — loại khỏi tử số ngay khi report, không chờ hết hạn tranh chấp (sửa 2026-11-12).
+- Match `ARCHIVED` (chưa ai đánh giá) mà đội bị report bùng (chưa bị bác) được tính vào mẫu số của đội đó (2026-11-12).
+- Completion Rate và rating trung bình tính từ dữ liệu trận/đánh giá/report khi hiển thị, không lưu bộ đếm (2026-11-12).
 - Chỉ hiển thị Completion Rate khi có ít nhất 5 trận đã chốt; trước đó hiển thị “Mới tham gia” kèm số trận hiện có, ví dụ `2/5 trận`.
 
 **Đánh giá:**
@@ -161,7 +165,7 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
 - **Giao tiếp tệ:** bao gồm chửi bới/thiếu tôn trọng trong chat, không phản hồi tin nhắn sau khi ghép kèo, thái độ thiếu hợp tác, ngôn từ khiếm nhã.
 - Mỗi loại report đếm số lần riêng. Ví dụ: bị report bùng 2 lần và chơi xấu 1 lần → áp dụng mức lần 2 cho bùng, lần 1 cho chơi xấu.
 - **Reset:** Sau khi hoàn thành 5 trận sạch liên tiếp (không bị report), tất cả bộ đếm số lần bị report được reset về 0.
-- Report bùng được xác nhận → Match tính vào mẫu số nhưng không tính tử số Completion Rate.
+- Report bùng (chưa bị Admin bác) → Match tính vào mẫu số nhưng không tính tử số Completion Rate của đội bị report; Admin bác → hoàn đúng số điểm đã trừ thực tế, giảm 1 lần bị report bùng (2026-11-12).
 
 ### 3.5 Địa điểm sân, chi phí, chat và thông báo
 
@@ -262,7 +266,7 @@ Tất cả các quy tắc nghiệp vụ đã được làm rõ và xác nhận v
 - Completion qua đánh giá (không dùng check-in), Match `ARCHIVED`/`COMPLETED`, retention chat
 - Reliability Score: công thức đầy đủ, bonus mốc, chặn [0,100], reset sau 5 trận sạch
 - Report 4 loại (bùng, chơi xấu, giao tiếp tệ, không đúng trình độ), mức trừ tăng dần
-- Rating tách biệt với report; rating ≥4.5 cộng điểm, rating thấp không trừ
+- Rating tách biệt với report; rating 5 sao cộng điểm, rating thấp không trừ
 - Verification Badge 4 điều kiện (phone + >5 trận + rating >3 + Reliability ≥70)
 - Chi phí: thỏa thuận hiển thị, không thanh toán, 50-50/70-30/thua trả hết, khoản tự nhập
 - GPS/mercenary: 4 vị trí, GPS khi tìm kèo/tạo luồng B, dự phòng khu vực hồ sơ (phường/xã), bảo vệ vị trí

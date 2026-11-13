@@ -45,7 +45,7 @@
 
 #### REPUTATION DOMAIN
 - [ ] Reliability Score chặn trong [0, 100]
-- [ ] Completion Rate tính đúng (loại trừ CANCELLED ≥24h và ARCHIVED)
+- [ ] Completion Rate tính đúng theo Business_Rules §3.3 (mẫu số: COMPLETED, CANCELLED <24h chỉ của đội hủy, ARCHIVED có report bùng; tử số: COMPLETED không bị report bùng)
 - [ ] Report tự động chấp nhận và trừ điểm đúng
 - [ ] Tranh chấp report bùng trong 24h
 - [ ] Reset bộ đếm report sau 5 trận sạch
@@ -242,7 +242,9 @@
 - Điểm sau khi trừ không nhỏ hơn 0 (BR-R03)
 - Match chuyển CANCELLED
 - (Nếu đội đã ghép hủy) request đã ACCEPTED của đội đó chuyển WITHDRAWN (BR-M12)
-- (Nếu hủy ≥24h trước) Match loại khỏi mẫu số Completion Rate
+- Chuỗi trận sạch của đội hủy về 0 (user chốt 2026-11-12)
+- (Nếu hủy ≥24h trước) Match không tính vào mẫu số Completion Rate của đội nào
+- (Nếu hủy <24h trước) Match chỉ tính vào mẫu số Completion Rate của **đội hủy**; đội còn lại không tính (user chốt 2026-11-12)
 - Đội kia nhận notification
 - Chưa nhập lý do → hệ thống yêu cầu nhập, không hủy
 - Trận đã bắt đầu → hệ thống báo "Trận đã bắt đầu, không thể hủy", không hủy, không trừ điểm (BR-M11)
@@ -283,6 +285,7 @@
 **Then:**
 - Request chuyển WITHDRAWN; Match chuyển CANCELLED (đội hủy = đội B)
 - Chỉ đội B bị trừ Reliability theo BR-M10; đội tạo kèo không bị trừ
+- Chuỗi trận sạch của đội B về 0; rút <24h trước trận → Match chỉ tính vào mẫu số Completion Rate của đội B (user chốt 2026-11-12)
 - Rút lần hai (hoặc đội B bấm "Hủy kèo" sau đó) không trừ thêm điểm
 - Đội tạo kèo nhận notification "Kèo bị hủy"
 - Rút request PENDING: request chuyển WITHDRAWN, không trừ điểm, Match giữ nguyên
@@ -335,29 +338,35 @@
 
 **Given:** Match đã ARCHIVED hoặc COMPLETED; đội trưởng chưa đánh giá
 
-**When:** Đội trưởng chọn rating 1-5 sao (hoặc "không đến") và submit
+**When:** Đội trưởng chọn sao nguyên 1–5 (hoặc "đội kia không đến") và submit
 
 **Then:**
-- Rating được lưu
+- Đánh giá được lưu (kể cả "đội kia không đến" — không có sao, không có tỷ số); nhận xét ≤500 ký tự (BR-R09)
 - Match chuyển COMPLETED (nếu đang ARCHIVED)
-- (Nếu rating ≥4.5) Đội được đánh giá nhận +1 Reliability Score
-- Rating trung bình của đội được đánh giá được cập nhật
+- Khi Match chuyển COMPLETED bởi đánh giá sao: cả hai đội +2 Reliability; bởi "đội kia không đến": đội đánh giá +2, đội vắng 0 và chuỗi trận sạch của đội vắng giữ nguyên (user chốt 2026-11-12)
+- (Nếu đánh giá 5 sao) Đội được đánh giá nhận +1 Reliability Score; 4 sao trở xuống không cộng (user chốt 2026-11-12)
+- Sao trung bình của đội được đánh giá phản ánh đánh giá mới khi hiển thị; "đội kia không đến" không tính vào trung bình
 - Bên đã đánh giá có thể xem rating đối phương cho mình (sau khi đối phương đánh giá)
+- Người là đội trưởng của cả hai đội trong trận → bị từ chối, không lưu đánh giá (BR-R08)
+- Đội của người đánh giá INACTIVE hoặc DISBANDED → bị từ chối; đội được đánh giá INACTIVE hoặc DISBANDED vẫn đánh giá được (BR-R10)
 
 ---
 
 ### AC-R02: Report đối phương (tự động chấp nhận)
 
-**Given:** Match đã kết thúc; đội trưởng chọn loại report
+**Given:** Match ARCHIVED/COMPLETED, hoặc CANCELLED sau khi đã CONFIRMED (BR-R07); đội trưởng chọn loại report
 
-**When:** Đội trưởng submit report (bùng, chơi xấu, giao tiếp tệ, không đúng trình độ)
+**When:** Đội trưởng submit report (bùng, chơi xấu, giao tiếp tệ, không đúng trình độ) với lý do bắt buộc 1–1000 ký tự (BR-R09)
 
 **Then:**
 - Report được lưu và tự động chấp nhận
 - Hệ thống tra số lần bị report loại này
-- Reliability Score của đội bị report bị trừ theo mức tăng dần (xem Business_Rules.md §3.2)
+- Reliability Score của đội bị report bị trừ theo mức tăng dần (xem Business_Rules.md §3.2); chuỗi trận sạch của đội bị report về 0, +2 / bonus đã cộng không bị thu hồi (user chốt 2026-11-12)
 - Đội bị report nhận notification
-- (Nếu report bùng) Có 24h để tranh chấp
+- (Nếu report bùng) Match bị loại khỏi tử số Completion Rate của đội bị report ngay; có 24h để tranh chấp
+- Match CANCELLED sau khi đã CONFIRMED: chỉ report được "giao tiếp tệ", loại khác bị từ chối; Match OPEN/CONFIRMED/EXPIRED hoặc CANCELLED khi còn OPEN: không report được (BR-R07 — user chốt 2026-11-12)
+- Người là đội trưởng của cả hai đội trong trận → bị từ chối, không lưu report (BR-R08)
+- Đội của người report INACTIVE hoặc DISBANDED → bị từ chối; đội bị report INACTIVE hoặc DISBANDED vẫn report được (BR-R10)
 
 ---
 
@@ -365,14 +374,15 @@
 
 **Given:** Đội bị report bùng trong 24h; report chưa qua tranh chấp
 
-**When:** Đội trưởng bị report chọn "Tranh chấp" và nhập bằng chứng
+**When:** Đội trưởng bị report chọn "Tranh chấp" và bắt buộc nhập bằng chứng (chỉ văn bản, 1–1000 ký tự — BR-R09)
 
 **Then:**
 - Tranh chấp được tạo và chuyển admin
 - Mức trừ Reliability tạm giữ (chưa hoàn lại)
-- Admin xem xét và đưa ra quyết định cuối cùng
-- (Nếu admin xác nhận đúng) Giữ nguyên mức trừ; Match không tính tử số Completion Rate
-- (Nếu admin bác) Hoàn lại Reliability; Match tính tử số Completion Rate
+- Admin xem xét và đưa ra quyết định cuối cùng, bắt buộc kèm ghi chú lý do 1–500 ký tự (BR-R09)
+- (Nếu admin xác nhận đúng) Giữ nguyên mức trừ, không trừ thêm; Match không tính tử số Completion Rate (user chốt 2026-11-12)
+- Đội bị report INACTIVE hoặc DISBANDED → không tranh chấp được (BR-R10)
+- (Nếu admin bác) Hoàn đúng số điểm đã thực trừ của report (có thể ít hơn mức trong bảng nếu lúc trừ điểm đã chạm 0) và giảm 1 lần bị report bùng; Match tính lại vào tử số Completion Rate (nếu đã COMPLETED); chuỗi trận sạch không được khôi phục (user chốt 2026-11-12)
 
 ---
 
@@ -380,25 +390,26 @@
 
 **Given:** Có sự kiện ảnh hưởng Reliability Score
 
-**When:** Match COMPLETED, Match CANCELLED, report được chấp nhận, rating ≥4.5
+**When:** Match COMPLETED, Match CANCELLED, report được chấp nhận, Admin bác report, nhận đánh giá 5 sao
 
 **Then:**
 - Reliability Score được cập nhật đúng theo công thức (xem Business_Rules.md §3.1)
 - Score chặn trong [0, 100]
-- Bonus trận sạch (+5 ở trận 5, +10 ở trận 10) được áp dụng đúng
+- Bonus trận sạch lặp ở mỗi bội số của 5: bội số của 10 (10, 20, 30…) → +10, còn lại (5, 15, 25…) → +5 (user chốt 2026-11-12)
+- Admin xác nhận report bùng đúng không trừ thêm (user chốt 2026-11-12)
 - Reset bộ đếm report sau 5 trận sạch
 
 ---
 
 ### AC-R05: Completion Rate tính đúng
 
-**Given:** Match chuyển trạng thái ảnh hưởng Completion Rate
+**Given:** Đội/cá nhân có Match COMPLETED, CANCELLED hoặc ARCHIVED
 
-**When:** Match chuyển COMPLETED, CANCELLED, hoặc ARCHIVED
+**When:** Người dùng xem uy tín (Completion Rate tính khi hiển thị, không lưu — user chốt 2026-11-12)
 
 **Then:**
-- Mẫu số: Match CONFIRMED, loại trừ CANCELLED ≥24h trước và ARCHIVED
-- Tử số: Match COMPLETED có ≥1 đánh giá và không có report bùng được xác nhận
+- Mẫu số: Match COMPLETED; Match CANCELLED sau khi đã CONFIRMED mà hủy <24h trước trận — chỉ của đội hủy (kể cả đội rút Match_Request đã ACCEPTED), đội còn lại không tính; Match ARCHIVED mà đội bị report bùng (chưa bị Admin bác) (user chốt 2026-11-12)
+- Tử số: Match COMPLETED mà đội không bị report bùng (chưa bị Admin bác) — loại ngay khi report; Admin bác → tính lại; đội bị đánh giá "đội kia không đến" mà không bị report bùng vẫn tính (user chốt 2026-11-12)
 - Completion Rate = (tử số / mẫu số) × 100%
 - (Nếu mẫu số <5) Hiển thị "Mới tham gia X/5 trận"
 - (Nếu mẫu số ≥5) Hiển thị phần trăm
@@ -409,11 +420,25 @@
 
 **Given:** User/đội có thay đổi ảnh hưởng điều kiện badge
 
-**When:** System kiểm tra 4 điều kiện (phone + >5 trận + rating >3 + Reliability ≥70)
+**When:** System kiểm tra 4 điều kiện BR-R04 (số điện thoại — đội: đội trưởng hiện tại có số điện thoại; cá nhân: tài khoản có số điện thoại + >5 trận hoàn thành (tử số Completion Rate) + sao trung bình >3 + Reliability ≥70)
 
 **Then:**
 - (Nếu đủ 4 điều kiện) Badge được cấp; User/đội nhận notification
 - (Nếu thiếu bất kỳ điều kiện nào) Badge bị thu hồi (nếu đã có); nhận notification
+- Đội: cấp/thu hồi ngay sau đánh giá, report, quyết định tranh chấp; trừ điểm do hủy kèo đã ghép / rút Match_Request đã ACCEPTED, đổi đội trưởng, đội trưởng thêm/bỏ số điện thoại → cập nhật ở lần đối soát hằng ngày (trễ tối đa khoảng 1 ngày — Business_Rules §8.2, user chốt 2026-11-12)
+
+---
+
+### AC-R07: Xem đánh giá của trận và report của đội
+
+**Given:** User là đội trưởng của đội trong trận (xem đánh giá) hoặc của đội (xem report đã gửi / bị nhận)
+
+**When:** Đội trưởng mở xem đánh giá của trận hoặc danh sách report của đội
+
+**Then:**
+- Thấy đánh giá đội mình đã gửi; rating đối phương dành cho đội mình chỉ hiện sau khi đội mình đã đánh giá, không hiện trạng thái "đối phương đã/chưa đánh giá" (BC-R03, BC-R04)
+- Thấy các report đội mình đã gửi và đã nhận
+- Đội của người xem INACTIVE hoặc DISBANDED → bị từ chối (BR-R10)
 
 ---
 
@@ -689,8 +714,8 @@
 
 **Expected:**
 - Match CANCELLED
-- User A: Reliability -10
-- Match tính vào mẫu số Completion Rate nhưng không tính tử số (hủy <24h)
+- User A: Reliability -10; chuỗi trận sạch của đội A về 0
+- Match chỉ tính vào mẫu số Completion Rate của **đội hủy** (đội A), không tính tử số (hủy <24h); đội B không tính trận này (user chốt 2026-11-12)
 
 ---
 
@@ -743,26 +768,27 @@
 
 1. User A và B ghép kèo (Match CONFIRMED, giờ trận: hôm nay 18:00)
 2. 20:00 (sau trận), User A report User B bùng
-3. → Report tự động chấp nhận; Reliability của B bị trừ -5 (lần 1 bị report bùng)
+3. → Report tự động chấp nhận; Reliability của B bị trừ -5 (lần 1 bị report bùng); chuỗi trận sạch của B về 0; Match bị loại khỏi tử số Completion Rate của B ngay
 4. → User B nhận notification "Bạn bị report bùng. Có 24h để tranh chấp."
-5. User B tranh chấp trong 1 giờ, gửi bằng chứng (ảnh check-in sân)
+5. User B tranh chấp trong 1 giờ, bắt buộc gửi bằng chứng dạng văn bản (vd "Đội tôi có mặt lúc 18:00, đã nhắn tin cho đội trưởng bên kia"; không đính kèm ảnh/tệp, 1–1000 ký tự — BR-R09)
 6. → Tranh chấp chuyển admin
-7. Admin xem bằng chứng, quyết định: bác report (B đã đến)
-8. → Reliability của B được hoàn lại +5
-9. → Match tính tử số Completion Rate
+7. Admin xem bằng chứng, quyết định: bác report (B đã đến), bắt buộc nhập ghi chú lý do 1–500 ký tự (BR-R09)
+8. → Reliability của B được hoàn lại +5 (đúng số điểm đã thực trừ); số lần bị report bùng của B giảm 1
+9. → Match tính lại vào tử số Completion Rate của B (nếu đã COMPLETED); chuỗi trận sạch của B không được khôi phục
 10. → Cả 2 nhận notification về quyết định
 
 **Expected:**
 - Report: auto_accepted → disputed → rejected
-- Reliability B: -5 → +5 (hoàn lại)
+- Reliability B: -5 → +5 (hoàn đúng điểm đã thực trừ; nếu lúc trừ điểm đã chạm 0 thì chỉ hoàn phần thực trừ)
+- Số lần bị report bùng của B về như trước report; chuỗi trận sạch vẫn là 0 (user chốt 2026-11-12)
 - Match tính vào Completion Rate đúng
 
 ---
 
 ### Scenario 9: Verification Badge — Cấp và thu hồi tự động
 
-1. User A hoàn thành 6 trận, rating trung bình 4.2 sao, Reliability 85, phone linked
-2. → System kiểm tra 4 điều kiện: ✓ phone, ✓ >5 trận, ✓ rating >3, ✓ Reliability ≥70
+1. User A hoàn thành 6 trận (tử số Completion Rate), sao trung bình 4.2, Reliability 85, tài khoản có số điện thoại
+2. → System kiểm tra 4 điều kiện BR-R04: ✓ số điện thoại, ✓ >5 trận hoàn thành, ✓ sao trung bình >3, ✓ Reliability ≥70
 3. → Badge được cấp; User A nhận notification "Bạn đã nhận Verification Badge"
 4. User A bị report 5 lần → Reliability giảm xuống 65
 5. → System kiểm tra: ✗ Reliability <70
@@ -806,7 +832,7 @@
 ## 5. Quyết định bổ sung đã chốt
 
 1. **Cost agreement (luồng B):** Một trong hai đội trưởng nhập/sửa trên Pairing, bên kia xem. Không test xác nhận riêng cho chi phí; test sửa chi phí xoá xác nhận của cả hai bên và chép sang Match khi ghép (BR-C05 — sửa 2026-11-10/11).
-2. **Verification Badge revocation:** Thu hồi ngay lập tức khi điều kiện không đủ. Test scenario: Reliability giảm <70 → badge thu hồi ngay + notification.
+2. **Verification Badge revocation:** Thu hồi ngay lập tức khi điều kiện không đủ. Test scenario: Reliability giảm <70 do report → badge thu hồi ngay + notification. Ngoại lệ (đội — user chốt 2026-11-12): đội bị trừ điểm do hủy kèo đã ghép / rút Match_Request đã ACCEPTED, đổi đội trưởng, đội trưởng thêm/bỏ số điện thoại → badge chỉ cập nhật ở lần đối soát hằng ngày (trễ tối đa khoảng 1 ngày) — Business_Rules §8.2.
 3. **GPS permission revocation:** Fallback sang khu vực hồ sơ ngay. Test scenario: User thu hồi GPS → tìm kèo dựa khu vực hồ sơ + thông báo "Bật GPS...".
 4. **Report cooldown:** Không giới hạn. Test scenario: User report 3 trận khác nhau trong 1 ngày → cả 3 report đều được chấp nhận.
 5. **Hard-delete policy:** Giữ mãi. Không có test scenario hard-delete.
