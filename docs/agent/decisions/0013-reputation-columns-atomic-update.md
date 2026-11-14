@@ -6,7 +6,7 @@
 | **Ngày** | 2026-11-09 |
 | **Người quyết định** | solution-architect (đề xuất) · chờ chủ repo duyệt |
 | **Sửa đổi** | 2026-11-12 — REPUTATION-001: bỏ cột đếm trận / sao trung bình (tính khi đọc); trả điểm cũ/mới bằng `RETURNING`; `verified_at` chỉ ghi bằng câu có điều kiện |
-| **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) · Business_Rules §3.1, §7 (SYSTEM-001) · `docs/agent/design/MATCH-001/Component_Class_Design.md` §4.8, §6 · `docs/agent/design/REPUTATION-001/Component_Class_Design.md` §4.6, §5 · MERCENARY-001 (sau) |
+| **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) · Business_Rules §3.1, §7 (SYSTEM-001) · `docs/agent/design/MATCH-001/Component_Class_Design.md` §4.8, §6 · `docs/agent/design/REPUTATION-001/Component_Class_Design.md` §4.6, §5 · `docs/agent/design/MERCENARY-001/Component_Class_Design.md` §4.10, §5.2 (điểm uy tín cá nhân: hoàn thành khi được chấm sao, rút lui, report, hoàn điểm; huy hiệu cá nhân) |
 
 ## Bối cảnh (Context)
 - Reliability Score đội (`team.reliability_score`) và cá nhân (`"user".reliability_score`) bị cộng/trừ từ nhiều luồng: huỷ kèo / rút yêu cầu (MATCH-001), hoàn thành trận, rating, report, tranh chấp (REPUTATION-001), rút mercenary (MERCENARY-001). Điểm chặn [0, 100] (BR-R03).

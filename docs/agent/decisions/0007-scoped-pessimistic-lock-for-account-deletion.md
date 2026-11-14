@@ -5,8 +5,8 @@
 | **Trạng thái** | Accepted |
 | **Ngày** | 2026-11-06 |
 | **Người quyết định** | Product Owner (chốt hướng khoá bi quan cho `deleteAccount`, 2026-11-06) · solution-architect (đề xuất cách thực hiện) |
-| **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) (đây là ngoại lệ có phạm vi, không thay thế) · [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) · `docs/agent/design/USER-002/Processing_Flow.md` §4.2, §5 |
-| **Sửa đổi** | 2026-11-06 — việc "thêm `Sửa đổi` vào ADR-0003" ở §Cần theo dõi đã xong · 2026-11-06 — retrier thử lại deadlock (`40P01`) |
+| **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) (đây là ngoại lệ có phạm vi, không thay thế) · [ADR-0005](0005-captain-must-hand-over-before-account-deletion.md) · `docs/agent/design/USER-002/Processing_Flow.md` §4.2, §5 · `docs/agent/design/MERCENARY-001/Processing_Flow.md` §3.16 (rút đơn mercenary khi xoá tài khoản) |
+| **Sửa đổi** | 2026-11-06 — việc "thêm `Sửa đổi` vào ADR-0003" ở §Cần theo dõi đã xong · 2026-11-06 — retrier thử lại deadlock (`40P01`) · 2026-11-14 — phạm vi khoá của `deleteAccount` mở rộng sang tin / đơn mercenary (MERCENARY-001, thứ tự tin → đơn) |
 
 ## Bối cảnh (Context)
 
@@ -69,3 +69,13 @@ Tổng 3 truy vấn (W6 ✅). Luồng transfer/accept/leave/disband không đổ
 
 - §Hệ quả "Deadlock vẫn có thể xảy ra … → **500 ở endpoint của bên bị huỷ** … vì retrier chỉ bắt `ObjectOptimisticLockingFailureException`" và §Cần theo dõi "… cho retrier bắt `PessimisticLockingFailureException`": đã làm có giới hạn — retrier chỉ thử lại khi SQLState là `40P01` (deadlock); bên bị huỷ ở `DELETE /profile`, transfer hoặc disband nay được thử lại, lặp lại đủ 3 lần → `409 TEAM_014` thay vì 500. Xem ADR-0003 mục `Sửa đổi 2026-11-06 — Retrier thử lại cả deadlock`.
 - Tín hiệu theo dõi "log có `40P01`": nay là log `WARN` của retrier ("Deadlock (SQLState 40P01) on attempt n/3"), không còn ERROR/500. Phần còn lại của mục đó (cân nhắc `lock_timeout`, xem lại thứ tự khoá khi tín hiệu này xuất hiện) vẫn hiệu lực.
+
+## Sửa đổi 2026-11-14 — Phạm vi khoá mở rộng sang tin / đơn mercenary (MERCENARY-001)
+
+Bổ sung, không thay §Quyết định 1–4. BR-ME18 (SRS `SYSTEM-001`, user chốt 2026-11-14): xoá tài khoản rút mọi đơn ứng tuyển mercenary `PENDING`/`APPROVED` của trận chưa bắt đầu, không trừ điểm, tin `FILLED` về `OPEN`. Chen giữa Q2 và soft delete (chi tiết `docs/agent/design/MERCENARY-001/Processing_Flow.md` §3.16):
+
+- **Q3 — khoá tin trước:** một `UPDATE mercenary_recruitment … FROM (đếm đơn APPROVED của user theo tin) … RETURNING id, n` — bớt số đã duyệt, `FILLED → OPEN`. Không dùng `SELECT … FOR UPDATE`; khoá dòng do chính câu `UPDATE`.
+- **Q4 — rút đơn:** một `UPDATE mercenary_application … RETURNING id, recruitment_id, was_approved`.
+- Số đơn `APPROVED` theo tin ở Q4 khác `n` của Q3 (đơn vừa được duyệt / vừa rút giữa hai câu) → ném xung đột → retrier thử lại cả lần thử.
+- **Thứ tự khoá** của `deleteAccount`: `team_member` (Q1) → `mercenary_recruitment` (Q3) → `mercenary_application` (Q4) → `"user"` (soft delete). Thứ tự tin → đơn trùng mọi luồng ghi mercenary khác (ADR-0003 Sửa đổi 2026-11-14); các luồng đó không khoá `team_member` → không thêm vòng chờ [Inference — chưa tái hiện; deadlock nếu có được retrier thử lại]. Bản thiết kế trước (đơn → tin) bị loại vì ngược thứ tự của duyệt.
+- Tổng truy vấn `deleteAccount`: 3 → 5 (W6 ✅).

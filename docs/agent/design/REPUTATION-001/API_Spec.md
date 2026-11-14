@@ -10,8 +10,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1.1, §1.2 và MATCH-001 `API_Spec.md` §1.1; kèo, trạng thái kèo, mã `MATCH_*`: MATCH-001 `API_Spec.md`; mã `TEAM_*`, `AUTH_*`: USER-001/USER-002 `API_Spec.md`; hiển thị user đã xoá ở API Admin: [ADR-0002](../../decisions/0002-soft-delete-policy.md) (Sửa đổi 2026-11-12) |
-| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.8) — UC-R01..R07; BR-R01..R10, BC-R01..R07; Business_Rules §3.1–§3.3, §6, §7, §8.2, §8.4; AC-R01..R07; Scenario 8, 9 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 |
+| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.9) — UC-R01..R07; BR-ME14 (report của mercenary với đội); BR-R01..R10, BC-R01..R07; Business_Rules §3.1–§3.3, §6, §7, §8.2, §8.4; AC-R01..R07; Scenario 8, 9 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-13, cập nhật 2026-11-14) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -46,7 +46,7 @@ Sau trận, đội trưởng **đánh giá** đối phương (1–5 sao hoặc "
 | Đánh giá đầu tiên là "đội kia không đến" | Đội đánh giá: +2 (và chuỗi như dưới) · đội bị đánh giá vắng: 0, chuỗi trận sạch giữ nguyên | — |
 | Chuỗi trận sạch chạm bội số của 5 lúc trận `COMPLETED` (5, 15, 25… → +5; 10, 20, 30… → +10) | Đội đạt mốc | +5 / +10 (cộng thêm vào +2) |
 | Nhận đánh giá 5 sao | Đội được đánh giá | +1 |
-| Bị report (2.3) | Đội bị report | Theo bảng dưới, theo **số lần bị report loại đó kể cả lần này** |
+| Bị report (2.3), kể cả bị **mercenary** đá thuê cho đội report (MERCENARY-001 `API_Spec.md` 2.20 — BR-ME14, v1.1) | Đội bị report | Theo bảng dưới, theo **số lần bị report loại đó kể cả lần này** (report của đội đối phương và của mercenary cộng chung một bộ đếm) |
 | Admin bác report bùng (2.8, `REJECTED`) | Đội bị report | Hoàn lại đúng số điểm đã thực trừ của report đó |
 | Admin xác nhận report bùng (2.8, `CONFIRMED`) | — | Không trừ thêm |
 | Huỷ kèo đã ghép / rút yêu cầu đã chấp nhận | Đội huỷ | MATCH-001 `API_Spec.md` §1.5 |
@@ -70,7 +70,7 @@ Sau trận, đội trưởng **đánh giá** đối phương (1–5 sao hoặc "
 Tính tại thời điểm đọc (2.9), cho từng đội:
 
 - **Trận được tính (mẫu số):** trận của đội đang `COMPLETED`; trận `CANCELLED` sau khi đã ghép mà **chính đội này** huỷ (hoặc rút yêu cầu đã chấp nhận) **dưới 24 giờ** trước giờ bắt đầu — đội bị huỷ kèo không bị tính; trận `ARCHIVED` (chưa ai đánh giá) mà đội bị report bùng (chưa bị bác).
-- **Trận hoàn thành (tử số):** trận của đội đang `COMPLETED` mà đội **không** bị report bùng (chưa bị bác). Report bùng loại trận khỏi tử số **ngay khi gửi** (trong lúc chờ tranh chấp cũng vậy); Admin bác → trận được tính lại. Đánh giá "không đến" **không** loại trận khỏi tử số — chỉ report bùng mới loại.
+- **Trận hoàn thành (tử số):** trận của đội đang `COMPLETED` mà đội **không** bị report bùng (chưa bị bác) — report bùng của đội đối phương **hoặc** của mercenary đá thuê cho đội trong kèo đó (BR-ME14, v1.1). Report bùng loại trận khỏi tử số **ngay khi gửi** (trong lúc chờ tranh chấp cũng vậy); Admin bác → trận được tính lại. Đánh giá "không đến" **không** loại trận khỏi tử số — chỉ report bùng mới loại.
 - Trận được tính < 5 → `completionRate = null`, `isNewcomer = true` → FE hiện "Mới tham gia X/5 trận" (X = `countedMatches`). ≥ 5 → `completionRate` = phần trăm làm tròn tới số nguyên.
 - Trận `CONFIRMED` chưa đá, `EXPIRED`, `CANCELLED` khi chưa ghép, huỷ từ đủ 24 giờ trước trận, hoặc do đội kia huỷ: không tính.
 
@@ -92,6 +92,7 @@ Hệ thống cấp / thu hồi ngay sau mỗi đánh giá, report, quyết đị
 
 ### 1.7. Report và tranh chấp
 
+- Mercenary đá thuê cho đội cũng report được đội (MERCENARY-001 2.20): cùng 4 loại, cùng mức trừ, cùng tác động lên chuỗi trận sạch và tỉ lệ hoàn thành của đội (v1.1). Các report này **không** nằm trong 2.4 (xem MERCENARY-001 2.21); đội tranh chấp report bùng của mercenary bằng 2.5 như report của đội đối phương; Admin xử lý ở hàng chờ riêng (MERCENARY-001 2.25–2.27). Trận ngoài hệ thống (MERCENARY-001 2.28) không tính vào tỉ lệ hoàn thành của đội.
 - Report được chấp nhận ngay (`AUTO_ACCEPTED`) và trừ điểm (§1.3). Một trận, mỗi đội report đội kia **tối đa một lần cho mỗi loại**; được gửi nhiều loại khác nhau. Không giới hạn thời gian report sau trận.
 - Chỉ report **bùng** (`NOSHOW`) có tranh chấp: đội bị report gửi bằng chứng (văn bản) trong **24 giờ** kể từ lúc report (`disputeDeadlineAt`). Hết hạn mà không tranh chấp → report được xác nhận tự động, API trả `status = "CONFIRMED"`.
 - Trong lúc tranh chấp (`DISPUTED`) điểm đã trừ được giữ nguyên. Admin quyết định:
@@ -299,7 +300,7 @@ Trận chưa kết thúc / không diễn ra → `200` với `given = null`, `rec
 
 ### 2.4. Danh sách report của đội — `GET /api/v1/teams/{teamId}/reports`
 
-**Dùng khi:** màn hình "Report" của đội — tab **Đội bị report** (`RECEIVED`: xem lý do, điểm bị trừ, nút "Tranh chấp") và tab **Đội đã report** (`SENT`).
+**Dùng khi:** màn hình "Report" của đội — tab **Đội bị report** (`RECEIVED`: xem lý do, điểm bị trừ, nút "Tranh chấp") và tab **Đội đã report** (`SENT`). Chỉ gồm report **giữa hai đội**; report giữa đội và mercenary ở MERCENARY-001 `API_Spec.md` 2.21 (v1.1).
 **Ai gọi được:** đội trưởng của đội `ACTIVE` có ID `teamId`; đội đã giải tán → `422 TEAM_016`, đội đang tạm ngưng → `422 TEAM_015`.
 
 **Path / Query params**
@@ -361,7 +362,7 @@ Trận chưa kết thúc / không diễn ra → `200` với `given = null`, `rec
 ### 2.5. Tranh chấp report bùng — `POST /api/v1/reports/{reportId}/dispute`
 
 **Dùng khi:** đội trưởng đội bị report bùng bấm "Tranh chấp" (hiện khi `canDispute = true` ở 2.4) và nhập bằng chứng (UC-R03).
-**Ai gọi được:** đội trưởng của **đội bị report** khi đội đang `ACTIVE`; đội đã giải tán → `422 TEAM_016`, đội đang tạm ngưng → `422 TEAM_015`. Report phải loại `NOSHOW`, trạng thái `AUTO_ACCEPTED`, trước `disputeDeadlineAt`.
+**Ai gọi được:** report nhắm vào **đội** (giữa hai đội, hoặc mercenary report đội): đội trưởng của **đội bị report** khi đội đang `ACTIVE`; đội đã giải tán → `422 TEAM_016`, đội đang tạm ngưng → `422 TEAM_015`. Report nhắm vào **cá nhân** (đội trưởng report mercenary — MERCENARY-001 `API_Spec.md` 2.20; v1.1): chính người bị report, không xét trạng thái đội; người khác → `403 REPORT_009`. Report phải loại `NOSHOW`, trạng thái `AUTO_ACCEPTED`, trước `disputeDeadlineAt`. `reportId` lấy từ 2.4 hoặc MERCENARY-001 2.21 / 2.22.
 
 **Path params:** `reportId` (UUID, bắt buộc).
 
@@ -407,6 +408,7 @@ Trận chưa kết thúc / không diễn ra → `200` với `given = null`, `rec
 |---|---|---|---|
 | 400 | `VALIDATION_ERROR` | Thiếu `evidence` / rỗng sau trim / > 1000 | Hiện lỗi cạnh field |
 | 404 | `REPORT_001` | Không có report | Tải lại 2.4 |
+| 403 | `REPORT_009` | Report nhắm vào cá nhân mà người gọi không phải người bị report (v1.1) | Ẩn nút "Tranh chấp" |
 | 422 | `TEAM_016` | Đội bị report đã giải tán | Hiện message |
 | 422 | `TEAM_015` | Đội bị report đang tạm ngưng hoạt động | Hiện message |
 | 403 | `TEAM_002` | Người gọi không là đội trưởng đội bị report | Ẩn nút "Tranh chấp" |
@@ -419,7 +421,7 @@ Trận chưa kết thúc / không diễn ra → `200` với `given = null`, `rec
 
 ### 2.6. Admin: danh sách tranh chấp — `GET /api/v1/admin/disputes`
 
-**Dùng khi:** admin panel, hàng chờ tranh chấp report bùng (UC-R04).
+**Dùng khi:** admin panel, hàng chờ tranh chấp report bùng (UC-R04). Chỉ tranh chấp report **giữa hai đội** (cả 2.7, 2.8 — tranh chấp khác trả `404 DISPUTE_001`); tranh chấp liên quan mercenary ở MERCENARY-001 `API_Spec.md` 2.25–2.27 (v1.1).
 **Ai gọi được:** Admin.
 
 **Query params**
@@ -767,7 +769,7 @@ Mọi field §4.6, thêm:
 | `completion.countedMatches` | integer | Mẫu số §1.4 |
 | `completion.completionRate` | integer \| null | Phần trăm (làm tròn); `null` khi `countedMatches < 5` |
 | `completion.isNewcomer` | boolean | `countedMatches < 5` |
-| `rating.averageRating` | number \| null | Sao trung bình, 1 chữ số thập phân (làm tròn); `null` khi chưa có sao nào |
+| `rating.averageRating` | number \| null | Sao trung bình từ đánh giá của các **đội** đối phương, 1 chữ số thập phân (làm tròn); `null` khi chưa có sao nào. Đánh giá của mercenary dành cho đội không tính (BR-ME13 — xem MERCENARY-001 2.24) |
 | `rating.ratingCount` | integer | Số đánh giá có sao (không tính "không đến") |
 | `verification.isVerified` | boolean | Có huy hiệu xác minh (§1.5) |
 | `verification.verifiedAt` | string \| null | Thời điểm cấp; `null` khi không có huy hiệu |
@@ -789,6 +791,7 @@ Mã mới của REPUTATION-001:
 | `REPORT_006` | 422 | "Chỉ tranh chấp được report bùng" | 2.5 |
 | `REPORT_007` | 422 | "Đã quá hạn 24 giờ để tranh chấp" | 2.5 |
 | `REPORT_008` | 409 | "Report đã được tranh chấp hoặc đã có quyết định" | 2.5 |
+| `REPORT_009` | 403 | "Chỉ người bị report được tranh chấp" | 2.5 (report nhắm vào cá nhân — v1.1) |
 | `DISPUTE_001` | 404 | "Không tìm thấy tranh chấp" | 2.7, 2.8 |
 | `DISPUTE_002` | 409 | "Tranh chấp đã được xử lý" | 2.8 |
 

@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL ≥ 18 |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §10; VENUE-001 `Component_Class_Design.md` §4.9 (retrier overload), §4.13 (audit); MATCH-001 `Component_Class_Design.md` §4.5 (`TeamGuard`), §4.8 (`ReputationService` — sửa ở đây §4.6), §4.9 (event), §4.10 (scheduler), §4.11 (`AdminAuditLog.afterCommit(action, adminId, targetType, targetId)`), §8 (pool) · ADR-0002 (Sửa đổi 2026-11-12), ADR-0003 (Sửa đổi 2026-11-12), ADR-0008, ADR-0011, ADR-0012, ADR-0013 (Sửa đổi 2026-11-12) |
 | Ràng buộc dữ liệu | V1–V4 (code) + V5 (VENUE-001), V6 (MATCH-001), V7 (MATCH-002) — **chưa có trong code** + `V8__reputation_rating_report_dispute.sql` (§5.1). Entity hiện có `domain/.../entity/rating/{Rating, Report}`, `team/Team`, `user/User` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-13, cập nhật 2026-11-14) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -485,3 +485,19 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 | 3 (D) | Kèo huỷ dưới 24 giờ trước trận chỉ vào mẫu số của **đội huỷ** (`cancelled_by_team_id = :teamId`) — đổi so với câu chữ SRS cũ | §5.3; `API_Spec.md` §1.4 |
 | 4 (E) | Admin bác report không khôi phục chuỗi trận sạch | §4.6 `refundReportPenalty`; `API_Spec.md` §1.3 |
 | F | `reason`/`evidence` ≤ 1000, `note` ≤ 500, `comment` ≤ 500 | §5.1, §7; `API_Spec.md` 2.1, 2.3, 2.5, 2.8 |
+
+## 14. Sửa đổi bởi MERCENARY-001 (v1.1, 2026-11-13, cập nhật 2026-11-14)
+
+Thiết kế chi tiết ở MERCENARY-001 `Component_Class_Design.md` §4.10, §4.12, §5.2 (nguồn duy nhất); các mục dưới của tài liệu này đọc kèm bảng sau.
+
+| Mục ở đây | Sửa |
+|---|---|
+| §1, §4.6 `ReputationService` | + `applyMercenaryCompletion` (khi đội trưởng chấm sao mercenary — BR-ME15 sửa 2026-11-14), `applyUserReportPenalty`, `refundUserReportPenalty`; `ScoreChangeView` + `subjectType`; `ReliabilityReason` + `MERCENARY_COMPLETED`, `MERCENARY_WITHDRAWN_AFTER_APPROVED`. `applyMatchCompletion` / `TeamRepository.applyCompletion` **không đổi** (mercenary không được cộng điểm lúc trận `COMPLETED`) |
+| §4.4 `AdminDisputeService.resolveDispute` (2.8) | CAS 0 dòng: `existsById` → `DisputeRepository.existsTeamDispute(id)` (`EXISTS dispute d JOIN report r … AND r.application_id IS NULL`) → `false` → `DISPUTE_001` — id của tranh chấp mercenary trả 404 thay vì 409 (M5) |
+| §4.3 `DisputeService`, §5.3 `DisputeContextView` | + `reportedType`, `callerIsReportedUser`; report nhắm vào cá nhân → caller phải là người bị report (`REPORT_009`), không kiểm trạng thái đội |
+| §4.7 event | `TeamReportedEvent`, `ReportDisputedEvent`, `DisputeResolvedEvent`: `reporterTeamId/reportedTeamId` → `reporterType, reporterId, reportedType, reportedId` |
+| §4.8 huy hiệu | `TeamVerificationRefresher` → `VerificationRefresher` (gom id đội + cá nhân, tối đa 1 câu mỗi loại); `TeamVerificationJobService` / `TeamVerificationScheduler` → `VerificationJobService` / `VerificationScheduler` (thêm vòng cá nhân) |
+| §5.2, §5.3 truy vấn đội ↔ đội | `findRatingContext` (`authorRated`/`opponentRated`), `findMatchRatingRows`, `findByMatchIdAndRaterType…`, `findReportContext`, `findTeamReports`/`countTeamReports`, `findAdminDisputes`/`countAdminDisputes`/`findAdminDisputeDetail`, `resolveIfPending`, sao trung bình trong `TeamReputationSql.STATS`: thêm `application_id IS NULL`. `noshow` của STATS và trận sạch trong `applyCompletion` **giữ** mọi report nhắm vào đội của kèo (kể cả từ mercenary — BR-ME14, user chốt 2026-11-14); report trận ngoài hệ thống có `match_id = NULL` nên không vào STATS |
+| §5.2 `applyDecision` | `RETURNING` thêm `reported_type` |
+| Migration | Cột `application_id`, `external_match_id` của `rating`/`report` (`match_id` thành nullable — luồng đội ↔ đội luôn có, CHECK của V9), `"user".verified_at`: V9 (MERCENARY-001 §5.1); V8 không đổi |
+| §4.3 `findDisputeContext` | Không `JOIN match` bắt buộc (report trận ngoài có `match_id = NULL`) |

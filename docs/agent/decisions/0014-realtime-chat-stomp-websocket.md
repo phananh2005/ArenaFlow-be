@@ -4,8 +4,9 @@
 |---|---|
 | **Trạng thái** | Proposed |
 | **Ngày** | 2026-11-10 |
+| **Sửa đổi** | 2026-11-13 — MERCENARY-001: thêm topic cuộc trò chuyện tổng quát `/topic/conversations/{conversationId}` |
 | **Người quyết định** | Chủ repo (chốt cơ chế chat MATCH-002, 2026-11-10) · solution-architect (đề xuất cách thực hiện) |
-| **Liên quan** | [ADR-0001](0001-jwt-authentication-strategy.md) (JWT) · [ADR-0011](0011-domain-events-after-commit.md) (side effect sau commit, một instance) · `docs/agent/design/MATCH-002/` (API_Spec "Kênh realtime", Component_Class_Design §4.6) · SRS `SYSTEM-001` UC-N01, AC-N01, Acceptance_Criteria §3.1 |
+| **Liên quan** | [ADR-0001](0001-jwt-authentication-strategy.md) (JWT) · [ADR-0011](0011-domain-events-after-commit.md) (side effect sau commit, một instance) · `docs/agent/design/MATCH-002/` (API_Spec "Kênh realtime", Component_Class_Design §4.6) · SRS `SYSTEM-001` UC-N01, AC-N01, Acceptance_Criteria §3.1 · `docs/agent/design/MERCENARY-001/` (chat theo đơn ứng tuyển — Component_Class_Design §4.7–§4.8; BR-ME16, UC-ME09, AC-ME10) |
 
 ## Bối cảnh (Context)
 - MATCH-002 có chat giữa hai đội trưởng của một thương lượng ghép kèo (luồng B). SRS: tin nhắn tới bên kia "real-time … (WebSocket/polling)", độ trễ < 1s; implementation note "WebSocket + SockJS (Spring Boot `.withSockJS()`)".
@@ -48,3 +49,13 @@ Chúng tôi:
 - Cần chạy nhiều instance → ADR mới cho broker relay (hoặc chuyển sang polling).
 - Cần thu hồi quyền tức thời khi chuyển quyền đội trưởng → ngắt phiên theo user (registry phiên) hoặc kiểm lại định kỳ.
 - Số kết nối đồng thời / bộ nhớ broker khi tăng người dùng; giới hạn kích thước frame vào.
+
+## Sửa đổi 2026-11-13 — MERCENARY-001: topic cuộc trò chuyện tổng quát
+
+Bổ sung, không thay §Quyết định 1–2, 4, 6–7. Mở rộng §Quyết định 3, 5:
+
+- Thêm mẫu topic `/topic/conversations/{conversationId}` cho **cuộc trò chuyện** (ngữ cảnh + hai bên, mỗi bên là đội hoặc người dùng). Ngữ cảnh đầu tiên: chat 1–1 giữa đội trưởng đội tuyển và ứng viên của một đơn ứng tuyển mercenary (`docs/agent/design/MERCENARY-001/` — API_Spec §1.7, Component_Class_Design §4.7–§4.8). `SUBSCRIBE` vẫn chỉ nhận đúng nguyên văn hai mẫu (`/topic/pairings/{id}`, `/topic/conversations/{id}`), không wildcard.
+- Phân quyền `SUBSCRIBE` của topic mới: một truy vấn DB lúc subscribe, theo luật đọc của loại ngữ cảnh (mercenary: ứng viên hoặc đội trưởng ACTIVE hiện tại của đội tuyển). Rủi ro "chỉ kiểm lúc subscribe" như §Hệ quả.
+- Port `ChatRealtimeGateway` thêm phương thức đẩy theo cuộc trò chuyện, cùng cơ chế `afterCommit`.
+- **Mô hình dữ liệu cuộc trò chuyện** (MERCENARY-001 `Component_Class_Design.md` §4.7, §5.1): bảng tổng quát `conversation` (loại ngữ cảnh + khoá ngữ cảnh dạng cột FK riêng theo loại + trận để tính hạn lưu + hai bên `TEAM`/`USER`) và `conversation_message` (bên gửi A/B + người thực sự gửi). Tách khỏi `chat_message` của pairing — MATCH-002 giữ nguyên. Đã loại: dùng chung `chat_message` (phải nới `pairing_id`/`sender_team_id`, sửa mọi truy vấn MATCH-002; phía ứng viên không có đội); bảng riêng chỉ cho mercenary (ngữ cảnh kế tiếp lại cần bảng thứ ba). Quyền đọc / gửi theo loại ngữ cảnh qua một policy; lưu tin, cursor, đánh dấu đọc, kênh realtime dùng chung.
+- Lý do chọn topic tổng quát thay vì `/topic/mercenary-applications/{id}`: chat đội–đội theo cặp (kèo, đội) — thay đổi đã chốt, làm sau trên nhánh riêng — có thể thêm loại ngữ cảnh mà không thêm mẫu topic.

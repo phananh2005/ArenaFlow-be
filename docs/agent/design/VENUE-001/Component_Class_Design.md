@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · Cloudinary (ký/xác minh cục bộ trong request; Admin API chỉ trong job dọn asset) |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §10 · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) (`Proposed`) |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (§5.1); entity hiện có `domain/.../entity/venue/{Venue,VenueImage,VenueReport}` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.0** (solution-architect · 2026-11-14) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -96,11 +96,11 @@ VenueResponse getVenue(UUID venueId);                                           
 VenueReportResponse reportVenue(UUID venueId, CurrentActor actor, ReportVenueRequest r); // @Transactional
 VenueResponse updateVenue(UUID venueId, CurrentActor actor, UpdateVenueRequest r);       // retrier(VENUE_011)
 ```
-Deps: `VenueRepository`, `VenueReportRepository`, `UserRepository` (`findByIdAndDeletedAtIsNull`), `VenueImageRepository`, `VenueGuard`, `VenueMapper`, `PageRequestFactory`, `ApplicationEventPublisher`, `AdminAuditLog`.
-- `createVenue`: chuẩn hoá (trim; `""` → `null`) → `Venue.builder()` → `save`; response từ entity + `displayName`, không đọc lại.
+Deps: `VenueRepository`, `VenueReportRepository`, `UserRepository` (`findByIdAndDeletedAtIsNull`), `AdministrativeUnitRepository` (`findWardWithProvince` — USER-001, v4.0), `VenueImageRepository`, `VenueGuard`, `VenueMapper`, `PageRequestFactory`, `ApplicationEventPublisher`, `AdminAuditLog`.
+- `createVenue`: `findWardWithProvince(wardId)` → `USER_002` (v4.0) → chuẩn hoá (trim; `""` → `null`) → `Venue.builder()` → `save`; response từ entity + `displayName` + phường/tỉnh, không đọc lại.
 - `searchVenues`: escape `q` (`%`, `_`, `\`) rồi bọc `%…%`; chọn 1 trong 4 truy vấn theo (có toạ độ?, `status`) — §5.2.
 - `reportVenue`: `actor.admin()` → `VENUE_015` → `activeVenue` → `saveAndFlush`; constraint `uq_venue_report_pending` → `VENUE_014`.
-- `updateVenue`: `findVenue` → `requireOwnerOrAdmin` → `requireWritable` → setter → `save` → `getVenue`.
+- `updateVenue`: `findVenue` → `requireOwnerOrAdmin` → `requireWritable` → phường (v4.0: chưa có và không gửi → `VENUE_016`; gửi → `findWardWithProvince` → `USER_002`) → setter → `save` → `getVenue`.
 - Luồng chi tiết: `Processing_Flow.md` §3.1–§3.3, §3.7, §3.12.
 
 ### 4.2. VenueImageService
@@ -176,7 +176,7 @@ List<SelectableVenueView> requireSelectable(Collection<UUID> venueIds); // readO
                                                                        // trả thông tin hiển thị theo thứ tự venueIds
 void markSelected(Collection<UUID> venueIds, OffsetDateTime selectedAt); // MANDATORY; 1 truy vấn bulk, reset cổng 180 ngày
 ```
-`MANDATORY` để `last_selected_at` rollback cùng kèo. Thời điểm "được chọn" do MATCH-001 quyết định (luồng B: chỉ địa điểm đã chốt, lúc hoàn tất xác nhận — MATCH-002 `Component_Class_Design.md` §4.4). `requireSelectable` trả `SelectableVenueView` để kèo luồng B dựng response 2.1 (MATCH-001) không cần đọc lại địa điểm; caller không cần thông tin hiển thị thì bỏ qua giá trị trả về.
+`MANDATORY` để `last_selected_at` rollback cùng kèo / trận ngoài. v4.0 (BC-V05, user chốt 2026-11-14): MERCENARY-001 cũng gọi `markSelected` khi khai báo trận ngoài (2.28) và khi đổi sân của trận ngoài (2.31, chỉ sân mới) — `MERCENARY-001/Component_Class_Design.md` §4.15. Job cảnh báo 180 ngày (`markStaleAlerted`) **không đổi** câu: vẫn đọc `last_selected_at`, nay đã gồm trận ngoài. Thời điểm "được chọn" của kèo do MATCH-001 quyết định (luồng B: chỉ địa điểm đã chốt, lúc hoàn tất xác nhận — MATCH-002 `Component_Class_Design.md` §4.4). `requireSelectable` trả `SelectableVenueView` để kèo luồng B dựng response 2.1 (MATCH-001) không cần đọc lại địa điểm; caller không cần thông tin hiển thị thì bỏ qua giá trị trả về.
 
 ### 4.7. Domain event (`application/event`)
 ```java
@@ -280,6 +280,10 @@ ALTER TABLE venue_report ADD CONSTRAINT venue_report_handled_consistency_check C
     OR (status <> 'PENDING' AND handled_by IS NOT NULL AND handled_at IS NOT NULL));
 CREATE INDEX idx_venue_report_status_created ON venue_report(status, created_at DESC);
 CREATE UNIQUE INDEX uq_venue_report_pending ON venue_report(reporter_id, venue_id, reason) WHERE status = 'PENDING';
+
+-- venue: phường/xã (v4.0, BR-V11) — nullable cho địa điểm tạo trước; bắt buộc ở tầng API khi thêm / sửa
+ALTER TABLE venue ADD COLUMN ward_id UUID REFERENCES administrative_unit(id) ON DELETE RESTRICT;
+CREATE INDEX idx_venue_ward ON venue(ward_id);
 ```
 - Chỉ delta spec/thiết kế cần: khoá + cổng cảnh báo (BC-V05), CHECK loại sân (BR-V05; giữ kiểu cột V1), `public_id` (ADR-0009), trạng thái report (Data Model §2.4), chống trùng report (BR-V09).
 - Dữ liệu cũ (chưa kiểm số dòng Neon dev — developer kiểm khi lập kế hoạch): `UPDATE` giữ migration chạy được; `venue_type` lạ → `NULL`; report trùng `(reporter_id, venue_id, 'OTHER')` sẽ làm `uq_venue_report_pending` lỗi → dừng, báo, không tự xoá.
@@ -287,6 +291,7 @@ CREATE UNIQUE INDEX uq_venue_report_pending ON venue_report(reporter_id, venue_i
 - `venue.created_by_user_id`: V1 khai `ON DELETE SET NULL` + CHECK `venue_check` (`created_by_type = 'USER'` ⇒ `created_by_user_id IS NOT NULL`) — cùng mâu thuẫn (xoá cứng user tạo địa điểm sẽ lỗi CHECK). Đổi `ON DELETE RESTRICT`, giữ tên `venue_created_by_user_id_fkey` (Neon dev `misty-dew-90700890`, kiểm 2026-11-11).
 - `reporter_id`: V1 khai `NOT NULL` + `ON DELETE SET NULL` (mâu thuẫn — xoá cứng user sẽ lỗi NOT NULL). Đổi `ON DELETE RESTRICT`: khớp `NOT NULL` và chính sách chỉ xoá mềm user (ADR-0002); cùng thay đổi cho `chat_message.sender_user_id` ở V7 (MATCH-002 §5.1). Giữ tên constraint V1 `venue_report_reporter_id_fkey` (Neon dev `misty-dew-90700890`, kiểm 2026-11-10). Index `idx_venue_report_reporter` của V1 giữ nguyên.
 - **Xoá ảnh = hard-delete** dòng `venue_image` (lệch có chủ đích, §10).
+- `ward_id` (v4.0): nullable vì địa điểm tạo trước chưa có phường (BR-V11); không CHECK `level = 'ward'` ở DB (không CHECK chéo bảng) — service kiểm bằng `findWardWithProvince` (USER-001, `level = 'ward'`). `idx_venue_ward` cho tìm kèo mercenary không GPS (MERCENARY-001 `Component_Class_Design.md` §5.2).
 
 ### 5.2. Repository
 
@@ -338,10 +343,10 @@ Ghi chú SQL:
 
 | Projection | Cột |
 |---|---|
-| `VenueDetailView` | cột `venue` cho `VenueResponse` / `AdminVenueResponse` + `createdByName`, `createdByDeleted` (`false` khi không có người tạo) |
+| `VenueDetailView` | cột `venue` cho `VenueResponse` / `AdminVenueResponse` + `createdByName`, `createdByDeleted` (`false` khi không có người tạo) + `wardId`, `wardName`, `provinceId`, `provinceName` (v4.0: `LEFT JOIN administrative_unit` phường + tỉnh, cùng câu) |
 | `VenueSummaryView` | cột `VenueSummaryResponse` + `primaryImageUrl`, `distanceKm` (`Double`) |
 | `VenueImageStatsView` | `imageCount`, `maxDisplayOrder` |
-| `SelectableVenueView` | `id`, `name`, `address`, `latitude`, `longitude`, `status`, `primaryImageUrl` (v1.2 — thay `VenueStatusView`) |
+| `SelectableVenueView` | `id`, `name`, `address`, `latitude`, `longitude`, `status`, `primaryImageUrl` (v1.2 — thay `VenueStatusView`) + `wardName`, `provinceName` (v4.0 — `LEFT JOIN administrative_unit`, cùng câu; dùng ở MERCENARY-001 2.28, 2.31) |
 | `StaleVenueView` | `id`, `name` |
 | `AdminVenueReportView` | cột report + `venueName`, `venueStatus`, `reporterName`, `reporterDeleted`, `handledByName`, `handledByDeleted` (`false` khi chưa có người xử lý) |
 
@@ -360,6 +365,7 @@ Giữ Lombok/builder/`@PrePersist` (`convention-backend.md` §6, §6.1); `src/ma
 ## 7. DTO & Mapper
 
 - DTO là `record`; enum dạng chuỗi dùng `@OneOf` (phân biệt hoa thường).
+- v4.0: `CreateVenueRequest.wardId` `@NotNull UUID`; `UpdateVenueRequest.wardId` `UUID` (tuỳ chọn ở DTO, bắt buộc có điều kiện ở service — `VENUE_016`). `VenueResponse`, `AdminVenueResponse` + `ward` (`WardResponse` của USER-001 hoặc record `VenueWardResponse(wardId, wardName, provinceId, provinceName)` — developer chọn khi reuse-scan; shape API ở `API_Spec.md` §4.2). Entity `venue.Venue` + `wardId` (`UUID`).
 - **Field tuỳ chọn chấp nhận `""`** (cả tạo và sửa — `API_Spec.md` §1, §2.1, §2.12): `venueType` `@OneOf({"FIVE_A_SIDE","SEVEN_A_SIDE","ELEVEN_A_SIDE",""})`; `phone` `@Pattern(regexp = "^$|^0[0-9]{9,10}$")`; `website` `@URL(regexp = "^$|^https?://.*")` + `@Size(max = 500)` ([Inference] `@URL` của Hibernate Validator coi `""` hợp lệ — có test). Service đổi `""` → `null` (tạo) hoặc xoá giá trị (sửa). `UpdateVenueRequest.venueName/address`: `@Size` + `@Pattern(regexp = "(?s).*\\S.*")` (null hợp lệ, chỉ khoảng trắng → 400).
 - **`SearchVenueRequest`** (record, bind `@ModelAttribute`): `page`, `pageSize` kiểu `Integer`, `status` kiểu `VenueStatusFilter`; compact constructor gán mặc định khi `null` (`page = 1`, `pageSize = 20`, `status = ACTIVE`, `radiusKm = 5` nếu có toạ độ) **trước** Bean Validation (`@Min/@Max` chạy trên giá trị sau mặc định). `@ValidGeoQuery` mức lớp gắn lỗi vào property node (`lat` / `radiusKm`) vì `GlobalExceptionHandler` chỉ đọc `getFieldErrors()`. Test bắt buộc: không gửi `page`/`pageSize`/`status` → 1/20/`ACTIVE`; `pageSize=101` → 400. `pageSize` tối đa 100 (không theo 50 của AC §3.4): user chốt 2026-11-09 để nhất quán `PageRequestFactory` dùng chung.
 - `VenueMapper` (`componentModel = "spring"`, `uses`/`imports` `MapperSupport`, `unmappedTargetPolicy = ERROR`): `toResponse(VenueDetailView, List<VenueImage>)` (che `createdByName`), `toAdminResponse(VenueDetailView, List<VenueImage>)` (không che; `@Mapping(target = "isCreatedByDeleted", source = "createdByDeleted")`), `toCreatedResponse(Venue, String creatorName)`, `toSummary(VenueSummaryView)` (`distanceKm` HALF_UP 2 chữ số), `toImage(VenueImage)` (không map `publicId`), `toReport(VenueReport)`, `toAdminReport(AdminVenueReportView)` (không che: giữ `reporterName`, `handledByName` gốc; ánh xạ cờ `reporterDeleted` → `isReporterDeleted`, `handledByDeleted` → `isHandledByDeleted` bằng `@Mapping(target = "is…Deleted", source = "…Deleted")`), `toSignatureResponse(UploadSignature)`. Response report Admin không có avatar reporter.
@@ -424,9 +430,10 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 
 | Tài liệu | Nội dung | Nhánh |
 |---|---|---|
-| `docs/database/schema.dbml`, `schema-design.md` §5 | Cột/index/CHECK V5 | `feature/VENUE-001-*` |
+| `docs/database/schema.dbml`, `schema-design.md` §5 | Cột/index/CHECK V5 (v4.0: + `venue.ward_id`, `idx_venue_ward`) | `feature/VENUE-001-*` |
+| `docs/database/data-model.md` §3.5 (v4.0) | Địa điểm có phường/xã (BR-V11) — bắt buộc khi thêm / sửa, nullable cho địa điểm cũ | `feature/VENUE-001-*` |
 | `docs/database/data-model.md` §3.5 | Loại sân enum, quyền sửa/xoá ảnh, trạng thái + chống trùng report, hard-delete ảnh, `public_id` | `feature/VENUE-001-*` |
-| `docs/agent/api-convention.md` §5 · §6 | 13 endpoint (gồm `DELETE` trả 200 — B3) + domain `VENUE` | `chore/agent-framework-*` (qua `workflow-adapt`) |
+| `docs/agent/api-convention.md` §5 · §6 | 13 endpoint (gồm `DELETE` trả 200 — B3) + domain `VENUE` (v4.0: + `VENUE_016`) | `chore/agent-framework-*` (qua `workflow-adapt`) |
 | `docs/agent/convention-backend.md` §1 | Package `application/event/`, `application/support/storage/`, `api/scheduler/`; `@CurrentUser CurrentActor` | `chore/agent-framework-*` |
 | `docs/agent/design/USER-001/Component_Class_Design.md` §9.4, `Processing_Flow.md` §5 | Resolver hỗ trợ `CurrentActor`; retrier có overload mã lỗi | `feature/VENUE-001-*` (+ `USER-001/CHANGELOG.md`) |
 | `docs/agent/decisions/0003-optimistic-locking-strategy.md` | Mục Sửa đổi 2026-11-09 (đã viết sẵn trong thay đổi thiết kế này) — kiểm lại khớp code | Cùng nhánh thiết kế |
