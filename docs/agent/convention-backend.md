@@ -25,8 +25,10 @@ ArenaFlow-be/
 │   │   └── response/        # Response DTOs (ApiResponse, PageResponse…)
 │   ├── mapper/              # Entity ↔ DTO mappers (MapStruct)
 │   ├── validation/          # Custom constraint annotation + validator
+│   ├── event/<miền>/        # Domain event (record) theo miền: match/, reputation/, mercenary/… — phát qua ApplicationEventPublisher
 │   └── support/             # Thành phần hỗ trợ service: guard, retry, phân trang
 │       ├── chat/            # Port realtime (ChatRealtimeGateway) — không phụ thuộc spring-websocket
+│       ├── mercenary/       # MercenaryGuard, MercenaryRules… — guard / quy tắc riêng của miền mercenary
 │       └── security/        # JwtTokenService, JwtProperties (service gọi trực tiếp)
 └── api/                     # com.phananh.arenaflow (ArenaFlowApplication) + com.phananh.arenaflow.api
     ├── <nhóm>/              # REST Controllers (@RestController) theo nhóm: auth/, profile/, team/…
