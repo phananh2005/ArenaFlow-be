@@ -6,8 +6,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
-| Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.0** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 · v4.1: xoá tài khoản (2.7) cần bảng mercenary của V9 (MERCENARY-001 `Component_Class_Design.md` §5.1) — implement sau MERCENARY-001 phần dữ liệu |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.1** (solution-architect · 2026-11-14) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -118,7 +118,7 @@ ProfileResponse getProfile(UUID userId);
 ProfileResponse updateProfile(UUID userId, ProfileUpdateRequest request);
 void deleteAccount(UUID userId);
 ```
-Deps: `UserRepository`, `OAuthAccountRepository`, `AdministrativeUnitRepository`, `TeamRepository`, `TeamMemberRepository`, `ConcurrencyConflictRetrier`, `ProfileMapper`.
+Deps: `UserRepository`, `OAuthAccountRepository`, `AdministrativeUnitRepository`, `TeamRepository`, `TeamMemberRepository`, `ConcurrencyConflictRetrier`, `ProfileMapper`, `MercenaryAccountCleanup` (v4.1 — `deleteAccount` rút đơn mercenary; MERCENARY-001 `Component_Class_Design.md` §4.14).
 
 ### 4.3. TeamService
 ```java

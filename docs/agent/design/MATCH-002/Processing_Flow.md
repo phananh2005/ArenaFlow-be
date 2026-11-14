@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL ≥ 18 · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush) · ADR-0003 (+ Sửa đổi 2026-11-09, 2026-11-10), ADR-0011, ADR-0012, ADR-0014 · MATCH-001 `Processing_Flow.md` (v2.1) §1 (lazy check), §4, §5 |
 | Ràng buộc dữ liệu | V1 + V5 + V6 + `V7__match_flow_b_pairing.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v1.2** (solution-architect · 2026-11-13) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 

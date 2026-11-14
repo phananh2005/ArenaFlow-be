@@ -1,5 +1,25 @@
 # CHANGELOG — VENUE-001 Quản lý địa điểm sân
 
+## [v4.0] — 2026-11-14
+
+**Type:** MAJOR (2.1 thêm field bắt buộc `wardId` — request cũ không gửi sẽ bị `400`) · **Tóm tắt:** Địa điểm có phường/xã bắt buộc khi thêm / sửa (BR-V11) để tìm kèo mercenary không GPS và hiện khu vực "phường, tỉnh" của sân (MERCENARY-001).
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | 2.1 Request | Thêm (bắt buộc) | — → `wardId` (phường/xã từ danh mục đơn vị hành chính) | BR-V11 (user chốt 2026-11-14) | Thêm ô chọn phường/xã (dùng danh mục như hồ sơ USER-001) ở màn "Thêm địa điểm"; gửi `wardId` |
+| 2 | 2.12 Request | Thêm | — → `wardId` tuỳ chọn; **bắt buộc** khi địa điểm chưa có phường (`ward = null`); không xoá được phường đã có | BR-V11 | Màn "Sửa địa điểm": hiện ô phường/xã; nếu `ward = null` bắt chọn trước khi lưu |
+| 3 | 2.1, 2.12 Lỗi; §5 | Thêm | — → `400 USER_002` "Khu vực không hợp lệ" (`wardId` sai); 2.12: `422 VENUE_016` "Địa điểm cần bổ sung phường/xã" | Như #1, #2 | Hiện message, cho chọn lại phường/xã |
+| 4 | §4.2 Venue (2.1, 2.3, 2.12), §4.8 AdminVenue | Thêm | — → `ward` (`wardId`, `wardName`, `provinceId`, `provinceName`) \| `null` | Hiển thị khu vực của sân | Hiển thị "phường, tỉnh"; `ward = null` (địa điểm tạo trước v4.0) → nhắc bổ sung |
+| 4a | §1, §4.2 `lastSelectedAt` | Đổi nghĩa | "Lần gần nhất được chọn cho kèo" → thêm: lần khai báo / đổi sang địa điểm này cho trận ngoài hệ thống (MERCENARY-001 2.28, 2.31); cảnh báo admin "không được chọn 180 ngày" tính theo giá trị mới | BC-V05 (user chốt 2026-11-14) | Không đổi cách gọi; nhãn "lần được chọn gần nhất" gồm cả trận ngoài |
+| 5 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE ngoài các mục trên | — | — |
+| 6 | Header 3 tài liệu | Ghi nhận | v3.0 → v4.0 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract: 2.1 thêm field bắt buộc (phá vỡ), 2.12 thêm field có điều kiện + mã lỗi mới, response thêm `ward`.
+- Nghiệp vụ / SRS: BR-V11, BC-V05 (`SYSTEM-001`, user chốt 2026-11-14). Địa điểm tạo trước chưa có phường vẫn hoạt động; không xuất hiện khi tìm kèo mercenary không GPS cho tới khi được bổ sung.
+
 ## [v3.0] — 2026-11-12
 
 **Type:** MAJOR (đổi shape response Admin: report Admin thêm `isHandledByDeleted`, `handledByName` của admin đã xoá tài khoản đổi sang tên thật; ngừng hoạt động / kích hoạt lại địa điểm đổi response từ Venue sang AdminVenue: thêm `isCreatedByDeleted`, `createdByName` không che) · **Tóm tắt:** Mọi endpoint Admin không che user đã xoá tài khoản — tên thật, mỗi field tên có cờ đã xoá; endpoint thường giữ nguyên.

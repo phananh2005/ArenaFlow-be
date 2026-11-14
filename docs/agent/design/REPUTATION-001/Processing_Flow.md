@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL ≥ 18 · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush) · ADR-0003 (+ Sửa đổi 2026-11-10, 2026-11-12) · ADR-0011, ADR-0012, ADR-0013 (+ Sửa đổi 2026-11-12) · retrier: VENUE-001 `Component_Class_Design.md` §4.9 |
 | Ràng buộc dữ liệu | V1–V7 + `V8__reputation_rating_report_dispute.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-13, cập nhật 2026-11-14) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -21,10 +21,10 @@ Thao tác ghi (2.1, 2.3, 2.5, 2.8) chạy trong `ConcurrencyConflictRetrier.exec
 | 2.2 | Bean Validation → `MATCH_001` → `TEAM_001` → `TEAM_016` (DISBANDED) → `TEAM_015` (INACTIVE) → `TEAM_002` (`TeamGuard.requireActiveCaptain`) → `MATCH_009` (`teamId` không thuộc trận) |
 | 2.3 | Bean Validation → `MATCH_001` → `TEAM_002` (như 2.1) → `TEAM_015` (như 2.1) → `REPORT_005` → `REPORT_002` (status ∉ {`ARCHIVED`, `COMPLETED`, `CANCELLED`} hoặc không có đội đã ghép) → `REPORT_003` (`CANCELLED` và loại ≠ `BAD_COMMUNICATION`) → `REPORT_004` (đã report loại này; race → unique index) |
 | 2.4 | Bean Validation → `TEAM_001` → `TEAM_016` (DISBANDED) → `TEAM_015` (INACTIVE) → `TEAM_002` (`TeamGuard.requireActiveCaptain`) |
-| 2.5 | Bean Validation → `REPORT_001` → `TEAM_016` (`reportedTeamStatus = DISBANDED`) → `TEAM_015` (`reportedTeamStatus = INACTIVE`) → `TEAM_002` (caller không captain ACTIVE đội bị report) → `REPORT_006` (≠ `NOSHOW`) → `REPORT_008` (status ≠ `AUTO_ACCEPTED` hoặc đã có tranh chấp) → `REPORT_007` (`now ≥ createdAt + 24h`) |
+| 2.5 | Bean Validation → `REPORT_001` → bên bị report `TEAM`: `TEAM_016` (`reportedTeamStatus = DISBANDED`) → `TEAM_015` (`reportedTeamStatus = INACTIVE`) → `TEAM_002` (caller không captain ACTIVE đội bị report) · bên bị report `INDIVIDUAL` (v1.1, MERCENARY-001): `REPORT_009` (caller ≠ người bị report) → `REPORT_006` (≠ `NOSHOW`) → `REPORT_008` (status ≠ `AUTO_ACCEPTED` hoặc đã có tranh chấp) → `REPORT_007` (`now ≥ createdAt + 24h`) |
 | 2.6 | `AUTH_004` (filter) → Bean Validation |
 | 2.7 | `AUTH_004` → `DISPUTE_001` |
-| 2.8 | `AUTH_004` → Bean Validation → CAS 0 dòng: `DISPUTE_001` (không tồn tại) / `DISPUTE_002` (đã `RESOLVED`) |
+| 2.8 | `AUTH_004` → Bean Validation → CAS 0 dòng: `DISPUTE_001` (không có tranh chấp **đội ↔ đội** với id này — v1.1) / `DISPUTE_002` (đã `RESOLVED`) |
 | 2.9 | `TEAM_001` |
 
 ## 2. Sequence
@@ -97,7 +97,7 @@ sequenceDiagram
 
 | # | Endpoint | Truy vấn (một lần thử) | Tổng / Ngưỡng |
 |---|---|---|---|
-| 2.1 | `POST …/ratings` — hoàn tất trận | S context, I rating, U match `COMPLETED`, U team (2 đội, 1 câu) · sau commit: U `verified_at` | 5 / W6 ✅ |
+| 2.1 | `POST …/ratings` — hoàn tất trận | S context, I rating, U match `COMPLETED`, U team (2 đội, 1 câu) · sau commit: U `verified_at` | 5 / W6 ✅ (v1.1: không đổi — mercenary được cộng điểm khi đội trưởng chấm sao, MERCENARY-001 2.18) |
 | 2.1 | `POST …/ratings` — trận đã `COMPLETED` | S context, I rating, (U team +1 khi 5 sao) · sau commit: U `verified_at` | 3–4 / W6 ✅ |
 | 2.2 | `GET …/ratings` | S trận + đánh giá, S captain ctx | 2 / D3 ✅ |
 | 2.3 | `POST …/reports` | S context, I report, U team (trừ điểm), U report (`reliability_penalty`) · sau commit: U `verified_at` | 5 / W6 ✅ |
@@ -107,7 +107,7 @@ sequenceDiagram
 | 2.7 | `GET /admin/disputes/{id}` | S chi tiết, S đánh giá của trận | 2 / D3 ✅ |
 | 2.8 | `PATCH …/resolve` — `REJECTED` | U dispute CAS, U report, U team (hoàn), S chi tiết, S đánh giá · sau commit: U `verified_at` | 6 / W6 ✅ (= ngưỡng) |
 | 2.8 | `PATCH …/resolve` — `CONFIRMED` | U dispute CAS, U report, S chi tiết, S đánh giá | 4 / W6 ✅ |
-| 2.8 | CAS 0 dòng | U dispute CAS, S `existsById` | 2 |
+| 2.8 | CAS 0 dòng | U dispute CAS, S `existsTeamDispute` (v1.1) | 2 |
 | 2.9 | `GET /teams/{id}/reputation` | S thống kê (1 câu) | 1 / D3 ✅ |
 | Job | huy hiệu (mỗi lô) | S id lô, U `verified_at` RETURNING | 2 / lô |
 
@@ -165,7 +165,7 @@ Lần thử: Q1 `findDisputeContext(reportId, caller)` → guard §1.1 → Q2 `m
 2.6: Q1 `findAdminDisputes(status, oldestFirst = status == PENDING, …)` → Q2 `countAdminDisputes`. 2.7: Q1 `findAdminDisputeDetail` → `DISPUTE_001` → Q2 `findByMatchIdAndRaterTypeOrderByCreatedAtAsc(matchId, TEAM)`.
 
 ### 3.7. `PATCH /admin/disputes/{id}/resolve` (retrier `MATCH_014`)
-Lần thử: Q1 `resolveIfPending(id, decision, note.trim(), adminId, now)` → rỗng → Q1b `existsById` → `DISPUTE_001`/`DISPUTE_002` (mã trực tiếp, không thử lại — trạng thái nguồn đã đổi là kết luận đủ, ADR-0003 Sửa đổi 2026-11-10) → Q2 `applyDecision(reportId, decision, now)` (rỗng → `IllegalStateException`: dispute `PENDING` luôn đi với report `DISPUTED`) → `REJECTED`: Q3 `refundReportPenalty(reportedTeamId, type, penalty, reportId)` + `refreshAfterCommit({reported})` → `DisputeResolvedEvent` → `adminAuditLog.afterCommit(...)` → Q4 `findAdminDisputeDetail` → Q5 đánh giá của trận → response.
+Lần thử: Q1 `resolveIfPending(id, decision, note.trim(), adminId, now)` → rỗng → Q1b `existsTeamDispute(id)` (v1.1 — chỉ tranh chấp report `application_id IS NULL`) → `DISPUTE_001`/`DISPUTE_002` (mã trực tiếp, không thử lại — trạng thái nguồn đã đổi là kết luận đủ, ADR-0003 Sửa đổi 2026-11-10) → Q2 `applyDecision(reportId, decision, now)` (rỗng → `IllegalStateException`: dispute `PENDING` luôn đi với report `DISPUTED`) → `REJECTED`: Q3 `refundReportPenalty(reportedTeamId, type, penalty, reportId)` + `refreshAfterCommit({reported})` → `DisputeResolvedEvent` → `adminAuditLog.afterCommit(...)` → Q4 `findAdminDisputeDetail` → Q5 đánh giá của trận → response.
 
 ### 3.8. `GET /teams/{id}/reputation` (readOnly)
 Q1 `findReputation(teamId, now)` (thống kê `Component_Class_Design.md` §5.3) → rỗng → `TEAM_001` → mapper.

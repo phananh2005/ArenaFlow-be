@@ -1,5 +1,21 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v4.1] — 2026-11-14
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi) · **Tóm tắt:** Xoá tài khoản (2.7) tự rút các đơn ứng tuyển mercenary đang chờ / đã duyệt của trận chưa bắt đầu (kèo đã ghép hoặc trận ngoài chưa huỷ), không trừ điểm (BR-ME18).
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Hành vi 2.7 `DELETE /profile` | Thêm | Rời đội, từ chối lời mời → thêm: mọi đơn mercenary `PENDING`/`APPROVED` của trận chưa bắt đầu (kèo đã ghép hoặc trận ngoài chưa huỷ) thành `WITHDRAWN`, không trừ điểm; tin `FILLED` về `OPEN`; đội trưởng nhận thông báo (MERCENARY-001 `API_Spec.md` §1.3) | BR-ME18 (`SYSTEM-001`, user chốt 2026-11-14) | Có thể thêm dòng cảnh báo ở hộp xác nhận xoá tài khoản ("các kèo mercenary sắp tới sẽ bị rút") |
+| 2 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE (luồng xoá tài khoản thêm bước rút đơn mercenary), không ảnh hưởng FE ngoài mục trên | — | — |
+| 3 | Header 3 tài liệu | Ghi nhận | v4.0 → v4.1 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract: không đổi (vẫn `204`, cùng mã lỗi).
+- Nghiệp vụ / SRS: UC-U03, BR-ME18 đã cập nhật trong `SYSTEM-001`.
+
 ## [v4.0] — 2026-11-12
 
 **Type:** MAJOR (đổi shape response 2.19, 2.20, 2.21: thêm field `isCaptainDeleted`, `isDisbandedByDeleted`; `captainName`, `disbandedByName` của user đã xoá tài khoản đổi từ `"Người dùng đã xóa"` sang tên thật) · **Tóm tắt:** Mọi endpoint Admin không che user đã xoá tài khoản — trả tên thật kèm cờ đã xoá cho từng field tên; endpoint thường giữ nguyên.

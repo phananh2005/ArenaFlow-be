@@ -1,5 +1,19 @@
 # CHANGELOG — MATCH-002 Thương lượng ghép kèo luồng B (pairing) & chat
 
+## [v1.2] — 2026-11-13
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, frame của thương lượng) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE cho MERCENARY-001 (kênh realtime dùng chung thêm topic cuộc trò chuyện theo đơn ứng tuyển), không ảnh hưởng FE của thương lượng.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Kênh realtime nhận thêm `SUBSCRIBE /topic/conversations/{conversationId}` (hợp đồng ở MERCENARY-001 `API_Spec.md` §1.7); mẫu `/topic/pairings/{pairingId}` và frame của thương lượng giữ nguyên | Không (FE dùng topic mới theo MERCENARY-001) |
+| 2 | Header 3 tài liệu | Ghi nhận | v1.1 → v1.2 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract MATCH-002: không đổi.
+
 ## [v1.1] — 2026-11-11
 
 **Type:** MINOR (thêm field vào response, thêm mã lỗi `VENUE_002` cho 2.5 / 2.7, ghi rõ hành vi; không đổi endpoint, method, field đã có, mã thành công) · **Tóm tắt:** Sửa sau review thiết kế: chặn địa điểm đã ngừng hoạt động khi chốt / xác nhận, tin nhắn hiện người thực sự đã gửi, chi tiết thương lượng có đội trưởng hiện tại và hạn kèo.

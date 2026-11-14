@@ -7,7 +7,7 @@
 | Stakeholders | Product Owner, Development Team, End Users (cá nhân & đội bóng) |
 | Tác giả | business-analyst agent |
 | Ngày | 2026-11-01 |
-| Phiên bản | v1.8 |
+| Phiên bản | v1.9 |
 
 ## 1. Tổng quan
 
@@ -106,9 +106,9 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 
 ### Mercenary Management
 - Đội trưởng tạo tin tuyển theo vị trí (Thủ môn, Hậu vệ, Tiền vệ, Tiền đạo) và số lượng
-- Cá nhân tìm kèo: GPS hiện tại (bán kính 3km, có thể điều chỉnh); không có GPS → dùng khu vực hồ sơ (phường/xã)
+- Cá nhân tìm kèo: GPS hiện tại (bán kính mặc định 3 km, chỉnh 1–20 km); không có GPS → tin tuyển cùng tỉnh với phường trong hồ sơ, cùng phường lên đầu (BR-ME03)
 - Cá nhân ứng tuyển → đội trưởng duyệt
-- Mercenary được duyệt có thể rút bất kỳ lúc nào → trừ Reliability cá nhân
+- Mercenary được duyệt có thể rút trước giờ bắt đầu trận → trừ Reliability cá nhân (BR-ME11)
 - Tin tuyển hết hạn khi đến giờ kết thúc dự kiến của Match
 - Đánh giá: đội trưởng đánh giá mercenary (1-5 sao), mercenary đánh giá đội (1-5 sao)
 - Report: cả 2 bên có thể report nhau, cơ chế giống report Match
@@ -216,7 +216,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 
 ## 10. Trạng thái tài liệu
 
-**Phiên bản:** v1.0 (baseline) → v1.1 (hoàn chỉnh) → v1.2 (2026-11-09: bổ sung UC-V05 sửa địa điểm, UC-V06 xóa ảnh, BR-V05..V10, AC-V04/V05 — cho `VENUE-001`) → v1.3 (2026-11-09: BR-M09..BR-M18, BR-C03..BR-C04, làm rõ BC-M04, sửa §2.1/§2.2/§5.2/§7.3 Business_Rules, UC-M01/M03/M04/M08/M09/C01/C02, sửa AC-M06/AC-C01, thêm AC-M09..AC-M12 — cho `MATCH-001`) → v1.5 (2026-11-11: luồng B — hai đội xác nhận một gói rõ ràng (phương án chốt + chi phí + tiền cọc) thay vì "đã thống nhất qua chat", gói đổi thì xác nhận lại; Pairing hoàn tất trước thắng; chi phí/cọc thuộc Pairing và chép sang Match khi ghép; chat hiển thị người thực sự gửi; quy tắc đội tạm ngưng / bộ môn tắt / kèo quá hạn áp cho thao tác luồng B; chat của kèo hết hạn cũng bị xóa sau 90 ngày; thêm BR-M19..BR-M21, BR-C05, BR-N03; sửa BR-M03, BR-M07, BR-M14, BR-M15, BR-M17, BR-N01, BC-M04, BC-N01, BC-N03, BC-V05, §2.3/§5.2/§5.5/§8.1 Business_Rules, UC-M02/M05/M06/M07/M08/M09/C01/N01/N03, AC-M02/M04/M05/C01/N01, Scenario 2/3, Data_Model Match/Pairing/Chat_Message/Cost_Agreement/§6 — cho `MATCH-002`) → v1.6 (2026-11-11: ngoại lệ hiển thị user đã xóa — Admin xem lịch sử thành viên đội (tên thành viên) và report địa điểm (tên người report) thấy tên thật kèm nhãn "đã xóa", ảnh vẫn ẩn; các tên khác vẫn che; sửa BC-U02, UC-U03, AC-U03 — cho `USER-002`, `VENUE-001`) → v1.7 (2026-11-12: mở rộng ngoại lệ BC-U02 — mọi endpoint `/api/v1/admin/**` trả tên thật kèm cờ `is…Deleted`; ảnh thật chỉ khi response đã có field ảnh user và còn đường dẫn; FE gắn nhãn theo cờ, không tự thêm field ảnh; sửa BC-U02, UC-U03, AC-U03 — cho `USER-001`, `USER-002`, `VENUE-001`) → v1.8 (2026-11-13: uy tín — thêm BR-R07..BR-R10, AC-R07; sửa BR-R04, BC-R05, BC-R07, §2.1/§3.1/§3.3/§6/§7/§8.2 Business_Rules, UC-M08/R01..R07/ME06, AC-M06/M09/R01..R06, Scenario 4/8/9, Data_Model Rating/Report/Dispute/Reliability_Score/Completion_Rate/Verification_Badge — cho `REPUTATION-001`, user chốt 2026-11-12/13)
+**Phiên bản:** v1.0 (baseline) → v1.1 (hoàn chỉnh) → v1.2 (2026-11-09: bổ sung UC-V05 sửa địa điểm, UC-V06 xóa ảnh, BR-V05..V10, AC-V04/V05 — cho `VENUE-001`) → v1.3 (2026-11-09: BR-M09..BR-M18, BR-C03..BR-C04, làm rõ BC-M04, sửa §2.1/§2.2/§5.2/§7.3 Business_Rules, UC-M01/M03/M04/M08/M09/C01/C02, sửa AC-M06/AC-C01, thêm AC-M09..AC-M12 — cho `MATCH-001`) → v1.5 (2026-11-11: luồng B — hai đội xác nhận một gói rõ ràng (phương án chốt + chi phí + tiền cọc) thay vì "đã thống nhất qua chat", gói đổi thì xác nhận lại; Pairing hoàn tất trước thắng; chi phí/cọc thuộc Pairing và chép sang Match khi ghép; chat hiển thị người thực sự gửi; quy tắc đội tạm ngưng / bộ môn tắt / kèo quá hạn áp cho thao tác luồng B; chat của kèo hết hạn cũng bị xóa sau 90 ngày; thêm BR-M19..BR-M21, BR-C05, BR-N03; sửa BR-M03, BR-M07, BR-M14, BR-M15, BR-M17, BR-N01, BC-M04, BC-N01, BC-N03, BC-V05, §2.3/§5.2/§5.5/§8.1 Business_Rules, UC-M02/M05/M06/M07/M08/M09/C01/N01/N03, AC-M02/M04/M05/C01/N01, Scenario 2/3, Data_Model Match/Pairing/Chat_Message/Cost_Agreement/§6 — cho `MATCH-002`) → v1.6 (2026-11-11: ngoại lệ hiển thị user đã xóa — Admin xem lịch sử thành viên đội (tên thành viên) và report địa điểm (tên người report) thấy tên thật kèm nhãn "đã xóa", ảnh vẫn ẩn; các tên khác vẫn che; sửa BC-U02, UC-U03, AC-U03 — cho `USER-002`, `VENUE-001`) → v1.7 (2026-11-12: mở rộng ngoại lệ BC-U02 — mọi endpoint `/api/v1/admin/**` trả tên thật kèm cờ `is…Deleted`; ảnh thật chỉ khi response đã có field ảnh user và còn đường dẫn; FE gắn nhãn theo cờ, không tự thêm field ảnh; sửa BC-U02, UC-U03, AC-U03 — cho `USER-001`, `USER-002`, `VENUE-001`) → v1.8 (2026-11-13: uy tín — thêm BR-R07..BR-R10, AC-R07; sửa BR-R04, BC-R05, BC-R07, §2.1/§3.1/§3.3/§6/§7/§8.2 Business_Rules, UC-M08/R01..R07/ME06, AC-M06/M09/R01..R06, Scenario 4/8/9, Data_Model Rating/Report/Dispute/Reliability_Score/Completion_Rate/Verification_Badge — cho `REPUTATION-001`, user chốt 2026-11-12/13) → v1.9 (2026-11-13: mercenary — thêm BR-ME05..BR-ME19, BR-V11, UC-ME07..UC-ME09, AC-ME04..AC-ME11; sửa BR-ME01, BR-ME03, BR-ME04, BC-ME03, BC-ME04, BC-V05, §2.4/§2.5/§3.1/§3.3/§5.1/§5.2/§5.5/§8.2 Business_Rules, UC-U03, UC-ME01..ME06, AC-ME01..ME03, Data_Model Mercenary_Posting/Chat_Message/§8 — cho `MERCENARY-001`, user chốt 2026-11-13/14)
 **Ngày hoàn thiện:** 2026-11-02  
 **Trạng thái:** ✅ **Hoàn chỉnh** — Tất cả quyết định nghiệp vụ đã được chốt, không còn [cần xác nhận]  
 **Sẵn sàng cho:** Solution design (thiết kế kỹ thuật chi tiết)

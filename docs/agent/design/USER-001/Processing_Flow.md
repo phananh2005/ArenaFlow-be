@@ -6,8 +6,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
-| Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.0** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003, ADR-0007 (+ Sửa đổi 2026-11-14) · v4.1: 2.7 cần V9 (MERCENARY-001) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.1** (solution-architect · 2026-11-14) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan luồng
 
@@ -82,7 +82,8 @@ sequenceDiagram
         RT-->>C: 422 USER_003 (rollback, không ghi gì)
     else
         RT->>TMR: Q2 leaveAndRejectAllOpen(userId, now) — MEMBER ACTIVE → LEFT, PENDING → REJECTED
-        RT->>UR: Q3 softDelete(userId)
+        RT->>RT: v4.1 MercenaryAccountCleanup.withdrawForDeletedApplicant — Q3 U tin bớt số đã duyệt RETURNING (khoá tin trước), Q4 U đơn → WITHDRAWN RETURNING; lệch số → thử lại — MERCENARY-001 Processing_Flow.md §3.16
+        RT->>UR: Q5 softDelete(userId)
         RT-->>C: 204
     end
 ```
@@ -126,7 +127,7 @@ Ký hiệu truy vấn: **S** = SELECT, **I** = INSERT, **U** = UPDATE. Loại: D
 | 2.4 | `POST /auth/refresh` | Parse refresh token (AUTH_002) → S user theo id (không có/đã xoá → AUTH_003) → cấp cặp token mới với `role` hiện tại | S | 1 / D3 ✅ |
 | 2.5 | `GET /profile` | S `ProfileView` (user LEFT JOIN ward LEFT JOIN province, `deleted_at IS NULL`) → USER_001 · S oauth_account theo user | S, S | 2 / D3 ✅ |
 | 2.6 | `PATCH /profile` | S user chưa xoá (USER_001) → nếu có `wardId`: S ward+province (USER_002) → áp field ≠ null → U user (`save`; Hibernate tự flush trước native S `ProfileView`) → S `ProfileView` (response qua `ProfileMapper`, khớp DB — đọc lại có chủ đích, lệch NFS §3 đã duyệt: `Component_Class_Design.md` §10) → S oauth_account (response) | S, (S ward), U, S, S | 4–5 / W6 ✅ |
-| 2.7 | `DELETE /profile` | Xem §2.2 (luồng USER-002) · còn captain ACTIVE → `USER_003`, không đổi trạng thái đội · **membership MEMBER ACTIVE → LEFT, PENDING → REJECTED** · khoá membership ACTIVE/PENDING trước (`PESSIMISTIC_WRITE`, ADR-0007) rồi kiểm captain trên dữ liệu đã khoá · `softDelete` chỉ khi `deleted_at IS NULL` → gọi lại vẫn 204 · Access token còn hiệu lực tối đa 1h (JWT stateless, grace period chấp nhận cho MVP) | S (khoá), U, U | 3 / W6 ✅ |
+| 2.7 | `DELETE /profile` | Xem §2.2 (luồng USER-002) · còn captain ACTIVE → `USER_003`, không đổi trạng thái đội · **membership MEMBER ACTIVE → LEFT, PENDING → REJECTED** · khoá membership ACTIVE/PENDING trước (`PESSIMISTIC_WRITE`, ADR-0007) rồi kiểm captain trên dữ liệu đã khoá · `softDelete` chỉ khi `deleted_at IS NULL` → gọi lại vẫn 204 · Access token còn hiệu lực tối đa 1h (JWT stateless, grace period chấp nhận cho MVP) · **v4.1:** rút đơn mercenary của kèo chưa bắt đầu (BR-ME18 — MERCENARY-001 `Processing_Flow.md` §3.16), trước `softDelete` | S (khoá), U, U tin RETURNING, U đơn RETURNING, U | 5 / W6 ✅ (v4.0: 3) |
 | 2.8 | `POST /teams` | S user chưa xoá (USER_001; lấy `displayName` làm `captainName`) → I team (`skill_levels` JSON) → I team_member (CAPTAIN, ACTIVE, `joined_at=now`) → I history (`from=null`) · response dựng từ dữ liệu đã có (`memberCount=1`) | S, I, I, I | 4 / W6 ✅ |
 | 2.9 | `GET /teams/{id}` | S `TeamDetailView` (team LEFT JOIN captain ACTIVE LEFT JOIN user, `memberCount` bằng subquery COUNT) → TEAM_001 | S | 1 / D3 ✅ |
 | 2.10 | `GET /teams` | S `TeamSummaryView` trang (join như 2.9, lọc status) · S COUNT | S, S | 2 / L4 ✅ |

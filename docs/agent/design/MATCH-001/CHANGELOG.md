@@ -1,5 +1,19 @@
 # CHANGELOG — MATCH-001 Kèo (luồng A, luồng B) & vòng đời kèo
 
+## [v2.3] — 2026-11-13
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE cho MERCENARY-001 (job vòng đời kèo chạy thêm tác vụ đóng / hết hạn tin tuyển mercenary), không ảnh hưởng FE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | MERCENARY-001: tin tuyển đóng khi kèo bị huỷ / hết hạn lúc trận kết thúc, báo mercenary đã duyệt khi kèo bị huỷ — chạy cùng job định kỳ | Không |
+| 2 | Header 3 tài liệu | Ghi nhận | v2.2 → v2.3 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract: không đổi. Huỷ kèo (2.5, 2.10) không thêm bước nào; trạng thái tin tuyển của kèo bị huỷ do MERCENARY-001 tính.
+
 ## [v2.2] — 2026-11-12
 
 **Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Huỷ kèo đã ghép / rút yêu cầu đã chấp nhận nay cũng làm mất chuỗi trận sạch của đội huỷ; cập nhật tài liệu nội bộ BE cho REPUTATION-001.

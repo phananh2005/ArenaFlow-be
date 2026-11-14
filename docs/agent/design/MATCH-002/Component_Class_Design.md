@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL ≥ 18 · + `spring-boot-starter-websocket` (§8) |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa MATCH-001 `Component_Class_Design.md` (v2.1) §4.5–§4.9, §4.12, §5.2, §7; VENUE-001 §4.6 (port, v1.2), §4.9 (retrier overload); USER-001 §9 (JWT), §7–§8 (`DeletedUserMasking` qua `MapperSupport`) · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09, 2026-11-10), ADR-0008 (+ Sửa đổi 2026-11-09), ADR-0011, ADR-0012, ADR-0013, [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (`Proposed`) |
 | Ràng buộc dữ liệu | V1 + V5 (VENUE-001) + V6 (MATCH-001) + `V7__match_flow_b_pairing.sql` (§5.1). Neon dev `misty-dew-90700890` kiểm 2026-11-10: Flyway V4, `server_version = 18.6`, `match`/`pairing`/`chat_message`/`match_venue_option`/`match_time_option`/`cost_custom_item` đều 0 dòng; tên CHECK V1 `match_check2` (type ↔ `venue_id`); tên FK V1 `chat_message_sender_user_id_fkey` (`ON DELETE SET NULL`) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v1.2** (solution-architect · 2026-11-13) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -159,6 +159,8 @@ Thắng race giữa hai pairing của cùng kèo = lần hoàn tất commit trư
 Không phát event cho: chốt phương án, sửa chi phí, một bên xác nhận, gửi / đọc tin (không thuộc 11 loại thông báo; cập nhật tức thời qua kênh realtime). Mỗi thao tác tối đa một event nghiệp vụ.
 
 ### 4.6. Kênh realtime (ADR-0014)
+
+> **v1.2 (MERCENARY-001):** port `ChatRealtimeGateway` thêm `publishConversationAfterCommit`, `RealtimeFrame` thêm frame cuộc trò chuyện, interceptor nhận thêm mẫu `SUBSCRIBE /topic/conversations/{id}` — thiết kế ở MERCENARY-001 `Component_Class_Design.md` §4.8 (ADR-0014 Sửa đổi 2026-11-13). Phần dưới (thương lượng) giữ nguyên.
 
 **Port (application):**
 ```java

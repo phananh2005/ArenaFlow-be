@@ -256,6 +256,8 @@
 - N Chat_Message thuộc về 1 Team (đội gửi); người nhận = đội còn lại của Pairing (không lưu riêng)
 - N Chat_Message thuộc về 1 User (người thực sự gửi)
 
+**Mở rộng `MERCENARY-001` (BR-ME16):** chat 1–1 theo Mercenary_Application (đội trưởng ↔ ứng viên); thiết kế quyết định dùng chung hay tách khỏi tin nhắn của Pairing.
+
 **Ghi chú:** Lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED/EXPIRED). Hiển thị: tên đội gửi + tên/ảnh người thực sự gửi; người gửi đã xóa tài khoản → "Người dùng đã xóa", không ảnh (BR-N03).
 
 > **Implementation note:** Gửi tin và đọc lịch sử qua REST; nhận tin ngay qua STOMP/WebSocket (SockJS tuỳ kết quả kiểm khi cài đặt — MATCH-002 `[cần xác nhận #1]`, ADR-0014). Lịch sử phân trang theo con trỏ để bù tin sau khi kết nối lại.
@@ -372,7 +374,7 @@
 
 **Lifecycle:** Xem Business_Rules.md §2.4
 
-**Ghi chú:** Tự động EXPIRED khi đến `Match.scheduled_end_time`.
+**Ghi chú:** Mỗi tin một vị trí; đội trưởng tạo nhiều vị trí trong một lần → nhiều tin (BR-ME05). Tự động EXPIRED khi đến `Match.scheduled_end_time`; tự CLOSED khi Match bị hủy (BR-ME09). Chỉ sửa được số lượng (BR-ME08).
 
 ---
 
@@ -684,7 +686,7 @@ erDiagram
 
 ### Bảo vệ vị trí
 - Không hiển thị tọa độ chính xác (latitude/longitude) trên UI.
-- Chỉ hiển thị: **khoảng cách** (vd: "2.3 km từ bạn") và **khu vực chung** (vd: "Quận 1").
+- Trước khi được duyệt chỉ hiển thị: **khoảng cách** (vd: "2.3 km từ bạn") và **khu vực "phường, tỉnh"** của sân (vd: "Phường Sài Gòn, TP. Hồ Chí Minh"); đơn APPROVED thấy tên sân, địa chỉ, tọa độ (BR-ME04).
 
 ---
 

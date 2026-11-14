@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, định dạng lỗi, kiểu dữ liệu); quy ước chung và lỗi chung USER-001 `API_Spec.md` §1.1, §1.2; kèo, trạng thái kèo, thoả thuận chi phí, mã `MATCH_*`/`SPORT_*`: MATCH-001 `API_Spec.md`; mã `TEAM_*`: USER-001/USER-002 `API_Spec.md`; mã `VENUE_002`: VENUE-001 `API_Spec.md`; [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (kênh realtime) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.5) — UC-M05, M06, M07, M09, UC-N01, UC-C01, C02 (luồng B); BR-M07, BR-M08, BR-M13..BR-M15, BR-M17..BR-M21, BR-C01..C05, BR-N01, BR-N03; Business_Rules §2.3; AC-M04, AC-M05, AC-C01, AC-N01; Scenario 2, 3 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-11) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v1.2** (solution-architect · 2026-11-13) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 

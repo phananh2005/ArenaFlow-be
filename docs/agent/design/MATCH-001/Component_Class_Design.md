@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §10; VENUE-001 `Component_Class_Design.md` §4.6 (port), §4.7 (event), §4.9 (retrier overload), §4.13 (audit) · ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0011](../../decisions/0011-domain-events-after-commit.md), [ADR-0012](../../decisions/0012-scheduled-jobs-claim-with-skip-locked.md), [ADR-0013](../../decisions/0013-reputation-columns-atomic-update.md) (cả ba `Proposed`) |
 | Ràng buộc dữ liệu | PostgreSQL ≥ 18 (`uuidv7()` — §5.2) · V1 + V5 (VENUE-001) + `V6__match_flow_a_lifecycle.sql` (§5.1) + `V7__match_flow_b_pairing.sql` (MATCH-002 `Component_Class_Design.md` §5.1); entity hiện có `domain/.../entity/match/{Match, MatchRequest, CostCustomItem, Sport}`, `team/Team`, `user/User` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.2** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.3** (solution-architect · 2026-11-13) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -229,7 +229,7 @@ Payload chỉ id + thời điểm + enum, không PII; người nhận tự tra �
 **Phạm vi event (ADR-0011):** event không bền → chỉ dùng cho thông báo và dữ liệu dẫn xuất tính lại được. Dữ liệu nghiệp vụ (cộng/trừ điểm, bộ đếm hoàn thành, chuỗi trận sạch) MUST ghi trong cùng transaction qua `ReputationService` (ADR-0013); REPUTATION-001 không nghe `MatchArchivedEvent` để ghi bộ đếm.
 
 ### 4.10. Scheduler (ADR-0012)
-`MatchLifecycleScheduler` (`api/scheduler`, không logic): `@Scheduled(cron = "${arenaflow.match.lifecycle.cron}", zone = "Asia/Ho_Chi_Minh")` gọi `expireDueMatches()` rồi `archiveFinishedMatches()`; lỗi một phần log `ERROR`, phần kia vẫn chạy. Cron `-` = tắt (test). Dùng `SchedulingConfig` của VENUE-001.
+`MatchLifecycleScheduler` (`api/scheduler`, không logic): `@Scheduled(cron = "${arenaflow.match.lifecycle.cron}", zone = "Asia/Ho_Chi_Minh")` gọi `expireDueMatches()` rồi `archiveFinishedMatches()`, rồi `MercenaryLifecycleJobService.closeDueRecruitments()`, `rejectOrphanPending()` và `notifyCancelledGames()` (v2.3 — thiết kế ở MERCENARY-001 `Component_Class_Design.md` §4.9); lỗi một phần log `ERROR`, phần kia vẫn chạy. Cron `-` = tắt (test). Dùng `SchedulingConfig` của VENUE-001.
 
 ### 4.11. AdminAuditLog (sửa — VENUE-001 §4.13)
 Thêm overload trung tính `void afterCommit(String action, UUID adminId, String targetType, UUID targetId)` (cùng cơ chế `TransactionSynchronization.afterCommit`); bản VENUE-001 giữ nguyên `[cần xác nhận #4]`. MATCH-001 dùng cho 2.15.

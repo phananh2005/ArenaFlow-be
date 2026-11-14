@@ -10,8 +10,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
-| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (UC-U01..U03, UC-T01..T05, BR-U01..U06, BR-T01..T06) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.0** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
+| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.9) — UC-U01..U03, UC-T01..T05, BR-U01..U06, BR-T01..T06, BR-ME18 (xoá tài khoản rút đơn mercenary — v4.1) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.1** (solution-architect · 2026-11-14) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -320,7 +320,7 @@ Tài khoản vừa tạo: `displayName` = `"User "` + 6 ký tự cuối của `u
 **Ai gọi được:** người đã đăng nhập.
 
 - Còn là đội trưởng của **bất kỳ** đội nào chưa giải tán (kể cả đội chỉ có mình, kể cả đội đang `INACTIVE`) → `422 USER_003`, không có gì thay đổi. Phải chuyển quyền (2.15) hoặc giải tán đội (USER-002 `API_Spec.md` §2.1) trước.
-- Thành công: rời mọi đội đang tham gia (`ACTIVE` → `LEFT`), mọi lời mời đang chờ thành `REJECTED`; trạng thái các đội không đổi. Người khác thấy tên `"Người dùng đã xóa"`; màn Admin thấy tên thật kèm cờ đã xoá (§1.1).
+- Thành công: rời mọi đội đang tham gia (`ACTIVE` → `LEFT`), mọi lời mời đang chờ thành `REJECTED`; trạng thái các đội không đổi. Mọi đơn ứng tuyển mercenary đang chờ / đã được duyệt của trận **chưa bắt đầu** (kèo đã ghép hoặc trận ngoài chưa huỷ) tự rút (`WITHDRAWN`), không trừ điểm uy tín; tin tuyển đã đủ người mở lại; đội trưởng nhận thông báo (BR-ME18 — MERCENARY-001 `API_Spec.md` §1.3) (v4.1). Người khác thấy tên `"Người dùng đã xóa"`; màn Admin thấy tên thật kèm cờ đã xoá (§1.1).
 - Gọi lại khi đã xoá → vẫn `204`.
 - Sau khi xoá: access token cũ còn dùng được tới khi hết hạn (tối đa 1 giờ) nhưng `GET/PATCH /profile` trả `USER_001`, refresh/đăng nhập lại trả `AUTH_003`. FE nên xoá token đã lưu ngay sau `204`.
 
