@@ -85,6 +85,7 @@
 - Tài khoản chuyển sang trạng thái soft-deleted
 - Endpoint thường hiển thị "Người dùng đã xóa" và ảnh `null`; mọi endpoint `/api/v1/admin/**` hiển thị tên thật kèm cờ `is…Deleted`; chỉ trả ảnh thật nếu response đã có field ảnh user và còn đường dẫn. FE Admin gắn nhãn "đã xóa" theo cờ; không tự thêm field ảnh user vào response chưa có field đó (BC-U02)
 - Điểm/đánh giá lịch sử của đội khác được giữ nguyên
+- Đơn ứng tuyển mercenary PENDING/APPROVED của trận chưa bắt đầu tự chuyển WITHDRAWN, không trừ điểm; đội trưởng nhận thông báo (BR-ME18 — `MERCENARY-001`)
 - Tài khoản có thể khôi phục sau này
 
 **Exception Flows:**
@@ -791,24 +792,30 @@
 
 **Preconditions:**
 - User là đội trưởng
-- Đội có Match đã CONFIRMED
+- Đội (đội tạo kèo hoặc đội đã ghép) có Match đã CONFIRMED (BR-ME05)
 
 **Main Flow:**
 1. Đội trưởng chọn "Tuyển mercenary"
-2. Đội trưởng chọn vị trí (Thủ môn, Hậu vệ, Tiền vệ, Tiền đạo) và số lượng
+2. Đội trưởng chọn một hoặc nhiều vị trí (Thủ môn, Hậu vệ, Tiền vệ, Tiền đạo), mỗi vị trí kèm số lượng
 3. Đội trưởng submit
-4. Hệ thống tạo tin tuyển với trạng thái OPEN
+4. Hệ thống tạo mỗi vị trí một tin tuyển, trạng thái OPEN (BR-ME05)
 5. Tin tuyển hiển thị trong danh sách tìm kèo mercenary
 
 **Postconditions:**
 - Tin tuyển được tạo với trạng thái OPEN
 - Tin tuyển tự động EXPIRED khi đến giờ kết thúc dự kiến của Match
 
+**Alternative Flows:**
+
+**A1. Trận ngoài hệ thống (BR-ME19):** ở bước 1 đội trưởng chọn "Trận ngoài hệ thống", chọn sân từ danh sách địa điểm, nhập giờ bắt đầu, giờ kết thúc, trình độ, tên đối thủ (tùy chọn); tiếp tục từ bước 2. Đội phải ACTIVE.
+
 **Exception Flows:**
 
 **3a. Match chưa CONFIRMED:**
 - 3a1. Hệ thống hiển thị "Chỉ có thể tuyển mercenary sau khi kèo đã ghép"
 - 3a2. Use case kết thúc
+
+**3b. Trận đã bắt đầu (BR-ME08):** không tạo được tin.
 
 ---
 
@@ -822,9 +829,9 @@
 **Main Flow:**
 1. User chọn "Tìm kèo mercenary"
 2. App yêu cầu quyền GPS
-3. (Nếu User cấp GPS) Hệ thống tìm kèo trong bán kính 3km (có thể điều chỉnh)
-4. (Nếu User không cấp GPS) Hệ thống tìm kèo dựa trên khu vực hồ sơ (phường/xã) và hiển thị thông báo "Bật GPS để tìm kèo gần bạn hơn"
-5. Hệ thống hiển thị danh sách kèo, mỗi kèo hiển thị: khoảng cách (vd "2.3 km từ bạn"), khu vực chung (vd "Quận 1"), vị trí cần, giờ đá, trình độ
+3. (Nếu User cấp GPS) Hệ thống tìm tin tuyển có sân trong bán kính mặc định 3 km (User chỉnh 1–20 km), sắp theo khoảng cách (BR-ME03)
+4. (Nếu User không cấp GPS) Hệ thống tìm tin tuyển có sân cùng tỉnh với phường trong hồ sơ, sân cùng phường lên đầu rồi theo giờ đá, và hiển thị thông báo "Bật GPS để tìm kèo gần bạn hơn" (BR-ME03)
+5. Hệ thống hiển thị danh sách kèo, mỗi kèo hiển thị: khoảng cách khi có GPS (vd "2.3 km từ bạn"), khu vực "phường, tỉnh" của sân, vị trí cần, giờ đá, trình độ — không hiển thị tên sân, địa chỉ, tọa độ (BR-ME04)
 6. User xem chi tiết kèo
 
 **Postconditions:**
@@ -839,7 +846,8 @@
 
 **Preconditions:**
 - Tin tuyển đang ở trạng thái OPEN
-- User chưa ứng tuyển tin này
+- User chưa có đơn PENDING/APPROVED cho tin này
+- User không là thành viên đang hoạt động của một trong hai đội của trận; không có đơn APPROVED ở trận khác trùng thời gian (BR-ME06)
 
 **Main Flow:**
 1. User xem chi tiết tin tuyển
@@ -852,6 +860,15 @@
 - Đơn ứng tuyển được tạo với trạng thái PENDING
 - Đội trưởng nhận notification
 
+**Exception Flows:**
+
+**3a. User là thành viên một trong hai đội, hoặc trùng giờ đơn APPROVED khác (BR-ME06):**
+- 3a1. Hệ thống từ chối, không tạo đơn
+
+**Alternative Flows:**
+
+**A1. User rút đơn PENDING:** đơn chuyển WITHDRAWN, không ảnh hưởng uy tín.
+
 ---
 
 ### UC-ME04: Đội trưởng duyệt ứng viên
@@ -860,7 +877,7 @@
 
 **Preconditions:**
 - Có đơn ứng tuyển PENDING
-- Tin tuyển chưa FILLED hoặc EXPIRED
+- Tin tuyển đang OPEN (BR-ME07)
 
 **Main Flow:**
 1. Đội trưởng xem danh sách ứng viên (hồ sơ cá nhân, rating, Reliability Score)
@@ -873,7 +890,13 @@
 
 **Postconditions:**
 - Đơn ứng tuyển chuyển sang APPROVED/REJECTED
-- (Nếu đủ người) Tin tuyển chuyển FILLED
+- (Nếu đủ người) Tin tuyển chuyển FILLED; đơn PENDING còn lại giữ nguyên, duyệt tiếp được khi tin về OPEN (BR-ME07)
+- Đội trưởng không hủy duyệt được đơn đã APPROVED (BR-ME10)
+
+**Exception Flows:**
+
+**4a. Ứng viên vừa trở thành thành viên một trong hai đội, hoặc vừa được duyệt ở trận khác trùng giờ (BR-ME06):**
+- 4a1. Hệ thống từ chối duyệt; đơn giữ PENDING
 
 ---
 
@@ -888,7 +911,7 @@
 1. User chọn "Rút lui"
 2. User xác nhận
 3. Hệ thống tính khoảng cách đến giờ trận
-4. Hệ thống trừ Reliability cá nhân: -1 (≥24h), -3 (4-24h), -5 (<4h)
+4. Hệ thống trừ Reliability cá nhân: -1 (≥24h), -3 (4-24h), -5 (<4h); chuỗi trận sạch cá nhân về 0 (BR-ME11)
 5. Hệ thống chuyển đơn sang WITHDRAWN
 6. Hệ thống gửi notification cho đội trưởng
 7. Hệ thống chuyển tin tuyển từ FILLED về OPEN (nếu thiếu người)
@@ -909,11 +932,11 @@
 - Mercenary đã tham gia trận
 
 **Main Flow:**
-1. Đội trưởng đánh giá từng mercenary (1-5 sao)
-2. Mercenary đánh giá đội (1-5 sao)
+1. Đội trưởng đánh giá từng mercenary đã tham gia (sao nguyên 1–5 hoặc "không đến" — BR-ME12, BR-ME13)
+2. Mercenary đánh giá đội thuê mình (sao nguyên 1–5)
 3. Hệ thống lưu rating (cấu trúc: rater_type, rater_id, ratee_type, ratee_id)
-4. Hệ thống cập nhật rating trung bình cá nhân/đội
-5. (Nếu được đánh giá 5 sao — sao nguyên 1–5) Hệ thống cộng +1 Reliability (user chốt 2026-11-12)
+4. Rating mercenary nhận được tính vào sao trung bình cá nhân; rating mercenary dành cho đội chỉ hiển thị riêng trên hồ sơ đội, không tính vào sao trung bình đội (BR-ME13)
+5. (Nếu mercenary được đánh giá 5 sao) Hệ thống cộng +1 Reliability cá nhân; đánh giá của mercenary không cộng Reliability đội (BR-ME13)
 
 **Postconditions:**
 - Rating được lưu
@@ -925,6 +948,71 @@
 **3a. Đã đánh giá trước đó:**
 - 3a1. Hệ thống hiển thị "Bạn đã đánh giá người chơi này"
 - 3a2. Use case kết thúc
+
+**3b. Match bị hủy (BR-ME09):** không đánh giá được.
+
+---
+
+### UC-ME07: Đội trưởng sửa số lượng / đóng tin tuyển
+
+**Actor:** Team Captain
+
+**Preconditions:**
+- Tin tuyển của đội mình đang OPEN hoặc FILLED
+
+**Main Flow:**
+1. Đội trưởng đổi số lượng (không thấp hơn số đã duyệt) hoặc chọn "Đóng tin"
+2. Hệ thống lưu số lượng mới: bằng số đã duyệt → FILLED, lớn hơn → OPEN (BR-ME08)
+3. (Nếu đóng) Tin chuyển CLOSED; đơn PENDING tự chuyển REJECTED, ứng viên nhận notification (BR-ME07)
+
+**Postconditions:**
+- Tin tuyển có số lượng / trạng thái mới; vị trí không đổi
+
+**Exception Flows:**
+
+**1a. Số lượng mới thấp hơn số đã duyệt:** hệ thống từ chối.
+
+**System flow (BR-ME09):** Match chuyển CANCELLED → mọi tin OPEN/FILLED của trận tự CLOSED, đơn PENDING tự REJECTED, đơn APPROVED giữ nguyên; ứng viên và mercenary nhận notification.
+
+---
+
+### UC-ME08: Report giữa đội trưởng và mercenary
+
+**Actor:** Team Captain, User (mercenary đã tham gia), Admin
+
+**Preconditions:**
+- Match ARCHIVED/COMPLETED và mercenary đã tham gia (BR-ME12) — mọi loại report; **hoặc** đơn ứng tuyển đã có tin nhắn chat (BR-ME16) — chỉ "giao tiếp tệ", bất kể trạng thái đơn và trận (BR-ME14)
+- Đội của đội trưởng đang ACTIVE (BR-R10)
+
+**Main Flow:**
+1. Đội trưởng report một mercenary đã tham gia, hoặc mercenary report đội thuê mình; chọn loại (bùng, chơi xấu, giao tiếp tệ, không đúng trình độ) và nhập lý do (BR-R09)
+2. Hệ thống lưu report, tự chấp nhận, trừ Reliability của bên bị report theo số lần (§3.2 — cá nhân khi bên bị report là mercenary) (BR-ME14)
+3. Bên bị report nhận notification
+4. (Nếu report bùng) Bên bị report có 24 giờ để tranh chấp; Admin xử lý như UC-R03, UC-R04
+
+**Postconditions:**
+- Report được lưu; Reliability và chuỗi trận sạch của bên bị report cập nhật (BR-ME15)
+
+---
+
+### UC-ME09: Chat giữa đội trưởng và ứng viên
+
+**Actor:** Team Captain (đội tuyển), User (ứng viên)
+
+**Preconditions:**
+- Có đơn ứng tuyển (từ PENDING trở đi)
+
+**Main Flow:**
+1. Đội trưởng hoặc ứng viên gửi tin nhắn (1..1000 ký tự) trong cuộc chat của đơn
+2. Hệ thống lưu tin: người thực sự gửi, nội dung, thời điểm, trạng thái đã đọc
+3. Bên còn lại nhận tin real-time
+
+**Postconditions:**
+- Tin nhắn được lưu; retention 90 ngày sau khi Match kết thúc (BR-N01)
+
+**Exception Flows:**
+
+**1a. Đơn REJECTED/WITHDRAWN:** chỉ xem lịch sử, không gửi được. Đơn APPROVED vẫn nhắn được sau khi Match kết thúc hoặc bị hủy, đến khi hết hạn lưu (BR-ME16).
 
 ---
 

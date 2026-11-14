@@ -56,10 +56,25 @@
 | BR-R09 | Giới hạn độ dài và bắt buộc nhập: nhận xét khi đánh giá không bắt buộc, nếu có ≤500 ký tự; lý do report bắt buộc, 1–1000 ký tự; bằng chứng tranh chấp bắt buộc, chỉ văn bản (không đính kèm ảnh/tệp), 1–1000 ký tự; ghi chú lý do quyết định của Admin bắt buộc, 1–500 ký tự (user chốt 2026-11-13) | Khi đánh giá, report, tranh chấp, Admin xử lý tranh chấp |
 | BR-R10 | Đội của đội trưởng thực hiện thao tác phải đang hoạt động (ACTIVE) khi đánh giá, xem đánh giá của trận, report, xem report của đội; đội bị report phải ACTIVE khi tranh chấp. Đội INACTIVE hoặc DISBANDED không thực hiện được các thao tác này. Trạng thái của đội được đánh giá / bị report không ảnh hưởng — đội đối phương INACTIVE hoặc DISBANDED vẫn bị đánh giá / report được (user chốt 2026-11-13) | Khi đánh giá, xem đánh giá, report, xem report, tranh chấp |
 | **MERCENARY** | | |
-| BR-ME01 | Chỉ có thể tuyển mercenary sau khi Match đã CONFIRMED | Khi tạo tin tuyển |
+| BR-ME01 | Tuyển mercenary cho Match trên hệ thống đã CONFIRMED, hoặc cho trận ngoài hệ thống do đội trưởng khai báo (BR-ME19) (user chốt 2026-11-14) | Khi tạo tin tuyển |
 | BR-ME02 | Tin tuyển tự động EXPIRED khi đến giờ kết thúc dự kiến của Match | Khi hết hạn |
-| BR-ME03 | Tìm kèo mercenary: GPS ưu tiên (bán kính mặc định 3km); không có GPS → dùng khu vực hồ sơ | Khi tìm kèo |
-| BR-ME04 | Không hiển thị tọa độ chính xác; chỉ hiển thị khoảng cách và khu vực chung | Khi hiển thị kèo |
+| BR-ME03 | Tìm kèo mercenary: có GPS → tin tuyển có sân trong bán kính, mặc định 3 km, người dùng chỉnh 1–20 km, sắp theo khoảng cách. Không có GPS → tin tuyển có sân cùng tỉnh với phường trong hồ sơ; sân cùng phường lên đầu, rồi theo giờ đá; không hiển thị khoảng cách (user chốt 2026-11-13) | Khi tìm kèo |
+| BR-ME04 | Trước khi được duyệt: chỉ hiển thị khoảng cách (khi có GPS) và khu vực "phường, tỉnh" của sân; không hiển thị tọa độ, tên sân, địa chỉ. Đơn APPROVED: mercenary thấy tên sân, địa chỉ, tọa độ và tên đội trưởng (user chốt 2026-11-13). Ngoại lệ: trong chat của đơn (BR-ME16), tên đội trưởng hiển thị từ khi đơn PENDING (user chốt 2026-11-14) | Khi hiển thị kèo |
+| BR-ME05 | Đội tạo kèo và đội đã ghép đều được tuyển cho trận CONFIRMED của đội mình. Đội trưởng chọn nhiều vị trí trong một lần → mỗi vị trí thành một tin tuyển (vị trí + số lượng) với trạng thái riêng (user chốt 2026-11-13). Số lượng mỗi tin 1–10. Mỗi (Match, đội, vị trí) tối đa một tin OPEN/FILLED — muốn thêm người thì tăng số lượng (BR-ME08). Đội phải ACTIVE mới tạo tin, sửa số lượng, duyệt; đội INACTIVE vẫn đóng tin và từ chối đơn; tin của đội không ACTIVE bị ẩn khỏi tìm kèo và không nhận ứng tuyển mới; đơn APPROVED giữ nguyên (user chốt 2026-11-14) | Khi tạo tin tuyển |
+| BR-ME06 | Không ứng tuyển / không được duyệt nếu: là thành viên đang hoạt động của một trong hai đội của trận; hoặc đã có đơn APPROVED ở trận khác trùng thời gian (khoảng giờ bắt đầu – giờ kết thúc dự kiến giao nhau). Kiểm cả lúc ứng tuyển và lúc duyệt. Mỗi người tối đa một đơn PENDING/APPROVED cho mỗi tin (user chốt 2026-11-13); tối đa một đơn APPROVED trong cùng một Match (không đá hai vị trí, không đá cho cả hai đội) (user chốt 2026-11-14) | Khi ứng tuyển, duyệt |
+| BR-ME07 | Chỉ duyệt khi tin OPEN; đủ số lượng → FILLED. Tin FILLED: đơn PENDING giữ nguyên, không duyệt được cho tới khi tin về OPEN. Tin CLOSED hoặc EXPIRED: đơn PENDING tự chuyển REJECTED, ứng viên nhận thông báo (user chốt 2026-11-13). Từ giờ bắt đầu trận: tin ẩn khỏi tìm kèo, không ứng tuyển, không duyệt được nữa. Khi hệ thống tự đóng tin / tự từ chối đơn, trạng thái hiển thị đổi ngay; thông báo có thể đến trễ tối đa khoảng 5 phút (user chốt 2026-11-14) | Khi duyệt, đóng, hết hạn |
+| BR-ME08 | Đội trưởng sửa số lượng khi tin OPEN hoặc FILLED, không thấp hơn số đã duyệt: bằng số đã duyệt → FILLED, lớn hơn → OPEN. Không đổi vị trí (đóng tin và tạo tin mới). Đội trưởng đóng tin sớm (CLOSED) khi tin OPEN hoặc FILLED (user chốt 2026-11-13). Từ giờ bắt đầu trận: không tạo tin mới, không tăng số lượng; vẫn giảm số lượng và đóng tin được (user chốt 2026-11-14) | Khi tạo / sửa / đóng tin |
+| BR-ME09 | Match chuyển CANCELLED: mọi tin OPEN/FILLED của trận tự CLOSED; đơn PENDING tự REJECTED; đơn APPROVED giữ nguyên (lịch sử). Ứng viên và mercenary nhận thông báo — với Match trên hệ thống, thông báo có thể đến trễ tối đa khoảng 5 phút kể từ lúc hủy, trạng thái hiển thị đổi ngay; trận ngoài hệ thống bị hủy thì báo ngay (user chốt 2026-11-14). Mercenary không bị trừ điểm, trận không tính Completion Rate cá nhân, đội trưởng và mercenary không đánh giá nhau (user chốt 2026-11-13). Đội trưởng hủy trận ngoài hệ thống (BR-ME19) được xử lý như trên (user chốt 2026-11-14) | Khi Match bị hủy |
+| BR-ME10 | Đội trưởng không hủy duyệt / loại mercenary đã APPROVED; chỉ mercenary tự rút (BR-ME11) (user chốt 2026-11-13) | Khi duyệt |
+| BR-ME11 | Mercenary rút sau khi APPROVED chỉ được trước giờ bắt đầu trận (như BR-M11); trừ Reliability cá nhân -1/-3/-5 theo khoảng cách đến giờ bắt đầu trận (§3.1), chuỗi trận sạch cá nhân về 0; tin FILLED → OPEN. Rút đơn PENDING không ảnh hưởng uy tín (user chốt 2026-11-13) | Khi rút lui |
+| BR-ME12 | Mercenary "đã tham gia trận" = đơn còn APPROVED lúc Match kết thúc (không điểm danh). Mercenary vắng → đội trưởng đánh giá "không đến" và/hoặc report bùng (user chốt 2026-11-13) | Khi đánh giá, report, tính uy tín |
+| BR-ME13 | Đánh giá khi Match ARCHIVED/COMPLETED: đội trưởng đánh giá từng mercenary đã tham gia (sao nguyên 1–5 hoặc "không đến"); mercenary đánh giá đội thuê mình (sao nguyên 1–5). Mercenary nhận 5 sao → +1 Reliability cá nhân. Đánh giá của mercenary dành cho đội chỉ hiển thị riêng trên hồ sơ đội — và chỉ sau khi đội đã đánh giá lại mercenary đó (BC-R03, user chốt 2026-11-14) — không tính vào sao trung bình đội, không cộng Reliability đội. Đánh giá liên quan mercenary không làm Match chuyển COMPLETED (chỉ đánh giá giữa hai đội). Áp dụng BC-R02..R04, BR-R09 (user chốt 2026-11-13) | Khi đánh giá |
+| BR-ME14 | Report hai chiều: đội trưởng report từng mercenary đã tham gia; mercenary report đội thuê mình. Cùng 4 loại, tự chấp nhận, mức trừ theo số lần (§3.2, trừ vào Reliability cá nhân khi người bị report là mercenary), report bùng tranh chấp được trong 24 giờ, Admin quyết định (BR-R05, BR-R06, BR-R09, §6) trong hàng chờ tranh chấp riêng cho mercenary. Report của mercenary dành cho đội tác động lên đội như report giữa hai đội: trừ Reliability đội, report bùng loại trận khỏi tử số Completion Rate và cắt chuỗi trận sạch của đội (user chốt 2026-11-14). Đội của đội trưởng phải ACTIVE (BR-R10). Ngoài ra, đội trưởng và ứng viên report nhau được loại "giao tiếp tệ" khi đơn ứng tuyển đã có tin nhắn chat (BR-ME16), bất kể trạng thái đơn và trận (user chốt 2026-11-13) | Khi report, tranh chấp |
+| BR-ME15 | Reliability, chuỗi trận sạch, reset bộ đếm report và Completion Rate của mercenary theo luật đội (§3.1–§3.3), với thời điểm hoàn thành riêng: mercenary đã tham gia được tính hoàn thành (+2, tử số Completion Rate, xét chuỗi trận sạch) vào lúc đội trưởng đánh giá mercenary bằng sao — áp cho cả Match trên hệ thống và trận ngoài hệ thống. Không bị report (chưa bị Admin bác) trong trận → chuỗi trận sạch +1 và bonus mốc bội số 5/10; bị report → chuỗi về 0. Bị đánh giá "không đến" hoặc chưa được đánh giá → không +2, không tính hoàn thành (user chốt 2026-11-13, sửa 2026-11-14) | Khi tính uy tín cá nhân |
+| BR-ME16 | Chat 1–1 theo đơn ứng tuyển: mỗi đơn một cuộc chat giữa đội trưởng hiện tại của đội tuyển và ứng viên, mở từ khi đơn PENDING. Gửi tin được khi đơn PENDING hoặc APPROVED — đơn APPROVED nhắn được cả sau khi Match kết thúc hoặc bị hủy, đến khi tin nhắn hết hạn lưu; đơn REJECTED/WITHDRAWN chỉ xem. Nội dung 1..1000 ký tự; mỗi tin hiển thị người thực sự gửi (như BR-N03); lưu 90 ngày sau khi Match kết thúc (BR-N01) (user chốt 2026-11-13) | Khi chat |
+| BR-ME17 | Tìm kèo khi không có GPS và hồ sơ chưa chọn phường → hệ thống báo lỗi, nhắc bật GPS hoặc cập nhật khu vực trong hồ sơ (user chốt 2026-11-14) | Khi tìm kèo |
+| BR-ME18 | User xoá tài khoản: mọi đơn PENDING/APPROVED của trận chưa bắt đầu (Match CONFIRMED hoặc trận ngoài hệ thống chưa hủy) tự chuyển WITHDRAWN (đơn APPROVED của Match đã bị hủy giữ nguyên làm lịch sử — BR-ME09), không trừ Reliability; tin FILLED về OPEN; đội trưởng nhận thông báo (user chốt 2026-11-14) | Khi xoá tài khoản |
+| BR-ME19 | Trận ngoài hệ thống: đội trưởng đội ACTIVE khai báo sân (chọn từ danh sách địa điểm; chưa có thì thêm địa điểm trước), giờ bắt đầu, giờ kết thúc, trình độ, tên đối thủ (tùy chọn), rồi vị trí + số lượng như BR-ME05. Tin tuyển, ứng tuyển, duyệt, rút lui, chat, tìm kiếm và hiển thị theo cùng quy tắc như Match trên hệ thống. Giới hạn như khi tạo kèo: giờ bắt đầu ≥ hiện tại + 1 giờ, giờ kết thúc sau giờ bắt đầu và không quá 12 giờ (BR-M01, BR-M16), tên đối thủ ≤100 ký tự. Sửa sân / giờ / trình độ chỉ trước giờ bắt đầu và khi chưa có đơn APPROVED; đội trưởng hủy trận ngoài chỉ trước giờ bắt đầu (như BR-M11) → như BR-ME09, không trừ điểm đội. Sau giờ kết thúc: đánh giá / report hai chiều như BR-ME13, BR-ME14; đội không được cộng hay trừ Reliability vì trận ngoài, trừ report của mercenary (BR-ME14) (user chốt 2026-11-14) | Khi tuyển cho trận ngoài hệ thống |
 | **VENUE** | | |
 | BR-V01 | Tên địa điểm không được để trống, tối đa 200 ký tự | Khi thêm/sửa địa điểm |
 | BR-V02 | Ảnh sân: tối đa 5 ảnh mỗi địa điểm | Khi upload ảnh |
@@ -71,6 +86,7 @@
 | BR-V08 | Xóa ảnh chính khi địa điểm còn ảnh khác → ảnh còn lại có thứ tự hiển thị nhỏ nhất thành ảnh chính | Khi xóa ảnh |
 | BR-V09 | Mỗi user chỉ có tối đa 1 report chờ xử lý cho mỗi (địa điểm, lý do); không report địa điểm đã ngừng hoạt động | Khi report địa điểm |
 | BR-V10 | Kèo chỉ tham chiếu địa điểm; luôn hiển thị thông tin địa điểm mới nhất (không lưu bản sao) | Khi sửa địa điểm, hiển thị kèo |
+| BR-V11 | Địa điểm có phường/xã chọn từ danh mục Vietnam Administrative Units; bắt buộc khi thêm hoặc sửa địa điểm. Địa điểm tạo trước đó chưa có phường vẫn hoạt động, tìm bằng GPS bình thường, nhưng không hiển thị khu vực và không xuất hiện trong tìm kèo mercenary không GPS cho tới khi được bổ sung phường (cho MERCENARY-001 — BR-ME03, BR-ME04) (user chốt 2026-11-14) | Khi thêm/sửa địa điểm, tìm kèo mercenary |
 | **COST** | | |
 | BR-C01 | Tiền tệ mặc định VND trong MVP | Khi nhập thỏa thuận chi phí |
 | BR-C02 | Số tiền phải > 0 | Khi nhập thỏa thuận chi phí |
@@ -189,7 +205,10 @@ stateDiagram-v2
     OPEN --> FILLED: Đủ số lượng được duyệt
     OPEN --> EXPIRED: Đến giờ kết thúc dự kiến của Match
     OPEN --> CLOSED: Đội trưởng đóng sớm
-    FILLED --> OPEN: Mercenary rút lui (thiếu người)
+    FILLED --> OPEN: Mercenary rút lui hoặc tăng số lượng (thiếu người)
+    OPEN --> FILLED: Giảm số lượng bằng số đã duyệt
+    OPEN --> CLOSED: Match bị hủy (System)
+    FILLED --> CLOSED: Match bị hủy (System)
     FILLED --> EXPIRED: Đến giờ kết thúc dự kiến
     FILLED --> CLOSED: Đội trưởng đóng
     CLOSED --> [*]
@@ -205,7 +224,13 @@ stateDiagram-v2
 | OPEN | EXPIRED | Đến `Match.scheduled_end_time` | System |
 | OPEN | CLOSED | Đội trưởng đóng tin sớm | Team Captain |
 | FILLED | OPEN | Mercenary rút lui → thiếu người | System |
+| FILLED | OPEN | Đội trưởng tăng số lượng (BR-ME08) | Team Captain |
+| OPEN | FILLED | Đội trưởng giảm số lượng bằng số đã duyệt (BR-ME08) | Team Captain |
 | FILLED | EXPIRED | Đến `Match.scheduled_end_time` | System |
+| FILLED | CLOSED | Đội trưởng đóng tin | Team Captain |
+| OPEN, FILLED | CLOSED | Match chuyển CANCELLED (BR-ME09) | System |
+
+Tin chuyển CLOSED / EXPIRED → đơn PENDING tự REJECTED (BR-ME07) (user chốt 2026-11-13).
 
 **Trạng thái terminal:** CLOSED, EXPIRED
 
@@ -219,6 +244,7 @@ stateDiagram-v2
     PENDING --> APPROVED: Đội trưởng duyệt
     PENDING --> REJECTED: Đội trưởng từ chối
     PENDING --> WITHDRAWN: Ứng viên rút
+    PENDING --> REJECTED: Tin CLOSED/EXPIRED (System)
     APPROVED --> WITHDRAWN: Ứng viên rút (trừ Reliability)
     REJECTED --> [*]
     WITHDRAWN --> [*]
@@ -231,8 +257,11 @@ stateDiagram-v2
 | — | PENDING | Cá nhân ứng tuyển | User | Khởi tạo |
 | PENDING | APPROVED | Đội trưởng duyệt | Team Captain | |
 | PENDING | REJECTED | Đội trưởng từ chối | Team Captain | Không ảnh hưởng uy tín |
+| PENDING | REJECTED | Tin CLOSED hoặc EXPIRED, kể cả do Match bị hủy (BR-ME07, BR-ME09) | System | Không ảnh hưởng uy tín; báo ứng viên |
 | PENDING | WITHDRAWN | Ứng viên rút | User | Không trừ uy tín khi PENDING |
-| APPROVED | WITHDRAWN | Ứng viên rút | User | Trừ Reliability cá nhân: -1/-3/-5 theo khoảng cách giờ trận |
+| APPROVED | WITHDRAWN | Ứng viên rút | User | Trừ Reliability cá nhân: -1/-3/-5 theo khoảng cách giờ trận; chuỗi trận sạch cá nhân về 0 (BR-ME11) |
+
+Đội trưởng không chuyển được đơn APPROVED sang trạng thái khác (BR-ME10). Match bị hủy → đơn APPROVED giữ nguyên (BR-ME09).
 
 **Trạng thái terminal:** REJECTED, WITHDRAWN
 
@@ -285,6 +314,8 @@ newScore = Math.max(0, Math.min(100, currentScore + delta))
 | Mercenary rút sau khi APPROVED (4-24 giờ) | -3 | |
 | Mercenary rút sau khi APPROVED (<4 giờ) | -5 | |
 | Bị report (xem bảng §3.2) | -1 đến -15 | Tăng dần theo số lần |
+
+**Cá nhân (mercenary):** các dòng trên áp dụng cho Reliability cá nhân theo BR-ME11, BR-ME13, BR-ME15 — +2 và bonus chuỗi khi được đội trưởng đánh giá bằng sao, +1 khi nhận 5 sao, trừ khi rút sau APPROVED hoặc bị report. Hủy kèo / rút Match_Request chỉ trừ điểm đội (BR-M09) (user chốt 2026-11-13).
 
 Admin xác nhận report bùng đúng qua tranh chấp **không** trừ thêm — giữ nguyên mức đã trừ lúc report (user chốt 2026-11-12).
 
@@ -351,7 +382,7 @@ Không tính: Match CONFIRMED chưa đá, EXPIRED, CANCELLED khi còn OPEN, CANC
 
 **Áp dụng:**
 - Completion Rate áp dụng riêng cho đội và cá nhân
-- Completion Rate cá nhân chỉ tính các trận cá nhân tham gia với vai trò mercenary
+- Completion Rate cá nhân chỉ tính các trận cá nhân tham gia với vai trò mercenary (Match trên hệ thống hoặc trận ngoài hệ thống — BR-ME19). **Mẫu số:** trận mercenary được đội trưởng đánh giá bằng sao; trận đã kết thúc mà mercenary còn APPROVED và bị report bùng (chưa bị Admin bác); trận mercenary rút lui sau APPROVED dưới 24 giờ trước giờ bắt đầu (trừ khi trận sau đó bị hủy). **Tử số:** trận được đánh giá bằng sao và không bị report bùng (chưa bị Admin bác). Không tính: trận bị hủy (BR-ME09), rút từ 24 giờ trở lên trước trận, trận chưa được đánh giá hoặc bị đánh giá "không đến" mà không bị report bùng (BR-ME15) (user chốt 2026-11-13, sửa 2026-11-14)
 - Đội bùng không làm giảm uy tín cá nhân thành viên
 
 ---
@@ -387,15 +418,15 @@ Không tính: Match CONFIRMED chưa đá, EXPIRED, CANCELLED khi còn OPEN, CANC
 | **MERCENARY** | |
 | BC-ME01 | Chỉ có thể tuyển mercenary sau khi Match đã CONFIRMED |
 | BC-ME02 | Tin tuyển tự động EXPIRED khi đến giờ kết thúc dự kiến của Match |
-| BC-ME03 | Không hiển thị tọa độ chính xác; chỉ hiển thị khoảng cách (vd "2.3 km từ bạn") và khu vực chung (vd "Quận 1") |
-| BC-ME04 | GPS ưu tiên; không có GPS → dùng khu vực hồ sơ (phường/xã) |
+| BC-ME03 | Trước khi được duyệt: không hiển thị tọa độ, tên sân, địa chỉ; chỉ khoảng cách (vd "2.3 km từ bạn") và khu vực "phường, tỉnh" (vd "Phường Sài Gòn, TP. Hồ Chí Minh") — BR-ME04 |
+| BC-ME04 | GPS ưu tiên (1–20 km, mặc định 3 km); không có GPS → tin tuyển cùng tỉnh với phường trong hồ sơ, cùng phường lên đầu — BR-ME03 |
 | BC-ME05 | Truy cập GPS dựa vào quyền hệ điều hành; không lưu consent riêng trong DB |
 | **VENUE** | |
 | BC-V01 | Ảnh sân tối đa 5 mỗi địa điểm |
 | BC-V02 | Chỉ 1 ảnh is_primary=true mỗi venue (unique constraint hoặc check) |
 | BC-V03 | Report địa điểm không tự ẩn địa điểm; admin xác minh rồi đánh dấu ngừng hoạt động |
 | BC-V04 | Địa điểm ngừng hoạt động bị loại khỏi gợi ý mặc định; Match cũ giữ tham chiếu |
-| BC-V05 | Admin cảnh báo 1 lần khi địa điểm không được chọn trong 180 ngày hoặc có báo cáo ngừng hoạt động; không nhắc định kỳ. Luồng B: địa điểm "được chọn" = địa điểm của phương án đã chốt, tính tại lúc kèo được ghép (không tính các lựa chọn địa điểm lúc tạo kèo) (2026-11-10) |
+| BC-V05 | Admin cảnh báo 1 lần khi địa điểm không được chọn trong 180 ngày hoặc có báo cáo ngừng hoạt động; không nhắc định kỳ. Luồng B: địa điểm "được chọn" = địa điểm của phương án đã chốt, tính tại lúc kèo được ghép (không tính các lựa chọn địa điểm lúc tạo kèo) (2026-11-10). Khai báo trận ngoài hệ thống (BR-ME19) ở địa điểm nào cũng tính là địa điểm đó "được chọn" (user chốt 2026-11-14) |
 | BC-V06 | Chỉ người tạo địa điểm hoặc Admin được sửa địa điểm và xóa ảnh; người khác dùng report "thông tin sai" |
 | BC-V07 | Không trùng report chờ xử lý cho cùng (user, địa điểm, lý do) |
 | **COST** | |
@@ -418,7 +449,9 @@ Không tính: Match CONFIRMED chưa đá, EXPIRED, CANCELLED khi còn OPEN, CANC
 | Tạo đội (trở thành đội trưởng) | Tham gia đội mà chưa được mời |
 | Chấp nhận/Từ chối lời mời vào đội | Mời người khác vào đội (chỉ đội trưởng) |
 | Rời đội | Giải tán đội (chỉ đội trưởng — `USER-002`); xóa cứng đội |
-| Ứng tuyển mercenary | Duyệt ứng viên mercenary (chỉ đội trưởng) |
+| Ứng tuyển mercenary (trừ thành viên hai đội của trận, trùng giờ đơn APPROVED khác — BR-ME06); rút đơn PENDING; rút lui sau khi APPROVED (bị trừ điểm) | Duyệt ứng viên mercenary (chỉ đội trưởng) |
+| Tranh chấp report bùng nhắm vào mình (vai trò mercenary — BR-ME14) | Tranh chấp report loại khác |
+| Chat 1–1 với đội trưởng của tin mình ứng tuyển (BR-ME16) | Chat với đội trưởng của tin mình chưa ứng tuyển |
 | Đánh giá đội sau trận mercenary (1-5 sao) | Đánh giá đội khác khi không tham gia trận |
 | Report đội sau trận mercenary | Report đội khác khi không tham gia trận |
 | Xóa tài khoản (soft-delete) | Hard-delete tài khoản (để sau, có chính sách retention) |
@@ -446,7 +479,9 @@ Không tính: Match CONFIRMED chưa đá, EXPIRED, CANCELLED khi còn OPEN, CANC
 | Duyệt/Từ chối ứng viên mercenary | Duyệt ứng viên cho đội khác |
 | Đánh giá đối phương sau trận (1-5 sao hoặc "không đến") | Đánh giá nhiều lần cùng Match |
 | Report đối phương sau trận | Report đội chưa từng thi đấu |
-| Đánh giá mercenary sau trận | — |
+| Đánh giá / report từng mercenary đã tham gia trận (BR-ME12..BR-ME14) | Đánh giá / report mercenary không thuộc trận của đội mình |
+| Sửa số lượng, đóng tin tuyển của đội mình (BR-ME08) | Đổi vị trí của tin; hủy duyệt mercenary đã APPROVED (BR-ME10) |
+| Chat 1–1 với từng ứng viên của tin đội mình (BR-ME16) | Chat với ứng viên của đội khác |
 
 ### 5.3. Team Member (không phải đội trưởng)
 
@@ -475,6 +510,7 @@ Không tính: Match CONFIRMED chưa đá, EXPIRED, CANCELLED khi còn OPEN, CANC
 | Có thể | Không thể |
 |---|---|
 | Cập nhật trạng thái hết hạn (Match, Request, Pairing, tin tuyển) | Tạo kèo/đội/user |
+| Đóng tin tuyển khi Match bị hủy; tự REJECTED đơn PENDING khi tin CLOSED/EXPIRED (BR-ME07, BR-ME09) | Chuyển đơn APPROVED sang trạng thái khác |
 | Gửi notification | Xóa notification trước retention |
 | Tính Reliability Score | Sửa Reliability Score ngoài quy tắc |
 | Tính Completion Rate | — |
@@ -573,7 +609,7 @@ Sau khi hoàn thành **5 trận sạch liên tiếp**, tất cả bộ đếm s�
 ### 8.2. Verification Badge Revocation
 - **Quyết định:** Thu hồi badge ngay lập tức khi điều kiện không còn đủ (Reliability <70, sao trung bình ≤3, không có số điện thoại, hoặc ≤5 trận hoàn thành — BR-R04).
 - **Đội:** badge được cấp/thu hồi ngay sau mỗi đánh giá, report, quyết định tranh chấp liên quan đến đội. Các thay đổi sau chỉ được cập nhật ở lần đối soát hằng ngày (trễ tối đa khoảng 1 ngày): đội bị trừ điểm do hủy kèo đã ghép hoặc rút Match_Request đã ACCEPTED; đổi đội trưởng; đội trưởng thêm/bỏ số điện thoại.
-- **Cá nhân:** thời điểm cấp/thu hồi khi thay đổi số điện thoại sẽ do MERCENARY-001 xác định; không suy rộng quy tắc đội sang cá nhân.
+- **Cá nhân:** badge được cấp/thu hồi ngay sau mỗi đánh giá, report, quyết định tranh chấp liên quan đến cá nhân và khi mercenary rút lui sau APPROVED; thêm/bỏ số điện thoại trong tài khoản chỉ được cập nhật ở lần đối soát hằng ngày (trễ tối đa khoảng 1 ngày) (user chốt 2026-11-13).
 - **Lý do:** Badge phản ánh trạng thái hiện tại. Thu hồi ngay làm hệ thống minh bạch và đơn giản.
 
 ### 8.3. GPS Permission Revocation

@@ -446,10 +446,10 @@
 
 **Given:** User là đội trưởng; Match đã CONFIRMED
 
-**When:** Đội trưởng tạo tin tuyển (chọn vị trí, số lượng) và submit
+**When:** Đội trưởng (đội tạo kèo hoặc đội đã ghép) chọn một hoặc nhiều vị trí, mỗi vị trí kèm số lượng, và submit
 
 **Then:**
-- Tin tuyển được tạo với trạng thái OPEN
+- Mỗi vị trí thành một tin tuyển trạng thái OPEN (BR-ME05)
 - Tin tuyển hiển thị trong danh sách tìm kèo mercenary
 - Tin tuyển tự động EXPIRED khi đến `Match.scheduled_end_time`
 
@@ -462,10 +462,10 @@
 **When:** User chọn "Tìm kèo mercenary"
 
 **Then:**
-- (Nếu cấp GPS) Hệ thống tìm kèo trong bán kính 3km (có thể điều chỉnh)
-- (Nếu không cấp GPS) Hệ thống tìm dựa trên khu vực hồ sơ (phường/xã); hiển thị thông báo "Bật GPS để tìm kèo gần bạn hơn"
-- Mỗi kèo hiển thị: khoảng cách (vd "2.3 km"), khu vực chung (vd "Quận 1"), vị trí cần, giờ đá
-- KHÔNG hiển thị tọa độ chính xác
+- (Nếu cấp GPS) Tin tuyển có sân trong bán kính mặc định 3 km, chỉnh được 1–20 km, sắp theo khoảng cách
+- (Nếu không cấp GPS) Tin tuyển có sân cùng tỉnh với phường trong hồ sơ, sân cùng phường lên đầu rồi theo giờ đá; không có khoảng cách; hiển thị thông báo "Bật GPS để tìm kèo gần bạn hơn"
+- Mỗi kèo hiển thị: khoảng cách (khi có GPS, vd "2.3 km"), khu vực "phường, tỉnh" (vd "Phường Sài Gòn, TP. Hồ Chí Minh"), vị trí cần, giờ đá
+- KHÔNG hiển thị tọa độ, tên sân, địa chỉ khi chưa được duyệt; đơn APPROVED thấy tên sân, địa chỉ, tọa độ và tên đội trưởng (BR-ME04)
 
 ---
 
@@ -477,9 +477,119 @@
 
 **Then:**
 - Đơn chuyển WITHDRAWN
-- Reliability cá nhân bị trừ: -1 (≥24h), -3 (4-24h), -5 (<4h)
+- Reliability cá nhân bị trừ: -1 (≥24h), -3 (4-24h), -5 (<4h); chuỗi trận sạch cá nhân về 0 (BR-ME11)
 - Đội trưởng nhận notification
 - (Nếu tin tuyển đang FILLED) Chuyển về OPEN (thiếu người)
+
+---
+
+### AC-ME04: Ứng tuyển và duyệt
+
+**Given:** Tin tuyển OPEN của trận A–B
+
+**When:** User ứng tuyển; đội trưởng duyệt / từ chối
+
+**Then:**
+- Thành viên đang hoạt động của đội A hoặc đội B, hoặc người đã có đơn APPROVED ở trận khác trùng giờ → bị từ chối cả lúc ứng tuyển lẫn lúc duyệt (BR-ME06)
+- Mỗi người tối đa một đơn PENDING/APPROVED cho mỗi tin; rút đơn PENDING không ảnh hưởng uy tín
+- Duyệt đủ số lượng → tin FILLED; đơn PENDING còn lại giữ nguyên, không duyệt được cho tới khi tin về OPEN (BR-ME07)
+- Đội trưởng không hủy duyệt được đơn APPROVED (BR-ME10)
+
+---
+
+### AC-ME05: Sửa số lượng / đóng tin tuyển
+
+**Given:** Tin tuyển OPEN hoặc FILLED, đã duyệt 2 người
+
+**When:** Đội trưởng đổi số lượng hoặc đóng tin
+
+**Then:**
+- Số lượng 1 → bị từ chối (thấp hơn số đã duyệt); số lượng 2 → FILLED; số lượng 4 → OPEN; vị trí không đổi được (BR-ME08)
+- Đóng tin → CLOSED; đơn PENDING tự REJECTED, ứng viên nhận notification (BR-ME07)
+- Đến giờ kết thúc dự kiến của Match → tin EXPIRED; đơn PENDING tự REJECTED
+
+---
+
+### AC-ME06: Match bị hủy khi đang tuyển
+
+**Given:** Match CONFIRMED có tin tuyển; một đơn APPROVED, một đơn PENDING
+
+**When:** Match chuyển CANCELLED (hủy kèo hoặc rút Match_Request đã ACCEPTED)
+
+**Then:**
+- Mọi tin OPEN/FILLED của trận tự CLOSED; đơn PENDING tự REJECTED; đơn APPROVED giữ nguyên (BR-ME09)
+- Ứng viên và mercenary nhận notification
+- Mercenary không bị trừ điểm; trận không tính Completion Rate cá nhân; không đánh giá nhau
+
+---
+
+### AC-ME07: Đánh giá giữa đội trưởng và mercenary
+
+**Given:** Match ARCHIVED/COMPLETED; mercenary còn APPROVED lúc Match kết thúc (BR-ME12)
+
+**When:** Đội trưởng đánh giá mercenary; mercenary đánh giá đội
+
+**Then:**
+- Đội trưởng chọn sao nguyên 1–5 hoặc "không đến" cho từng mercenary; mercenary chọn sao nguyên 1–5 cho đội (BR-ME13)
+- Mercenary nhận 5 sao → +1 Reliability cá nhân; rating tính vào sao trung bình cá nhân
+- Rating mercenary dành cho đội chỉ hiển thị riêng trên hồ sơ đội, không vào sao trung bình đội, không cộng Reliability đội
+- Mỗi cặp (Match, người đánh giá, người được đánh giá) chỉ đánh giá một lần (BC-R02)
+
+---
+
+### AC-ME08: Report và tranh chấp giữa đội trưởng và mercenary
+
+**Given:** Match ARCHIVED/COMPLETED và mercenary đã tham gia; hoặc đơn ứng tuyển đã có tin nhắn chat; đội của đội trưởng ACTIVE
+
+**When:** Đội trưởng report mercenary, hoặc mercenary report đội thuê mình, với lý do bắt buộc 1–1000 ký tự (BR-R09)
+
+**Then:**
+- Report tự chấp nhận; bên bị report bị trừ Reliability theo số lần (§3.2 — cá nhân khi là mercenary); chuỗi trận sạch về 0 (BR-ME14, BR-ME15)
+- Report bùng: bên bị report có 24 giờ để tranh chấp, Admin quyết định như AC-R03
+- Đơn đã có tin nhắn chat (kể cả PENDING/REJECTED/WITHDRAWN, trận bị hủy): chỉ report được "giao tiếp tệ"; loại khác bị từ chối (BR-ME14)
+
+---
+
+### AC-ME09: Uy tín cá nhân của mercenary
+
+**Given:** Mercenary còn APPROVED lúc Match kết thúc
+
+**When:** Đội trưởng đánh giá mercenary
+
+**Then:**
+- Đánh giá bằng sao → mercenary +2 Reliability cá nhân, tính hoàn thành; không bị report (chưa bị Admin bác) trong trận → chuỗi trận sạch +1 và bonus ở mốc bội số 5/10; bị report → chuỗi về 0 (BR-ME15)
+- Đánh giá "không đến", hoặc đội trưởng chưa đánh giá → mercenary không được +2, không tính hoàn thành
+- Badge cá nhân cập nhật ngay sau đánh giá, report, quyết định tranh chấp, rút lui; thêm/bỏ số điện thoại cập nhật ở lần đối soát hằng ngày (Business_Rules §8.2)
+- Đánh giá giữa đội trưởng và mercenary không làm Match chuyển COMPLETED (BR-ME13)
+- Rút lui sau APPROVED dưới 24 giờ trước trận → trận vào mẫu số Completion Rate cá nhân; mercenary không rút được từ giờ bắt đầu trận (BR-ME11)
+
+---
+
+### AC-ME10: Chat giữa đội trưởng và ứng viên
+
+**Given:** Đơn ứng tuyển PENDING hoặc APPROVED
+
+**When:** Đội trưởng hoặc ứng viên gửi tin nhắn 1..1000 ký tự
+
+**Then:**
+- Tin được lưu và bên kia nhận real-time; hiển thị người thực sự gửi (BR-ME16)
+- Đơn APPROVED vẫn nhắn được sau khi Match kết thúc hoặc bị hủy, đến khi hết hạn lưu
+- Đơn REJECTED/WITHDRAWN → chỉ xem lịch sử, không gửi được
+- Tin nhắn lưu 90 ngày sau khi Match kết thúc
+
+---
+
+### AC-ME11: Tuyển cho trận ngoài hệ thống
+
+**Given:** Đội trưởng của đội ACTIVE; trận không có trên hệ thống
+
+**When:** Đội trưởng chọn sân từ danh sách địa điểm, nhập giờ bắt đầu, giờ kết thúc, trình độ, tên đối thủ (tùy chọn), vị trí + số lượng, rồi submit
+
+**Then:**
+- Mỗi vị trí thành một tin OPEN; tìm kiếm, ứng tuyển, duyệt, chat, hiển thị như tin của Match trên hệ thống (BR-ME19)
+- Sửa sân / giờ / trình độ bị từ chối khi đã có đơn APPROVED
+- Đội trưởng hủy trận ngoài trước giờ bắt đầu (từ giờ bắt đầu không hủy được) → tin CLOSED, đơn PENDING tự REJECTED, đơn APPROVED giữ nguyên, không ai bị trừ điểm, mercenary nhận thông báo
+- Sau giờ kết thúc: đội trưởng và mercenary đánh giá / report nhau; mercenary được +2 khi được đánh giá bằng sao; đội không được cộng / trừ Reliability vì trận ngoài (trừ report của mercenary)
 
 ---
 
