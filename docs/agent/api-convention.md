@@ -167,6 +167,15 @@ Mã thành công chọn theo **kết quả** của thao tác, không theo HTTP m
 | `PUT /pairings/{id}/cost-agreement` | 200 | B3 (`revision`, `itemId`, `updatedAt`), B4 |
 | `POST /pairings/{id}/confirm` | 200 | B3 (`…ConfirmedAt`, `confirmedAt`, `status`, `matchStatus`) |
 | `POST /pairings/{id}/messages/read` | 204 | N1 |
+| `POST /matches/{matchId}/mercenary-recruitments`, `POST /external-matches/{id}/mercenary-recruitments` (đăng tin tuyển), `POST /mercenary-recruitments/{id}/applications` (ứng tuyển), `POST /conversations/{id}/messages`, `POST /mercenary-applications/{id}/ratings`, `POST /mercenary-applications/{id}/reports`, `POST /teams/{teamId}/external-matches` | 201 | B2 |
+| `GET /teams/{teamId}/mercenary-recruitments`, `GET /mercenary-recruitments`, `GET /mercenary-recruitments/{id}`, `GET /mercenary-recruitments/{id}/applications`, `GET /profile/mercenary-applications`, `GET /mercenary-applications/{id}`, `GET /conversations/{id}`, `GET /conversations/{id}/messages`, `GET /mercenary-applications/{id}/ratings`, `GET /teams/{teamId}/mercenary-reports`, `GET /profile/mercenary-reports`, `GET /users/{userId}/reputation`, `GET /teams/{teamId}/mercenary-ratings`, `GET /admin/mercenary-disputes`, `GET /admin/mercenary-disputes/{id}`, `GET /teams/{teamId}/external-matches`, `GET /external-matches/{id}` | 200 | B1 |
+| `PATCH /mercenary-recruitments/{id}`, `PATCH /external-matches/{id}` | 200 | B3 (`status` tính lại / `updatedAt`), B4 |
+| `POST /mercenary-recruitments/{id}/close` | 200 | B3 (`closedAt`, số đơn bị từ chối), B4 |
+| `POST /mercenary-applications/{id}/approve` | 200 | B3 (`respondedAt`, trạng thái / số đã duyệt của tin) |
+| `POST /mercenary-applications/{id}/withdraw` | 200 | B3 (`withdrawnAt`, `reliabilityPenalty`, trạng thái tin) |
+| `PATCH /admin/mercenary-disputes/{id}/resolve` | 200 | B3 (`resolvedAt`, `resolvedByName`), B4 |
+| `POST /external-matches/{id}/cancel` | 200 | B3 (`cancelledAt`, số tin đóng, số đơn bị từ chối) |
+| `POST /mercenary-applications/{id}/reject`, `POST /conversations/{id}/messages/read` | 204 | N1 |
 
 ### Client Error (4xx)
 - `400 Bad Request` — request không hợp lệ (validation fail)
@@ -193,6 +202,10 @@ Format: `<DOMAIN>_<NUMBER>`
 - `TEAM` — Đội
 - `AUTH` — Authentication/Authorization
 - `PAYMENT` — Thanh toán
+- `VENUE` — Địa điểm sân
+- `REPORT` — Report (báo cáo vi phạm)
+- `CHAT` — Cuộc trò chuyện (dùng chung cho mọi ngữ cảnh chat)
+- `MERCENARY` — Tuyển mercenary: tin tuyển, đơn ứng tuyển, đánh giá / report theo đơn, trận ngoài hệ thống
 - `SYS` — Lỗi tầng HTTP/hệ thống, không gắn miền nghiệp vụ; **chỉ** global exception handler phát ra (NEVER ném qua exception nghiệp vụ):
   - `SYS_001` — 404, URL không khớp endpoint nào
   - `SYS_002` — 405, sai HTTP method (kèm header `Allow`)
@@ -211,6 +224,10 @@ Lỗi 400 do framework phát hiện (thiếu query param bắt buộc, sai kiể
 - `MATCH_016` — Thao tác không áp dụng cho loại kèo này (luồng A gọi endpoint luồng B hoặc ngược lại)
 - `PAIRING_001`..`PAIRING_008` — Thương lượng ghép kèo (luồng B): không tìm thấy, quyền, trùng, tự nhận, đã kết thúc, revision lệch, chưa chốt, ngoài lựa chọn
 - `CHAT_001` — Tin nhắn mốc không thuộc cuộc trò chuyện
+- `CHAT_002`..`CHAT_004` — Cuộc trò chuyện: không tìm thấy, người gọi không tham gia, chỉ còn xem (không gửi tin được)
+- `VENUE_016` — Địa điểm chưa có phường/xã mà lần sửa không gửi `wardId`
+- `REPORT_009` — Report nhắm vào cá nhân mà người gọi tranh chấp không phải người bị report
+- `MERCENARY_001`..`MERCENARY_025` — Tuyển mercenary: không tìm thấy tin / đơn / trận ngoài (`001`, `002`, `024`); điều kiện kèo / trận (`003`, `004`, `013`); đội tuyển không hoạt động (`005`); tin đủ người / đã đóng (`006`, `007`); số lượng thấp hơn số đã duyệt (`008`); trùng đơn / trùng vị trí / trùng đánh giá / trùng report (`009`, `023`, `017`, `022`); thành viên đội trong trận (`010`); trùng giờ (`011`); trạng thái đơn đã đổi (`012`); không tham gia đơn (`014`); điều kiện đánh giá / report (`015`, `016`, `019`–`021`); thiếu vị trí để tìm kèo (`018`); trận ngoài đã có mercenary được duyệt (`025`)
 
 ---
 
@@ -275,6 +292,7 @@ Bản thân phần tử mốc (`before` / `after`) không có trong kết quả.
 |---|---|---|
 | Mọi danh sách trừ bảng dưới | Offset (`page`/`pageSize`) | — |
 | `GET /pairings/{id}/messages` (lịch sử chat) | Cursor | `before` / `after` = `messageId` |
+| `GET /conversations/{id}/messages` (lịch sử chat theo cuộc trò chuyện) | Cursor | `before` / `after` = `messageId` |
 
 ---
 
