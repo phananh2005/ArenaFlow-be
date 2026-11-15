@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · Cloudinary (ký/xác minh cục bộ trong request; Admin API chỉ trong job dọn asset) |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §10 · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) (`Proposed`) |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (§5.1); entity hiện có `domain/.../entity/venue/{Venue,VenueImage,VenueReport}` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.0** (solution-architect · 2026-11-14) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.1** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -289,7 +289,7 @@ CREATE INDEX idx_venue_ward ON venue(ward_id);
 - Dữ liệu cũ (chưa kiểm số dòng Neon dev — developer kiểm khi lập kế hoạch): `UPDATE` giữ migration chạy được; `venue_type` lạ → `NULL`; report trùng `(reporter_id, venue_id, 'OTHER')` sẽ làm `uq_venue_report_pending` lỗi → dừng, báo, không tự xoá.
 - `handled_by ON DELETE RESTRICT` nhất quán `team.disbanded_by`. Không ràng buộc ≤5 ảnh / unique `display_order` ở DB (tuần tự hoá bằng khoá dòng `venue`). Không index cho job 180 ngày (1 lần/ngày).
 - `venue.created_by_user_id`: V1 khai `ON DELETE SET NULL` + CHECK `venue_check` (`created_by_type = 'USER'` ⇒ `created_by_user_id IS NOT NULL`) — cùng mâu thuẫn (xoá cứng user tạo địa điểm sẽ lỗi CHECK). Đổi `ON DELETE RESTRICT`, giữ tên `venue_created_by_user_id_fkey` (Neon dev `misty-dew-90700890`, kiểm 2026-11-11).
-- `reporter_id`: V1 khai `NOT NULL` + `ON DELETE SET NULL` (mâu thuẫn — xoá cứng user sẽ lỗi NOT NULL). Đổi `ON DELETE RESTRICT`: khớp `NOT NULL` và chính sách chỉ xoá mềm user (ADR-0002); cùng thay đổi cho `chat_message.sender_user_id` ở V7 (MATCH-002 §5.1). Giữ tên constraint V1 `venue_report_reporter_id_fkey` (Neon dev `misty-dew-90700890`, kiểm 2026-11-10). Index `idx_venue_report_reporter` của V1 giữ nguyên.
+- `reporter_id`: V1 khai `NOT NULL` + `ON DELETE SET NULL` (mâu thuẫn — xoá cứng user sẽ lỗi NOT NULL). Đổi `ON DELETE RESTRICT`: khớp `NOT NULL` và chính sách chỉ xoá mềm user (ADR-0002); cùng chính sách cho `conversation_message.sender_user_id` ở V6 (MATCH-001 §5.1 — bảng `chat_message` của V1 bị bỏ). Giữ tên constraint V1 `venue_report_reporter_id_fkey` (Neon dev `misty-dew-90700890`, kiểm 2026-11-10). Index `idx_venue_report_reporter` của V1 giữ nguyên.
 - **Xoá ảnh = hard-delete** dòng `venue_image` (lệch có chủ đích, §10).
 - `ward_id` (v4.0): nullable vì địa điểm tạo trước chưa có phường (BR-V11); không CHECK `level = 'ward'` ở DB (không CHECK chéo bảng) — service kiểm bằng `findWardWithProvince` (USER-001, `level = 'ward'`). `idx_venue_ward` cho tìm kèo mercenary không GPS (MERCENARY-001 `Component_Class_Design.md` §5.2).
 

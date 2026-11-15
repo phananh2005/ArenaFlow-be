@@ -6,12 +6,12 @@
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL ≥ 18 · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush) · ADR-0003 (+ Sửa đổi 2026-11-10, 2026-11-12) · ADR-0011, ADR-0012, ADR-0013 (+ Sửa đổi 2026-11-12) · retrier: VENUE-001 `Component_Class_Design.md` §4.9 |
-| Ràng buộc dữ liệu | V1–V7 + `V8__reputation_rating_report_dispute.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-13, cập nhật 2026-11-14) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | V1–V7 (v1.2: 2.10 đọc `conversation`, `conversation_message` của V6 — MATCH-001 v2.4) + `V8__reputation_rating_report_dispute.sql` (`Component_Class_Design.md` §5.1) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.2** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
-Thao tác ghi (2.1, 2.3, 2.5, 2.8) chạy trong `ConcurrencyConflictRetrier.execute(MATCH_014, …)`: mỗi lần thử một transaction; ghi dữ liệu nghiệp vụ + điểm uy tín cùng transaction (ADR-0013); event phát trong transaction, giao sau commit (ADR-0011); refresh huy hiệu chạy sau commit trong transaction riêng (`Component_Class_Design.md` §4.8). API đọc `readOnly`.
+Thao tác ghi (2.1, 2.3, 2.5, 2.8, 2.10) chạy trong `ConcurrencyConflictRetrier.execute(MATCH_014, …)`: mỗi lần thử một transaction; ghi dữ liệu nghiệp vụ + điểm uy tín cùng transaction (ADR-0013); event phát trong transaction, giao sau commit (ADR-0011); refresh huy hiệu chạy sau commit trong transaction riêng (`Component_Class_Design.md` §4.8). API đọc `readOnly`.
 
 ### 1.1. Thứ tự guard (nguồn duy nhất)
 
@@ -26,6 +26,7 @@ Thao tác ghi (2.1, 2.3, 2.5, 2.8) chạy trong `ConcurrencyConflictRetrier.exec
 | 2.7 | `AUTH_004` → `DISPUTE_001` |
 | 2.8 | `AUTH_004` → Bean Validation → CAS 0 dòng: `DISPUTE_001` (không có tranh chấp **đội ↔ đội** với id này — v1.1) / `DISPUTE_002` (đã `RESOLVED`) |
 | 2.9 | `TEAM_001` |
+| 2.10 | Bean Validation (`reason`) → `CHAT_002` (không có cuộc trò chuyện) → `USER_001` (cột `callerDeleted`) → `CHAT_003` (policy của loại ngữ cảnh — MATCH-001 `Component_Class_Design.md` §4.14 — trả không bên nào; vd vừa chuyển quyền, thành viên của đội đã giải tán) → `REPORT_011` (`contextType ≠ TEAM_MATCH`) → `TEAM_016` (policy trả bên chỉ xem = người đã giải tán đội của mình, BR-R10) → `TEAM_015` (đội phía caller `INACTIVE`, BR-R10) → `REPORT_005` (captain cả hai bên, BR-R08) → `REPORT_010` (`!hasMessages`) → `REPORT_004` (chiều của caller đã có "giao tiếp tệ" trong kèo — qua 2.3 hoặc 2.10; race → unique index) |
 
 ## 2. Sequence
 
@@ -109,9 +110,10 @@ sequenceDiagram
 | 2.8 | `PATCH …/resolve` — `CONFIRMED` | U dispute CAS, U report, S chi tiết, S đánh giá | 4 / W6 ✅ |
 | 2.8 | CAS 0 dòng | U dispute CAS, S `existsTeamDispute` (v1.1) | 2 |
 | 2.9 | `GET /teams/{id}/reputation` | S thống kê (1 câu) | 1 / D3 ✅ |
+| 2.10 | `POST /conversations/{id}/reports` | S context (cột ngữ cảnh chung của cuộc trò chuyện + có tin nhắn + đã report, 1 câu), I report, U team (trừ điểm), U report (`reliability_penalty`) · sau commit: U `verified_at` | 5 / W6 ✅ (mới, như 2.3) |
 | Job | huy hiệu (mỗi lô) | S id lô, U `verified_at` RETURNING | 2 / lô |
 
-**NFS gate:** 9/9 endpoint trong ngưỡng; truy vấn sau commit (refresh huy hiệu) **được tính** vào request. **2.8 `REJECTED` chạm đúng W6** — mọi truy vấn thêm phải gộp hoặc xin duyệt. Đã gộp: trận + quyền captain hai phía + đã đánh giá/report thành 1 câu context (2.1, 2.3); report + đội + quyền + tranh chấp thành 1 câu (2.5); điểm hai đội lúc hoàn tất thành 1 câu; refresh huy hiệu gom mọi đội của request thành 1 câu. Retry nhân số truy vấn tối đa 3 (ADR-0003).
+**NFS gate:** 10/10 endpoint trong ngưỡng; truy vấn sau commit (refresh huy hiệu) **được tính** vào request. **2.8 `REJECTED` chạm đúng W6** — mọi truy vấn thêm phải gộp hoặc xin duyệt. Đã gộp: trận + quyền captain hai phía + đã đánh giá/report thành 1 câu context (2.1, 2.3); report + đội + quyền + tranh chấp thành 1 câu (2.5); điểm hai đội lúc hoàn tất thành 1 câu; refresh huy hiệu gom mọi đội của request thành 1 câu. Retry nhân số truy vấn tối đa 3 (ADR-0003).
 
 ### 3.1. `POST /matches/{id}/ratings` (retrier `MATCH_014`)
 
@@ -135,6 +137,8 @@ Lần thử: Q1 `findRatingContext` → guard §1.1 → rater = phía `callerXCa
 | 80, 9, 0 | Không | completes, bonus 1 | 93 (+2+10+1), 10, 0 |
 | 80, 14, 0 | Không | completes, bonus 0 | 87 (+2+5), 15, 0 (Q10) |
 | 80, 3, 1 | Có | completes, bonus 0 | 82 (+2), **0**, 1 |
+| 80, 0, 0 (chuỗi vừa về 0 vì đội Y không được ghép report qua chat) | Chỉ report qua chat của Y (đội không đá trận) | completes, bonus 0 | 82, **1**, 0 — v1.2, user chốt 2026-11-15 |
+| 80, 3, 0 | Report qua chat **trước trận** của chính đội đối phương | completes, bonus 0 | 82, **0**, 0 |
 | 99, 4, 0 | Không | completes, bonus 0 | 100 (chặn), 5, 0 |
 
 ### 3.2. `GET /matches/{id}/ratings` (readOnly)
@@ -154,6 +158,9 @@ Lần thử: Q1 `findReportContext(matchId, caller, type)` → guard §1.1 → r
 | 80, 1 | `BAD_PLAY` | 75, 2 | 5 |
 
 Mọi trường hợp: `clean_streak = 0`.
+
+### 3.3a. `POST /conversations/{id}/reports` (retrier `MATCH_014`) — v1.2
+Lần thử: Q1 `findChatReportContext(conversationId, callerId)` → guard §1.1 → reporter = bên caller là captain (A = đội tạo kèo, B = đội tham gia), reported = bên còn lại → Q2 `saveAndFlush(Report)` (`match_id` = kèo của cuộc trò chuyện, `BAD_COMMUNICATION`; bắt `idx_report_unique` → `REPORT_004`) → Q3 `applyReportPenalty(reported, BAD_COMMUNICATION, reportId)` → `report.setReliabilityPenalty(points)` → `TeamReportedEvent` → `refreshAfterCommit({reported})` → Q4 `UPDATE report` lúc commit → response (`direction = SENT`, `reliabilityPenalty = null`, `counterpartTeam` từ Q1). Bảng kiểm `applyReportPenalty` như §3.3. Test: tài khoản đã xoá → `USER_001`; người đã giải tán đội của mình → `TEAM_016`; người không tham gia cuộc trò chuyện mercenary → `CHAT_003` (trước `REPORT_011`), ứng viên / đội trưởng của cuộc trò chuyện mercenary → `REPORT_011`; mỗi trạng thái yêu cầu (`PENDING`, `REJECTED`, `SUPERSEDED`, `EXPIRED`, `WITHDRAWN`, `ACCEPTED`) / thương lượng (`NEGOTIATING`, `SUPERSEDED`, `EXPIRED`, `CONFIRMED`) / kèo (`OPEN`, `CONFIRMED` trước trận, `CANCELLED`, `EXPIRED`, `COMPLETED`) với ≥ 1 tin → 201; chưa có tin → `REPORT_010`; report chiều A→B qua 2.10 rồi qua 2.3 sau trận (cùng loại) → `REPORT_004`, chiều B→A vẫn 201; cuộc trò chuyện mercenary → `REPORT_011`; đội trưởng cả hai đội → `REPORT_005`; đội caller `INACTIVE` → `TEAM_015`, đội bị report `DISBANDED` → 201; report xuất hiện ở 2.4 của cả hai đội; `NfsQueryCountTest` 2.10 = 5.
 
 ### 3.4. `GET /teams/{id}/reports` (readOnly)
 Q1 `requireActiveCaptain(teamId, caller)` → Q2 `findTeamReports(teamId, direction, limit, offset)` → Q3 `countTeamReports` → mapper (trạng thái hiệu lực, `canDispute` — `Component_Class_Design.md` §4.10, `now` từ `Clock`).
@@ -181,13 +188,13 @@ Như `Component_Class_Design.md` §4.11. Isolation mặc định (READ COMMITTED
 
 ## 5. Concurrency & Locking
 
-**Thứ tự khoá** (chống vòng chờ): `match` → `team` (theo id tăng dần) ở 2.1 và ở huỷ kèo MATCH-001; `report` → `team` ở 2.3 (INSERT report lấy `KEY SHARE` trên `match` — tương thích `NO KEY UPDATE` của 2.1); `dispute` → `report` → `team` ở 2.8; `report` → `dispute` ở 2.5. Không luồng nào khoá `team` rồi mới khoá `match`/`report`/`dispute` → không thấy vòng chờ [Inference — chưa tái hiện; deadlock nếu có được retrier thử lại].
+**Thứ tự khoá** (chống vòng chờ): `match` → `team` (theo id tăng dần) ở 2.1 và ở huỷ kèo MATCH-001; `report` → `team` ở 2.3 và 2.10 (2.10: INSERT report lấy `KEY SHARE` trên `match`; không khoá `conversation`) (INSERT report lấy `KEY SHARE` trên `match` — tương thích `NO KEY UPDATE` của 2.1); `dispute` → `report` → `team` ở 2.8; `report` → `dispute` ở 2.5. Không luồng nào khoá `team` rồi mới khoá `match`/`report`/`dispute` → không thấy vòng chờ [Inference — chưa tái hiện; deadlock nếu có được retrier thử lại].
 
 | Tình huống | Xử lý |
 |---|---|
 | Hai đội trưởng đánh giá cùng lúc trận `ARCHIVED` | Hai INSERT khác dòng; Q3 của bên sau chờ khoá `match` rồi đánh giá lại `status = 'ARCHIVED'` → 0 dòng → chỉ bên trước cộng điểm hoàn tất; bên sau chỉ cộng +1 (5 sao) |
 | Cùng đội gửi đánh giá hai lần đồng thời | Bên sau đụng `idx_rating_unique` → `RATING_002` |
-| Report trùng đồng thời | `idx_report_unique` → `REPORT_004` (bên sau rollback, không trừ điểm) |
+| Report trùng đồng thời (kể cả 2.3 và 2.10 cùng "giao tiếp tệ", cùng chiều, cùng kèo) | `idx_report_unique` → `REPORT_004` (bên sau rollback, không trừ điểm) |
 | Report gửi gần như cùng lúc với đánh giá hoàn tất trận | `applyCompletion` khoá `team` rồi kiểm report bằng snapshot đầu câu → có thể chưa thấy report vừa commit → chuỗi +1 thay vì 0 cho trận đó `[cần xác nhận #12]`. Điểm trừ report vẫn đúng (cộng dồn nguyên tử) |
 | Tranh chấp sát hạn 24h | Hạn kiểm trong chính câu CAS (`created_at > now − 24h`) |
 | Hai Admin quyết định cùng tranh chấp | CAS `status = 'PENDING'` → bên sau `DISPUTE_002` |
@@ -201,7 +208,7 @@ Như USER-001 §6. Bổ sung trong service: `DataIntegrityViolationException` c�
 
 ## 7. Idempotency
 
-- 2.1, 2.3: unique index → gửi lặp trả `RATING_002` / `REPORT_004`, không cộng/trừ hai lần. Không hỗ trợ `Idempotency-Key`.
+- 2.1, 2.3, 2.10: unique index → gửi lặp trả `RATING_002` / `REPORT_004`, không cộng/trừ hai lần. Không hỗ trợ `Idempotency-Key`.
 - 2.5: CAS + unique `idx_dispute_report` → gửi lặp `REPORT_008`.
 - 2.8: CAS → gửi lặp `DISPUTE_002`, không hoàn điểm hai lần.
 - Refresh huy hiệu, job: tính lại từ dữ liệu gốc, chạy lặp không đổi kết quả.
@@ -215,7 +222,7 @@ Như USER-001 §6. Bổ sung trong service: `DataIntegrityViolationException` c�
 
 ## 9. Danh sách [cần xác nhận]
 
-Đánh số toàn thiết kế: 1–4 và 13 đã đóng (`Component_Class_Design.md` §13), 5–11 `Component_Class_Design.md` §12, 12 ở đây.
+Đánh số toàn thiết kế: 1–4 và 13 đã đóng (`Component_Class_Design.md` §13), 5–11, 14 `Component_Class_Design.md` §12, 12 ở đây.
 
 | # | Nội dung | Loại |
 |---|---|---|

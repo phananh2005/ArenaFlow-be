@@ -1,5 +1,30 @@
 # CHANGELOG — MATCH-001 Kèo (luồng A, luồng B) & vòng đời kèo
 
+## [v2.4] — 2026-11-15
+
+**Type:** MINOR (thêm endpoint chat 2.16–2.20, thêm field `conversationId` vào yêu cầu ghép kèo, thêm mã lỗi `CHAT_*` cho endpoint mới, thêm `MATCH_016` tạm thời ở 2.1; tương thích ngược, trừ 2.1 `type = NEED_VENUE` tạm trả `422 MATCH_016` cho tới khi luồng B phát hành (chưa có bản chạy; user duyệt 2026-11-15); endpoint, field, mã thành công đã có của 2.1–2.15 giữ nguyên) · **Tóm tắt:** Gửi yêu cầu ghép kèo luồng A mở cuộc trò chuyện giữa đội gửi và đội tạo kèo; bộ endpoint chat và kênh realtime dùng chung cho mọi cuộc trò chuyện (luồng A, luồng B, mercenary) đặt ở mã này (chuyển từ MATCH-002 v2.0); thêm màn hình "Tin nhắn của tôi" (SRS `SYSTEM-001` v1.10 — BR-N01, BR-N03..BR-N06).
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | §4.4 Yêu cầu ghép kèo (2.6, 2.7, 2.12) | Thêm field | — → `conversationId` (các yêu cầu của cùng đội cho cùng kèo có cùng giá trị) | Mỗi cặp (kèo, đội gửi) một cuộc trò chuyện với đội tạo kèo, mở từ lúc gửi yêu cầu (BR-N04) | Mở phòng chat bằng 2.19 + 2.17 với `conversationId`; `SUBSCRIBE /topic/conversations/{conversationId}` |
+| 2 | 2.6 | Thêm hành vi | Chỉ tạo yêu cầu → tạo yêu cầu **và** mở cuộc trò chuyện; gửi lại sau khi rút / hết hạn dùng tiếp cuộc trò chuyện cũ (giữ lịch sử) | BR-N04 | Không đổi cách gọi |
+| 3 | 2.16–2.19, §4.7, §4.8 | Thêm endpoint | — → gửi tin (2.16), lịch sử chat (2.17), đánh dấu đã đọc (2.18), đầu phòng chat (2.19) theo **cuộc trò chuyện** `/conversations/{conversationId}/…` — endpoint mới ở mã này. FE đã code theo chat thương lượng của MATCH-002 v1.x (`/pairings/{pairingId}/messages`, body có `teamId`, tin nhắn có `pairingId` / `senderTeamId`, lỗi `PAIRING_*`) phải đổi path, body, shape tin nhắn, mã lỗi theo MATCH-002 `CHANGELOG.md` v2.0 | Bộ endpoint chat chung đặt ở mã đầu tiên mở chat (luồng A) — review 2026-11-15; MATCH-002 v2.0 bỏ chat theo thương lượng và trỏ về đây | Gọi chat bằng 2.16–2.19 với `conversationId` |
+| 4 | 2.20, §4.9 | Thêm endpoint | — → `GET /api/v1/profile/conversations` "Tin nhắn của tôi": mọi cuộc trò chuyện của người gọi (luồng A, B, mercenary; gồm phòng chỉ xem), mới nhất trước; phòng chưa có tin của luồng A xếp theo lúc gửi yêu cầu gần nhất, luồng B và mercenary theo lúc mở | User chốt 2026-11-15 (MATCH-002 #13 / MERCENARY-001 #17; review 2026-11-15) | Màn hình "Tin nhắn" dùng 2.20 |
+| 5 | §1.6, §1.7 | Thêm quy tắc | — → ai là bên nào, ai nhắn được / chỉ xem theo trạng thái yêu cầu (luồng A) hoặc thương lượng (luồng B); người đã giải tán đội chỉ xem; kênh realtime `/ws` + topic `/topic/conversations/{id}` + frame `MESSAGE_CREATED` | BR-N03, BR-N05, BR-N06; ADR-0014 | Khoá ô chat theo `canSend` (2.19); kết nối lại → 2.17 với `after` |
+| 6 | §1, §3.2 | Ghi rõ | — → chat theo trạng thái yêu cầu: `PENDING`, `ACCEPTED`, `WITHDRAWN` sau khi được chấp nhận → nhắn được; `REJECTED`, `SUPERSEDED`, `EXPIRED`, `WITHDRAWN` khi còn chờ → chỉ xem; report "giao tiếp tệ" qua chat (REPUTATION-001 2.10) | BR-N05, BR-R07 | Như #5 |
+| 7 | §5 | Thêm mã | — → `CHAT_001` (422 — trước là mã của chat thương lượng MATCH-002 v1.x), `CHAT_002` (404), `CHAT_003` (403), `CHAT_004` (409) (trước là mã của chat theo đơn MERCENARY-001 v1.0) cho 2.16–2.19 — mã, HTTP, message giữ nguyên; `USER_001` (404, tài khoản đã xoá) và `MATCH_004`, `MATCH_014` (2.16) cho endpoint mới | Chủ sở hữu bộ endpoint chat | Xử lý theo bảng §5 |
+| 7a | 2.1 lỗi, §1, §5 | Thêm mã (tạm thời) | — → `422 MATCH_016` khi `type = NEED_VENUE` trong lúc luồng B chưa được phát hành (MATCH-001 code trước, luồng B phát hành cùng MATCH-002) | Thứ tự code hai đợt (user chốt 2026-11-15). Ngoại lệ của MINOR: chưa có bản chạy nên chưa FE nào gọi 2.1 với `NEED_VENUE` (user duyệt 2026-11-15); đợt MATCH-002 gỡ bằng entry mới "2.1 nhận lại `NEED_VENUE`" | Ẩn lựa chọn "Chưa có sân" tới khi luồng B được phát hành |
+| 8 | §6 | Thêm mục | — → `[cần xác nhận #12]` đường dẫn / SockJS của kênh realtime (chuyển từ MATCH-002), không có frame khi yêu cầu luồng A đổi trạng thái (user chốt 2026-11-15 — giữ ở bản này) | Chưa chốt được khi thiết kế | Theo dõi §6 |
+| 9 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE (bảng `conversation`, `conversation_message` tạo ở V6; lõi chat, cấu hình WebSocket chuyển từ MATCH-002), không ảnh hưởng FE ngoài các mục trên | — | — |
+| 10 | Header 3 tài liệu | Ghi nhận | v2.3 → v2.4 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract: chỉ thêm (endpoint 2.16–2.20, field `conversationId`, mã lỗi cho endpoint mới, `MATCH_016` tạm thời ở 2.1) — tương thích ngược, trừ 2.1 `type = NEED_VENUE` tạm trả `422 MATCH_016` cho tới khi luồng B phát hành (chưa có bản chạy; user duyệt 2026-11-15). FE đã code chat theo MATCH-002 v1.x: đổi path, body, shape tin nhắn, topic, mã lỗi theo MATCH-002 `CHANGELOG.md` v2.0.
+- Thứ tự phát hành (user chốt 2026-11-15): bản đầu của mã này gồm luồng A, chat và kênh realtime; kèo luồng B (`type = NEED_VENUE` — tạo, tìm, xem, huỷ, hết hạn) mở cùng bản phát hành MATCH-002, trước đó 2.1 trả `422 MATCH_016` (mục 7a). Chat của MATCH-002, MERCENARY-001, REPUTATION-001 dùng các endpoint chat của mã này (ADR-0014, sửa đổi 2026-11-15).
+- Nghiệp vụ / SRS: theo SRS `SYSTEM-001` v1.10 (BR-N01, BR-N03..BR-N06, UC-N01, UC-N04, AC-N01, AC-N03, AC-N04, UC-M03, Scenario 12).
+
 ## [v2.3] — 2026-11-13
 
 **Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE cho MERCENARY-001 (job vòng đời kèo chạy thêm tác vụ đóng / hết hạn tin tuyển mercenary), không ảnh hưởng FE.
