@@ -6,8 +6,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL ≥ 18 |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §10; VENUE-001 `Component_Class_Design.md` §4.9 (retrier overload), §4.13 (audit); MATCH-001 `Component_Class_Design.md` §4.5 (`TeamGuard`), §4.8 (`ReputationService` — sửa ở đây §4.6), §4.9 (event), §4.10 (scheduler), §4.11 (`AdminAuditLog.afterCommit(action, adminId, targetType, targetId)`), §8 (pool) · ADR-0002 (Sửa đổi 2026-11-12), ADR-0003 (Sửa đổi 2026-11-12), ADR-0008, ADR-0011, ADR-0012, ADR-0013 (Sửa đổi 2026-11-12) |
-| Ràng buộc dữ liệu | V1–V4 (code) + V5 (VENUE-001), V6 (MATCH-001), V7 (MATCH-002) — **chưa có trong code** + `V8__reputation_rating_report_dispute.sql` (§5.1). Entity hiện có `domain/.../entity/rating/{Rating, Report}`, `team/Team`, `user/User` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-13, cập nhật 2026-11-14) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | V1–V4 (code) + V5 (VENUE-001), V6 (MATCH-001), V7 (MATCH-002) — **chưa có trong code** + `V8__reputation_rating_report_dispute.sql` (§5.1). v1.2 (2.10) đọc `conversation`, `conversation_message` của V6 (MATCH-001 v2.4 §5.1) — không đổi V8. Entity hiện có `domain/.../entity/rating/{Rating, Report}`, `team/Team`, `user/User` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.2** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -26,7 +26,7 @@ Layered theo 4 module Maven (ADR-0006) như USER-001. Hợp đồng: `API_Spec.m
 
 ```text
 common/        com.phananh.arenaflow.common
-└── exception/       ErrorCode (+ RATING_001..003, REPORT_001..008, DISPUTE_001..002)
+└── exception/       ErrorCode (+ RATING_001..003, REPORT_001..008, DISPUTE_001..002; v1.1 REPORT_009; v1.2 REPORT_010, REPORT_011)
 
 domain/        com.phananh.arenaflow.domain
 ├── entity/rating/   Rating, Report (sửa — §6); Dispute (mới)
@@ -35,7 +35,7 @@ domain/        com.phananh.arenaflow.domain
 ├── repository/      RatingRepository, ReportRepository, DisputeRepository (mới); TeamRepository, MatchRepository (sửa)
 └── projection/      RatingContextView, ReportContextView, MatchRatingRowView, TeamReportView, DisputeContextView,
                      ReportDecisionView, AdminDisputeView, AdminDisputeDetailView, TeamReputationView,
-                     ScoreChangeView, VerificationChangeView (mới)
+                     ScoreChangeView, VerificationChangeView (mới); ChatReportContextView (mới — v1.2)
 
 application/   com.phananh.arenaflow.application
 ├── service/         RatingService, ReportService, DisputeService, AdminDisputeService, TeamReputationService,
@@ -46,7 +46,7 @@ application/   com.phananh.arenaflow.application
 │                    TeamVerificationChangedEvent (mới); ReliabilityScoreChangedEvent (giữ — MATCH-001)
 ├── support/reputation/ ReportPenaltyPolicy, ReputationRules, TeamVerificationRefresher (mới); TimeBandPenaltyPolicy (giữ)
 ├── validation/      ValidRating (+ validator) (mới); OneOf (tái dùng)
-├── dto/request/     CreateRatingRequest, CreateReportRequest, CreateDisputeRequest, ResolveDisputeRequest
+├── dto/request/     CreateRatingRequest, CreateReportRequest, CreateDisputeRequest, ResolveDisputeRequest; CreateChatReportRequest (v1.2)
 ├── dto/response/    RatingResponse, RatingCreatedResponse, MatchRatingsResponse, TeamBriefResponse, ReportResponse,
 │                    ReportDisputeResponse, DisputeCreatedResponse, AdminTeamBriefResponse, AdminDisputeResponse,
 │                    AdminDisputeDetailResponse, DisputeMatchResponse, TeamReputationResponse (+ CompletionResponse,
@@ -54,7 +54,8 @@ application/   com.phananh.arenaflow.application
 └── mapper/          ReputationMapper (MapStruct); MapperSupport (tái dùng)
 
 api/           com.phananh.arenaflow.api
-├── reputation/      MatchReputationController, ReportController, TeamReputationController, AdminDisputeController
+├── reputation/      MatchReputationController, ReportController, TeamReputationController, AdminDisputeController,
+│                    ConversationReportController (v1.2)
 └── scheduler/       TeamVerificationScheduler (mới)
 ```
 
@@ -70,14 +71,15 @@ Quy ước như MATCH-001 §3 (`@Validated`, `ResponseEntity<ApiResponse<…>>`,
 | `ReportController` | `/api/v1/reports` | 2.5 | `DisputeService` |
 | `TeamReputationController` | `/api/v1/teams/{teamId}` (`/reports`, `/reputation`) | 2.4, 2.9 | `ReportService`, `TeamReputationService` |
 | `AdminDisputeController` | `/api/v1/admin/disputes` | 2.6–2.8 | `AdminDisputeService` |
+| `ConversationReportController` (v1.2) | `/api/v1/conversations/{conversationId}/reports` | 2.10 | `ReportService` |
 
 | Endpoint | Thành công | Tiêu chí `api-convention.md` §5 |
 |---|---|---|
-| 2.1, 2.3, 2.5 | 201 | B2 |
+| 2.1, 2.3, 2.5, 2.10 | 201 | B2 |
 | 2.2, 2.4, 2.6, 2.7, 2.9 | 200 | B1 |
 | 2.8 | 200 | B3 (`resolvedAt`, `resolvedByName`, điểm sau hoàn), B4 |
 
-**Path/method:** 2.1, 2.3 tạo tài nguyên con dưới trận (tiền lệ `POST /matches/{id}/requests`). 2.5 tạo tranh chấp 1:1 dưới report → danh từ số ít `/dispute`, `POST` 201. 2.8 action sub-resource Admin, `PATCH` theo tiền lệ VENUE-001 `PATCH /admin/venue-reports/{id}/resolve`. 2.9 tách khỏi `GET /teams/{id}` (Q8 — không đổi hợp đồng USER-001).
+**Path/method:** 2.1, 2.3 tạo tài nguyên con dưới trận (tiền lệ `POST /matches/{id}/requests`). 2.5 tạo tranh chấp 1:1 dưới report → danh từ số ít `/dispute`, `POST` 201. 2.8 action sub-resource Admin, `PATCH` theo tiền lệ VENUE-001 `PATCH /admin/venue-reports/{id}/resolve`. 2.9 tách khỏi `GET /teams/{id}` (Q8 — không đổi hợp đồng USER-001). 2.10 tạo report dưới **cuộc trò chuyện** (tiền lệ MERCENARY-001 2.20 report theo đơn): đội trưởng đội tạo kèo luồng A có nhiều cuộc trò chuyện (X, Y, Z) trên cùng kèo → `POST /matches/{id}/reports` không xác định được đội bị report; cuộc trò chuyện xác định đúng cặp đội. Không mở rộng 2.3 (giữ hợp đồng, 2.3 chỉ cho hai đội của trận).
 
 - 2.2: `@RequestParam UUID teamId` bắt buộc. 2.4: `direction` enum `ReportDirection` mặc định `RECEIVED`. 2.6: `DisputeStatusFilter` (`PENDING` mặc định, `RESOLVED`, `ALL`). Enum sai → `MethodArgumentTypeMismatchException` → 400 (như `AdminTeamController`).
 - Không đổi `SecurityConfig` (`/api/v1/admin/**` đã `hasRole('ADMIN')`).
@@ -98,10 +100,12 @@ Deps: `MatchRepository` (`findRatingContext`, `completeIfArchived`), `RatingRepo
 ### 4.2. ReportService
 ```java
 ReportResponse createReport(UUID matchId, UUID callerId, CreateReportRequest r);                       // retrier MATCH_014
+ReportResponse createChatReport(UUID conversationId, UUID callerId, CreateChatReportRequest r);       // retrier MATCH_014 — v1.2, 2.10
 PageResponse<ReportResponse> listTeamReports(UUID teamId, UUID callerId, ReportDirection d, int page, int pageSize); // readOnly
 ```
 Deps: `MatchRepository` (`findReportContext`), `ReportRepository`, `TeamGuard`, `ReputationService`, `TeamVerificationRefresher`, `ConcurrencyConflictRetrier`, `ReputationMapper`, `PageRequestFactory`, `ApplicationEventPublisher`, `Clock`.
 - `createReport`: guard (`Processing_Flow.md` §1.1) → `Report.builder()` (`status = AUTO_ACCEPTED`, `reliabilityPenalty = 0`, `createdByUserId`) `saveAndFlush` (bắt `idx_report_unique` → `REPORT_004`) → `applied = reputationService.applyReportPenalty(reportedTeamId, type, reportId)` → `report.setReliabilityPenalty(applied)` (dirty checking, ghi lúc commit) → `TeamReportedEvent` → `refreshAfterCommit({reported})`.
+- `createChatReport` (v1.2, BR-R07 trường hợp 3): `reportRepository.findChatReportContext(conversationId, callerId)` (§5.2 — cột ngữ cảnh chung `ConversationSql.CONTEXT_COLUMNS` của MATCH-001 + `hasMessages` + đã report) → `ConversationAccessPolicy` của loại ngữ cảnh (MATCH-001 §4.14, trong bộ nhớ) → guard (`Processing_Flow.md` §1.1: `CHAT_002` → `USER_001` → `CHAT_003` (không bên nào) → `REPORT_011` (`contextType ≠ TEAM_MATCH`) → `TEAM_016` (bên chỉ xem = người đã giải tán đội) → `TEAM_015` → `REPORT_005` → `REPORT_010` → `REPORT_004`) → đội report = bên mà caller là đội trưởng ACTIVE (A = đội tạo kèo, B = đội tham gia), đội bị report = bên còn lại → **cùng đường ghi với `createReport`** (helper chung khi reuse-scan): `Report.builder()` (`matchId = ctx.matchId`, `reporterType/reportedType = TEAM`, `reportType = BAD_COMMUNICATION`, `status = AUTO_ACCEPTED`, `reliabilityPenalty = 0`, `createdByUserId`) `saveAndFlush` (bắt `idx_report_unique` → `REPORT_004` — chung khoá với 2.3: một "giao tiếp tệ" mỗi chiều mỗi kèo) → `applyReportPenalty(reported, BAD_COMMUNICATION, reportId)` → `setReliabilityPenalty` → `TeamReportedEvent` → `refreshAfterCommit({reported})`. Không đụng trạng thái kèo / yêu cầu / pairing / cuộc trò chuyện. Deps thêm: `ReportRepository.findChatReportContext` (không cần `ConversationRepository`).
 - `listTeamReports`: `requireActiveCaptain` (BR-R10) → `findTeamReports`/`countTeamReports` theo `direction` (§5.2). Mapper tính `status` hiệu lực, `disputeDeadlineAt`, `canDispute` (§4.10); `SENT` → `reliabilityPenalty = null`, `dispute.evidence = null`.
 
 ### 4.3. DisputeService
@@ -201,7 +205,7 @@ Không thêm component: `RatingServiceImpl` / `ReportServiceImpl` đọc một `
 | Method | Ranh giới |
 |---|---|
 | `getMatchRatings`, `listTeamReports`, `listDisputes`, `getDispute`, `getTeamReputation` | `@Transactional(readOnly = true)` |
-| `createRating`, `createReport`, `createDispute`, `resolveDispute` | Không annotate; `concurrencyConflictRetrier.execute(MATCH_014, …)` (thử lại xung đột CAS và deadlock `40P01`) |
+| `createRating`, `createReport`, `createChatReport`, `createDispute`, `resolveDispute` | Không annotate; `concurrencyConflictRetrier.execute(MATCH_014, …)` (thử lại xung đột CAS và deadlock `40P01`) |
 | `ReputationService.*` | `MANDATORY` |
 | `TeamVerificationRefresher.refreshNow`, mỗi lô `reconcileAll` | `TransactionTemplate` (`REQUIRES_NEW` cho `refreshNow`) |
 
@@ -292,6 +296,7 @@ long countTeamReports(UUID teamId, String direction);
 Optional<DisputeContextView> findDisputeContext(UUID reportId, UUID callerId);
 @Modifying int markDisputed(UUID reportId, OffsetDateTime now, OffsetDateTime createdAfter);
 Optional<ReportDecisionView> applyDecision(UUID reportId, String decision, OffsetDateTime now); // UPDATE … RETURNING
+Optional<ChatReportContextView> findChatReportContext(UUID conversationId, UUID callerId);      // v1.2 — 2.10
 
 // DisputeRepository extends JpaRepository<Dispute, UUID>
 Optional<UUID> resolveIfPending(UUID id, String decision, String note, UUID adminId, OffsetDateTime now); // UPDATE … RETURNING report_id
@@ -324,8 +329,10 @@ Ghi chú SQL:
   locked AS (SELECT t.id, t.reliability_score AS old_score, t.clean_streak AS old_streak
              FROM team t JOIN input i ON i.team_id = t.id ORDER BY t.id FOR NO KEY UPDATE OF t),
   calc AS (SELECT l.id, l.old_score, i.completes, i.bonus, l.old_streak + 1 AS next_streak,
-                  i.completes AND NOT EXISTS (SELECT 1 FROM report r WHERE r.match_id = :matchId AND r.reported_type = 'TEAM'
-                                              AND r.reported_id = l.id AND r.status <> 'REJECTED') AS clean
+                  i.completes AND NOT EXISTS (SELECT 1 FROM report r JOIN match m ON m.id = r.match_id
+                                              WHERE r.match_id = :matchId AND r.reported_type = 'TEAM'
+                                              AND r.reported_id = l.id AND r.status <> 'REJECTED'
+                                              AND r.reporter_type = 'TEAM' AND r.reporter_id IN (m.author_team_id, m.confirmed_opponent_team_id)) AS clean   -- v1.2: chỉ đối thủ thật; MERCENARY-001 §4.12 thêm mệnh đề mercenary APPROVED
            FROM locked l JOIN input i ON i.team_id = l.id)
   UPDATE team t SET
     clean_streak = CASE WHEN NOT c.completes THEN t.clean_streak WHEN c.clean THEN c.next_streak ELSE 0 END,
@@ -338,9 +345,10 @@ Ghi chú SQL:
   FROM calc c WHERE t.id = c.id
   RETURNING t.id, c.old_score, t.reliability_score AS new_score
   ```
-  `ORDER BY t.id FOR NO KEY UPDATE` khoá hai đội theo thứ tự id cố định (chống deadlock giữa hai trận cùng cặp đội); `old_score` đọc sau khi khoá → điểm trước thay đổi `[cần xác nhận #6]`.
+  v1.2 (user chốt 2026-11-15): trận "sạch" chỉ xét report của **đội đối phương thật** (`reporter_id` là đội tạo kèo / đội đã ghép, khác chính đội — `report_not_self_check`); report của **mercenary đã được duyệt của trận** được MERCENARY-001 thêm vào câu này khi code (`OR EXISTS mercenary_application … status = 'APPROVED'` theo `report.application_id` — cột có từ V9; MERCENARY-001 `Component_Class_Design.md` §4.12, review 2026-11-15) — V8 chưa có report từ mercenary nên mã này không cần mệnh đề đó; report "giao tiếp tệ" qua chat (2.10) của đội không được ghép bỏ qua (đã đưa chuỗi về 0 lúc gửi bằng `applyReportPenalty`). `JOIN match` (khoá chính) trong `EXISTS` — cùng câu, không thêm truy vấn. `ORDER BY t.id FOR NO KEY UPDATE` khoá hai đội theo thứ tự id cố định (chống deadlock giữa hai trận cùng cặp đội); `old_score` đọc sau khi khoá → điểm trước thay đổi `[cần xác nhận #6]`.
 - `applyReportPenalty`: `WITH locked AS (SELECT id, reliability_score AS old_score FROM team WHERE id = :id FOR NO KEY UPDATE) UPDATE team t SET report_count_<loại> = report_count_<loại> + 1` (4 cột viết bằng `CASE WHEN :type = '…' THEN … + 1 ELSE … END`, **không** nối chuỗi tên cột), `clean_streak = 0`, `reliability_score = GREATEST(0, t.reliability_score - (CAST(:tiers AS int[]))[LEAST(<bộ đếm loại đó> + 1, 4)]) FROM locked l WHERE t.id = l.id RETURNING l.old_score, t.reliability_score AS new_score`.
 - `refundReportPenalty`: `SET reliability_score = LEAST(100, reliability_score + :points), report_count_<loại> = GREATEST(0, report_count_<loại> - 1)` (CASE theo `:type`). `GREATEST(0, …)` vì bộ đếm có thể đã về 0 do mốc chuỗi.
+- `findChatReportContext` (v1.2): một câu = `ConversationSql.CONTEXT_COLUMNS` / `CONTEXT_JOINS` của MATCH-001 §5.2 (mọi loại ngữ cảnh, gồm cột người gọi, đội trưởng / người đã giải tán, trạng thái đội) + `EXISTS (SELECT 1 FROM conversation_message cm WHERE cm.conversation_id = c.id) AS has_messages` + `EXISTS (report BAD_COMMUNICATION chiều A → B của kèo) AS a_reported_b`, `EXISTS (… B → A) AS b_reported_a` (tiền tố `idx_report_unique`). Tên / ảnh đội bị report cho `counterpartTeam` có trong cột ngữ cảnh — không đọc lại. Policy dùng chung với chat nên quy tắc "ai là bên nào" một nơi.
 - `markDisputed`: `UPDATE report SET status = 'DISPUTED', updated_at = :now WHERE id = :id AND status = 'AUTO_ACCEPTED' AND report_type = 'NOSHOW' AND created_at > :createdAfter`.
 - `applyDecision`: `UPDATE report SET status = :decision, updated_at = :now WHERE id = :id AND status = 'DISPUTED' RETURNING reported_id, reporter_id, report_type, reliability_penalty`.
 - `resolveIfPending`: `UPDATE dispute SET status = 'RESOLVED', decision = :decision, resolution_note = :note, resolved_by_user_id = :adminId, resolved_at = :now, updated_at = :now WHERE id = :id AND status = 'PENDING' RETURNING report_id`.
@@ -358,6 +366,7 @@ Ghi chú SQL:
 | `TeamReportView` | cột report + `matchStartTime` + đội còn lại (`id`, `name`, `avatar_url`) + cột dispute (nullable) |
 | `DisputeContextView` | `reportId`, `reportType`, `status`, `createdAt`, `reportedTeamId`, `reportedTeamStatus`, `callerReportedCaptain`, `disputeExists` |
 | `ReportDecisionView` | `reportedTeamId`, `reporterTeamId`, `reportType`, `reliabilityPenalty` |
+| `ChatReportContextView` (v1.2) | `extends ConversationContextView` (MATCH-001 §5.3) + `matchStartTime`, `partyAName`, `partyAAvatarUrl`, `partyBName`, `partyBAvatarUrl`, `hasMessages`, `aReportedB`, `bReportedA` |
 | `AdminDisputeView` / `AdminDisputeDetailView` | cột §5.2 |
 | `TeamReputationView` | `teamId`, `reliabilityScore`, `verifiedAt`, `completedMatches`, `countedMatches`, `averageRating` (numeric, chưa làm tròn), `ratingCount` |
 | `ScoreChangeView` | `teamId`, `oldScore`, `newScore` |
@@ -456,14 +465,14 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 | Tài liệu | Nội dung | Nhánh |
 |---|---|---|
 | `docs/database/schema.dbml`, `schema-design.md` (`rating`, `report`, `team`, `user`) | V8: cột/CHECK/index/FK mới, bảng `dispute`, bỏ `total_matches_*`, `average_rating`, `admin_reviewed_at` | `feature/REPUTATION-001-*` |
-| `docs/agent/api-convention.md` §5, §6 | 9 endpoint vào bảng 2xx (§3); domain `RATING`, `REPORT`, `DISPUTE` | `chore/agent-framework-*` |
+| `docs/agent/api-convention.md` §5, §6 | 9 endpoint vào bảng 2xx (§3) + v1.2 `POST /conversations/{id}/reports` 201 B2; domain `RATING`, `REPORT` (gồm `REPORT_009`..`REPORT_011`), `DISPUTE` | `chore/agent-framework-*` |
 | `docs/agent/convention-backend.md` §1 | `support/reputation/` | `chore/agent-framework-*` |
 | `docs/agent/CLAUDE.md` §2 | Dòng điều hướng REPUTATION-001 | `chore/agent-framework-*` |
 | SRS `SYSTEM-001` v1.8 | Đã cập nhật cùng nhánh thiết kế (BR-R07..R10, AC-R07, §8.2) | `feature/REPUTATION-001-*` |
 
 ## 12. Danh sách [cần xác nhận]
 
-Đánh số toàn thiết kế: 1–4 và 13 đã đóng (§13), 5–11 ở đây, 12 ở `Processing_Flow.md` §9.
+Đánh số toàn thiết kế: 1–4 và 13 đã đóng (§13), 5–11, 14 ở đây, 12 ở `Processing_Flow.md` §9.
 
 | # | Nội dung | Loại |
 |---|---|---|
@@ -474,6 +483,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 | 9 | Mở transaction mới (`REQUIRES_NEW`) trong `afterCommit` (Spring: tài nguyên transaction cũ còn bind lúc `afterCommit`) [Inference — theo Javadoc `TransactionSynchronization`] | Không chặn — test tích hợp refresher |
 | 10 | Kiểm `spring.task.scheduling.pool.size` 4 đủ (MATCH-001 `[cần xác nhận #10]`) | Không chặn |
 | 11 | Thông báo "rating nhận" (Business_Rules §8.6) mâu thuẫn BC-R04 (không tiết lộ đối phương đã đánh giá) — NOTIFICATION-001 chốt nội dung; REPUTATION-001 chỉ phát `MatchRatedEvent` | Không chặn — chuyển NOTIFICATION-001 |
+| 14 | ~~Report qua chat của đội không được ghép làm trận không sạch lúc hoàn thành~~ — **user chốt 2026-11-15:** chỉ tính report của đối thủ thật + mercenary của trận (§5.2 `applyCompletion`, không thêm câu) | Đã đóng |
 
 ## 13. Quyết định đã chốt (user, 2026-11-12)
 
@@ -497,7 +507,7 @@ Thiết kế chi tiết ở MERCENARY-001 `Component_Class_Design.md` §4.10, §
 | §4.3 `DisputeService`, §5.3 `DisputeContextView` | + `reportedType`, `callerIsReportedUser`; report nhắm vào cá nhân → caller phải là người bị report (`REPORT_009`), không kiểm trạng thái đội |
 | §4.7 event | `TeamReportedEvent`, `ReportDisputedEvent`, `DisputeResolvedEvent`: `reporterTeamId/reportedTeamId` → `reporterType, reporterId, reportedType, reportedId` |
 | §4.8 huy hiệu | `TeamVerificationRefresher` → `VerificationRefresher` (gom id đội + cá nhân, tối đa 1 câu mỗi loại); `TeamVerificationJobService` / `TeamVerificationScheduler` → `VerificationJobService` / `VerificationScheduler` (thêm vòng cá nhân) |
-| §5.2, §5.3 truy vấn đội ↔ đội | `findRatingContext` (`authorRated`/`opponentRated`), `findMatchRatingRows`, `findByMatchIdAndRaterType…`, `findReportContext`, `findTeamReports`/`countTeamReports`, `findAdminDisputes`/`countAdminDisputes`/`findAdminDisputeDetail`, `resolveIfPending`, sao trung bình trong `TeamReputationSql.STATS`: thêm `application_id IS NULL`. `noshow` của STATS và trận sạch trong `applyCompletion` **giữ** mọi report nhắm vào đội của kèo (kể cả từ mercenary — BR-ME14, user chốt 2026-11-14); report trận ngoài hệ thống có `match_id = NULL` nên không vào STATS |
+| §5.2, §5.3 truy vấn đội ↔ đội | `findRatingContext` (`authorRated`/`opponentRated`), `findMatchRatingRows`, `findByMatchIdAndRaterType…`, `findReportContext`, `findTeamReports`/`countTeamReports`, `findAdminDisputes`/`countAdminDisputes`/`findAdminDisputeDetail`, `resolveIfPending`, sao trung bình trong `TeamReputationSql.STATS`: thêm `application_id IS NULL`. `noshow` của STATS **giữ** mọi report bùng nhắm vào đội của kèo; trận sạch trong `applyCompletion` xét report của đối thủ thật + mercenary (v1.2, user chốt 2026-11-15) (kể cả từ mercenary — BR-ME14, user chốt 2026-11-14); report trận ngoài hệ thống có `match_id = NULL` nên không vào STATS |
 | §5.2 `applyDecision` | `RETURNING` thêm `reported_type` |
 | Migration | Cột `application_id`, `external_match_id` của `rating`/`report` (`match_id` thành nullable — luồng đội ↔ đội luôn có, CHECK của V9), `"user".verified_at`: V9 (MERCENARY-001 §5.1); V8 không đổi |
 | §4.3 `findDisputeContext` | Không `JOIN match` bắt buộc (report trận ngoài có `match_id = NULL`) |

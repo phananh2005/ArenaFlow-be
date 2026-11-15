@@ -1,5 +1,19 @@
 # CHANGELOG — VENUE-001 Quản lý địa điểm sân
 
+## [v4.1] — 2026-11-15
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE: ghi chú FK `venue_report.reporter_id` trỏ chính sách cùng loại sang `conversation_message.sender_user_id` ở V6 (MATCH-001 v2.4 bỏ bảng `chat_message`), không ảnh hưởng FE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE (`chat_message` ở V7 → `conversation_message` ở V6), không ảnh hưởng FE | MATCH-001 v2.4 / MATCH-002 v2.0: mọi chat dùng `conversation_message` | Không |
+| 2 | Header 3 tài liệu | Ghi nhận | v4.0 → v4.1 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract: không đổi.
+
 ## [v4.0] — 2026-11-14
 
 **Type:** MAJOR (2.1 thêm field bắt buộc `wardId` — request cũ không gửi sẽ bị `400`) · **Tóm tắt:** Địa điểm có phường/xã bắt buộc khi thêm / sửa (BR-V11) để tìm kèo mercenary không GPS và hiện khu vực "phường, tỉnh" của sân (MERCENARY-001).

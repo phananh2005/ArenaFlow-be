@@ -68,6 +68,7 @@
 - [ ] Thỏa thuận chi phí chỉ hiển thị, không thanh toán
 
 #### NOTIFICATION DOMAIN
+- [ ] Cuộc chat giữa hai đội mở cho cả luồng A (từ khi gửi request) và luồng B (từ khi nhận kèo); nhắn được / chỉ xem đúng BR-N05
 - [ ] Chat lưu 90 ngày sau Match kết thúc
 - [ ] Notification lưu 30 ngày
 - [ ] 11 loại notification hoạt động đúng
@@ -364,9 +365,27 @@
 - Reliability Score của đội bị report bị trừ theo mức tăng dần (xem Business_Rules.md §3.2); chuỗi trận sạch của đội bị report về 0, +2 / bonus đã cộng không bị thu hồi (user chốt 2026-11-12)
 - Đội bị report nhận notification
 - (Nếu report bùng) Match bị loại khỏi tử số Completion Rate của đội bị report ngay; có 24h để tranh chấp
-- Match CANCELLED sau khi đã CONFIRMED: chỉ report được "giao tiếp tệ", loại khác bị từ chối; Match OPEN/CONFIRMED/EXPIRED hoặc CANCELLED khi còn OPEN: không report được (BR-R07 — user chốt 2026-11-12)
+- Match CANCELLED sau khi đã CONFIRMED: chỉ report được "giao tiếp tệ", loại khác bị từ chối; Match OPEN/CONFIRMED/EXPIRED hoặc CANCELLED khi còn OPEN mà hai đội chưa có tin nhắn trong cuộc chat của kèo: không report được (BR-R07 — user chốt 2026-11-12; report qua chat: AC-R08)
 - Người là đội trưởng của cả hai đội trong trận → bị từ chối, không lưu report (BR-R08)
 - Đội của người report INACTIVE hoặc DISBANDED → bị từ chối; đội bị report INACTIVE hoặc DISBANDED vẫn report được (BR-R10)
+
+---
+
+### AC-R08: Report "giao tiếp tệ" qua chat hai đội
+
+**Given:** Cuộc chat giữa hai đội của một kèo (BR-N04) đã có ít nhất 1 tin nhắn; đội của người report ACTIVE (BR-R10)
+
+**When:** Đội trưởng một đội report đội kia loại "giao tiếp tệ" với lý do 1–1000 ký tự (BR-R09)
+
+**Then:**
+- Report được nhận bất kể trạng thái request (PENDING, REJECTED, SUPERSEDED, EXPIRED, WITHDRAWN), Pairing (NEGOTIATING, SUPERSEDED, EXPIRED) và kèo (OPEN, CONFIRMED trước trận, CANCELLED, EXPIRED) (BR-R07)
+- Vd: kèo luồng A của Alpha, request của Y còn PENDING, đội trưởng Y chửi Alpha trong chat → Alpha report Y ngay; report tự chấp nhận, Y bị trừ theo §3.2 (−2 nếu lần 1), chuỗi trận sạch của Y về 0, Y nhận notification
+- Hai đội đã ghép: report được ngay khi kèo CONFIRMED trước trận
+- Chọn loại khác "giao tiếp tệ" khi trận chưa ARCHIVED/COMPLETED → bị từ chối
+- Cuộc chat chưa có tin nhắn nào và kèo chưa ARCHIVED/COMPLETED/CANCELLED sau khi ghép → không report được
+- Alpha report Y lần thứ hai loại "giao tiếp tệ" cho cùng kèo (qua chat hay sau trận) → bị từ chối; Y vẫn report Alpha được một lần
+- Người là đội trưởng của cả hai đội → bị từ chối (BR-R08)
+- Người đã giải tán đội của mình → bị từ chối, vẫn đọc được chat (BR-R10, BR-N05)
 
 ---
 
@@ -575,6 +594,7 @@
 - Tin được lưu và bên kia nhận real-time; hiển thị người thực sự gửi (BR-ME16)
 - Đơn APPROVED vẫn nhắn được sau khi Match kết thúc hoặc bị hủy, đến khi hết hạn lưu
 - Đơn REJECTED/WITHDRAWN → chỉ xem lịch sử, không gửi được
+- Đội tuyển đã giải tán → người đã giải tán đội đọc được lịch sử, không gửi được; ứng viên vẫn nhắn theo trạng thái đơn (BR-ME16)
 - Tin nhắn lưu 90 ngày sau khi Match kết thúc
 
 ---
@@ -679,18 +699,53 @@
 
 ---
 
-### AC-N01: Chat giữa 2 đội trưởng (luồng B, real-time)
+### AC-N01: Chat giữa 2 đội trưởng trong một kèo (luồng A và B, real-time)
 
-**Given:** Pairing đang NEGOTIATING
+**Given:** Cuộc chat giữa đội tạo kèo và đội tham gia đã mở (luồng A: đội gửi Match Request, kể cả request còn PENDING; luồng B: đội nhận kèo) và đang nhắn được (BR-N04, BR-N05)
 
-**When:** Đội trưởng A gửi tin nhắn
+**When:** Đội trưởng hiện tại của đội A gửi tin nhắn
 
 **Then:**
-- Tin nhắn được lưu thuộc Pairing: đội gửi, người thực sự gửi, nội dung (1..1000 ký tự), thời điểm gửi, trạng thái đã đọc; không lưu người nhận (= đội còn lại của Pairing)
+- Tin nhắn được lưu thuộc cuộc chat: đội gửi, người thực sự gửi, nội dung (1..1000 ký tự), thời điểm gửi, trạng thái đã đọc; không lưu người nhận (= đội còn lại của cuộc chat)
 - Tin nhắn được gửi real-time cho đội trưởng B (độ trễ <1s)
 - Mỗi tin hiển thị tên đội gửi + tên (và ảnh) người thực sự đã gửi; tin cũ giữ người gửi lúc đó sau khi đội chuyển quyền đội trưởng (vd đội Beta: tin của Nam vẫn "Beta · Nam" sau khi Lan làm đội trưởng); người gửi đã xóa tài khoản → "Người dùng đã xóa", không ảnh (BR-N03)
 - Đầu phòng chat hiển thị tên hai đội + đội trưởng hiện tại của mỗi đội
-- Chat lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED/EXPIRED)
+- Thành viên không phải đội trưởng, đội trưởng cũ (đã chuyển quyền) và đội không thuộc cuộc chat → không xem, không gửi được (BR-N04)
+- Chat lưu 90 ngày sau khi Match kết thúc (BR-N01)
+
+---
+
+### AC-N03: Nhắn được / chỉ xem theo kết quả ghép kèo
+
+**Given:** Kèo luồng A của đội Alpha; đội X, Y, Z gửi request (3 cuộc chat Alpha–X, Alpha–Y, Alpha–Z)
+
+**When:** Alpha chấp nhận request của X; sau đó kèo bị hủy (bởi Alpha hoặc X)
+
+**Then:**
+- Trước khi chấp nhận: cả 3 cuộc chat nhắn được; X không thấy chat Alpha–Y, Alpha–Z
+- Sau khi chấp nhận: chat Alpha–X vẫn nhắn được trước, trong, sau trận; Alpha–Y, Alpha–Z (SUPERSEDED) chỉ xem — cả hai phía không gửi được, vẫn đọc lịch sử (BR-N05)
+- Sau khi kèo bị hủy: chat Alpha–X vẫn nhắn được đến khi chat bị xóa (90 ngày sau lúc hủy — BR-N01)
+- Request bị từ chối, rút khi còn PENDING hoặc hết hạn → cuộc chat của request đó chỉ xem
+- Luồng B tương tự: Pairing CONFIRMED → chat nhắn tiếp trong chính cuộc chat đó; Pairing SUPERSEDED/EXPIRED → chỉ xem
+- Kèo OPEN quá thời hạn bài đăng: gửi tin trong chat của request PENDING / Pairing NEGOTIATING bị từ chối "Kèo đã hết hạn", kèo chuyển EXPIRED (BR-M17)
+- Đội tạm ngưng, đội còn lại không hoạt động, bộ môn tắt → vẫn nhắn được; đội đã giải tán → người đã giải tán đội chỉ xem (đọc được, không gửi), thành viên khác của đội đó không xem được; đội còn lại vẫn nhắn (BR-N05)
+
+---
+
+### AC-N04: Danh sách tin nhắn của tôi
+
+**Given:** Minh là đội trưởng Alpha và Delta. Kèo của Alpha có chat với Beta (Beta có tin Minh chưa đọc) và Gamma (request của Gamma đã bị thay thế). Delta có chat theo đơn với ứng viên C. Kèo của Alpha vừa có thêm Epsilon gửi request, chưa ai nhắn
+
+**When:** Minh mở "Tin nhắn"
+
+**Then:**
+- Có 4 dòng Alpha–Beta, Alpha–Gamma, Alpha–Epsilon, Delta–C; cuộc chat có tin mới hơn ở trên; Alpha–Epsilon không có tin cuối, xếp theo lúc Epsilon gửi request gần nhất (BR-N06)
+- Epsilon rút request rồi gửi lại khi vẫn chưa ai nhắn → Alpha–Epsilon lên trên các cuộc chat có tin cũ hơn lần gửi lại
+- Alpha–Beta có dấu chưa đọc; Alpha–Gamma đánh dấu chỉ xem
+- Sau khi Minh chuyển quyền đội trưởng Alpha cho Lan: danh sách của Minh chỉ còn Delta–C; danh sách của Lan có các cuộc chat của Alpha
+- Nam giải tán Beta → danh sách của Nam vẫn có Alpha–Beta (chỉ xem); thành viên khác của Beta không thấy
+- Bên kia đã xóa tài khoản → hiện "Người dùng đã xóa", không ảnh
+- Người không tham gia cuộc chat nào → danh sách rỗng
 
 ---
 
@@ -763,15 +818,16 @@
 
 1. User A đăng ký qua Google, hoàn thiện hồ sơ, tạo đội "Team Alpha"
 2. User A tạo kèo luồng A (sân X, ngày mai 18:00-20:00, 7v7, trình độ "Nhiệt tình")
-3. User B (đội "Team Beta") tìm kèo, thấy kèo của A, gửi Match Request
+3. User B (đội "Team Beta") tìm kèo, thấy kèo của A, gửi Match Request → cuộc chat Alpha–Beta mở; A và B nhắn "Sân X có chỗ để xe không?" — "Có" khi request còn PENDING
 4. User A xem request, chấp nhận
-5. → Match chuyển CONFIRMED; request chuyển ACCEPTED; User A và B nhận notification
+5. → Match chuyển CONFIRMED; request chuyển ACCEPTED; User A và B nhận notification; A và B tiếp tục nhắn trong cùng cuộc chat
 6. (Sau trận) User A đánh giá User B: 5 sao → User B nhận +1 Reliability
 7. → Match chuyển COMPLETED; Completion Rate của cả 2 tăng
 
 **Expected:**
 - Match lifecycle: OPEN → CONFIRMED → ARCHIVED → COMPLETED
 - Request lifecycle: PENDING → ACCEPTED
+- Chat Alpha–Beta nhắn được từ lúc gửi request, kể cả sau trận, đến khi bị xóa 90 ngày sau Match kết thúc (BR-N05, BR-N01)
 - Reliability Score: cả 2 đội +2 (hoàn thành), User B thêm +1 (rating 5 sao)
 - Completion Rate: tử số +1, mẫu số +1
 
@@ -780,7 +836,7 @@
 ### Scenario 2: Happy path — Tạo kèo luồng B, thương lượng, xác nhận
 
 1. User A tạo kèo luồng B (lựa chọn sân Y/Z, khung giờ 18:00/19:00, chưa chốt)
-2. User B nhận bài đăng → Pairing NEGOTIATING → chat mở
+2. User B nhận bài đăng → Pairing NEGOTIATING → cuộc chat giữa hai đội mở
 3. User A và B chat: "18:00 sân Y được không?" — "OK" — "50-50 tiền sân?" — "OK"
 4. User B chốt phương án sân Y + khung 18:00; User A nhập chi phí 50-50 tiền sân (mỗi lần gói đổi, xác nhận của cả hai bị xoá)
 5. User A xác nhận gói qua UI (thời điểm T1)
@@ -791,7 +847,7 @@
 **Expected:**
 - Pairing lifecycle: NEGOTIATING → CONFIRMED
 - Match lifecycle: OPEN → CONFIRMED
-- Chat lưu 90 ngày sau Match kết thúc
+- Sau khi ghép, User A và B vẫn nhắn trong chính cuộc chat đó (BR-N05); chat lưu 90 ngày sau Match kết thúc
 - Thời điểm hoàn tất được lưu (T2)
 
 ---
@@ -809,6 +865,7 @@
 - Chỉ 1 Pairing CONFIRMED
 - Pairing thua chuyển SUPERSEDED
 - User C nhận notification "Pairing superseded"
+- Chat của Pairing C thành chỉ xem; chat của Pairing B vẫn nhắn được (BR-N05)
 
 > **Implementation note:** Pairing cập nhật bằng CAS trên trạng thái + `revision` (FE gửi `revision` của gói), Match bằng CAS trên version; retry tối đa 3 lần khi xung đột (ADR-0003 Sửa đổi 2026-11-10).
 
@@ -853,6 +910,7 @@
 **Expected:**
 - Chỉ 1 request ACCEPTED
 - Tối đa 1 request ACCEPTED mỗi Match (ràng buộc dữ liệu)
+- Chat A–C chỉ xem; chat A–B vẫn nhắn được (BR-N05)
 
 ---
 
@@ -921,6 +979,7 @@
 **Expected:**
 - Scheduled job chạy đúng mỗi 5 phút
 - Trạng thái cập nhật đúng (EXPIRED)
+- Chat của các request EXPIRED chỉ xem (BR-N05)
 - Notification gửi đúng
 
 ---
@@ -936,6 +995,22 @@
 **Expected:**
 - Lazy check hoạt động đúng
 - Trạng thái cập nhật ngay khi API gọi
+
+---
+
+### Scenario 12: Chat luồng A — nhiều đội gửi request, ghép rồi hủy
+
+1. Đội Alpha tạo kèo luồng A (ngày mai 18:00)
+2. Đội X, Y, Z gửi request → 3 cuộc chat Alpha–X, Alpha–Y, Alpha–Z mở; đội trưởng Alpha nhắn riêng với từng đội
+3. Đội Z rút request khi còn PENDING → chat Alpha–Z chỉ xem
+4. Alpha chấp nhận X → Match CONFIRMED; request Y SUPERSEDED → chat Alpha–Y chỉ xem
+5. Ngày mai 10:00, X hủy kèo (rút request đã ACCEPTED — BR-M12) → Match CANCELLED; X bị trừ -5
+6. Đội trưởng Alpha và X vẫn nhắn trong chat Alpha–X (vd hẹn đá lại)
+
+**Expected:**
+- Chat Alpha–X nhắn được trước và sau khi hủy; bị xóa 90 ngày sau lúc hủy (BR-N01)
+- Chat Alpha–Y, Alpha–Z: đọc được lịch sử, không gửi được (BR-N05)
+- Đội trưởng Y không thấy chat Alpha–X, Alpha–Z (BR-N04)
 
 ---
 
@@ -966,5 +1041,5 @@
 
 ## 6. Trạng thái tài liệu
 
-**Trạng thái:** ✅ **Hoàn chỉnh** — Tất cả acceptance criteria đã được định nghĩa rõ ràng, không còn [cần xác nhận]  
+**Trạng thái:** ✅ **Hoàn chỉnh** — Tất cả acceptance criteria đã được định nghĩa rõ ràng  
 **Sẵn sàng cho:** Implementation và testing

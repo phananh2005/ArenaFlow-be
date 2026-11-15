@@ -9,13 +9,13 @@
 | Mã chức năng | `REPUTATION-001` |
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo | ArenaFlow-be |
-| Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1.1, §1.2 và MATCH-001 `API_Spec.md` §1.1; kèo, trạng thái kèo, mã `MATCH_*`: MATCH-001 `API_Spec.md`; mã `TEAM_*`, `AUTH_*`: USER-001/USER-002 `API_Spec.md`; hiển thị user đã xoá ở API Admin: [ADR-0002](../../decisions/0002-soft-delete-policy.md) (Sửa đổi 2026-11-12) |
-| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.9) — UC-R01..R07; BR-ME14 (report của mercenary với đội); BR-R01..R10, BC-R01..R07; Business_Rules §3.1–§3.3, §6, §7, §8.2, §8.4; AC-R01..R07; Scenario 8, 9 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-13, cập nhật 2026-11-14) — lịch sử thay đổi: `CHANGELOG.md` |
+| Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1.1, §1.2 và MATCH-001 `API_Spec.md` §1.1; kèo, trạng thái kèo, mã `MATCH_*`: MATCH-001 `API_Spec.md`; cuộc trò chuyện giữa hai đội, mã `CHAT_*`: MATCH-001 `API_Spec.md` §1.6, §5; mã `TEAM_*`, `AUTH_*`: USER-001/USER-002 `API_Spec.md`; hiển thị user đã xoá ở API Admin: [ADR-0002](../../decisions/0002-soft-delete-policy.md) (Sửa đổi 2026-11-12) |
+| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10) — UC-R01..R07; BR-ME14 (report của mercenary với đội); BR-R01..R10 (BR-R07 trường hợp 3: report qua chat hai đội), BC-R01..R07; BR-N04; Business_Rules §3.1–§3.3, §6, §7, §8.2, §8.4; AC-R01..R08; Scenario 8, 9 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.2** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
-Sau trận, đội trưởng **đánh giá** đối phương (1–5 sao hoặc "đội kia không đến") và có thể **report** đối phương (bùng, chơi xấu, giao tiếp tệ, không đúng trình độ). Report được chấp nhận ngay và trừ điểm uy tín của đội bị report. Đội bị report **bùng** có 24 giờ để **tranh chấp**; Admin xem bằng chứng hai bên và quyết định cuối cùng. Mọi người dùng xem được **uy tín đội**: điểm uy tín (Reliability Score), tỉ lệ hoàn thành (Completion Rate), sao trung bình và huy hiệu xác minh.
+Sau trận, đội trưởng **đánh giá** đối phương (1–5 sao hoặc "đội kia không đến") và có thể **report** đối phương (bùng, chơi xấu, giao tiếp tệ, không đúng trình độ). Ngoài ra, hai đội đã nhắn tin với nhau trong cuộc trò chuyện của một kèo (MATCH-001 §1.6) report được nhau loại **giao tiếp tệ** ở mọi trạng thái kèo (2.10). Report được chấp nhận ngay và trừ điểm uy tín của đội bị report. Đội bị report **bùng** có 24 giờ để **tranh chấp**; Admin xem bằng chứng hai bên và quyết định cuối cùng. Mọi người dùng xem được **uy tín đội**: điểm uy tín (Reliability Score), tỉ lệ hoàn thành (Completion Rate), sao trung bình và huy hiệu xác minh.
 
 **Ngoài phạm vi:** đánh giá / report / uy tín **cá nhân** (người chơi lẻ — MERCENARY-001) · gửi thông báo (NOTIFICATION-001) · liên kết số điện thoại cho tài khoản đăng nhập bằng Google/Facebook (chưa có API) · sửa / xoá đánh giá hoặc report (không hỗ trợ) · header `Idempotency-Key` (`api-convention.md` §13) chưa hỗ trợ — FE chặn bấm lặp nút gửi.
 
@@ -32,6 +32,7 @@ Sau trận, đội trưởng **đánh giá** đối phương (1–5 sao hoặc "
   - Người gọi là đội trưởng của cả hai đội (BR-M18 cho phép ghép như vậy) → không được đánh giá (`422 RATING_003`) hay report (`422 REPORT_005`).
   - Đội của người gọi đang tạm ngưng (`INACTIVE`, Admin khoá) → `422 TEAM_015`.
   - Chỉ kiểm đội của người gọi: đội được đánh giá / bị report đang tạm ngưng hoặc đã giải tán vẫn được đánh giá / report — FE không ẩn nút theo trạng thái đội đối phương.
+- Report qua chat (2.10): đội trưởng hiện tại của một trong hai đội của cuộc trò chuyện, đội `ACTIVE`; không gửi `teamId` — đội bị report là đội còn lại của cuộc trò chuyện (có thể là đội không được ghép). Người là đội trưởng cả hai đội → `422 REPORT_005`.
 - Xem đánh giá của trận (2.2), danh sách report của đội (2.4), tranh chấp (2.5): đội trưởng của đội `ACTIVE` trong path/query hoặc của đội bị report. Đội đã giải tán → `422 TEAM_016`; đội đang tạm ngưng (`INACTIVE`, Admin khoá) → `422 TEAM_015`.
 - Xem uy tín đội (2.9): mọi người dùng đã đăng nhập; không hạn chế theo trạng thái đội.
 - Thành viên thường (không phải đội trưởng) không xem được đánh giá / report của đội.
@@ -46,7 +47,7 @@ Sau trận, đội trưởng **đánh giá** đối phương (1–5 sao hoặc "
 | Đánh giá đầu tiên là "đội kia không đến" | Đội đánh giá: +2 (và chuỗi như dưới) · đội bị đánh giá vắng: 0, chuỗi trận sạch giữ nguyên | — |
 | Chuỗi trận sạch chạm bội số của 5 lúc trận `COMPLETED` (5, 15, 25… → +5; 10, 20, 30… → +10) | Đội đạt mốc | +5 / +10 (cộng thêm vào +2) |
 | Nhận đánh giá 5 sao | Đội được đánh giá | +1 |
-| Bị report (2.3), kể cả bị **mercenary** đá thuê cho đội report (MERCENARY-001 `API_Spec.md` 2.20 — BR-ME14, v1.1) | Đội bị report | Theo bảng dưới, theo **số lần bị report loại đó kể cả lần này** (report của đội đối phương và của mercenary cộng chung một bộ đếm) |
+| Bị report (2.3, 2.10), kể cả bị **mercenary** đá thuê cho đội report (MERCENARY-001 `API_Spec.md` 2.20 — BR-ME14, v1.1) | Đội bị report | Theo bảng dưới, theo **số lần bị report loại đó kể cả lần này** (report của đội đối phương và của mercenary cộng chung một bộ đếm) |
 | Admin bác report bùng (2.8, `REJECTED`) | Đội bị report | Hoàn lại đúng số điểm đã thực trừ của report đó |
 | Admin xác nhận report bùng (2.8, `CONFIRMED`) | — | Không trừ thêm |
 | Huỷ kèo đã ghép / rút yêu cầu đã chấp nhận | Đội huỷ | MATCH-001 `API_Spec.md` §1.5 |
@@ -59,7 +60,7 @@ Sau trận, đội trưởng **đánh giá** đối phương (1–5 sao hoặc "
 | `SKILL_MISMATCH` (không đúng trình độ) | -1 | -2 | -3 | -4 |
 
 **Chuỗi trận sạch** (đếm riêng mỗi đội):
-- Lúc trận chuyển `COMPLETED`: đội **không** có report nào (chưa bị bác) trong trận → chuỗi +1; có → chuỗi về 0. Đội bị đánh giá "không đến" ở lần đánh giá đầu tiên: chuỗi **giữ nguyên** — chỉ report bùng mới cắt chuỗi.
+- Lúc trận chuyển `COMPLETED`: đội **không** bị report (chưa bị bác) trong trận **bởi đội đối phương của trận** hoặc **bởi mercenary đã được duyệt đá thuê trong trận đó** (khi hệ thống có chức năng tuyển mercenary — MERCENARY-001) → chuỗi +1; có → chuỗi về 0. Report của ứng viên mercenary bị từ chối / đã rút (qua chat theo đơn) không làm trận mất "sạch". Report "giao tiếp tệ" qua chat (2.10) của đội **không được ghép** chỉ đưa chuỗi về 0 lúc gửi (dòng dưới), không làm trận bị tính là có report (user chốt 2026-11-15). Đội bị đánh giá "không đến" ở lần đánh giá đầu tiên: chuỗi **giữ nguyên** — chỉ report bùng mới cắt chuỗi.
 - Bị report ở bất kỳ trận nào, kể cả sau khi trận đã `COMPLETED` → chuỗi về 0; điểm +2 / thưởng chuỗi đã cộng **không** bị thu hồi.
 - Huỷ kèo đã ghép / rút yêu cầu đã chấp nhận → chuỗi của đội huỷ về 0.
 - Chuỗi chạm bội số của 5 → số lần bị report của **mọi loại** về 0 (lần report tiếp theo tính "Lần 1").
@@ -94,6 +95,7 @@ Hệ thống cấp / thu hồi ngay sau mỗi đánh giá, report, quyết đị
 
 - Mercenary đá thuê cho đội cũng report được đội (MERCENARY-001 2.20): cùng 4 loại, cùng mức trừ, cùng tác động lên chuỗi trận sạch và tỉ lệ hoàn thành của đội (v1.1). Các report này **không** nằm trong 2.4 (xem MERCENARY-001 2.21); đội tranh chấp report bùng của mercenary bằng 2.5 như report của đội đối phương; Admin xử lý ở hàng chờ riêng (MERCENARY-001 2.25–2.27). Trận ngoài hệ thống (MERCENARY-001 2.28) không tính vào tỉ lệ hoàn thành của đội.
 - Report được chấp nhận ngay (`AUTO_ACCEPTED`) và trừ điểm (§1.3). Một trận, mỗi đội report đội kia **tối đa một lần cho mỗi loại**; được gửi nhiều loại khác nhau. Không giới hạn thời gian report sau trận.
+- **Report qua chat** (2.10, BR-R07): cuộc trò chuyện giữa hai đội của kèo đã có ít nhất 1 tin → report "giao tiếp tệ" bất kể trạng thái yêu cầu / thương lượng / kèo; gắn với kèo của cuộc trò chuyện. "Mỗi loại một lần" tính chung cho 2.3 và 2.10 (vd đã report "giao tiếp tệ" qua chat trước trận → sau trận 2.3 cùng loại → `REPORT_004`; các loại khác vẫn report được sau trận).
 - Chỉ report **bùng** (`NOSHOW`) có tranh chấp: đội bị report gửi bằng chứng (văn bản) trong **24 giờ** kể từ lúc report (`disputeDeadlineAt`). Hết hạn mà không tranh chấp → report được xác nhận tự động, API trả `status = "CONFIRMED"`.
 - Trong lúc tranh chấp (`DISPUTED`) điểm đã trừ được giữ nguyên. Admin quyết định:
   - `CONFIRMED` (report đúng): giữ nguyên mức đã trừ, không trừ thêm; trận không vào tử số Completion Rate.
@@ -113,6 +115,7 @@ Hệ thống cấp / thu hồi ngay sau mỗi đánh giá, report, quyết đị
 | 2.7 | `GET /api/v1/admin/disputes/{disputeId}` | Admin: chi tiết tranh chấp | Admin | 200 |
 | 2.8 | `PATCH /api/v1/admin/disputes/{disputeId}/resolve` | Admin: quyết định tranh chấp | Admin | 200 |
 | 2.9 | `GET /api/v1/teams/{teamId}/reputation` | Xem uy tín đội | Người dùng đã đăng nhập | 200 |
+| 2.10 | `POST /api/v1/conversations/{conversationId}/reports` | Report "giao tiếp tệ" qua chat hai đội | Đội trưởng của một trong hai đội của cuộc trò chuyện | 201 |
 
 ---
 
@@ -291,7 +294,7 @@ Trận chưa kết thúc / không diễn ra → `200` với `given = null`, `rec
 | 403 | `TEAM_002` | Người gọi không là đội trưởng của đội nào trong trận (kể cả đội đã giải tán) | Ẩn nút "Report" |
 | 422 | `TEAM_015` | Đội của người gọi đang tạm ngưng hoạt động | Hiện message |
 | 422 | `REPORT_005` | Người gọi là đội trưởng của cả hai đội | Ẩn nút, hiện message |
-| 422 | `REPORT_002` | Trận chưa kết thúc hoặc không có đối phương (bảng trên) | Hiện message |
+| 422 | `REPORT_002` | Trận chưa kết thúc hoặc không có đối phương (bảng trên) | Hiện message; nếu hai đội đã nhắn tin, report "giao tiếp tệ" từ phòng chat (2.10) |
 | 422 | `REPORT_003` | Kèo đã huỷ sau khi ghép mà `reportType ≠ BAD_COMMUNICATION` | Chỉ cho chọn "Giao tiếp tệ" với kèo đã huỷ |
 | 409 | `REPORT_004` | Đội mình đã report đội kia loại này trong trận | Ẩn loại đã report (xem 2.4 `SENT`) |
 | 409 | `MATCH_014` | §1.1 | Thử lại |
@@ -300,7 +303,7 @@ Trận chưa kết thúc / không diễn ra → `200` với `given = null`, `rec
 
 ### 2.4. Danh sách report của đội — `GET /api/v1/teams/{teamId}/reports`
 
-**Dùng khi:** màn hình "Report" của đội — tab **Đội bị report** (`RECEIVED`: xem lý do, điểm bị trừ, nút "Tranh chấp") và tab **Đội đã report** (`SENT`). Chỉ gồm report **giữa hai đội**; report giữa đội và mercenary ở MERCENARY-001 `API_Spec.md` 2.21 (v1.1).
+**Dùng khi:** màn hình "Report" của đội — tab **Đội bị report** (`RECEIVED`: xem lý do, điểm bị trừ, nút "Tranh chấp") và tab **Đội đã report** (`SENT`). Chỉ gồm report **giữa hai đội** — sau trận (2.3) và qua chat (2.10; `counterpartTeam` có thể là đội không được ghép của kèo); report giữa đội và mercenary ở MERCENARY-001 `API_Spec.md` 2.21 (v1.1).
 **Ai gọi được:** đội trưởng của đội `ACTIVE` có ID `teamId`; đội đã giải tán → `422 TEAM_016`, đội đang tạm ngưng → `422 TEAM_015`.
 
 **Path / Query params**
@@ -638,6 +641,69 @@ Ví dụ: người gửi tranh chấp đã xoá tài khoản → tên thật + `
 | 400 | `VALIDATION_ERROR` | `teamId` sai định dạng | — |
 | 404 | `TEAM_001` | Không có đội | Quay lại |
 
+---
+
+### 2.10. Report "giao tiếp tệ" qua chat hai đội — `POST /api/v1/conversations/{conversationId}/reports`
+
+**Dùng khi:** nút "Report" trong phòng chat giữa hai đội của một kèo (UC-R02, AC-R08) — luồng A (chat từ yêu cầu ghép kèo) hoặc luồng B (chat của thương lượng), MATCH-001 `API_Spec.md` §1.6. Report luôn là loại **`BAD_COMMUNICATION`** (giao tiếp tệ).
+**Ai gọi được:** đội trưởng hiện tại của một trong hai đội của cuộc trò chuyện, đội đang `ACTIVE` (BR-R10). Không gửi `teamId` — đội report = đội của người gọi trong cuộc trò chuyện, đội bị report = đội còn lại (trạng thái đội bị report không ảnh hưởng).
+
+**Điều kiện** (BR-R07 trường hợp 3): cuộc trò chuyện đã có **ít nhất 1 tin nhắn** (của bất kỳ bên nào), **bất kể** trạng thái yêu cầu ghép kèo (`PENDING`, `REJECTED`, `SUPERSEDED`, `EXPIRED`, `WITHDRAWN`, `ACCEPTED`), thương lượng (`NEGOTIATING`, `SUPERSEDED`, `EXPIRED`, `CONFIRMED`) và kèo (`OPEN`, `CONFIRMED` trước trận, `CANCELLED`, `EXPIRED`, `ARCHIVED`, `COMPLETED`). Mỗi chiều (đội report → đội bị report) **tối đa 1 report "giao tiếp tệ" cho mỗi kèo**, dù gửi qua 2.10 hay 2.3.
+
+Report được chấp nhận ngay (`AUTO_ACCEPTED`), trừ điểm uy tín đội bị report theo bảng §1.3 (dòng `BAD_COMMUNICATION`, cùng bộ đếm số lần với report sau trận), chuỗi trận sạch của đội bị report về 0; đội bị report nhận thông báo. Report gắn với **kèo của cuộc trò chuyện** (`matchId`), kể cả khi hai đội không được ghép; hiện ở 2.4 của cả hai đội như report khác. Không tranh chấp (chỉ report bùng có tranh chấp).
+
+Ví dụ: kèo luồng A của Alpha, yêu cầu của Y còn `PENDING`; đội trưởng Y chửi Alpha trong chat → đội trưởng Alpha report Y ngay → Y −2 (lần đầu bị report loại này), chuỗi trận sạch của Y về 0. Sau khi yêu cầu của Y bị `SUPERSEDED`, Alpha report Y lần nữa → `409 REPORT_004`; Y vẫn report Alpha được một lần.
+
+**Request body**
+
+| Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `reason` | string | Có | 1..1000 ký tự sau khi bỏ khoảng trắng đầu/cuối (BR-R09) | `"Đội trưởng bên kia dùng lời lẽ xúc phạm trong chat"` |
+
+```json
+{ "reason": "Đội trưởng bên kia dùng lời lẽ xúc phạm trong chat" }
+```
+
+**Response 201** — Report (§4.4) theo góc nhìn đội gửi (`direction = "SENT"`); `reportType = "BAD_COMMUNICATION"`, `matchId` = kèo của cuộc trò chuyện, `counterpartTeam` = đội bị report.
+
+```json
+{
+  "data": {
+    "reportId": "01936c20-2b3c-7d4e-9f50-6a7b8c9d0e09",
+    "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b01",
+    "matchStartsAt": "2026-11-16T11:00:00Z",
+    "direction": "SENT",
+    "counterpartTeam": { "teamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e05", "name": "Team Y", "avatarUrl": null },
+    "reportType": "BAD_COMMUNICATION",
+    "reason": "Đội trưởng bên kia dùng lời lẽ xúc phạm trong chat",
+    "status": "AUTO_ACCEPTED",
+    "disputeDeadlineAt": null,
+    "canDispute": false,
+    "reliabilityPenalty": null,
+    "dispute": null,
+    "createdAt": "2026-11-15T09:20:00Z"
+  }
+}
+```
+
+**Lỗi** (thứ tự kiểm từ trên xuống)
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 400 | `VALIDATION_ERROR` | Thiếu `reason` / rỗng sau trim / > 1000 | Hiện lỗi cạnh field |
+| 404 | `CHAT_002` | Không có cuộc trò chuyện (hoặc đã bị xoá theo hạn lưu) | Quay lại |
+| 404 | `USER_001` | Tài khoản đã xoá (token còn hạn) | Xoá token, về đăng nhập |
+| 403 | `CHAT_003` | Người gọi không tham gia cuộc trò chuyện (không là bên nào — vd vừa chuyển quyền đội trưởng; thành viên của đội đã giải tán) | Ẩn nút "Report" |
+| 422 | `REPORT_011` | Cuộc trò chuyện không phải giữa hai đội (vd chat theo đơn ứng tuyển mercenary) | Dùng MERCENARY-001 `API_Spec.md` 2.20 |
+| 422 | `TEAM_016` | Người gọi là người đã giải tán đội của mình (vẫn đọc được chat — MATCH-001 `API_Spec.md` §1.6 — nhưng đội đã giải tán không report được, BR-R10) | Ẩn nút "Report" |
+| 422 | `TEAM_015` | Đội của người gọi đang tạm ngưng hoạt động (BR-R10) | Hiện message |
+| 422 | `REPORT_005` | Người gọi là đội trưởng của cả hai đội (BR-R08) | Ẩn nút, hiện message |
+| 422 | `REPORT_010` | Cuộc trò chuyện chưa có tin nhắn nào | Ẩn nút "Report" tới khi có tin nhắn |
+| 409 | `REPORT_004` | Đội mình đã report đội kia "giao tiếp tệ" trong kèo này (qua chat hoặc sau trận — 2.3) | Ẩn nút; xem ở 2.4 `SENT` |
+| 409 | `MATCH_014` | §1.1 | Thử lại |
+
+---
+
 ## 3. Hành động theo trạng thái
 
 Hai bảng dưới áp dụng cho đội trưởng có đội đang `ACTIVE`; đội của người gọi đang tạm ngưng hoặc đã giải tán → không thao tác nào (§1.2).
@@ -649,10 +715,11 @@ Hai bảng dưới áp dụng cho đội trưởng có đội đang `ACTIVE`; đ
 | `OPEN`, `CONFIRMED`, `EXPIRED` | — | — | — |
 | `CANCELLED` (chưa ghép) | — | — | — |
 | `CANCELLED` (sau khi ghép) | Report `BAD_COMMUNICATION` (2.3) | — | — |
+| Mọi trạng thái — cuộc trò chuyện giữa hai đội đã có tin nhắn | Report `BAD_COMMUNICATION` qua chat (2.10) — cả đội không được ghép | — (`REPORT_005`) | — |
 | `ARCHIVED` | Đánh giá (2.1) → trận `COMPLETED`; report mọi loại (2.3) | — | — |
 | `COMPLETED` | Đánh giá nếu đội mình chưa đánh giá (2.1); report mọi loại (2.3) | — | — |
 
-Ẩn nút "Đánh giá" khi `given ≠ null` (2.2); ẩn loại report đã gửi cho trận (2.4 `SENT`).
+Ẩn nút "Đánh giá" khi `given ≠ null` (2.2); ẩn loại report đã gửi cho trận (2.4 `SENT`) — gồm report "giao tiếp tệ" đã gửi qua chat (2.10).
 
 ### 3.2. Report và tranh chấp
 
@@ -786,12 +853,14 @@ Mã mới của REPUTATION-001:
 | `REPORT_001` | 404 | "Không tìm thấy report" | 2.5 |
 | `REPORT_002` | 422 | "Chỉ report được trận đã kết thúc" | 2.3 |
 | `REPORT_003` | 422 | "Kèo đã huỷ chỉ report được giao tiếp tệ" | 2.3 |
-| `REPORT_004` | 409 | "Bạn đã report đội này với loại này trong trận" | 2.3 |
-| `REPORT_005` | 422 | "Bạn là đội trưởng của cả hai đội, không thể report trận này" | 2.3 |
+| `REPORT_004` | 409 | "Bạn đã report đội này với loại này trong trận" | 2.3, 2.10 |
+| `REPORT_005` | 422 | "Bạn là đội trưởng của cả hai đội, không thể report trận này" | 2.3, 2.10 |
 | `REPORT_006` | 422 | "Chỉ tranh chấp được report bùng" | 2.5 |
 | `REPORT_007` | 422 | "Đã quá hạn 24 giờ để tranh chấp" | 2.5 |
 | `REPORT_008` | 409 | "Report đã được tranh chấp hoặc đã có quyết định" | 2.5 |
 | `REPORT_009` | 403 | "Chỉ người bị report được tranh chấp" | 2.5 (report nhắm vào cá nhân — v1.1) |
+| `REPORT_010` | 422 | "Chỉ report qua chat được khi hai đội đã nhắn tin" | 2.10 (v1.2) |
+| `REPORT_011` | 422 | "Cuộc trò chuyện này không report theo cách này" | 2.10 (v1.2) |
 | `DISPUTE_001` | 404 | "Không tìm thấy tranh chấp" | 2.7, 2.8 |
 | `DISPUTE_002` | 409 | "Tranh chấp đã được xử lý" | 2.8 |
 
@@ -803,12 +872,17 @@ Mã dùng lại:
 | `AUTH_004` | 403 | "Cần quyền quản trị" | USER-001 | 2.6–2.8 |
 | `TEAM_001` | 404 | "Không tìm thấy đội" | USER-001 | 2.2, 2.4, 2.9 |
 | `TEAM_002` | 403 | "Chỉ đội trưởng được thực hiện" | USER-001 | 2.1–2.5 |
-| `TEAM_015` | 422 | "Đội đang tạm ngưng hoạt động" | USER-001 | 2.2, 2.4, 2.5; đội caller ở 2.1/2.3 |
-| `TEAM_016` | 422 | "Đội đã giải tán" | USER-002 | 2.2, 2.4, 2.5 |
+| `TEAM_015` | 422 | "Đội đang tạm ngưng hoạt động" | USER-001 | 2.2, 2.4, 2.5; đội caller ở 2.1/2.3/2.10 |
+| `TEAM_016` | 422 | "Đội đã giải tán" | USER-002 | 2.2, 2.4, 2.5, 2.10 |
 | `MATCH_001` | 404 | "Không tìm thấy kèo" | MATCH-001 | 2.1–2.3 |
 | `MATCH_009` | 403 | "Đội không có quyền với kèo này" | MATCH-001 | 2.2 |
-| `MATCH_014` | 409 | "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại" | MATCH-001 | 2.1, 2.3, 2.5, 2.8 |
+| `MATCH_014` | 409 | "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại" | MATCH-001 | 2.1, 2.3, 2.5, 2.8, 2.10 |
+| `CHAT_002` | 404 | "Không tìm thấy cuộc trò chuyện" | MATCH-001 | 2.10 |
+| `CHAT_003` | 403 | "Bạn không tham gia cuộc trò chuyện này" | MATCH-001 | 2.10 |
+| `USER_001` | 404 | "Không tìm thấy người dùng" | USER-001 | 2.10 (tài khoản đã xoá, token còn hạn) |
 
 ## 6. Danh sách [cần xác nhận]
 
-Không còn điểm mở ảnh hưởng hợp đồng hay hành vi API (user chốt 2026-11-12: §1.3 chuỗi trận sạch khi "không đến" và khi Admin bác report; §1.4 tử số / mẫu số; §1.5 độ trễ huy hiệu).
+14. ~~(v1.2) Report qua chat của đội không được ghép có làm trận bị tính "có report" khi kèo hoàn thành~~ — **user chốt 2026-11-15:** không; chỉ report của đội đối phương thật và mercenary đã được duyệt đá trong trận được tính (§1.3). Ví dụ: Alpha chuỗi 4 → Y report Alpha qua chat → chuỗi 0 → Alpha đá với X xong, không ai report → chuỗi **1**.
+
+Các mục trước: không còn điểm mở ảnh hưởng hợp đồng hay hành vi API (user chốt 2026-11-12: §1.3 chuỗi trận sạch khi "không đến" và khi Admin bác report; §1.4 tử số / mẫu số; §1.5 độ trễ huy hiệu).

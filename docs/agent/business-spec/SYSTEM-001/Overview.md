@@ -7,7 +7,7 @@
 | Stakeholders | Product Owner, Development Team, End Users (cá nhân & đội bóng) |
 | Tác giả | business-analyst agent |
 | Ngày | 2026-11-01 |
-| Phiên bản | v1.9 |
+| Phiên bản | v1.10 |
 
 ## 1. Tổng quan
 
@@ -36,14 +36,14 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 - Xây dựng hệ thống uy tín 2 cấp (đội & cá nhân) với Reliability Score và Completion Rate
 - Xử lý report (bùng, chơi xấu, giao tiếp tệ, không đúng trình độ) với tranh chấp
 - Quản lý địa điểm sân do Admin/User đóng góp, có cơ chế report địa điểm
-- Hỗ trợ chat giữa 2 đội trưởng (luồng B) và notification đa dạng
+- Hỗ trợ chat giữa 2 đội trưởng trong mỗi kèo (luồng A và B, từ lúc gửi yêu cầu / nhận kèo) và notification đa dạng
 
 ## 3. Actors (Người dùng/Hệ thống tương tác)
 
 | Actor | Vai trò | Quyền |
 |---|---|---|
 | **User (Individual)** | Người dùng cá nhân | Quản lý hồ sơ, tham gia đội (phải được mời và chấp nhận), ứng tuyển mercenary, đánh giá đội sau trận mercenary, report |
-| **Team Captain** | Đội trưởng | Tạo/quản lý đội, mời thành viên, tạo kèo, duyệt Match Request/Pairing, tuyển mercenary, đánh giá đối phương/mercenary, report, hủy kèo, chuyển quyền đội trưởng |
+| **Team Captain** | Đội trưởng | Tạo/quản lý đội, mời thành viên, tạo kèo, duyệt Match Request/Pairing, tuyển mercenary, chat với đội đối phương trong kèo, đánh giá đối phương/mercenary, report, hủy kèo, chuyển quyền đội trưởng |
 | **Team Member** | Thành viên đội | Xem thông tin đội, rời đội, có thể được chọn làm đội trưởng mới (bắt buộc nhận) |
 | **Admin** | Quản trị viên | Bật/tắt bộ môn, đánh dấu đội INACTIVE, thêm địa điểm sân, xác minh report địa điểm, xử lý tranh chấp report bùng |
 | **System** | Hệ thống tự động | Cập nhật trạng thái hết hạn (Match, Request, Pairing, tin tuyển), gửi notification, tính Reliability Score/Completion Rate, chuyển Match sang ARCHIVED khi hết giờ dự kiến, xóa chat/notification sau retention, tự động chấp nhận report và trừ điểm |
@@ -62,14 +62,14 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 ### Match Management (Luồng A — đã có sân)
 - Đội trưởng tạo kèo với sân, giờ, định dạng, trình độ
 - Chọn thời hạn bài đăng (tối đa 7 ngày trước giờ đá đến giờ bắt đầu)
-- Đội khác gửi Match Request
+- Đội khác gửi Match Request; mỗi đội gửi có một cuộc chat riêng với đội tạo kèo ngay từ lúc gửi (BR-N04)
 - Đội trưởng chấp nhận 1 request → Match CONFIRMED, các request khác SUPERSEDED
 - Tối đa 1 request ACCEPTED mỗi Match
 
 ### Match Management (Luồng B — chưa có sân)
 - Đội trưởng tạo kèo với 1–5 lựa chọn địa điểm và 1–5 khung giờ
 - Nhiều đội có thể nhận bài đăng và tạo Pairing đồng thời (mỗi đội một Pairing cho một kèo; không rút / kết thúc Pairing)
-- Chat giữa 2 đội trưởng để thương lượng
+- Chat giữa 2 đội trưởng để thương lượng (mỗi Pairing một cuộc chat — BR-N04)
 - Một trong hai đội trưởng chốt phương án (1 địa điểm + 1 khung giờ của kèo) và nhập chi phí + tiền cọc trên Pairing; gói đổi → xoá xác nhận của cả hai
 - Cả 2 xác nhận gói qua UI riêng (không phải chat) → Match CONFIRMED (chi phí + tiền cọc + khoản tự nhập chép sang Match)
 - Race condition: Pairing hoàn tất trước (lần xác nhận của bên thứ hai được ghi nhận trước) thắng; Pairing kia → SUPERSEDED
@@ -97,7 +97,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 ### Rating & Report
 - Đội trưởng đánh giá đối phương: 1-5 sao hoặc "đội kia không đến"
 - Chọn "không đến" → đề xuất report bùng (tách khỏi luồng đánh giá)
-- Report 4 loại: bùng, chơi xấu, giao tiếp tệ, không đúng trình độ; kèo hủy sau khi đã ghép chỉ report "giao tiếp tệ"
+- Report 4 loại: bùng, chơi xấu, giao tiếp tệ, không đúng trình độ; kèo hủy sau khi đã ghép chỉ report "giao tiếp tệ"; cuộc chat giữa hai đội đã có tin nhắn → report nhau "giao tiếp tệ" bất kể trạng thái request/Pairing/kèo (BR-R07)
 - Người là đội trưởng của cả hai đội trong trận không được đánh giá/report
 - Report bùng: tự động chấp nhận và trừ điểm; nếu đội bị report phản hồi trong 24h → tranh chấp, admin xem xét
 - Report khác: tự động chấp nhận và trừ điểm
@@ -131,7 +131,8 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 - Luồng B: có thể có tiền cọc — số tiền cọc (không bắt buộc) + "ai giữ tiền cọc" (văn bản, chỉ khi có số tiền); không chia tiền cọc; cọc do thỏa thuận bên ngoài, ArenaFlow không thu/giữ
 
 ### Notification & Chat
-- Chat giữa 2 đội trưởng (luồng B): lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED/EXPIRED)
+- Chat giữa 2 đội trưởng trong một kèo (luồng A và B): mỗi cặp (kèo, đội gửi request / đội nhận kèo) một cuộc chat với đội tạo kèo; chỉ đội trưởng hiện tại xem và nhắn (BR-N04). Hai đội đã ghép nhắn được trước, trong, sau trận và cả khi kèo bị hủy; đội không được ghép chỉ xem (BR-N05). Lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED/EXPIRED)
+- Màn hình "Tin nhắn" liệt kê mọi cuộc chat người dùng xem được (chat hai đội + chat theo đơn ứng tuyển), tin mới nhất trước, kể cả cuộc chat chỉ xem và chưa có tin (BR-N06)
 - Notification: lưu 30 ngày
 - 11 loại notification: Match request nhận, request được chấp nhận/từ chối, Match confirmed, Match cancelled, Pairing mới, reminder trước trận, Match completed (kèm lời nhắc đánh giá), rating nhận, report nhận, mercenary application, invitation vào đội
 
@@ -216,7 +217,7 @@ ArenaFlow chỉ hỗ trợ **tạo kèo và ghép người**; sân là địa đ
 
 ## 10. Trạng thái tài liệu
 
-**Phiên bản:** v1.0 (baseline) → v1.1 (hoàn chỉnh) → v1.2 (2026-11-09: bổ sung UC-V05 sửa địa điểm, UC-V06 xóa ảnh, BR-V05..V10, AC-V04/V05 — cho `VENUE-001`) → v1.3 (2026-11-09: BR-M09..BR-M18, BR-C03..BR-C04, làm rõ BC-M04, sửa §2.1/§2.2/§5.2/§7.3 Business_Rules, UC-M01/M03/M04/M08/M09/C01/C02, sửa AC-M06/AC-C01, thêm AC-M09..AC-M12 — cho `MATCH-001`) → v1.5 (2026-11-11: luồng B — hai đội xác nhận một gói rõ ràng (phương án chốt + chi phí + tiền cọc) thay vì "đã thống nhất qua chat", gói đổi thì xác nhận lại; Pairing hoàn tất trước thắng; chi phí/cọc thuộc Pairing và chép sang Match khi ghép; chat hiển thị người thực sự gửi; quy tắc đội tạm ngưng / bộ môn tắt / kèo quá hạn áp cho thao tác luồng B; chat của kèo hết hạn cũng bị xóa sau 90 ngày; thêm BR-M19..BR-M21, BR-C05, BR-N03; sửa BR-M03, BR-M07, BR-M14, BR-M15, BR-M17, BR-N01, BC-M04, BC-N01, BC-N03, BC-V05, §2.3/§5.2/§5.5/§8.1 Business_Rules, UC-M02/M05/M06/M07/M08/M09/C01/N01/N03, AC-M02/M04/M05/C01/N01, Scenario 2/3, Data_Model Match/Pairing/Chat_Message/Cost_Agreement/§6 — cho `MATCH-002`) → v1.6 (2026-11-11: ngoại lệ hiển thị user đã xóa — Admin xem lịch sử thành viên đội (tên thành viên) và report địa điểm (tên người report) thấy tên thật kèm nhãn "đã xóa", ảnh vẫn ẩn; các tên khác vẫn che; sửa BC-U02, UC-U03, AC-U03 — cho `USER-002`, `VENUE-001`) → v1.7 (2026-11-12: mở rộng ngoại lệ BC-U02 — mọi endpoint `/api/v1/admin/**` trả tên thật kèm cờ `is…Deleted`; ảnh thật chỉ khi response đã có field ảnh user và còn đường dẫn; FE gắn nhãn theo cờ, không tự thêm field ảnh; sửa BC-U02, UC-U03, AC-U03 — cho `USER-001`, `USER-002`, `VENUE-001`) → v1.8 (2026-11-13: uy tín — thêm BR-R07..BR-R10, AC-R07; sửa BR-R04, BC-R05, BC-R07, §2.1/§3.1/§3.3/§6/§7/§8.2 Business_Rules, UC-M08/R01..R07/ME06, AC-M06/M09/R01..R06, Scenario 4/8/9, Data_Model Rating/Report/Dispute/Reliability_Score/Completion_Rate/Verification_Badge — cho `REPUTATION-001`, user chốt 2026-11-12/13) → v1.9 (2026-11-13: mercenary — thêm BR-ME05..BR-ME19, BR-V11, UC-ME07..UC-ME09, AC-ME04..AC-ME11; sửa BR-ME01, BR-ME03, BR-ME04, BC-ME03, BC-ME04, BC-V05, §2.4/§2.5/§3.1/§3.3/§5.1/§5.2/§5.5/§8.2 Business_Rules, UC-U03, UC-ME01..ME06, AC-ME01..ME03, Data_Model Mercenary_Posting/Chat_Message/§8 — cho `MERCENARY-001`, user chốt 2026-11-13/14)
+**Phiên bản:** v1.0 (baseline) → v1.1 (hoàn chỉnh) → v1.2 (2026-11-09: bổ sung UC-V05 sửa địa điểm, UC-V06 xóa ảnh, BR-V05..V10, AC-V04/V05 — cho `VENUE-001`) → v1.3 (2026-11-09: BR-M09..BR-M18, BR-C03..BR-C04, làm rõ BC-M04, sửa §2.1/§2.2/§5.2/§7.3 Business_Rules, UC-M01/M03/M04/M08/M09/C01/C02, sửa AC-M06/AC-C01, thêm AC-M09..AC-M12 — cho `MATCH-001`) → v1.5 (2026-11-11: luồng B — hai đội xác nhận một gói rõ ràng (phương án chốt + chi phí + tiền cọc) thay vì "đã thống nhất qua chat", gói đổi thì xác nhận lại; Pairing hoàn tất trước thắng; chi phí/cọc thuộc Pairing và chép sang Match khi ghép; chat hiển thị người thực sự gửi; quy tắc đội tạm ngưng / bộ môn tắt / kèo quá hạn áp cho thao tác luồng B; chat của kèo hết hạn cũng bị xóa sau 90 ngày; thêm BR-M19..BR-M21, BR-C05, BR-N03; sửa BR-M03, BR-M07, BR-M14, BR-M15, BR-M17, BR-N01, BC-M04, BC-N01, BC-N03, BC-V05, §2.3/§5.2/§5.5/§8.1 Business_Rules, UC-M02/M05/M06/M07/M08/M09/C01/N01/N03, AC-M02/M04/M05/C01/N01, Scenario 2/3, Data_Model Match/Pairing/Chat_Message/Cost_Agreement/§6 — cho `MATCH-002`) → v1.6 (2026-11-11: ngoại lệ hiển thị user đã xóa — Admin xem lịch sử thành viên đội (tên thành viên) và report địa điểm (tên người report) thấy tên thật kèm nhãn "đã xóa", ảnh vẫn ẩn; các tên khác vẫn che; sửa BC-U02, UC-U03, AC-U03 — cho `USER-002`, `VENUE-001`) → v1.7 (2026-11-12: mở rộng ngoại lệ BC-U02 — mọi endpoint `/api/v1/admin/**` trả tên thật kèm cờ `is…Deleted`; ảnh thật chỉ khi response đã có field ảnh user và còn đường dẫn; FE gắn nhãn theo cờ, không tự thêm field ảnh; sửa BC-U02, UC-U03, AC-U03 — cho `USER-001`, `USER-002`, `VENUE-001`) → v1.8 (2026-11-13: uy tín — thêm BR-R07..BR-R10, AC-R07; sửa BR-R04, BC-R05, BC-R07, §2.1/§3.1/§3.3/§6/§7/§8.2 Business_Rules, UC-M08/R01..R07/ME06, AC-M06/M09/R01..R06, Scenario 4/8/9, Data_Model Rating/Report/Dispute/Reliability_Score/Completion_Rate/Verification_Badge — cho `REPUTATION-001`, user chốt 2026-11-12/13) → v1.9 (2026-11-13: mercenary — thêm BR-ME05..BR-ME19, BR-V11, UC-ME07..UC-ME09, AC-ME04..AC-ME11; sửa BR-ME01, BR-ME03, BR-ME04, BC-ME03, BC-ME04, BC-V05, §2.4/§2.5/§3.1/§3.3/§5.1/§5.2/§5.5/§8.2 Business_Rules, UC-U03, UC-ME01..ME06, AC-ME01..ME03, Data_Model Mercenary_Posting/Chat_Message/§8 — cho `MERCENARY-001`, user chốt 2026-11-13/14) → v1.10 (2026-11-15: chat giữa hai đội "bất kỳ lúc nào, chỉ cần tham gia kèo" — mở cả luồng A (từ lúc gửi request, mỗi đội một cuộc chat với đội tạo kèo) và luồng B (từ lúc nhận kèo); hai đội đã ghép nhắn được cả sau trận và khi kèo bị hủy, đội không được ghép chỉ xem; report "giao tiếp tệ" qua chat hai đội đã có tin nhắn, bất kể trạng thái request/Pairing/kèo (như chat mercenary); thêm BR-N04, BR-N05, BC-N04, UC-N01 exception 1a–1d, AC-N03, AC-R08, Scenario 12, Data_Model Team_Chat; sửa BR-R07, UC-R02, AC-R02, Data_Model Report, BR-M14, BR-M15, BR-M17, BR-N01, BR-N03, BC-N01, §2.2/§2.3/§5.2/§5.3/§6.2 Business_Rules, UC-M03..M09, UC-N01, UC-N03, AC-N01, DoD Notification, Scenario 1/2/3/6/10, Data_Model Match_Request/Pairing/Chat_Message/§1/§3/§4/§5/§6/§7; người đã giải tán đội vẫn đọc chat, không gửi (BR-N05, BR-ME16, AC-ME10); trận sạch chỉ xét report của đối thủ trong trận + mercenary (§3.1); thêm UC-N04, BR-N06, AC-N04 danh sách "Tin nhắn của tôi", quyền §5.1/§5.2 — cho `MATCH-001`, `MATCH-002`, `REPUTATION-001`, `MERCENARY-001`, user chốt 2026-11-13/15)
 **Ngày hoàn thiện:** 2026-11-02  
-**Trạng thái:** ✅ **Hoàn chỉnh** — Tất cả quyết định nghiệp vụ đã được chốt, không còn [cần xác nhận]  
+**Trạng thái:** ✅ **Hoàn chỉnh** — Tất cả quyết định nghiệp vụ đã được chốt  
 **Sẵn sàng cho:** Solution design (thiết kế kỹ thuật chi tiết)

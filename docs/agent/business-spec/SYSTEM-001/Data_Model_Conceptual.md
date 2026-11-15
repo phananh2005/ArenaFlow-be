@@ -16,7 +16,8 @@
 | **Match** | Kèo thi đấu (luồng A hoặc B) | OPEN → CONFIRMED → ARCHIVED → COMPLETED / EXPIRED / CANCELLED | Tính Reliability & Completion |
 | **Match_Request** | Yêu cầu ghép kèo (luồng A) | PENDING → ACCEPTED/REJECTED/WITHDRAWN/SUPERSEDED/EXPIRED | Ảnh hưởng Reliability khi rút ACCEPTED |
 | **Pairing** | Thương lượng ghép kèo (luồng B) | NEGOTIATING → CONFIRMED/SUPERSEDED/EXPIRED | — |
-| **Chat_Message** | Tin nhắn giữa 2 đội trưởng (luồng B) | Lưu 90 ngày sau Match kết thúc | — |
+| **Team_Chat** | Cuộc chat giữa đội tạo kèo và một đội tham gia kèo (luồng A: theo Match_Request; luồng B: theo Pairing) | Mở khi gửi request / nhận kèo; nhắn được hoặc chỉ xem theo trạng thái request/Pairing (BR-N05); xóa 90 ngày sau Match kết thúc | — |
+| **Chat_Message** | Tin nhắn trong một Team_Chat (luồng A và B) | Lưu 90 ngày sau Match kết thúc | — |
 | **Venue** | Địa điểm sân | active / inactive | — |
 | **Venue_Image** | Ảnh sân (tối đa 5) | Tồn tại khi Venue tồn tại | — |
 | **Venue_Report** | Report địa điểm | Lưu mãi, admin xác minh | — |
@@ -202,6 +203,7 @@
 **Relationships:**
 - N Match_Request thuộc về 1 Match
 - 1 Match_Request thuộc về 1 Team (đội gửi)
+- 1 Match_Request thuộc 1 Team_Chat với đội tạo kèo (BR-N04); đội gửi lại sau khi rút / hết hạn → request mới dùng tiếp chat cũ
 
 **Lifecycle:** Xem Business_Rules.md §2.2
 
@@ -228,7 +230,7 @@
 **Relationships:**
 - N Pairing thuộc về 1 Match
 - 1 Pairing thuộc về 1 Team (đội nhận); mỗi đội tối đa 1 Pairing cho một Match (BR-M21)
-- 1 Pairing có nhiều Chat_Message (N)
+- 1 Pairing có 1 Team_Chat giữa đội tạo kèo và đội nhận (BR-N04)
 - 1 Pairing có 1 Cost_Agreement (0..1)
 - 1 Pairing tham chiếu 0..1 lựa chọn địa điểm và 0..1 khung giờ của Match (phương án chốt)
 
@@ -240,23 +242,43 @@
 
 ---
 
-#### Chat_Message (Tin nhắn, luồng B)
+#### Team_Chat (Cuộc chat giữa hai đội trong một kèo — luồng A và B)
 
 **Attributes:**
 - ID
-- Pairing ID (khóa ngoại)
-- Đội gửi (Team ID — đội tạo hoặc đội nhận của Pairing)
+- Match (kèo)
+- Đội tham gia (Team ID — đội gửi Match_Request ở luồng A / đội nhận kèo ở luồng B); đội còn lại = đội tạo kèo
+- Gắn với: Match_Request của đội tham gia (luồng A) hoặc Pairing (luồng B)
+- Thời điểm mở (lúc gửi request / nhận kèo)
+
+**Trạng thái:** "nhắn được" / "chỉ xem" suy ra từ trạng thái Match_Request / Pairing và trạng thái đội, không lưu riêng — BR-N05.
+
+**Relationships:**
+- N Team_Chat thuộc về 1 Match; mỗi cặp (Match, đội tham gia) tối đa 1 Team_Chat (BC-N04)
+- 1 Team_Chat gắn với các Match_Request của đội tham gia cho kèo đó (luồng A — thường 1; nhiều khi đội gửi lại request, BR-N04) hoặc 1 Pairing (luồng B)
+- 1 Team_Chat có nhiều Chat_Message (N)
+
+**Ghi chú:** Chỉ đội trưởng hiện tại của hai đội xem và nhắn (BR-N04). Cách lưu kỹ thuật (gắn trực tiếp vào Match_Request/Pairing hay tách riêng; dùng chung với chat mercenary BR-ME16 hay không) do thiết kế quyết định.
+
+---
+
+#### Chat_Message (Tin nhắn trong cuộc chat giữa hai đội)
+
+**Attributes:**
+- ID
+- Team_Chat (cuộc chat chứa tin)
+- Đội gửi (Team ID — đội tạo kèo hoặc đội tham gia của cuộc chat)
 - Người thực sự gửi (User ID — đội trưởng của đội gửi tại lúc gửi; không đổi khi đội chuyển quyền đội trưởng sau đó)
 - Nội dung (1..1000 ký tự — BR-N03)
 - Thời điểm gửi
 - Trạng thái đọc (boolean)
 
 **Relationships:**
-- N Chat_Message thuộc về 1 Pairing (Match lấy qua Pairing)
-- N Chat_Message thuộc về 1 Team (đội gửi); người nhận = đội còn lại của Pairing (không lưu riêng)
+- N Chat_Message thuộc về 1 Team_Chat (Match lấy qua Team_Chat)
+- N Chat_Message thuộc về 1 Team (đội gửi); người nhận = đội còn lại của cuộc chat (không lưu riêng)
 - N Chat_Message thuộc về 1 User (người thực sự gửi)
 
-**Mở rộng `MERCENARY-001` (BR-ME16):** chat 1–1 theo Mercenary_Application (đội trưởng ↔ ứng viên); thiết kế quyết định dùng chung hay tách khỏi tin nhắn của Pairing.
+**Mở rộng `MERCENARY-001` (BR-ME16):** chat 1–1 theo Mercenary_Application (đội trưởng ↔ ứng viên); thiết kế quyết định dùng chung hay tách khỏi tin nhắn của Team_Chat.
 
 **Ghi chú:** Lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED/EXPIRED). Hiển thị: tên đội gửi + tên/ảnh người thực sự gửi; người gửi đã xóa tài khoản → "Người dùng đã xóa", không ảnh (BR-N03).
 
@@ -422,7 +444,7 @@
 
 ---
 
-#### Report (Report sau trận)
+#### Report (Report sau trận hoặc qua chat hai đội)
 
 **Attributes:**
 - ID
@@ -442,7 +464,7 @@
 - Report liên kết đến Team hoặc User (qua reporter_type/reporter_id, reportee_type/reportee_id)
 - 1 Report có 0..1 Dispute (nếu loại bùng và bị tranh chấp)
 
-**Ghi chú:** Tự động chấp nhận ngay khi tạo; trừ Reliability Score theo số lần. Match CANCELLED sau khi đã CONFIRMED chỉ nhận loại "giao tiếp tệ" (BR-R07).
+**Ghi chú:** Tự động chấp nhận ngay khi tạo; trừ Reliability Score theo số lần. Match CANCELLED sau khi đã CONFIRMED chỉ nhận loại "giao tiếp tệ" (BR-R07). Report "giao tiếp tệ" qua chat hai đội (BR-R07) vẫn gắn với Match (kèo) của cuộc chat, kể cả khi đội bị report không được ghép (kèo chưa/không có trận đã chốt giữa hai đội); mỗi (kèo, đội report, đội bị report) tối đa 1 report "giao tiếp tệ".
 
 ---
 
@@ -556,7 +578,11 @@ erDiagram
     MATCH ||--o{ MERCENARY_POSTING : has
     MATCH ||--o{ RATING : has
     MATCH ||--o{ REPORT : has
-    PAIRING ||--o{ CHAT_MESSAGE : has
+    MATCH ||--o{ TEAM_CHAT : has
+    TEAM ||--o{ TEAM_CHAT : joins
+    TEAM_CHAT ||--o{ MATCH_REQUEST : opened_by
+    TEAM_CHAT ||--o| PAIRING : opened_by
+    TEAM_CHAT ||--o{ CHAT_MESSAGE : has
     USER ||--o{ CHAT_MESSAGE : sends
     VENUE ||--o{ VENUE_IMAGE : has
     VENUE ||--o{ VENUE_REPORT : receives
@@ -591,7 +617,9 @@ erDiagram
 | Team | Match | Một đội tạo nhiều kèo |
 | Match | Match_Request | Một kèo nhận nhiều request (luồng A) |
 | Match | Pairing | Một kèo có nhiều pairing (luồng B) |
-| Pairing | Chat_Message | Một pairing có nhiều tin nhắn (luồng B); tin nhắn của kèo lấy qua pairing |
+| Match | Team_Chat | Một kèo có nhiều cuộc chat — mỗi đội gửi request (luồng A) / nhận kèo (luồng B) một cuộc chat với đội tạo kèo (BR-N04) |
+| Team_Chat | Chat_Message | Một cuộc chat có nhiều tin nhắn |
+| Team_Chat | Match_Request | Luồng A: thường 1 request; đội gửi lại request sau khi rút / hết hạn → các request của đội đó dùng chung cuộc chat (BR-N04) |
 | Match | Rating | Một trận có nhiều đánh giá (đội/cá nhân) |
 | Match | Report | Một trận có nhiều report (đội/cá nhân) |
 | Match | Mercenary_Posting | Một kèo có nhiều tin tuyển |
@@ -608,6 +636,7 @@ erDiagram
 | User | Profile | Hồ sơ cá nhân |
 | Match | Cost_Agreement | Thỏa thuận chi phí (0..1); luồng B: bản chép từ Pairing thắng khi ghép |
 | Pairing | Cost_Agreement | Thỏa thuận chi phí + tiền cọc của thương lượng (0..1, luồng B) |
+| Pairing | Team_Chat | Pairing mở cuộc chat với đội tạo kèo (luồng B — BR-N04) |
 | Team | Reliability_Score | Đội có 1 điểm uy tín |
 | User | Reliability_Score | Cá nhân có 1 điểm uy tín (mercenary) |
 | Team | Completion_Rate | Đội có 1 tỉ lệ hoàn thành |
@@ -630,6 +659,7 @@ erDiagram
 | Mercenary_Application | User ứng tuyển | REJECTED, WITHDRAWN | ❌ |
 | Venue | Admin/User thêm | inactive | ✅ (admin kích hoạt lại) |
 | Notification | System tạo | (xóa sau 30 ngày) | ❌ |
+| Team_Chat | Gửi request / nhận kèo | (xóa sau 90 ngày từ Match kết thúc); nhắn được ↔ chỉ xem theo request/Pairing (BR-N05) | ✅ chỉ xem → nhắn được khi đội gửi lại request sau khi rút / hết hạn (BR-N04) |
 | Chat_Message | User gửi | (xóa sau 90 ngày từ Match kết thúc) | ❌ |
 
 ---
@@ -638,7 +668,7 @@ erDiagram
 
 | Entity | Retention | Thời điểm bắt đầu | Hành động sau retention |
 |---|---|---|---|
-| Chat_Message | 90 ngày | Khi Match chuyển COMPLETED/ARCHIVED/CANCELLED/EXPIRED (vd hết hạn 12/11/2026 → xóa 10/02/2027) | Xóa |
+| Team_Chat + Chat_Message | 90 ngày | Khi Match chuyển COMPLETED/ARCHIVED/CANCELLED/EXPIRED (vd hết hạn 12/11/2026 → xóa 10/02/2027) — áp cho mọi cuộc chat của kèo, luồng A và B (BR-N01) | Xóa |
 | Notification | 30 ngày | Khi tạo notification | Xóa |
 | User (soft-deleted) | Giữ mãi | — | **[cần xác nhận: hard-delete policy]** |
 | Team_Member (left) | Giữ mãi | — | Không xóa (lịch sử) |
@@ -664,6 +694,7 @@ erDiagram
 | Pairing | Cả 2 đội trưởng phải xác nhận | Application logic |
 | Pairing | Race condition: Pairing hoàn tất trước thắng; tối đa 1 Pairing CONFIRMED mỗi Match | CAS trên kèo (version) + ràng buộc một Pairing CONFIRMED mỗi kèo (2026-11-10) |
 | Pairing | Mỗi đội tối đa 1 Pairing cho một Match (BR-M21) | Ràng buộc dữ liệu |
+| Team_Chat | Mỗi cặp (Match, đội tham gia) tối đa 1 cuộc chat (BC-N04) | Ràng buộc dữ liệu |
 | Venue_Image | Tối đa 5 ảnh mỗi venue | Check trước khi insert |
 | Venue_Image | Chỉ 1 ảnh `is_primary=true` | Unique constraint hoặc trigger |
 | Rating | Unique trên (`match_id`, `rater_type`, `rater_id`, `ratee_type`, `ratee_id`) | Unique constraint |
@@ -713,5 +744,5 @@ erDiagram
 
 ## 10. Trạng thái mô hình
 
-**Trạng thái:** ✅ **Hoàn chỉnh** — Mô hình dữ liệu nghiệp vụ đã đầy đủ, không còn [cần xác nhận]  
+**Trạng thái:** ✅ **Hoàn chỉnh** — Mô hình dữ liệu nghiệp vụ đã đầy đủ  
 **Sẵn sàng cho:** Thiết kế schema kỹ thuật (DB schema design với kiểu dữ liệu, constraints, indexes)

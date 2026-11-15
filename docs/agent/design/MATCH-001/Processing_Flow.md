@@ -6,12 +6,12 @@
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + VENUE-001 `Component_Class_Design.md` §4.9 · ADR-0011, ADR-0012, ADR-0013 (`Proposed`) |
-| Ràng buộc dữ liệu | V1 + V5 + `V6__match_flow_a_lifecycle.sql` (`Component_Class_Design.md` §5.1) + `V7__match_flow_b_pairing.sql` (MATCH-002 `Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.3** (solution-architect · 2026-11-13) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | V1 + V5 + `V6__match_flow_a_lifecycle.sql` (`Component_Class_Design.md` §5.1) · đợt MATCH-002 (nhánh luồng B — `Component_Class_Design.md` §1.1): + `V7__match_flow_b_pairing.sql` (MATCH-002 `Component_Class_Design.md` §5.1) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.4** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
-15 endpoint + 1 scheduled job (2 tác vụ). Mã lỗi: `API_Spec.md` §5; thứ tự guard: §1.1; cấu hình: `Component_Class_Design.md` §8. Số truy vấn tính cho **một lần thử**; JWT không truy vấn DB. Ký hiệu: **S** SELECT, **I** INSERT, **U** UPDATE, **D** DELETE. `now` lấy từ `Clock` một lần ở đầu mỗi lần thử. Không gọi HTTP ra ngoài.
+20 endpoint (2.16–2.20: chat dùng chung — v2.4) + kênh STOMP + 1 scheduled job (2 tác vụ). Mã lỗi: `API_Spec.md` §5; thứ tự guard: §1.1; cấu hình: `Component_Class_Design.md` §8. Số truy vấn tính cho **một lần thử**; JWT không truy vấn DB. Ký hiệu: **S** SELECT, **I** INSERT, **U** UPDATE, **D** DELETE. `now` lấy từ `Clock` một lần ở đầu mỗi lần thử. Không gọi HTTP ra ngoài.
 
 **Lazy check (UC-M09 1a):** API đọc tính trạng thái hiệu lực trong SQL (`Component_Class_Design.md` §5.2), không ghi. API ghi gặp kèo `OPEN` quá `expiresAt` → `MatchExpiry.expireIfDue` (U kèo + U yêu cầu `PENDING` (kèo A) hoặc U pairing `NEGOTIATING` (kèo B), phát `MatchExpiredEvent`) → lần thử **commit** và trả `Expired` → service ném `MATCH_004` sau commit (`Component_Class_Design.md` §4.7). Ký hiệu **[lazy]** dưới đây là nhánh này.
 
@@ -21,7 +21,7 @@ Chuyển từ `API_Spec.md` v1.0 §2.0 (nội bộ BE; `API_Spec.md` chỉ giữ
 
 | Endpoint | Thứ tự guard |
 |---|---|
-| 2.1 | `TEAM_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` → `SPORT_001` → `SPORT_002` → `VENUE_001` → `VENUE_002` (kèo B: trên toàn bộ `venueOptionIds`) |
+| 2.1 | `TEAM_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` → `SPORT_001` → `SPORT_002` → `VENUE_001` → `VENUE_002` (kèo B: trên toàn bộ `venueOptionIds`). Đợt 1 (`Component_Class_Design.md` §1.1): `type = NEED_VENUE` → `MATCH_016` sau Bean Validation, trước `TEAM_001` |
 | 2.3 | `MATCH_001` |
 | 2.4 | `MATCH_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` (đội tác giả) → `MATCH_016` (kèo B) → `MATCH_004` → `MATCH_003` → `MATCH_005` |
 | 2.5 | `MATCH_001` → `TEAM_001` → `TEAM_016` → `TEAM_002` (đội `teamId`) → `MATCH_009` → `MATCH_004` → `MATCH_005` (`CANCELLED`/`ARCHIVED`/`COMPLETED`) → `MATCH_015` (≠ `expectedStatus`) → `OPEN`: `MATCH_010` (chỉ kèo A) · `CONFIRMED`: `MATCH_011` → `MATCH_012` |
@@ -33,6 +33,13 @@ Chuyển từ `API_Spec.md` v1.0 §2.0 (nội bộ BE; `API_Spec.md` chỉ giữ
 | 2.11 | `TEAM_001` |
 | 2.12 | `TEAM_001` → `TEAM_002` (đội giải tán → `TEAM_016`) |
 | 2.15 | `SPORT_001` |
+| 2.16 | Bean Validation → `CHAT_002` → `USER_001` (cột `callerDeleted` của ctx) → `CHAT_003` (policy: không bên nào) → `TEAM_MATCH`: [lazy] `MATCH_004` (`expiryDue`; không áp cho người chỉ xem) → `CHAT_004` (`!canSend` — gồm người đã giải tán đội của mình) |
+| 2.17 | Bean Validation (cursor) → `CHAT_002` → `USER_001` → `CHAT_003` → `CHAT_001` |
+| 2.18, 2.19 | `CHAT_002` → `USER_001` → `CHAT_003` (người đã giải tán đội của mình: được, chỉ xem) |
+| 2.20 | Bean Validation (`page`, `pageSize`) → `USER_001` (cột của câu đếm). Danh sách rỗng khi người gọi không tham gia cuộc trò chuyện nào |
+| STOMP `SUBSCRIBE` | destination không khớp `/topic/conversations/{UUID}` → `ERROR` → `AUTH_001` (token hết hạn) → `CHAT_002` → `USER_001` → `CHAT_003` |
+
+Chat (v2.4): quyền (`CHAT_003`) đứng trước nhánh lazy của 2.16 để người không tham gia không kích hoạt chuyển `EXPIRED`. Đội đã giải tán: người đã bấm giải tán → bên của đội đó, chỉ xem (2.16 → `CHAT_004`); thành viên khác → `CHAT_003` (user chốt 2026-11-15).
 
 `TEAM_001` của đội tác giả / đội gửi suy ra từ tài nguyên không xảy ra (FK). Đội đã giải tán không còn đội trưởng ACTIVE → trả `TEAM_016` (không phải `TEAM_002`) ở mọi endpoint, gồm cả đọc (2.7, 2.12) — như USER-002 §2.1a.
 
@@ -116,6 +123,36 @@ sequenceDiagram
     end
 ```
 
+### 2.4. Gửi tin (2.16) và đẩy realtime — v2.4
+
+```mermaid
+sequenceDiagram
+    participant C as Client A
+    participant CS as ConversationServiceImpl
+    participant P as ConversationAccessPolicy
+    participant DB as PostgreSQL
+    participant GW as StompChatRealtimeGateway
+    participant B as Simple broker
+    participant D as Client B (đã SUBSCRIBE)
+    C->>CS: POST /conversations/{id}/messages (content)
+    Note over CS,DB: retrier MATCH_014 — mỗi lần thử = 1 transaction
+    CS->>DB: Q1 S findContext (cuộc trò chuyện + khối ngữ cảnh: kèo, 2 đội, đội trưởng hiện tại, yêu cầu gần nhất / pairing (MATCH-002) / đơn (MERCENARY-001) + tên, ảnh, cờ đã xoá của caller)
+    CS->>P: resolve(ctx, caller, now) → bên của caller, canSend, expiryDue
+    alt TEAM_MATCH: yêu cầu PENDING / pairing NEGOTIATING và kèo OPEN quá expiresAt
+        CS->>DB: U match EXPIRED, U yêu cầu PENDING / pairing NEGOTIATING → EXPIRED (MatchExpiry)
+        CS-->>C: commit → 409 MATCH_004
+    else canSend
+        CS->>DB: Q2 I conversation_message
+        CS->>GW: publishAfterCommit(conversationId, MESSAGE_CREATED) — tin + người gửi dựng từ Q1
+        Note over CS,DB: commit
+        GW->>B: convertAndSend /topic/conversations/{id}
+        B-->>D: MESSAGE frame
+        CS-->>C: 201 ConversationMessageResponse
+    else chỉ xem
+        CS-->>C: 409 CHAT_004
+    end
+```
+
 ## 3. Luồng chi tiết
 
 ### Bảng số truy vấn
@@ -123,32 +160,39 @@ sequenceDiagram
 | # | Endpoint | Truy vấn (một lần thử) | Tổng / Ngưỡng |
 |---|---|---|---|
 | 2.1 | `POST /matches` (kèo A) | S captain ctx, S sport, S venue status (port), I match, U venue `markSelected` (port), S detail | 6 / W6 ✅ (= ngưỡng) |
-| 2.1 | `POST /matches` (kèo B) | S captain ctx (+ tên/ảnh/điểm đội), S sport, S lựa chọn địa điểm (port, thông tin hiển thị), I match, I lựa chọn địa điểm (1 câu `unnest`), I khung giờ (1 câu `unnest … RETURNING`) | 6 / W6 ✅ (= ngưỡng) |
+| 2.1 | `POST /matches` (kèo B, đợt 1 — chặn) | Không truy vấn → `MATCH_016` | 0 / W6 ✅ |
+| 2.1 | `POST /matches` (kèo B, đợt MATCH-002) | S captain ctx (+ tên/ảnh/điểm đội), S sport, S lựa chọn địa điểm (port, thông tin hiển thị), I match, I lựa chọn địa điểm (1 câu `unnest`), I khung giờ (1 câu `unnest … RETURNING`) | 6 / W6 ✅ (= ngưỡng) |
 | 2.2 | `GET /matches` | S trang, S count | 2 / L4 ✅ |
-| 2.3 | `GET /matches/{id}` | S detail, S khoản tự nhập theo `match_id` (kèo B `confirmedPairingId = null`: bỏ) · kèo B: + S lựa chọn (1 câu `UNION ALL`) | 2 / D3 ✅ · kèo B chưa ghép 2, đã ghép 3 / D3 ✅ |
+| 2.3 | `GET /matches/{id}` | S detail, S khoản tự nhập theo `match_id` (kèo B `confirmedPairingId = null`: bỏ) · kèo B (đợt MATCH-002): + S lựa chọn (1 câu `UNION ALL`) | 2 / D3 ✅ · kèo B chưa ghép 2, đã ghép 3 / D3 ✅ |
 | 2.4 | `PUT …/cost-agreement` | S match, S captain ctx, U match (CAS + version), D khoản tự nhập, I khoản tự nhập (1 câu `unnest`, id DB sinh), S khoản tự nhập (lấy `itemId`); bỏ I + S khi rỗng · [lazy] S, S, U, U | 6 / W6 ✅ (= ngưỡng; 4 khi rỗng) · [lazy] 4 |
 | 2.5 | `POST …/cancel` `OPEN` | S match, S captain ctx, S tồn tại `PENDING`, U match CAS · [lazy] S, S, U, U | 4 / W6 ✅ |
-| 2.5 | `POST …/cancel` `OPEN` kèo B | S match, S captain ctx, U match CAS, U pairing `NEGOTIATING` → `SUPERSEDED` | 4 / W6 ✅ |
+| 2.5 | `POST …/cancel` `OPEN` kèo B (đợt MATCH-002) | S match, S captain ctx, U match CAS, U pairing `NEGOTIATING` → `SUPERSEDED` | 4 / W6 ✅ |
 | 2.5 | `POST …/cancel` `CONFIRMED` | S match, S captain ctx, U match CAS, (U request → `WITHDRAWN` khi đội đã ghép kèo A huỷ), U team điểm | 4–5 / W6 ✅ |
-| 2.6 | `POST …/requests` | S match, S captain ctx, S trạng thái đội tác giả + bộ môn, I request, U match version (lúc commit) · [lazy] S, S, U, U | 5 / W6 ✅ |
-| 2.7 | `GET …/requests` | S quyền tác giả, S trang, S count | 3 / L4 ✅ |
+| 2.6 | `POST …/requests` | S match, S captain ctx, S trạng thái đội tác giả + bộ môn + cuộc trò chuyện đã có (cùng câu), I request, I cuộc trò chuyện (lúc commit — chỉ lần gửi đầu của đội cho kèo), U match version (lúc commit) · [lazy] S, S, U, U | **lần đầu 6 / W6 ✅ (= ngưỡng; v2.3: 5)** · gửi lại 5 / W6 ✅ · [lazy] 4 |
+| 2.7 | `GET …/requests` | S quyền tác giả, S trang (+ `conversationId`, `LEFT JOIN`), S count | 3 / L4 ✅ (không đổi) |
 | 2.8 | `POST …/accept` | S request ctx, S match, S captain ctx, U match CAS, U request → `ACCEPTED`, U còn lại → `SUPERSEDED` · [lazy] S, S, S, U, U | 6 / W6 ✅ (= ngưỡng) |
 | 2.9 | `POST …/reject` | S request ctx, S captain ctx, U request · [lazy] S, S, U, U | 3 / W6 ✅ |
 | 2.10 | `POST …/withdraw` `PENDING` | S request ctx, S captain ctx, U request · [lazy] S, S, U, U | 3 / W6 ✅ · [lazy] 4 |
 | 2.10 | `POST …/withdraw` `ACCEPTED` | S request ctx, S captain ctx, S match, U match CAS, U request → `WITHDRAWN`, U team điểm | 6 / W6 ✅ (= ngưỡng) |
 | 2.11 | `GET /teams/{id}/matches` | S đội tồn tại, S trang, S count | 3 / L4 ✅ |
-| 2.12 | `GET /teams/{id}/match-requests` | S captain ctx, S trang, S count | 3 / L4 ✅ |
+| 2.12 | `GET /teams/{id}/match-requests` | S captain ctx, S trang (+ `conversationId`, `LEFT JOIN`), S count | 3 / L4 ✅ (không đổi) |
 | 2.13 / 2.14 | `GET /sports`, `GET /admin/sports` | S trang, S count | 2 / L4 ✅ |
 | 2.15 | `PATCH /admin/sports/{id}` | S sport, (U sport) | 1–2 / W6 ✅ |
-| Job | hết hạn (mỗi lô) | S claim, U match, U request (kèo A), U pairing (kèo B) — bỏ câu khi không có kèo loại đó | 3–4 / lô |
+| Job | hết hạn (mỗi lô) | S claim, U match, U request (kèo A), U pairing (kèo B — đợt MATCH-002) — bỏ câu khi không có kèo loại đó | 3 / lô (đợt 1) · 3–4 / lô |
 | Job | `ARCHIVED` (mỗi lô) | S claim, U match | 2 / lô |
+| 2.16 | `POST /conversations/{id}/messages` | S ctx (cuộc trò chuyện + ngữ cảnh + người gửi = caller), I tin · `TEAM_MATCH` [lazy] S, U match, U yêu cầu / pairing | 2 / W6 ✅ · [lazy] 3 |
+| 2.17 | `GET /conversations/{id}/messages` | S ctx, (S con trỏ khi có `before`/`after`), S trang (`limit + 1`, JOIN người gửi) | 2–3 / L4 ✅ |
+| 2.18 | `POST …/messages/read` | S ctx, U tin | 2 / W6 ✅ |
+| 2.19 | `GET /conversations/{id}` | S ctx | 1 / D3 ✅ |
+| 2.20 | `GET /profile/conversations` | S đếm (+ cờ người gọi đã xoá), S trang (đội của tôi + cuộc trò chuyện + tin cuối / yêu cầu gần nhất khi chưa có tin + ngữ cảnh + chưa đọc, 1 câu); bỏ câu trang khi đếm = 0 | 2 / L4 ✅ |
+| STOMP | `SUBSCRIBE` | S ctx | 1 (không phải HTTP) |
 
-**NFS gate:** 15/15 trong ngưỡng. **2.1 (cả kèo A và kèo B), 2.4 (có khoản tự nhập — giữ 6, không dùng `INSERT … RETURNING`, user chốt 2026-11-09), 2.8, 2.10 (`ACCEPTED`) chạm đúng W6** — mọi truy vấn thêm (vd đọc lại response, kiểm thêm trạng thái) phải gộp hoặc xin duyệt. Đã gộp: trạng thái đội + quyền captain thành 1 câu (`findCaptainContext`); request + match + đội gửi thành 1 câu (`findContextById`); response 2.8/2.10 dựng từ dữ liệu đã nạp, không đọc lại. 2.1 kèo A đọc lại detail sau INSERT: lệch NFS §3 có chủ đích (`Component_Class_Design.md` §10); 2.1 kèo B **không** đọc lại (response dựng từ dữ liệu đã nạp + `RETURNING`) để giữ W6 — `INSERT … RETURNING` không `@Modifying` là MATCH-002 `[cần xác nhận #4]`, **chặn code — bước đầu phase 1**; không chạy được → dừng, hỏi user — mọi truy vấn thêm cho kèo B (vd `markSelected`, đọc lại detail) vượt ngưỡng. Không truy vấn trong vòng lặp (sự kiện của job phát trong bộ nhớ). Retry nhân số truy vấn tối đa 3 (ADR-0003).
+**NFS gate:** 20/20 trong ngưỡng (2.16–2.20 chuyển từ MATCH-002 v2.0 — số truy vấn không đổi; `USER_001` ở 2.17–2.20 đọc từ cột có sẵn). **2.1 (cả kèo A và kèo B), 2.4 (có khoản tự nhập — giữ 6, không dùng `INSERT … RETURNING`, user chốt 2026-11-09), 2.6 (lần gửi đầu của đội — v2.4 thêm INSERT cuộc trò chuyện; cuộc trò chuyện đã có tìm trong câu `findAvailability` sẵn có, không thêm SELECT), 2.8, 2.10 (`ACCEPTED`) chạm đúng W6** — mọi truy vấn thêm (vd đọc lại response, kiểm thêm trạng thái) phải gộp hoặc xin duyệt. Đã gộp: trạng thái đội + quyền captain thành 1 câu (`findCaptainContext`); request + match + đội gửi thành 1 câu (`findContextById`); response 2.8/2.10 dựng từ dữ liệu đã nạp, không đọc lại. 2.1 kèo A đọc lại detail sau INSERT: lệch NFS §3 có chủ đích (`Component_Class_Design.md` §10); 2.1 kèo B **không** đọc lại (response dựng từ dữ liệu đã nạp + `RETURNING`) để giữ W6 — `INSERT … RETURNING` không `@Modifying` là MATCH-002 `[cần xác nhận #4]`, **chặn code — bước đầu phase 1**; không chạy được → dừng, hỏi user — mọi truy vấn thêm cho kèo B (vd `markSelected`, đọc lại detail) vượt ngưỡng. Không truy vấn trong vòng lặp (sự kiện của job phát trong bộ nhớ). Retry nhân số truy vấn tối đa 3 (ADR-0003).
 
 ### 3.1. `POST /matches` (`@Transactional`)
 Bean Validation (`@ValidMatchSchedule`, `@ValidSkillLevels`, `@OneOf`) → Q1 `teamGuard.requireActiveCaptain(teamId, callerId)` → Q2 `sportRepository.findById` → `SPORT_001`; `!isActive` → `SPORT_002` → Q3 `venueSelectionService.requireSelectable({venueId})` (`VENUE_001`, `VENUE_002`) → Q4 `Match.builder()` (`HAS_VENUE`, `OPEN`, `skillLevels` rỗng nếu vắng) → `save` → Q5 `markSelected({venueId}, now)` (bulk native — Hibernate tự flush INSERT trước) → Q6 `findDetailById(id, now)` → `toResponse(view, List.of())`. Một địa điểm → không có vấn đề thứ tự khoá nhiều dòng `venue` (VENUE-001 §3.15). Không phát event (spec không có thông báo khi tạo kèo).
 
-**Kèo B (`type = NEED_VENUE`):** Bean Validation (`@ValidMatchSchedule` nhánh B) → Q1 `requireActiveCaptain` (trả tên/ảnh/điểm) → Q2 sport (`SPORT_001`/`SPORT_002`) → Q3 `venueSelectionService.requireSelectable(venueOptionIds)` (`VENUE_001`/`VENUE_002`, trả `SelectableVenueView`) → Q4 `Match.builder()` (`NEED_VENUE`, `OPEN`, `venueId = null`, `matchStartTime`/`matchEndTime` = khung giờ có `startsAt` nhỏ nhất, `expiresAt`) `save` → Q5 `matchVenueOptionRepository.insertAll(matchId, venueOptionIds, now)` (Hibernate tự flush INSERT `match` trước câu native — comment tại chỗ) → Q6 `matchTimeOptionRepository.insertAllReturning(matchId, starts, ends, now)` → `toCreatedNeedVenue(…)`. Không `markSelected` (MATCH-002 §4.4), không đọc lại. CHECK `expires_at <= match_start_time` thực thi BR-M03 ở DB.
+**Kèo B (`type = NEED_VENUE`)** — đợt 1: Bean Validation (nhánh A bỏ qua) → `MATCH_016`, không truy vấn, không ghi (test). Đợt MATCH-002 (`Component_Class_Design.md` §1.1): Bean Validation (`@ValidMatchSchedule` nhánh B) → Q1 `requireActiveCaptain` (trả tên/ảnh/điểm) → Q2 sport (`SPORT_001`/`SPORT_002`) → Q3 `venueSelectionService.requireSelectable(venueOptionIds)` (`VENUE_001`/`VENUE_002`, trả `SelectableVenueView`) → Q4 `Match.builder()` (`NEED_VENUE`, `OPEN`, `venueId = null`, `matchStartTime`/`matchEndTime` = khung giờ có `startsAt` nhỏ nhất, `expiresAt`) `save` → Q5 `matchVenueOptionRepository.insertAll(matchId, venueOptionIds, now)` (Hibernate tự flush INSERT `match` trước câu native — comment tại chỗ) → Q6 `matchTimeOptionRepository.insertAllReturning(matchId, starts, ends, now)` → `toCreatedNeedVenue(…)`. Không `markSelected` (MATCH-002 §4.4), không đọc lại. CHECK `expires_at <= match_start_time` thực thi BR-M03 ở DB.
 
 ### 3.2. `GET /matches` (readOnly)
 Bean Validation (`SearchMatchRequest` + mặc định, `@ValidMatchSearch`, `type` tuỳ chọn) → không toạ độ: `searchOpen`; có toạ độ: tính hộp giới hạn → `searchOpenNearby` (`Component_Class_Design.md` §5.2: kèo B lọc giờ bằng `EXISTS` khung giờ, khoảng cách = lựa chọn địa điểm gần nhất). Q1 trang + Q2 count.
@@ -161,12 +205,12 @@ Bean Validation (`@ValidCostAgreement`, ≤10 khoản) → lần thử: Q1 `matc
 
 ### 3.5. `POST …/cancel` (retrier `MATCH_014`)
 Lần thử: Q1 `findMatch` → Q2 `requireCaptainAllowInactive(r.teamId, callerId)` → vai trò: `teamId == authorTeamId` → tác giả; `teamId == confirmedOpponentTeamId` (khác null) → đội đã ghép; khác → `MATCH_009` → `isExpiryDue` → [lazy] → `requireNotExpired` (`MATCH_004`) → `CANCELLED`/`ARCHIVED`/`COMPLETED` → `MATCH_005` → `match.status ≠ r.expectedStatus` → `MATCH_015` (kiểm ở **mọi** lần thử, so với giá trị client gửi — bắt cả màn hình cũ trước khi request tới, không chỉ thay đổi giữa các lần thử; không ghi, không trừ điểm).
-- `OPEN` (chỉ tác giả — đội đã ghép không tồn tại khi `OPEN`): kèo A: Q3 `existsByMatchIdAndStatus(id, PENDING)` → `MATCH_010` (kèo B bỏ Q3) → setter `CANCELLED`, `cancelledByTeamId`, `cancelledAt = now`, `cancelReason` (trim, `""` → null) → kèo A: Q4 CAS lúc commit; kèo B: Q3 CAS `match` (Hibernate tự flush trước câu sau — comment tại chỗ) → Q4 `pairingRepository.supersedeNegotiating(id, now)` (pairing tạo đồng thời bị CAS chặn) → `MatchCancelledEvent(previousStatus = OPEN, otherTeamId = null)`. Penalty 0.
+- `OPEN` (chỉ tác giả — đội đã ghép không tồn tại khi `OPEN`): kèo A: Q3 `existsByMatchIdAndStatus(id, PENDING)` → `MATCH_010` (kèo B bỏ Q3) → setter `CANCELLED`, `cancelledByTeamId`, `cancelledAt = now`, `cancelReason` (trim, `""` → null) → kèo A: Q4 CAS lúc commit; kèo B (đợt MATCH-002): Q3 CAS `match` (Hibernate tự flush trước câu sau — comment tại chỗ) → Q4 `pairingRepository.supersedeNegotiating(id, now)` (pairing tạo đồng thời bị CAS chặn) → `MatchCancelledEvent(previousStatus = OPEN, otherTeamId = null)`. Penalty 0.
 - `CONFIRMED`: `reason` blank → `MATCH_011` → `now ≥ matchStartTime` → `MATCH_012` → `matchCancellation.cancelConfirmed(match, teamId, reason, now)` (`Component_Class_Design.md` §4.13).
 - Penalty theo `TimeBandPenaltyPolicy.MATCH_CANCELLATION` (`API_Spec.md` §1.5); cùng câu `UPDATE team` đặt `clean_streak = 0` cho đội huỷ (v2.2, Q3 REPUTATION-001). Completion Rate tính khi đọc (REPUTATION-001) — không ghi bộ đếm ở đây.
 
 ### 3.6. `POST …/requests` (retrier `MATCH_014`)
-Lần thử: Q1 `findMatch` → Q2 `requireActiveCaptain(r.teamId, callerId)` → `teamId == authorTeamId` → `MATCH_007` → `isExpiryDue` → [lazy] → `requireOpen` (`MATCH_003` — UC-M03 3a) → Q3 `matchRepository.findAvailability(matchId)`: đội tác giả ≠ `ACTIVE` → `MATCH_013`; bộ môn tắt → `SPORT_002` → Q4 `MatchRequest.builder()` (`PENDING`, `requestedAt = now`) `saveAndFlush`; `idx_match_request_active` → `MATCH_006` (flush tường minh để đổi lỗi ràng buộc, comment tại chỗ) → `matchRepository.forceIncrementVersion(match)` → `MatchRequestSentEvent` → Q5 `UPDATE match SET version = version + 1 WHERE id = ? AND version = ?` lúc commit (lệch → retry).
+Lần thử: Q1 `findMatch` → Q2 `requireActiveCaptain(r.teamId, callerId)` → `teamId == authorTeamId` → `MATCH_007` → `isExpiryDue` → [lazy] → `requireOpen` (`MATCH_003` — UC-M03 3a) → Q3 `matchRepository.findAvailability(matchId, r.teamId)` (+ `existingConversationId`): đội tác giả ≠ `ACTIVE` → `MATCH_013`; bộ môn tắt → `SPORT_002` → Q4 `MatchRequest.builder()` (`PENDING`, `requestedAt = now`) `saveAndFlush`; `idx_match_request_active` → `MATCH_006` (flush tường minh để đổi lỗi ràng buộc, comment tại chỗ) → `existingConversationId == null` → `conversationRepository.save(Conversation …TEAM_MATCH, bên A = đội tác giả, bên B = r.teamId…)` (Q5 INSERT lúc commit; bỏ khi đội gửi lại — dùng tiếp cuộc trò chuyện cũ, BR-N04) → `matchRepository.forceIncrementVersion(match)` → `MatchRequestSentEvent` → Q6 `UPDATE match SET version = version + 1 WHERE id = ? AND version = ?` lúc commit (lệch → retry). Response: `conversationId` = cuộc trò chuyện đã có hoặc vừa `save`. INSERT cuộc trò chuyện sau INSERT yêu cầu: hai lần gửi đồng thời của cùng đội đã bị `idx_match_request_active` tuần tự hoá (bên sau `MATCH_006` trước bước này) → không đụng `idx_conversation_team_match` (MATCH-002 §5.1); vi phạm unique này (chỉ khi lỗi lập trình) → 500.
 
 ### 3.7. `GET …/requests` (readOnly)
 Q1 `findAuthorAccess(matchId, callerId)` → `MATCH_001`; `!callerIsCaptain` → `authorTeamStatus = DISBANDED` ? `TEAM_016` : `TEAM_002` (cùng câu, không thêm truy vấn) → Q2/Q3 `findByMatch(matchId, status == PENDING, now, p)`. Đọc không chặn đội `INACTIVE`.
@@ -190,13 +234,33 @@ Q1 `requireCaptainAllowInactive(teamId, callerId)` → Q2/Q3 `findByRequesterTea
 
 ### 3.13. Job `MatchLifecycleScheduler`
 `now` cố định ở đầu lần chạy. Mỗi tác vụ: tối đa `max-batches-per-run` lô, mỗi lô một `TransactionTemplate`; dừng khi lô < `batch-size`. Lỗi một lô → rollback lô đó, log `ERROR`, dừng tác vụ đó (tác vụ còn lại vẫn chạy); lần sau làm tiếp (điều kiện trạng thái là cổng chống trùng). Log `INFO` số kèo chuyển.
-- **Hết hạn:** Q1 `claimDueForExpiry(now, n)` (+ `type`) → Q2 `markExpired(ids, now)` (= số id vì đã khoá) → Q3 `expirePendingByMatchIds(idsA)` (bỏ khi rỗng) → Q4 `pairingRepository.expireNegotiatingByMatchIds(idsB, now)` (bỏ khi rỗng) → mỗi dòng `MatchExpiredEvent`.
+- **Hết hạn:** Q1 `claimDueForExpiry(now, n)` (+ `type`) → Q2 `markExpired(ids, now)` (= số id vì đã khoá) → Q3 `expirePendingByMatchIds(idsA)` (bỏ khi rỗng) → Q4 `pairingRepository.expireNegotiatingByMatchIds(idsB, now)` (bỏ khi rỗng; đợt MATCH-002 — đợt 1 claim không trả `type`, bỏ Q4) → mỗi dòng `MatchExpiredEvent`.
 - **ARCHIVED:** Q1 `claimDueForArchive(now, n)` → Q2 `markArchived(ids, now)` → mỗi dòng `MatchArchivedEvent`. Không đụng `match_request`.
 - Event phát trong transaction của lô; listener `AFTER_COMMIT` (ADR-0011) nên lô rollback không gửi thông báo.
 - Độ trễ: kèo chuyển trạng thái trễ tối đa ~5 phút + thời gian chạy; API đọc đã thấy `EXPIRED` ngay nhờ trạng thái hiệu lực; `ARCHIVED` chỉ qua job (spec không yêu cầu lazy).
 
 ### 3.14. Admin bộ môn
 2.13/2.14: `SportRepository` page (sort trong tên method). 2.15 (`@Transactional`): Q1 `findById` → `SPORT_001` → khác giá trị → setter → Q2 UPDATE lúc commit → `adminAuditLog.afterCommit("SET_SPORT_ACTIVE", …)`; giống giá trị → không ghi, không audit.
+
+### 3.15. `POST /conversations/{id}/messages` (retrier `MATCH_014`) — 2.16
+Bean Validation (`content` ≤ 1000, không rỗng sau trim) → lần thử: Q1 `conversationRepository.findContext(id, callerId, now)` → rỗng → `CHAT_002` → `callerDeleted` → `USER_001` → policy theo `contextType` (`Component_Class_Design.md` §4.14) → `viewerParty = null` → `CHAT_003` → `expiryDue` (chỉ `TEAM_MATCH`) → [lazy] `matchExpiry.expireIfDue(matchId, authorTeamId, matchType, now)` (U match + U yêu cầu `PENDING` (kèo A) / pairing `NEGOTIATING` (kèo B) + `MatchExpiredEvent`) → trả `Expired` → commit → `MATCH_004` → `!canSend` → `CHAT_004` → Q2 `ConversationMessage.builder()` `save` (INSERT lúc commit; id v7 sinh trước khi INSERT nên response dựng được trước commit) → `publishAfterCommit(conversationId, MESSAGE_CREATED)` → response. Người gửi lấy từ cột caller của Q1, bên gửi = `viewerParty` — không truy vấn thêm. `expireIfDue` 0 dòng (job / request khác vừa chuyển) → vẫn trả `Expired` → `MATCH_004`.
+
+### 3.16. `GET /conversations/{id}/messages` (readOnly) — 2.17
+Bean Validation (`@ValidChatCursor`, `limit` 1..100, mặc định 50) → Q1 `findContext` → `CHAT_002` → `USER_001` → policy → `CHAT_003` → có con trỏ: Q2 `findCursor(conversationId, messageId)` → rỗng → `CHAT_001` → Q3 `findBefore` / `findAfter` (hoặc Q2 `findLatest`) với `limit + 1`, JOIN người gửi trong cùng câu → `hasMore` → cắt `limit` → mapper che người gửi đã xoá tài khoản, `senderPartyId` theo bên A/B của ctx. Thứ tự: không con trỏ / `before` → `created_at DESC, id DESC`; `after` → `ASC`.
+
+### 3.17. `POST /conversations/{id}/messages/read` (`@Transactional`) — 2.18
+Q1 `findContext` → `CHAT_002` → `USER_001` → policy → `CHAT_003` → Q2 `markOtherPartyRead(conversationId, viewerParty)` → 204. Không kiểm trạng thái, không lazy.
+
+### 3.18. `GET /conversations/{id}` (readOnly) — 2.19
+Q1 `findContext` → `CHAT_002` → `USER_001` → policy → `CHAT_003` → `conversationMapper.toResponse(ctx, access)` (`canSend` = giá trị policy; `requestStatus` / `pairingStatus` = trạng thái hiệu lực từ SQL).
+
+### 3.19. `GET /profile/conversations` (readOnly) — 2.20
+Bean Validation → Q1 `countMine(callerId)` → `callerDeleted` → `USER_001`; `total = 0` → trang rỗng → Q2 `findMine(callerId, now, limit, offset)` → mỗi dòng: policy của loại ngữ cảnh (`resolve` trong bộ nhớ) → `viewerParty`, `canSend` → `hasUnread` theo bên → mapper (che người đã xoá) → `PageResponse`. Không truy vấn trong vòng lặp. Test: người gọi là đội trưởng nhiều đội (cả hai bên của một cuộc trò chuyện → một dòng, `viewerParty` = đội tạo kèo); đội trưởng mới thấy cuộc trò chuyện cũ của đội, đội trưởng cũ không thấy; người đã giải tán đội thấy cuộc trò chuyện của đội đó với `canSend = false`, thành viên khác không thấy; ứng viên thấy chat theo đơn; cuộc trò chuyện chỉ xem có trong danh sách; chưa có tin → `lastMessage = null`; thứ tự: tin cuối, chưa có tin → luồng A theo lần gửi yêu cầu gần nhất (gửi lại sau khi rút đẩy cuộc trò chuyện lên), luồng B / chat theo đơn theo lúc mở, cùng thời điểm theo id; `hasUnread` chỉ tính tin của bên kia; `contentPreview` ≤ 100 ký tự; người gửi / bên kia đã xoá tài khoản → "Người dùng đã xóa", ảnh `null`; người gọi đã xoá tài khoản → `USER_001`; `NfsQueryCountTest` 2.20 = 2 (1 khi đếm = 0).
+
+### 3.20. STOMP
+- `CONNECT`: giải mã JWT (không DB) → lưu user + `exp`.
+- `SUBSCRIBE /topic/conversations/{id}`: destination khác mẫu (gồm wildcard `/topic/**`, mẫu cũ `/topic/pairings/{id}`) → `ERROR`; header `selector` (nếu client gửi) bị bỏ qua (broker tắt selector); `exp ≤ now` → `AUTH_001`; Q1 `conversationService.requireSubscribable` (ctx + policy, mọi trạng thái) → `CHAT_002`/`USER_001`/`CHAT_003`.
+- Đẩy: `afterCommit` của 2.16 (và MATCH-002 2.5–2.7, MERCENARY-001 2.11–2.13) → `convertAndSend("/topic/conversations/" + id)`. Lỗi gửi → log `WARN` (`conversationId`, loại frame), không ảnh hưởng response.
 
 ## 4. Transaction Boundary
 
@@ -216,7 +280,8 @@ Bảng theo method: `Component_Class_Design.md` §4.12. `READ_COMMITTED`. Event 
 | Chấp nhận vs đội gửi rút (`PENDING`) / tác giả từ chối cùng yêu cầu | `UPDATE … WHERE status = 'PENDING'` chờ khoá dòng rồi đánh giá lại: bên sau 0 dòng → chấp nhận / từ chối thua: `MATCH_008`, rút thua: `MATCH_015`; chấp nhận thua thì rollback cả CAS `match` (kèo vẫn `OPEN`) |
 | Chấp nhận vs gửi yêu cầu mới | Gửi tăng version lúc commit. Gửi commit trước → chấp nhận retry, `supersedePending` gồm yêu cầu mới. Chấp nhận commit trước → gửi lệch version → retry → `MATCH_003`. Không còn `PENDING` trên kèo `CONFIRMED` |
 | Hai đội gửi yêu cầu cùng lúc | Cả hai tăng version → một bên retry rồi thành công; tranh chấp cao → có thể `MATCH_014` |
-| Cùng đội gửi 2 lần | INSERT thứ hai chờ entry index chưa commit → vi phạm `idx_match_request_active` → `MATCH_006` |
+| Cùng đội gửi 2 lần | INSERT thứ hai chờ entry index chưa commit → vi phạm `idx_match_request_active` → `MATCH_006` (rollback trước khi tạo cuộc trò chuyện — không có cuộc trò chuyện thứ hai) |
+| Đội gửi lại (sau rút / hết hạn) 2 lần đồng thời | Cả hai đọc `existingConversationId` khác `null` → không INSERT cuộc trò chuyện; INSERT yêu cầu thứ hai vi phạm `idx_match_request_active` → `MATCH_006` |
 | Chấp nhận vs huỷ `OPEN` (`expectedStatus = OPEN`) | CAS: huỷ thua → retry thấy `CONFIRMED` ≠ `expectedStatus` → `MATCH_015` (không trừ điểm); chấp nhận thua → `MATCH_005` |
 | Chấp nhận đã commit **trước** khi request huỷ tới (màn hình tác giả cũ còn `OPEN`) | Lần thử đầu đã thấy `CONFIRMED` ≠ `expectedStatus = OPEN` → `MATCH_015`, không trừ điểm (BR-M13, AC-M11) |
 | Đội gửi rút (màn hình `PENDING`) vs tác giả chấp nhận | Chấp nhận commit trước lúc rút đọc (Q1) → rút thấy `ACCEPTED` ≠ `expectedStatus = PENDING` → `MATCH_015`; chấp nhận commit giữa Q1 và Q3 của rút → `withdrawIfPending` 0 dòng → `MATCH_015`. Cả hai: không huỷ kèo, không trừ điểm. Rút commit trước → chấp nhận `MATCH_008` |
@@ -234,9 +299,22 @@ Bảng theo method: `Component_Class_Design.md` §4.12. `READ_COMMITTED`. Event 
 
 Race của kèo B (pairing: tạo, xác nhận, hoàn tất vs huỷ `OPEN` / job): MATCH-002 `Processing_Flow.md` §5.
 
-**Thứ tự khoá** [Inference — suy từ thứ tự câu lệnh, chưa tái hiện]: luồng người dùng `match` → `match_request` / `pairing` → `team` (Hibernate flush CAS `match` trước native query sau nó); job `match` → `match_request`; gửi yêu cầu INSERT (khoá `FOR KEY SHARE` `match`/`team` qua FK) rồi `UPDATE match` lúc commit — `KEY SHARE` tương thích `NO KEY UPDATE` nên không chờ chéo. Không thấy vòng chờ với USER-002 (giải tán khoá `team` → `team_member`, không chạm `match`). Nếu xuất hiện `40P01`, retrier thử lại phía người dùng; lô job bị huỷ → log, lần sau làm tiếp `[cần xác nhận #8]`.
+Chat (v2.4 — chuyển từ MATCH-002):
 
-**Test bắt buộc** (integration, commit thật, không `@Transactional` mức test; `Clock` cố định khi cần): 2 chấp nhận song song (đúng 1 `ACCEPTED`, `MATCH_003`); chấp nhận vs rút `PENDING` (chấp nhận commit giữa lúc đọc và lúc ghi của rút → `MATCH_015`, kèo vẫn `CONFIRMED`, điểm không đổi; rút lặp lại → `MATCH_008`); chấp nhận vs gửi mới (không `PENDING` sót trên kèo `CONFIRMED`); chấp nhận vs huỷ `OPEN` (`MATCH_015`, không trừ điểm); **màn hình cũ**: chấp nhận commit xong rồi mới gửi huỷ `expectedStatus = OPEN` → `MATCH_015`, điểm không đổi; rút `expectedStatus = PENDING` sau khi đã được chấp nhận → `MATCH_015`, kèo vẫn `CONFIRMED`, điểm không đổi; huỷ / rút / từ chối trên kèo đã `EXPIRED` trong DB → `MATCH_004`; huỷ / rút sau ghép → đúng một `MatchCancelledEvent`, không có `MatchRequestWithdrawnEvent`; 2.4 giữ thứ tự khoản tự nhập và `updatedAt` tăng khi chỉ đổi khoản tự nhập (chỉ assert tăng so với trước, **không** assert bằng giờ `Clock` vì `@PreUpdate` dùng `OffsetDateTime.now()`); 2.7 với đội tác giả đã giải tán → `TEAM_016`; huỷ `OPEN` vs gửi mới (`MATCH_010`); tác giả huỷ vs đội đã ghép rút (một lần trừ điểm); chấp nhận vs job hết hạn (`MATCH_004`, không 500); gửi trùng (`MATCH_006`); lazy: 2.8 trên kèo quá hạn → `MATCH_004` **và** DB đã `EXPIRED` + yêu cầu `EXPIRED` + 1 event; 2.3 trên kèo quá hạn → `status = EXPIRED`, DB không đổi; biên khung trừ điểm (Δ = 24h, 24h − 1s, 4h, 4h − 1s) và chặn [0,100] (điểm 3 trừ 5 → 0); job: 2 lô, SKIP LOCKED (dòng đang khoá bị bỏ qua), event chỉ cho dòng đã chuyển, lô lỗi không phát event; `reliability_score` không bị `updateTeam` ghi đè sau khi trừ điểm; audit 2.15 ghi đúng một lần khi commit; double-submit 2.8 qua MockMvc (retry trên đường HTTP thật với `open-in-view` — `[cần xác nhận #9]`); `NfsQueryCountTest`: 2.1 = 6 (kèo A và kèo B), 2.4 = 6 (có khoản tự nhập; 4 khi rỗng; 1 câu `INSERT` cho mọi khoản), 2.6 = 5, 2.8 = 6, 2.10 (`ACCEPTED`) = 6, 2.3 = 2 (kèo B ≤ 3), 2.5 `OPEN` kèo B = 4, 2.2/2.7/2.11/2.12 ≤ 4. Kèo B (v2.0): tạo kèo trả `timeOptionId` khớp DB và không cập nhật `lastSelectedAt`; 2.2 kèo B khớp khi chỉ một khung giờ nằm trong `startsAtFrom..startsAtTo`, `distanceKm` = lựa chọn gần nhất; 2.4/2.6/2.7 trên kèo B → `MATCH_016`; huỷ kèo B `OPEN` khi có pairing `NEGOTIATING` → tất cả `SUPERSEDED`, không `MATCH_010`; job hết hạn lô lẫn kèo A và B → yêu cầu `EXPIRED` và pairing `EXPIRED` đúng loại.
+| Race | Kết quả bất biến |
+|---|---|
+| Gửi tin vs chấp nhận / từ chối / rút / hết hạn yêu cầu (hoặc hoàn tất / hết hạn pairing — MATCH-002) | INSERT tin chỉ khoá `FOR KEY SHARE` dòng `conversation` (FK); không khoá `match_request` / `pairing` / `match` → tin có thể được lưu ngay sau khi yêu cầu chuyển "không được ghép" (cửa sổ một transaction, policy đã đọc trạng thái cũ). Chấp nhận — user chốt 2026-11-15, không khoá. Kèo quá hạn: nhánh lazy khoá `match` trước (như mọi luồng) |
+| Hai lần gửi tin đồng thời (hai thiết bị, hai bên) | Hai INSERT độc lập → cả hai thành công, thứ tự theo `(created_at, id)` |
+| Đánh dấu đọc vs tin mới | Tin commit sau `markOtherPartyRead` giữ `is_read = false` — đúng nghĩa |
+| Gửi yêu cầu (2.6) tạo cuộc trò chuyện | INSERT `conversation` sau INSERT yêu cầu; hai lần gửi đồng thời của cùng đội đã bị `idx_match_request_active` tuần tự hoá → không đụng `idx_conversation_team_match` |
+
+Thứ tự khoá chat: 2.16 INSERT `conversation_message` (`FOR KEY SHARE` trên `conversation` — dòng `conversation` không bao giờ bị `UPDATE`); [lazy] trong 2.16 `match` → `match_request` / `pairing` (như mọi nhánh lazy); 2.6 INSERT `match_request` → INSERT `conversation` (`KEY SHARE` `match`) → `match` (`version` lúc commit).
+
+**Test bắt buộc chat (v2.4):** cursor: tin cùng `created_at` khác `id` không mất / không trùng khi phân trang `before` và `after`; `CHAT_001` khi con trỏ thuộc cuộc trò chuyện khác; tin nhắn: người gửi đúng `sender_user_id` sau khi đội chuyển đội trưởng (tin cũ giữ người cũ, tin mới người mới), người gửi đã xoá tài khoản → `senderName = "Người dùng đã xóa"`, `senderAvatarUrl = null` ở 2.17; response 2.16 và frame cùng người gửi; FK `RESTRICT`: `DELETE` user có tin nhắn bị chặn (SQL trực tiếp); STOMP: `CONNECT` token sai / refresh token → `ERROR AUTH_001`; `SUBSCRIBE` người ngoài → `ERROR CHAT_003`; `SUBSCRIBE /topic/**`, `/topic/conversations/*`, `/topic/pairings/{id}` → `ERROR`; `SUBSCRIBE` hợp lệ kèm `selector` → vẫn nhận đủ frame; `SEND` → `ERROR`; frame `MESSAGE_CREATED` chỉ phát sau commit (lần thử rollback không phát); bảng nhắn được / chỉ xem luồng A (`API_Spec.md` §1.6 — yêu cầu `PENDING`, `ACCEPTED`, `WITHDRAWN` sau `ACCEPTED`, `REJECTED`, `SUPERSEDED`, `EXPIRED`, `WITHDRAWN` khi `PENDING`, gửi lại sau rút → nhắn được lại, cùng `conversationId`); lazy: gửi tin khi yêu cầu `PENDING` trên kèo quá hạn → `MATCH_004` **và** DB kèo + yêu cầu `EXPIRED` + 1 `MatchExpiredEvent`; đã ghép, kèo `CANCELLED` → 201; đội tạm ngưng / bộ môn tắt → vẫn 201; thành viên thường, đội trưởng cũ sau chuyển quyền, đội khác cùng kèo (X đọc chat Alpha–Y) → `CHAT_003`; đội trưởng mới đọc được tin cũ; người làm đội trưởng cả hai đội → `viewerPartyId` = đội tạo kèo; đội đã giải tán: người đã bấm giải tán → 2.17/2.18/2.19/`SUBSCRIBE` thành công, 2.19 `canSend = false`, 2.16 → `CHAT_004` (kể cả yêu cầu `PENDING` trên kèo quá hạn — không chuyển `EXPIRED`), thành viên khác → `CHAT_003`, đội còn lại vẫn gửi được; tài khoản đã xoá (token còn hạn) → `USER_001` ở 2.16–2.20 và `SUBSCRIBE`; 2.19 `canSend` khớp 2.16 ở mọi dòng bảng; lazy không kích hoạt khi caller không tham gia (`CHAT_003` trước); `NfsQueryCountTest`: 2.16 = 2 (lazy 3), 2.17 = 2 / 3, 2.18 = 2, 2.19 = 1, 2.20 = 2.
+
+**Thứ tự khoá** [Inference — suy từ thứ tự câu lệnh, chưa tái hiện]: luồng người dùng `match` → `match_request` / `pairing` → `team` (Hibernate flush CAS `match` trước native query sau nó); job `match` → `match_request`; gửi yêu cầu INSERT yêu cầu + cuộc trò chuyện (khoá `FOR KEY SHARE` `match`/`team` qua FK; v2.4) rồi `UPDATE match` lúc commit — `KEY SHARE` tương thích `NO KEY UPDATE` nên không chờ chéo. Không thấy vòng chờ với USER-002 (giải tán khoá `team` → `team_member`, không chạm `match`). Nếu xuất hiện `40P01`, retrier thử lại phía người dùng; lô job bị huỷ → log, lần sau làm tiếp `[cần xác nhận #8]`.
+
+**Test bắt buộc** (integration, commit thật, không `@Transactional` mức test; `Clock` cố định khi cần): 2 chấp nhận song song (đúng 1 `ACCEPTED`, `MATCH_003`); chấp nhận vs rút `PENDING` (chấp nhận commit giữa lúc đọc và lúc ghi của rút → `MATCH_015`, kèo vẫn `CONFIRMED`, điểm không đổi; rút lặp lại → `MATCH_008`); chấp nhận vs gửi mới (không `PENDING` sót trên kèo `CONFIRMED`); chấp nhận vs huỷ `OPEN` (`MATCH_015`, không trừ điểm); **màn hình cũ**: chấp nhận commit xong rồi mới gửi huỷ `expectedStatus = OPEN` → `MATCH_015`, điểm không đổi; rút `expectedStatus = PENDING` sau khi đã được chấp nhận → `MATCH_015`, kèo vẫn `CONFIRMED`, điểm không đổi; huỷ / rút / từ chối trên kèo đã `EXPIRED` trong DB → `MATCH_004`; huỷ / rút sau ghép → đúng một `MatchCancelledEvent`, không có `MatchRequestWithdrawnEvent`; 2.4 giữ thứ tự khoản tự nhập và `updatedAt` tăng khi chỉ đổi khoản tự nhập (chỉ assert tăng so với trước, **không** assert bằng giờ `Clock` vì `@PreUpdate` dùng `OffsetDateTime.now()`); 2.7 với đội tác giả đã giải tán → `TEAM_016`; huỷ `OPEN` vs gửi mới (`MATCH_010`); tác giả huỷ vs đội đã ghép rút (một lần trừ điểm); chấp nhận vs job hết hạn (`MATCH_004`, không 500); gửi trùng (`MATCH_006`); lazy: 2.8 trên kèo quá hạn → `MATCH_004` **và** DB đã `EXPIRED` + yêu cầu `EXPIRED` + 1 event; 2.3 trên kèo quá hạn → `status = EXPIRED`, DB không đổi; biên khung trừ điểm (Δ = 24h, 24h − 1s, 4h, 4h − 1s) và chặn [0,100] (điểm 3 trừ 5 → 0); job: 2 lô, SKIP LOCKED (dòng đang khoá bị bỏ qua), event chỉ cho dòng đã chuyển, lô lỗi không phát event; `reliability_score` không bị `updateTeam` ghi đè sau khi trừ điểm; audit 2.15 ghi đúng một lần khi commit; double-submit 2.8 qua MockMvc (retry trên đường HTTP thật với `open-in-view` — `[cần xác nhận #9]`); `NfsQueryCountTest`: 2.1 = 6 (kèo A và kèo B), 2.4 = 6 (có khoản tự nhập; 4 khi rỗng; 1 câu `INSERT` cho mọi khoản), 2.6 = 6 lần gửi đầu / 5 khi gửi lại (cùng `conversationId` với lần trước), 2.8 = 6, 2.10 (`ACCEPTED`) = 6, 2.3 = 2 (kèo B ≤ 3), 2.5 `OPEN` kèo B = 4, 2.2/2.7/2.11/2.12 ≤ 4. Kèo B (v2.0): tạo kèo trả `timeOptionId` khớp DB và không cập nhật `lastSelectedAt`; 2.2 kèo B khớp khi chỉ một khung giờ nằm trong `startsAtFrom..startsAtTo`, `distanceKm` = lựa chọn gần nhất; 2.4/2.6/2.7 trên kèo B → `MATCH_016`; huỷ kèo B `OPEN` khi có pairing `NEGOTIATING` → tất cả `SUPERSEDED`, không `MATCH_010`; job hết hạn lô lẫn kèo A và B → yêu cầu `EXPIRED` và pairing `EXPIRED` đúng loại.
 
 ## 6. Error Handling
 
@@ -270,6 +348,13 @@ Native projection + JOIN (sport, team, venue, ảnh chính), không N+1; trạng
 | `match_request` | unique `(match_id, requester_team_id) WHERE status NOT IN ('WITHDRAWN','EXPIRED')` | 2.6 chống trùng | V1 |
 | `match_request` | unique `(match_id) WHERE status = 'ACCEPTED'` | BR-M06 | V6 |
 | `cost_custom_item` | unique `(match_id, display_order)` | 2.3 (đọc theo thứ tự), 2.4 (xoá theo `match_id`) | V6 (thay `(match_id)` của V1) |
+| `conversation` | unique `(match_id, party_b_id) WHERE context_type = 'TEAM_MATCH'` | BC-N04; tìm cuộc trò chuyện theo (kèo, đội) ở 2.6/2.7/2.12, MATCH-002 2.1–2.4; job xoá theo `match_id` | V6 (v2.4) |
+| `conversation` | `(party_a_id)`, `(party_b_id)` | 2.20 cuộc trò chuyện của tôi | V6 (v2.4) |
+| `conversation_message` | `(conversation_id, created_at, id)` | 2.17 (row comparison); 2.20 tin cuối mỗi cuộc trò chuyện | V6 (v2.4) |
+| `conversation_message` | `(conversation_id, sender_party) WHERE NOT is_read` | 2.18; 2.20 `hasUnread` | V6 (v2.4) |
+| `team` | `(disbanded_by) WHERE disbanded_by IS NOT NULL` | 2.20 đội người gọi đã giải tán | V6 (v2.4) |
+| `team_member` | `(user_id, status)`; `(team_id, role, status)` | 2.20 đội người gọi làm đội trưởng; đội trưởng hiện tại hai đội ở 2.16–2.20 | V1 |
+| `match_request` | `(match_id, status)` | `findContext` / 2.20 — yêu cầu gần nhất của đội (LATERAL) | V1 |
 
 Index cho lựa chọn kèo B (`match_venue_option`, `match_time_option`) và `pairing`: MATCH-002 `Processing_Flow.md` §8. 2.2 với toạ độ không bảo đảm index (≤ 1000 kèo `OPEN` theo AC §3.1); lọc `skillLevel` dùng `jsonb_exists` trên cột TEXT (quét các dòng `OPEN` còn lại sau lọc index). Đo SQL thật bằng `NfsQueryCountTest` trước khi merge.
 
@@ -281,10 +366,17 @@ Index cho lựa chọn kèo B (`match_venue_option`, `match_time_option`) và `p
 | Job dừng / chậm | Kèo `OPEN` quá hạn vẫn đúng ở API (trạng thái hiệu lực); `ARCHIVED` và thông báo trễ | Log `INFO`/`ERROR` mỗi lần chạy; theo dõi |
 | Nhiều instance | Job chạy song song | `SKIP LOCKED` → không xử lý trùng, không event trùng (ADR-0012) |
 | Đội tác giả bị khoá / giải tán khi có kèo | Kèo `OPEN` treo tới hết hạn; `CONFIRMED` tới `ARCHIVED` | (user chốt 2026-11-09) |
+| Nhiều instance (kênh realtime — v2.4) | Simple broker trong bộ nhớ: client chỉ nhận frame từ instance mình kết nối | Một instance (ADR-0011, ADR-0014); nhiều instance → ADR broker relay |
+| Mất frame (ngắt mạng, restart) | Bên kia chưa thấy tin / thay đổi | FE kết nối lại → `SUBSCRIBE` trước → 2.17 `after` + 2.19, khử trùng theo `messageId` (`API_Spec.md` §1.7) |
+| Cursor `after` bỏ sót tin commit muộn | Tin M1 được gán `created_at`/`id` (lúc `save`) trước tin M2 nhưng commit **sau** M2; client đã có M2 và lỡ frame M1 → 2.17 `after = M2` không trả M1 | Cửa sổ = một transaction 2.16 (ms), chỉ khi trùng lúc mất kết nối. Chấp nhận MVP; M1 hiện khi tải lại trang mới nhất hoặc cuộn `before` |
+| **Quyền realtime chỉ kiểm lúc `SUBSCRIBE`** (ưu tiên cao — review 2026-11-15) | Đội trưởng cũ (sau chuyển quyền) hoặc token đã hết hạn vẫn nhận frame của cuộc trò chuyện đã đăng ký tới khi ngắt kết nối. Phạm vi lớn hơn bản trước: cuộc trò chuyện sống tới 90 ngày sau khi kèo kết thúc (gồm chat của đội đã ghép sau trận), có cả người chỉ xem (người đã giải tán đội) — một kết nối mở lâu có thể nhận tin trong thời gian dài | Chấp nhận MVP (ADR-0014). **Việc cần làm trước khi mở rộng người dùng** (theo dõi ở ADR-0014 §Cần theo dõi): ngắt phiên / huỷ đăng ký theo user khi chuyển quyền đội trưởng, giải tán đội, xoá tài khoản (registry phiên STOMP), hoặc kiểm lại quyền định kỳ / khi gửi frame |
+| Kết nối WebSocket nhiều | Bộ nhớ / luồng | Theo dõi số phiên; heartbeat ngắt kết nối chết |
+| Spam tin nhắn | DB tăng | Ngoài phạm vi; rate limit chung khi có (`security-backend.md` §7) |
+| 2.20 tăng theo số cuộc trò chuyện của một người | LATERAL tin cuối cho mọi cuộc trò chuyện của người gọi để sắp xếp — dự kiến vài trăm trong 90 ngày lưu [Inference — chưa đo] | Đo `EXPLAIN ANALYZE` khi một người > 1 000 cuộc trò chuyện; khi đó cân nhắc cột `last_message_at` trên `conversation` (thêm một câu ghi vào 2.16) |
 
 ## 10. Danh sách [cần xác nhận]
 
-Đánh số toàn thiết kế: 1–5, 10, 11 ở `Component_Class_Design.md` §12, 6–9 ở đây.
+Đánh số toàn thiết kế: 1–5, 10–13, 16, 18, 19 ở `Component_Class_Design.md` §12, 6–9, 14, 15 ở đây.
 
 | # | Nội dung | Loại |
 |---|---|---|
@@ -292,3 +384,5 @@ Index cho lựa chọn kèo B (`match_venue_option`, `match_time_option`) và `p
 | 7 | Native `SELECT … FOR NO KEY UPDATE SKIP LOCKED` trả interface projection qua Spring Data (không `@Lock`) chạy đúng trên PostgreSQL/Hibernate 7.2 [Inference] | Không chặn — kiểm bằng integration test job đầu tiên |
 | 8 | Deadlock giữa job và luồng người dùng / USER-002 chưa tái hiện (§5) | Không chặn |
 | 9 | Retry + nhánh commit-rồi-báo-lỗi trên đường HTTP với `open-in-view` bật (USER-002 §5 đã nêu cho disband) | Không chặn — test MockMvc |
+| 14 | (v2.4 — chuyển từ MATCH-002 #7) `TransactionSynchronization.afterCommit` của `ChatRealtimeGateway` trong lambda retrier (mỗi lần thử một transaction qua `TransactionTemplate`): synchronization chỉ chạy cho lần thử commit [Inference — theo cơ chế Spring, chưa chạy] | Không chặn — test "rollback không phát frame" |
+| 15 | (v2.4 — chuyển từ MATCH-002 #8) `SimpMessagingTemplate.convertAndSend` từ luồng request sau commit không chặn lâu khi có nhiều subscriber [Inference] | Không chặn — đo khi load test |

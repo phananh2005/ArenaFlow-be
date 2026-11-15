@@ -7,11 +7,11 @@
 | Mục | Giá trị |
 |---|---|
 | Mã chức năng | `MERCENARY-001` |
-| Phạm vi tầng | Backend (Spring Boot REST API + kênh STOMP/WebSocket của MATCH-002). Frontend: ngoài phạm vi repo này |
+| Phạm vi tầng | Backend (Spring Boot REST API + kênh STOMP/WebSocket của MATCH-001). Frontend: ngoài phạm vi repo này |
 | Repo | ArenaFlow-be |
-| Quy ước áp dụng | `api-convention.md` (envelope, phân trang offset / con trỏ, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1.1, §1.2 và MATCH-001 `API_Spec.md` §1.1; kèo, trạng thái kèo, mã `MATCH_*`: MATCH-001 `API_Spec.md`; kênh realtime: MATCH-002 `API_Spec.md` §1.6; report / tranh chấp / uy tín đội, mã `RATING_*`/`REPORT_*`/`DISPUTE_*`: REPUTATION-001 `API_Spec.md`; mã `TEAM_*`, `USER_*`, `AUTH_*`: USER-001/USER-002 `API_Spec.md`; hiển thị user đã xoá: ADR-0002 (Sửa đổi 2026-11-12) |
-| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.9, cập nhật 2026-11-14) — UC-ME01..ME09 (gồm UC-ME01 A1 trận ngoài hệ thống), UC-U03; BR-ME01..BR-ME19, BR-V11, BC-ME01..ME05; Business_Rules §2.4, §2.5, §3.1–§3.3, §5.1, §5.2, §5.5, §6, §8.2; AC-ME01..ME11; BR-R01..R10, BR-N01, BR-N03; Scenario 7 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 |
+| Quy ước áp dụng | `api-convention.md` (envelope, phân trang offset / con trỏ, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1.1, §1.2 và MATCH-001 `API_Spec.md` §1.1; kèo, trạng thái kèo, mã `MATCH_*`: MATCH-001 `API_Spec.md`; cuộc trò chuyện (2.14–2.17 = MATCH-001 2.19, 2.16, 2.17, 2.18), kênh realtime, mã `CHAT_*`: MATCH-001 `API_Spec.md` §1.7, §4.4, §4.5, §5; report / tranh chấp / uy tín đội, mã `RATING_*`/`REPORT_*`/`DISPUTE_*`: REPUTATION-001 `API_Spec.md`; mã `TEAM_*`, `USER_*`, `AUTH_*`: USER-001/USER-002 `API_Spec.md`; hiển thị user đã xoá: ADR-0002 (Sửa đổi 2026-11-12) |
+| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10; mercenary theo v1.9, cập nhật 2026-11-14) — UC-ME01..ME09 (gồm UC-ME01 A1 trận ngoài hệ thống), UC-U03; BR-ME01..BR-ME19, BR-V11, BC-ME01..ME05; Business_Rules §2.4, §2.5, §3.1–§3.3, §5.1, §5.2, §5.5, §6, §8.2; AC-ME01..ME11; BR-R01..R10, BR-N01, BR-N03; Scenario 7 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -23,7 +23,7 @@ Sau khi kèo đã ghép (`CONFIRMED`), đội trưởng của **đội tạo kè
 
 - Như MATCH-001 `API_Spec.md` §1.1: Bearer token (`401 AUTH_001` → refresh), `/api/v1/admin/**` cần quyền Admin (`403 AUTH_004`), envelope `data` / `error` / `pagination`, `201` không kèm header `Location`, thời gian ISO-8601 trả UTC, chuỗi được bỏ khoảng trắng đầu/cuối (`""` ở field tuỳ chọn = không nhập), enum UPPERCASE, `400 VALIDATION_ERROR` kèm `validationErrors[]`.
 - **Vị trí** (`position`) dùng **nhãn tiếng Việt** như `preferredPosition` của hồ sơ (USER-001): `Thủ môn` | `Hậu vệ` | `Tiền vệ` | `Tiền đạo`.
-- Danh sách phân trang `page` (≥ 1, mặc định 1) / `pageSize` (1..100, mặc định 20); thứ tự cố định ghi ở từng endpoint. Lịch sử chat (2.16) phân trang bằng **con trỏ** (`before` / `after`, `limit`) như MATCH-002 2.9.
+- Danh sách phân trang `page` (≥ 1, mặc định 1) / `pageSize` (1..100, mặc định 20); thứ tự cố định ghi ở từng endpoint. Lịch sử chat (2.16) phân trang bằng **con trỏ** (`before` / `after`, `limit`) như MATCH-001 2.17.
 - Mọi thao tác ghi có thể trả `409 MATCH_014` "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại" khi nhiều thao tác đụng nhau liên tục → FE tải lại rồi cho người dùng bấm lại.
 - Người dùng đã xoá tài khoản hiện `"Người dùng đã xóa"`, ảnh `null` ở mọi endpoint không phải Admin; API Admin (2.25–2.27) trả tên thật kèm cờ `is…Deleted` (ADR-0002).
 
@@ -48,8 +48,8 @@ Sau khi kèo đã ghép (`CONFIRMED`), đội trưởng của **đội tạo kè
 | Huỷ trận ngoài (2.32), xem trận ngoài của đội (2.29, 2.30) | Được | `422 TEAM_016` |
 | Đóng tin (2.6), từ chối (2.12), xem tin / ứng viên của đội (2.2, 2.8) | Được | `422 TEAM_016` |
 | Tin hiện khi tìm kiếm (2.3); nhận ứng tuyển (2.7) | Không hiện; `422 MERCENARY_005` | Không hiện; `422 MERCENARY_005` |
-| Chat (2.14–2.17) | Được | Đội không còn đội trưởng → chỉ ứng viên đọc / gửi được; tin của ứng viên vẫn lưu |
-| Đánh giá, report, xem đánh giá theo đơn — phía đội (2.18–2.20); danh sách report của đội (2.21) | `422 TEAM_015` (BR-R10) | Không còn đội trưởng → `403 MERCENARY_014` / `422 TEAM_016` (2.21) |
+| Chat (2.14–2.17) | Được | Người đã giải tán đội tuyển (đội trưởng cuối) vẫn mở cuộc trò chuyện, đọc lịch sử, đánh dấu đã đọc, đăng ký realtime nhưng **không gửi** (`canSend = false`, 2.15 → `409 CHAT_004`); thành viên khác của đội → `403 CHAT_003`; ứng viên đọc / gửi như cũ (user chốt 2026-11-15, như chat hai đội — MATCH-001 §1.6) |
+| Đánh giá, report, xem đánh giá theo đơn — phía đội (2.18–2.20); danh sách report của đội (2.21) | `422 TEAM_015` (BR-R10) | Không còn đội trưởng → `403 MERCENARY_014` (2.18, 2.19; 2.20 với người khác) / `422 TEAM_016` (2.21; 2.20 khi người gọi là người đã giải tán đội tuyển — BR-R10) |
 | Phía mercenary đánh giá / report đội | Được (trạng thái đội bị đánh giá / report không ảnh hưởng — BR-R10) | Được |
 
 ### 1.3. Trạng thái tin tuyển và đơn ứng tuyển
@@ -123,17 +123,19 @@ Tính tại thời điểm đọc (2.8, 2.23):
 
 ### 1.7. Cuộc trò chuyện theo đơn và kênh realtime
 
-- Mỗi đơn ứng tuyển có đúng **một** cuộc trò chuyện (`conversationId` có trong đơn — 2.7, 2.8, 2.9, 2.10), mở ngay khi ứng tuyển. Hai bên: **đội tuyển** (người nhắn là đội trưởng hiện tại) và **ứng viên** (BR-ME16).
-- **Gửi tin được** khi đơn (trạng thái hiệu lực) là `PENDING` hoặc `APPROVED` — đơn `APPROVED` nhắn được cả trước, trong, sau trận và khi kèo bị huỷ, tới khi tin nhắn hết hạn lưu. Đơn `REJECTED`/`WITHDRAWN` (kể cả đơn chờ bị từ chối tự động khi tin đóng / hết hạn) → **chỉ xem** (`409 CHAT_004`). Đọc lịch sử, đánh dấu đã đọc: mọi trạng thái.
-- Tên đội trưởng hiện tại (2.14) và tên người gửi luôn hiện trong chat, kể cả khi đơn `PENDING` (BR-ME04 ngoại lệ — §1.4).
+- Mỗi đơn ứng tuyển có đúng **một** cuộc trò chuyện (`conversationId` có trong đơn — 2.7, 2.8, 2.9, 2.10, và trong danh sách "Tin nhắn của tôi" MATCH-001 2.20), mở ngay khi ứng tuyển. Hai bên: **đội tuyển** (người nhắn là đội trưởng hiện tại) và **ứng viên** (BR-ME16). `contextType = "MERCENARY_APPLICATION"`.
+- **Endpoint, kiểu dữ liệu, kênh realtime dùng chung** với chat giữa hai đội trong kèo (MATCH-001 `API_Spec.md` §1.6, §1.7, 2.16–2.20, §4.7, §4.8): 2.14–2.17 ở đây **là** MATCH-001 2.19, 2.16, 2.17, 2.18 (cùng path, cùng body / response / lỗi). Mục này chỉ ghi quy tắc riêng của cuộc trò chuyện theo đơn.
+- **Gửi tin được** (`canSend`) khi đơn (trạng thái hiệu lực) là `PENDING` hoặc `APPROVED` — đơn `APPROVED` nhắn được cả trước, trong, sau trận và khi kèo bị huỷ, tới khi tin nhắn hết hạn lưu. Đơn `REJECTED`/`WITHDRAWN` (kể cả đơn chờ bị từ chối tự động khi tin đóng / hết hạn) → **chỉ xem** (`409 CHAT_004`). Đọc lịch sử, đánh dấu đã đọc: mọi trạng thái. Không có lỗi "kèo hết hạn" (`MATCH_004`) ở cuộc trò chuyện theo đơn.
+- **Đội tuyển đã giải tán** (user chốt 2026-11-15 — như chat hai đội, MATCH-001 §1.6): người đã bấm giải tán (đội trưởng cuối) vẫn là bên đội tuyển của cuộc trò chuyện ở chế độ **chỉ xem** — 2.14 (`canSend = false`), 2.16, 2.17, `SUBSCRIBE` được; 2.15 → `409 CHAT_004`. Thành viên khác của đội → `403 CHAT_003`. Ứng viên đọc / gửi theo trạng thái đơn như trên. Ví dụ: FC Hoa Lư đã duyệt Trần Văn C, đội trưởng A giải tán đội → A vẫn đọc chat với C nhưng ô chat bị khoá; C vẫn nhắn được (đơn `APPROVED`).
+- Tên đội trưởng hiện tại (2.14) và tên người gửi luôn hiện trong chat, kể cả khi đơn `PENDING` (BR-ME04 ngoại lệ — §1.4); đội đã giải tán → `captainName = null`.
 - Tin nhắn 1..1000 ký tự; mỗi tin mang **người thực sự đã gửi** (tên, ảnh); tin cũ giữ người gửi lúc đó dù đội đã chuyển quyền đội trưởng (như BR-N03). Tin được lưu 90 ngày sau khi trận kết thúc (BR-N01).
-- **Kênh realtime:** cùng kết nối STOMP của MATCH-002 `API_Spec.md` §1.6 (kết nối, xác thực, heartbeat, xử lý lỗi, thứ tự bù tin sau khi kết nối lại — áp y hệt, thay 2.9/2.4 của MATCH-002 bằng 2.16/2.14 của mã này). Đăng ký `SUBSCRIBE /topic/conversations/{conversationId}` (đúng mẫu, không wildcard). Lỗi đăng ký: không có cuộc trò chuyện → `ERROR` `message: CHAT_002`; không tham gia → `ERROR` `message: CHAT_003`; token hết hạn → `AUTH_001`.
+- **Kênh realtime:** MATCH-001 `API_Spec.md` §1.7 — `SUBSCRIBE /topic/conversations/{conversationId}`; thứ tự bù tin sau khi kết nối lại dùng 2.16 (`after`) và 2.14. Lỗi đăng ký: `CHAT_002`, `CHAT_003`, `AUTH_001`.
 
-**Frame server gửi tới topic cuộc trò chuyện** (body JSON):
+**Frame server gửi tới topic cuộc trò chuyện theo đơn** (body JSON):
 
 | `type` | Khi nào | Nội dung |
 |---|---|---|
-| `MESSAGE_CREATED` | Có tin mới (kể cả tin của chính mình) | `message`: object Tin nhắn (§4.8) |
+| `MESSAGE_CREATED` | Có tin mới (kể cả tin của chính mình) | `message`: object Tin nhắn (MATCH-001 §4.8) |
 | `APPLICATION_UPDATED` | Đội trưởng duyệt / từ chối, ứng viên rút đơn | `applicationId`, `status`, `recruitmentId`, `recruitmentStatus`, `quantityApproved` |
 
 ```json
@@ -160,10 +162,10 @@ Tính tại thời điểm đọc (2.8, 2.23):
 | 2.11 | `POST /api/v1/mercenary-applications/{applicationId}/approve` | Duyệt ứng viên | Đội trưởng đội tuyển | 200 |
 | 2.12 | `POST /api/v1/mercenary-applications/{applicationId}/reject` | Từ chối ứng viên | Đội trưởng đội tuyển | 204 |
 | 2.13 | `POST /api/v1/mercenary-applications/{applicationId}/withdraw` | Rút đơn / rút lui | Ứng viên | 200 |
-| 2.14 | `GET /api/v1/conversations/{conversationId}` | Đầu phòng chat | Hai bên của cuộc trò chuyện | 200 |
-| 2.15 | `POST /api/v1/conversations/{conversationId}/messages` | Gửi tin nhắn | Hai bên | 201 |
-| 2.16 | `GET /api/v1/conversations/{conversationId}/messages` | Lịch sử chat | Hai bên | 200 |
-| 2.17 | `POST /api/v1/conversations/{conversationId}/messages/read` | Đánh dấu đã đọc | Hai bên | 204 |
+| 2.14 | `GET /api/v1/conversations/{conversationId}` | Đầu phòng chat (= MATCH-001 2.19) | Hai bên của cuộc trò chuyện | 200 |
+| 2.15 | `POST /api/v1/conversations/{conversationId}/messages` | Gửi tin nhắn (= MATCH-001 2.16) | Hai bên | 201 |
+| 2.16 | `GET /api/v1/conversations/{conversationId}/messages` | Lịch sử chat (= MATCH-001 2.17) | Hai bên | 200 |
+| 2.17 | `POST /api/v1/conversations/{conversationId}/messages/read` | Đánh dấu đã đọc (= MATCH-001 2.18) | Hai bên | 204 |
 | 2.18 | `POST /api/v1/mercenary-applications/{applicationId}/ratings` | Đánh giá sau trận | Đội trưởng đội tuyển, mercenary | 201 |
 | 2.19 | `GET /api/v1/mercenary-applications/{applicationId}/ratings` | Xem đánh giá của đơn | Đội trưởng đội tuyển, mercenary | 200 |
 | 2.20 | `POST /api/v1/mercenary-applications/{applicationId}/reports` | Report | Đội trưởng đội tuyển, ứng viên | 201 |
@@ -840,19 +842,26 @@ Ví dụ Scenario 7: trận 18:00 ngày mai, rút lúc 14:00 (4 giờ trước) 
 
 ### 2.14. Đầu phòng chat — `GET /api/v1/conversations/{conversationId}`
 
-**Dùng khi:** mở phòng chat của một đơn — hiện hai bên (đội tuyển + đội trưởng hiện tại, ứng viên), bên của mình, có gửi được tin không.
+**Cùng endpoint MATCH-001 `API_Spec.md` 2.19** (hợp đồng, lỗi `CHAT_002` / `CHAT_003` ở đó). **Dùng khi:** mở phòng chat của một đơn — hiện hai bên (đội tuyển + đội trưởng hiện tại, ứng viên), bên của mình, có gửi được tin không (§1.7).
 **Ai gọi được:** đội trưởng hiện tại của đội tuyển; ứng viên. Mọi trạng thái đơn.
 
-**Response 200** — Cuộc trò chuyện (§4.7).
+**Response 200** — Cuộc trò chuyện (MATCH-001 §4.7). Ví dụ cuộc trò chuyện theo đơn, người gọi là ứng viên:
 
 ```json
 {
   "data": {
     "conversationId": "019370a2-6c7d-7e8f-a001-2b3c4d5e6f01",
     "contextType": "MERCENARY_APPLICATION",
+    "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708",
+    "matchType": null,
+    "requestId": null,
+    "requestStatus": null,
+    "pairingId": null,
+    "pairingStatus": null,
     "applicationId": "019370a1-5b6c-7d8e-9f00-1a2b3c4d5e01",
     "applicationStatus": "APPROVED",
-    "source": "SYSTEM", "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708", "externalMatchId": null,
+    "source": "SYSTEM",
+    "externalMatchId": null,
     "parties": [
       { "partyType": "TEAM", "partyId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c", "name": "FC Hoa Lư", "avatarUrl": null, "captainName": "Nguyễn Văn A" },
       { "partyType": "USER", "partyId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10", "name": "Trần Văn C", "avatarUrl": null, "captainName": null }
@@ -863,118 +872,44 @@ Ví dụ Scenario 7: trận 18:00 ngày mai, rút lúc 14:00 (4 giờ trước) 
 }
 ```
 
-**Lỗi**
-
-| HTTP | Mã | Khi nào | FE nên làm gì |
-|---|---|---|---|
-| 404 | `CHAT_002` | Không có cuộc trò chuyện | Quay lại |
-| 403 | `CHAT_003` | Không tham gia cuộc trò chuyện (không phải ứng viên, không phải đội trưởng hiện tại của đội tuyển) | Quay lại |
+Cuộc trò chuyện theo đơn: `parties[0]` = đội tuyển (`TEAM`), `parties[1]` = ứng viên (`USER`, `captainName = null`); `matchType`, `requestId`, `requestStatus`, `pairingId`, `pairingStatus` luôn `null`.
 
 ---
 
 ### 2.15. Gửi tin nhắn — `POST /api/v1/conversations/{conversationId}/messages`
 
-**Dùng khi:** ô chat của phòng chat đơn ứng tuyển (UC-ME09, AC-ME10).
-**Ai gọi được:** hai bên của cuộc trò chuyện; đơn đang `PENDING` hoặc `APPROVED` (§1.7).
+**Cùng endpoint MATCH-001 `API_Spec.md` 2.16** (body `{ "content": "…" }` 1..1000 ký tự, response Tin nhắn MATCH-001 §4.8, bảng lỗi ở đó). **Dùng khi:** ô chat của phòng chat đơn ứng tuyển (UC-ME09, AC-ME10).
+**Ai gọi được:** hai bên của cuộc trò chuyện; đơn đang `PENDING` hoặc `APPROVED` (§1.7). Người gửi luôn là người gọi API.
 
-Tin được lưu rồi mới đẩy cho cả hai bên qua frame `MESSAGE_CREATED`. Người gửi luôn là người gọi API.
-
-**Request body**
-
-| Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
-|---|---|---|---|---|
-| `content` | string | Có | Sau khi bỏ khoảng trắng đầu/cuối: 1..1000 ký tự | `"Mình đá tiền vệ trái được, mấy giờ có mặt?"` |
+Dùng chung endpoint chat của MATCH-001 (2.16–2.19 của mã đó); 2.15–2.17 ở đây chỉ ghi phần riêng của cuộc trò chuyện theo đơn. Ví dụ ứng viên gửi tin:
 
 ```json
 { "content": "Mình đá tiền vệ trái được, mấy giờ có mặt?" }
 ```
 
-**Response 201** — Tin nhắn (§4.8).
-
 ```json
-{
-  "data": {
-    "messageId": "019370b0-7d8e-7f90-b102-3c4d5e6f7a01",
-    "conversationId": "019370a2-6c7d-7e8f-a001-2b3c4d5e6f01",
-    "senderPartyType": "USER",
-    "senderPartyId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10",
-    "senderUserId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10",
-    "senderName": "Trần Văn C",
-    "senderAvatarUrl": null,
-    "content": "Mình đá tiền vệ trái được, mấy giờ có mặt?",
-    "isRead": false,
-    "createdAt": "2026-11-13T09:05:00Z"
-  }
-}
+{ "data": { "messageId": "019370b0-7d8e-7f90-b102-3c4d5e6f7a01", "conversationId": "019370a2-6c7d-7e8f-a001-2b3c4d5e6f01",
+            "senderPartyType": "USER", "senderPartyId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10",
+            "senderUserId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10", "senderName": "Trần Văn C", "senderAvatarUrl": null,
+            "content": "Mình đá tiền vệ trái được, mấy giờ có mặt?", "isRead": false, "createdAt": "2026-11-13T09:05:00Z" } }
 ```
 
-FE hiển thị tin từ response; frame `MESSAGE_CREATED` cùng `messageId` bỏ qua để không hiện trùng.
+Ứng viên gửi: `senderPartyType = "USER"`, `senderPartyId` = `senderUserId` = id ứng viên; tin của đội trưởng: `senderPartyType = "TEAM"`, `senderPartyId` = id đội tuyển. Hiển thị tin của bên đội: `<tên đội> · <senderName>` (vd "FC Hoa Lư · Nguyễn Văn A").
 
-**Lỗi**
-
-| HTTP | Mã | Khi nào | FE nên làm gì |
-|---|---|---|---|
-| 400 | `VALIDATION_ERROR` | `content` rỗng sau trim / > 1000 ký tự | Hiện lỗi cạnh ô nhập |
-| 404 | `USER_001` | Tài khoản đã xoá (token còn hạn) | Xoá token, về đăng nhập |
-| 404 | `CHAT_002` | Không có cuộc trò chuyện | Quay lại |
-| 403 | `CHAT_003` | Không tham gia (vd vừa bị chuyển quyền đội trưởng) | Khoá ô chat, tải lại 2.14 |
-| 409 | `CHAT_004` | Đơn đã bị từ chối / đã rút → chỉ xem | Khoá ô chat, vẫn cho đọc |
+Lỗi riêng của cuộc trò chuyện theo đơn: `409 CHAT_004` khi đơn đã bị từ chối / đã rút (chỉ xem) → khoá ô chat, vẫn cho đọc. Không có `MATCH_004`.
 
 ---
 
 ### 2.16. Lịch sử chat — `GET /api/v1/conversations/{conversationId}/messages`
 
-**Dùng khi:** mở phòng chat (trang mới nhất), cuộn lên xem tin cũ (`before`), bù tin sau khi kết nối realtime lại (`after`).
+**Cùng endpoint MATCH-001 `API_Spec.md` 2.17** (query `before` / `after` / `limit`, response `items` + `hasMore`, lỗi `CHAT_001` / `CHAT_002` / `CHAT_003`). **Dùng khi:** mở phòng chat (trang mới nhất), cuộn lên xem tin cũ, bù tin sau khi kết nối realtime lại.
 **Ai gọi được:** hai bên; mọi trạng thái đơn.
-
-**Query params** — y hệt MATCH-002 `API_Spec.md` 2.9 (`before`, `after` = `messageId` trong cuộc trò chuyện này; `limit` 1..100, mặc định 50; không gửi đồng thời `before` và `after`); bảng thứ tự / `hasMore` như MATCH-002 2.9 và `api-convention.md` §7.2.
-
-**Response 200** — `items`: mảng Tin nhắn (§4.8), `hasMore`.
-
-```json
-{
-  "data": {
-    "items": [
-      { "messageId": "019370b0-7d8e-7f90-b102-3c4d5e6f7a02", "conversationId": "019370a2-6c7d-7e8f-a001-2b3c4d5e6f01",
-        "senderPartyType": "TEAM", "senderPartyId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c",
-        "senderUserId": "01935f77-3c2d-7e1f-8a9b-0c1d2e3f4a5b", "senderName": "Nguyễn Văn A", "senderAvatarUrl": null,
-        "content": "17:45 có mặt nhé", "isRead": false, "createdAt": "2026-11-13T09:10:00Z" },
-      { "messageId": "019370b0-7d8e-7f90-b102-3c4d5e6f7a01", "conversationId": "019370a2-6c7d-7e8f-a001-2b3c4d5e6f01",
-        "senderPartyType": "USER", "senderPartyId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10",
-        "senderUserId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10", "senderName": "Trần Văn C", "senderAvatarUrl": null,
-        "content": "Mình đá tiền vệ trái được, mấy giờ có mặt?", "isRead": true, "createdAt": "2026-11-13T09:05:00Z" }
-    ],
-    "hasMore": false
-  }
-}
-```
-
-**Lỗi**
-
-| HTTP | Mã | Khi nào | FE nên làm gì |
-|---|---|---|---|
-| 400 | `VALIDATION_ERROR` | Gửi cả `before` và `after` (`field` = `after`); `limit` ngoài 1..100; con trỏ sai định dạng | Sửa tham số |
-| 404 | `CHAT_002` | Không có cuộc trò chuyện | Quay lại |
-| 403 | `CHAT_003` | Không tham gia | Quay lại |
-| 422 | `CHAT_001` | `before` / `after` không phải tin của cuộc trò chuyện này | Tải lại trang mới nhất (bỏ con trỏ) |
 
 ---
 
 ### 2.17. Đánh dấu đã đọc — `POST /api/v1/conversations/{conversationId}/messages/read`
 
-**Dùng khi:** người dùng mở / đang xem phòng chat.
-**Ai gọi được:** hai bên; mọi trạng thái đơn. Không body.
-
-Đánh dấu **mọi** tin của **bên kia** là đã đọc. Không có frame cho việc đánh dấu đọc; bên gửi thấy `isRead` mới khi tải lại 2.16.
-
-**Response 204** — không body. Gọi lặp → `204`.
-
-**Lỗi**
-
-| HTTP | Mã | Khi nào | FE nên làm gì |
-|---|---|---|---|
-| 404 | `CHAT_002` | Không có cuộc trò chuyện | Quay lại |
-| 403 | `CHAT_003` | Không tham gia | Bỏ qua |
+**Cùng endpoint MATCH-001 `API_Spec.md` 2.18** (không body, `204`, lỗi `CHAT_002` / `CHAT_003`). **Dùng khi:** người dùng mở / đang xem phòng chat. **Ai gọi được:** hai bên; mọi trạng thái đơn.
 
 ---
 
@@ -1129,6 +1064,7 @@ Report được chấp nhận ngay và trừ điểm bên bị report (§1.5; đ
 | 404 | `MERCENARY_002` | Không có đơn | Quay lại |
 | 422 | `MERCENARY_019` | Người gọi vừa là ứng viên vừa là đội trưởng | Hiện message |
 | 403 | `MERCENARY_014` | Không tham gia đơn | Ẩn nút "Report" |
+| 422 | `TEAM_016` | Người gọi là người đã giải tán đội tuyển (vẫn đọc được chat — §1.7 — nhưng đội đã giải tán không report được, BR-R10) | Ẩn nút "Report" |
 | 422 | `TEAM_015` | Phía đội: đội đang tạm ngưng | Hiện message |
 | 422 | `MERCENARY_020` | Chưa tham gia trận và cuộc trò chuyện chưa có tin nhắn | Ẩn nút "Report" |
 | 422 | `MERCENARY_021` | Chỉ có ngữ cảnh tin nhắn mà chọn loại khác "Giao tiếp tệ" | Chỉ cho chọn "Giao tiếp tệ" |
@@ -1789,7 +1725,7 @@ Kèo của tin: chỉ tạo tin khi kèo `CONFIRMED` và chưa tới giờ kết
 | `viewerSide`, `reporterSide` | `TEAM` \| `MERCENARY` | Phía đội tuyển / phía mercenary |
 | `direction` (report) | `RECEIVED` \| `SENT` | Theo góc nhìn đội (2.21) / người gọi (2.22) |
 | `reportType`, report `status`, tranh chấp `status`, `decision`, `reliabilityLevel` | Như REPUTATION-001 `API_Spec.md` §4.1 | — |
-| `contextType` | `MERCENARY_APPLICATION` | Loại cuộc trò chuyện (có thể thêm giá trị ở bản sau — FE bỏ qua giá trị lạ) |
+| `contextType` | `MERCENARY_APPLICATION` \| `TEAM_MATCH` | Loại cuộc trò chuyện — `TEAM_MATCH`: chat giữa hai đội trong kèo (MATCH-001 §1.6). Có thể thêm giá trị ở bản sau — FE bỏ qua giá trị lạ |
 | `partyType`, `senderPartyType` | `TEAM` \| `USER` | Bên của cuộc trò chuyện |
 | `format`, `match.status` | Như MATCH-001 `API_Spec.md` §4.1 | — |
 | Đội rút gọn | `teamId`, `name`, `avatarUrl` (+ `status` chỉ ở API Admin) | — |
@@ -1895,33 +1831,11 @@ Kèo của tin: chỉ tạo tin khi kèo `CONFIRMED` và chưa tới giờ kết
 
 ### 4.7. Cuộc trò chuyện — response 2.14
 
-| Field | Kiểu | Ý nghĩa |
-|---|---|---|
-| `conversationId` | UUID | — |
-| `contextType` | string | §4.1 |
-| `applicationId` | UUID | Đơn của cuộc trò chuyện |
-| `applicationStatus` | string | Trạng thái hiển thị của đơn |
-| `source` | string | `SYSTEM` \| `EXTERNAL` (§4.1) |
-| `matchId` | UUID \| null | Kèo trên hệ thống; `null` khi trận ngoài |
-| `externalMatchId` | UUID \| null | Trận ngoài hệ thống; `null` khi kèo |
-| `parties` | array (2) | Mỗi phần tử: `partyType`, `partyId` (`teamId` hoặc `userId`), `name`, `avatarUrl`, `captainName` (chỉ bên `TEAM`: đội trưởng hiện tại; `null` khi đội giải tán) |
-| `viewerPartyId` | UUID | Bên của người gọi |
-| `canSend` | boolean | Gửi tin được (§1.7) |
+MATCH-001 `API_Spec.md` §4.7 (v2.4 — shape chung mọi cuộc trò chuyện; cuộc trò chuyện theo đơn dùng `applicationId`, `applicationStatus`, `source`, `matchId` / `externalMatchId`; field của chat hai đội = `null` — ví dụ 2.14).
 
 ### 4.8. Tin nhắn — response 2.15, 2.16, frame `MESSAGE_CREATED`
 
-| Field | Kiểu | Ý nghĩa |
-|---|---|---|
-| `messageId`, `conversationId` | UUID | — |
-| `senderPartyType`, `senderPartyId` | string, UUID | Bên gửi (khớp một phần tử `parties` của 2.14 — FE lấy tên đội từ đó) |
-| `senderUserId` | UUID | Người **thực sự** đã gửi (đội trưởng tại lúc gửi, hoặc ứng viên); không đổi khi đội chuyển quyền sau đó |
-| `senderName` | string | `"Người dùng đã xóa"` nếu tài khoản đó đã xoá |
-| `senderAvatarUrl` | string \| null | `null` khi chưa có ảnh hoặc đã xoá |
-| `content` | string | 1..1000 ký tự |
-| `isRead` | boolean | Bên nhận đã đánh dấu đọc (2.17) |
-| `createdAt` | string | — |
-
-Hiển thị tin của bên đội: `<tên đội> · <senderName>` (vd "FC Hoa Lư · Nguyễn Văn A").
+MATCH-001 `API_Spec.md` §4.8. `senderPartyType`: `TEAM` (đội trưởng gửi) \| `USER` (ứng viên gửi). Hiển thị tin của bên đội: `<tên đội> · <senderName>` (vd "FC Hoa Lư · Nguyễn Văn A").
 
 ### 4.9. Uy tín cá nhân — response 2.23
 
@@ -2017,9 +1931,6 @@ Mã mới của MERCENARY-001:
 | `MERCENARY_023` | 409 | "Đội đã có tin đang mở cho vị trí này, hãy tăng số lượng" | 2.1, 2.33 |
 | `MERCENARY_024` | 404 | "Không tìm thấy trận ngoài hệ thống" | 2.30–2.33 |
 | `MERCENARY_025` | 409 | "Trận đã có mercenary được duyệt, không sửa được sân, giờ hoặc trình độ" | 2.31 |
-| `CHAT_002` | 404 | "Không tìm thấy cuộc trò chuyện" | 2.14–2.17, kênh realtime |
-| `CHAT_003` | 403 | "Bạn không tham gia cuộc trò chuyện này" | 2.14–2.17, kênh realtime |
-| `CHAT_004` | 409 | "Cuộc trò chuyện chỉ còn xem" | 2.15 |
 
 Mã dùng lại (message theo `API_Spec.md` của mã gốc):
 
@@ -2032,12 +1943,14 @@ Mã dùng lại (message theo `API_Spec.md` của mã gốc):
 | `TEAM_001` | 404 | USER-001 | 2.1, 2.2, 2.21, 2.24, 2.28, 2.29 |
 | `TEAM_002` | 403 | USER-001 | 2.1, 2.2, 2.5, 2.6, 2.8, 2.11, 2.12, 2.21, 2.28–2.33 |
 | `TEAM_015` | 422 | USER-001 | 2.1, 2.5, 2.11, 2.18–2.21, 2.28, 2.31, 2.33 |
-| `TEAM_016` | 422 | USER-002 | 2.1, 2.2, 2.5, 2.6, 2.8, 2.11, 2.12, 2.21, 2.28–2.33 |
+| `TEAM_016` | 422 | USER-002 | 2.1, 2.2, 2.5, 2.6, 2.8, 2.11, 2.12, 2.20 (người đã giải tán đội tuyển — v2.0), 2.21, 2.28–2.33 |
 | `MATCH_001` | 404 | MATCH-001 | 2.1 |
 | `MATCH_009` | 403 | MATCH-001 | 2.1 |
-| `MATCH_014` | 409 | MATCH-001 | Mọi endpoint ghi trừ 2.15, 2.17 |
+| `MATCH_014` | 409 | MATCH-001 | Mọi endpoint ghi trừ 2.17 (2.15: hiếm — MATCH-001 2.16) |
 | `VENUE_001`, `VENUE_002` | 404, 422 | VENUE-001 | 2.28, 2.31 |
-| `CHAT_001` | 422 | MATCH-002 | 2.16 |
+| `CHAT_001` | 422 | MATCH-001 | 2.16 |
+| `CHAT_002`, `CHAT_003` | 404, 403 | MATCH-001 (v2.4; v1.0 ghi là mã mới của mã này — mã và message không đổi) | 2.14–2.17, kênh realtime |
+| `CHAT_004` | 409 | MATCH-001 (như trên) | 2.15 |
 | `DISPUTE_001`, `DISPUTE_002` | 404, 409 | REPUTATION-001 | 2.26, 2.27 |
 | `REPORT_009` | 403 | REPUTATION-001 (v1.1) | REPUTATION-001 2.5 khi tranh chấp report nhắm vào mercenary |
 
@@ -2050,3 +1963,9 @@ Không còn điểm mở ảnh hưởng hợp đồng hay hành vi API. Đã ch�
 1. Ứng viên xoá tài khoản: đơn `APPROVED` của trận đã huỷ giữ nguyên (BR-ME18).
 2. Trận ngoài hệ thống (2.28, 2.31): giờ bắt đầu ≥ hiện tại + 1 giờ, thời lượng ≤ 12 giờ, `opponentName` ≤ 100 ký tự; sửa sân / giờ / trình độ chỉ trước giờ bắt đầu và khi chưa có mercenary được duyệt (BR-ME19).
 3. Khai báo trận ngoài ở một sân (2.28) hoặc đổi sang sân đó (2.31) tính là sân "được chọn" cho cảnh báo địa điểm 180 ngày (BC-V05).
+
+Đã chốt (v2.0):
+
+16. ~~Đội tuyển đã giải tán — chat theo đơn có áp quy tắc "người đã giải tán chỉ xem" không~~ — **user chốt 2026-11-15:** có (§1.2, §1.7; report 2.20 → `TEAM_016`).
+
+17. ~~Người đã giải tán đội tuyển lấy `conversationId` của chat theo đơn từ đâu~~ — **user chốt 2026-11-15:** danh sách "Tin nhắn của tôi" MATCH-001 `API_Spec.md` 2.20 (gồm chat theo đơn của đội trưởng đội tuyển, người đã giải tán đội tuyển, ứng viên).

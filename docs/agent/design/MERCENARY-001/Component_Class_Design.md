@@ -3,11 +3,11 @@
 | Mục | Giá trị |
 |---|---|
 | Mã chức năng | `MERCENARY-001` |
-| Phạm vi tầng | Backend (Spring Boot REST API + kênh STOMP của MATCH-002). Frontend: ngoài phạm vi repo này |
+| Phạm vi tầng | Backend (Spring Boot REST API + kênh STOMP của MATCH-001). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL ≥ 18 |
-| Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §7–§8 (`DeletedUserMasking` qua `MapperSupport`); VENUE-001 §4.6 (`VenueSelectionService`), §4.9 (retrier overload), §5.2 (hộp + Haversine); MATCH-001 §4.5 (`TeamGuard`), §4.8 (`ReputationService`, `TimeBandPenaltyPolicy`), §4.9 (event), §4.10 (scheduler); MATCH-002 §4.6 (kênh realtime), §5.2 (cursor `(created_at, id)`), §7 (`ChatHistoryQuery`, `@ValidChatCursor`); REPUTATION-001 §4.6 (`ReputationService`, `ReportPenaltyPolicy`, `ReputationRules`), §4.8 (refresher huy hiệu), §4.10 (trạng thái report hiệu lực), §5.3 (thống kê) · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-10, 2026-11-12, 2026-11-14), ADR-0007 (+ Sửa đổi 2026-11-14), ADR-0008, ADR-0011, ADR-0012, ADR-0013, ADR-0014 (+ Sửa đổi 2026-11-13) |
-| Ràng buộc dữ liệu | V1–V4 (code) + V5 (VENUE-001, gồm `venue.ward_id` v4.0), V6 (MATCH-001), V7 (MATCH-002), V8 (REPUTATION-001) — **chưa có trong code** + `V9__mercenary_recruitment_chat_reputation.sql` (§5.1). Entity hiện có `domain/.../entity/mercenary/{MercenaryRecruitment, MercenaryApplication}`, `rating/{Rating, Report}`, `user/User`, `venue/Venue` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 |
+| Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §7–§8 (`DeletedUserMasking` qua `MapperSupport`); VENUE-001 §4.6 (`VenueSelectionService`), §4.9 (retrier overload), §5.2 (hộp + Haversine); MATCH-001 §4.5 (`TeamGuard`), §4.8 (`ReputationService`, `TimeBandPenaltyPolicy`), §4.9 (event), §4.10 (scheduler); MATCH-001 (v2.4) §4.14 (lõi cuộc trò chuyện `ConversationService`, `ConversationAccessPolicy`), §4.15 (kênh realtime), §5.1 (bảng `conversation*` ở V6), §5.2 (`ConversationRepository.findContext`, cursor `(created_at, id)`), §7 (`ChatHistoryQuery`, `@ValidChatCursor`, `ConversationMapper`); REPUTATION-001 §4.6 (`ReputationService`, `ReportPenaltyPolicy`, `ReputationRules`), §4.8 (refresher huy hiệu), §4.10 (trạng thái report hiệu lực), §5.3 (thống kê) · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-10, 2026-11-12, 2026-11-14), ADR-0007 (+ Sửa đổi 2026-11-14), ADR-0008, ADR-0011, ADR-0012, ADR-0013, ADR-0014 (+ Sửa đổi 2026-11-13, 2026-11-15) |
+| Ràng buộc dữ liệu | V1–V4 (code) + V5 (VENUE-001, gồm `venue.ward_id` v4.0), V6 (MATCH-001), V6 (MATCH-001 — gồm bảng `conversation`, `conversation_message` từ v2.4), V8 (REPUTATION-001) — **chưa có trong code** + `V9__mercenary_recruitment_chat_reputation.sql` (§5.1 — v2.0: chỉ thêm phần riêng mercenary vào `conversation`). Entity hiện có `domain/.../entity/mercenary/{MercenaryRecruitment, MercenaryApplication}`, `rating/{Rating, Report}`, `user/User`, `venue/Venue` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -17,29 +17,29 @@ Layered theo 4 module Maven (ADR-0006). Hợp đồng FE: `API_Spec.md`. Luồng
 - **Tin tuyển / đơn ứng tuyển đổi trạng thái bằng CAS tự viết** `UPDATE … WHERE status = … [AND quantity_* = :expected]` (ADR-0003 Sửa đổi 2026-11-14 — cùng mẫu `MatchRequest`, `Pairing`, `Report`); entity chỉ INSERT + đọc. Thứ tự khoá mọi luồng: `mercenary_recruitment` → `mercenary_application` → `"user"`/`team` (`Processing_Flow.md` §5), kể cả xoá tài khoản (ADR-0007 Sửa đổi 2026-11-14).
 - **Trạng thái hiệu lực tính trong SQL** (như kèo `OPEN` quá hạn — MATCH-001 §5.2): tin `OPEN`/`FILLED` của trận đã huỷ → `CLOSED`; của trận đã tới giờ kết thúc → `EXPIRED`; đơn `PENDING` của tin hiệu lực `CLOSED`/`EXPIRED` → `REJECTED` (§5.3). API ghi không ghi chuyển trạng thái hệ thống — từ chối theo trạng thái hiệu lực; **job** (§4.9, ADR-0012) ghi thật và phát event. Hệ quả: MATCH-001 huỷ kèo (2.5, 2.10 — đang 6/W6) **không** thêm truy vấn.
 - **Uy tín cá nhân** ghi cùng transaction qua `ReputationService` (ADR-0013), mở rộng REPUTATION-001 (§4.10): hoàn thành trận khi đội trưởng chấm sao (BR-ME15, user sửa 2026-11-14 — **không** gắn với lúc trận `COMPLETED`), trừ điểm rút lui, report cá nhân, hoàn điểm. Completion Rate, sao trung bình cá nhân tính khi đọc (§5.4). Huy hiệu cá nhân là dữ liệu dẫn xuất `"user".verified_at`, refresh sau commit + job hằng ngày (như đội).
-- **Chat theo đơn** dùng mô hình **cuộc trò chuyện tổng quát** `conversation` (ngữ cảnh + hai bên tham gia, mỗi bên là đội hoặc người dùng) + `conversation_message` (§4.7, §5.1) — **tách** khỏi `chat_message` của pairing (MATCH-002 giữ nguyên). Đẩy realtime qua port `ChatRealtimeGateway` của MATCH-002, topic `/topic/conversations/{id}` (ADR-0014 Sửa đổi 2026-11-13).
+- **Chat theo đơn** là một loại ngữ cảnh (`MERCENARY_APPLICATION`) của **lõi cuộc trò chuyện dùng chung** do MATCH-001 (v2.4) thiết kế — bảng `conversation` + `conversation_message` (V6), `ConversationService`, endpoint `/conversations/{id}` (MATCH-001 2.19, 2.16, 2.17, 2.18 = 2.14–2.17 ở đây), topic `/topic/conversations/{id}` (ADR-0014 Sửa đổi 2026-11-13, 2026-11-15). Mã này thêm: cột ngữ cảnh mercenary (V9 — §5.1), `MercenaryApplicationConversationPolicy` + khối cột mercenary của `findContext` (§4.7), frame `APPLICATION_UPDATED` (§4.8).
 - **Đánh giá / report** dùng lại bảng `rating`, `report`, `dispute` (REPUTATION-001) với `rater_type`/`ratee_type` `TEAM`↔`INDIVIDUAL` và cột mới `application_id`. Luồng đội↔đội của REPUTATION-001 lọc `application_id IS NULL` (§4.12).
 
-**Điều kiện tiên quyết:** code VENUE-001, MATCH-001, MATCH-002 (kênh realtime, retrier bắt `ConcurrencyConflictException` — MATCH-002 `[cần xác nhận #5]`, `UPDATE … RETURNING` không `@Modifying` — MATCH-002 `[cần xác nhận #4]`), REPUTATION-001 (V8, `ReputationService`, refresher) phải có trước V9 `[cần xác nhận #1]`.
+**Điều kiện tiên quyết:** code VENUE-001, MATCH-001 (lõi chat, kênh realtime — v2.4), MATCH-002 (retrier bắt `ConcurrencyConflictException` — MATCH-002 `[cần xác nhận #5]`, `UPDATE … RETURNING` không `@Modifying` — MATCH-002 `[cần xác nhận #4]`), REPUTATION-001 (V8, `ReputationService`, refresher) phải có trước V9 `[cần xác nhận #1]`.
 
 ## 2. Package Structure (delta)
 
 ```text
 common/        com.phananh.arenaflow.common
-└── exception/       ErrorCode (+ MERCENARY_001..MERCENARY_025, CHAT_002..CHAT_004, REPORT_009)
+└── exception/       ErrorCode (+ MERCENARY_001..MERCENARY_025, REPORT_009; CHAT_002..CHAT_004 thuộc MATCH-001 v2.4)
 
 domain/        com.phananh.arenaflow.domain
 ├── entity/mercenary/ MercenaryRecruitment, MercenaryApplication (sửa — §6); ExternalMatch (mới)
-├── entity/chat/      Conversation, ConversationMessage (mới)
+├── entity/chat/      Conversation (sửa — + applicationId, externalMatchId; MATCH-001 §6), ConversationMessage (tái dùng)
 ├── entity/rating/    Rating, Report (sửa: + applicationId, + externalMatchId, matchId nullable)
 ├── entity/user/      User (sửa: + verifiedAt)
 ├── entity/converter/ PositionConverter (mới)
 ├── repository/       MercenaryRecruitmentRepository, MercenaryApplicationRepository, ExternalMatchRepository,
-│                     ConversationRepository, ConversationMessageRepository, MercenarySql (hằng SQL) (mới);
+│                     MercenarySql (hằng SQL) (mới); ConversationRepository (sửa — khối mercenary của `findContext`);
 │                     UserRepository, RatingRepository, ReportRepository, DisputeRepository (sửa)
 └── projection/       RecruitContextView, RecruitmentRowView, RecruitmentView, RecruitmentWriteContextView,
                       ApplyContextView, ApplicationContextView, ApplicationView, ApplicantRowView,
-                      WithdrawnApplicationView, ApprovedCountView, ConversationContextView, ConversationMessageView,
+                      WithdrawnApplicationView, ApprovedCountView, ConversationContextView (sửa — cột mercenary),
                       MercenaryRatingContextView, MercenaryReportContextView, MercenaryReportView,
                       AdminMercenaryDisputeView, AdminMercenaryDisputeDetailView, UserReputationView,
                       TeamMercenaryRatingView, DueRecruitmentView, RejectedApplicationView, ProfileAreaView,
@@ -47,7 +47,7 @@ domain/        com.phananh.arenaflow.domain
 
 application/   com.phananh.arenaflow.application
 ├── service/          MercenaryRecruitmentService, MercenaryApplicationService, ExternalMatchService,
-│   │                 ConversationService, MercenaryRatingService, MercenaryReportService, UserReputationService,
+│   │                 MercenaryRatingService, MercenaryReportService, UserReputationService,
 │   │                 AdminMercenaryDisputeService, MercenaryLifecycleJobService (mới); ReputationService,
 │   │                 ReliabilityReason (sửa — §4.10); RecruitmentStatusFilter, ApplicationStatusFilter,
 │   │                 ExternalMatchStatusFilter, MercenaryReportDirection (mới)
@@ -58,34 +58,34 @@ application/   com.phananh.arenaflow.application
 │                     MercenaryReportCreatedEvent (mới)
 ├── event/reputation/ UserVerificationChangedEvent (mới)
 ├── support/mercenary/ MercenaryGuard, MercenaryRules, MercenarySide, MercenaryAccountCleanup (mới)
-├── support/chat/     ConversationAccessPolicy (+ MercenaryApplicationConversationPolicy) (mới);
-│                     ChatRealtimeGateway, RealtimeFrame (sửa — §4.8)
+├── support/chat/     MercenaryApplicationConversationPolicy (mới — bean thứ hai của `ConversationAccessPolicy`, MATCH-001 §4.14);
+│                     RealtimeFrame (sửa — + ApplicationUpdated, §4.8)
 ├── support/reputation/ TimeBandPenaltyPolicy (+ hằng MERCENARY_WITHDRAWAL), VerificationRefresher (sửa — §4.10)
 ├── validation/       ValidMercenarySearch, UniquePositions, ValidExternalMatchSchedule (+ validator) (mới);
 │                     OneOf, ValidSkillLevels, ValidChatCursor (tái dùng)
 ├── dto/request/      CreateRecruitmentsRequest (+ RecruitmentPositionRequest), AddRecruitmentsRequest,
 │                     UpdateRecruitmentRequest, SearchRecruitmentsRequest, WithdrawApplicationRequest,
-│                     CreateExternalMatchRequest, UpdateExternalMatchRequest, SendConversationMessageRequest,
-│                     CreateMercenaryRatingRequest; ChatHistoryQuery, CreateReportRequest, ResolveDisputeRequest (tái dùng)
+│                     CreateExternalMatchRequest, UpdateExternalMatchRequest,
+│                     CreateMercenaryRatingRequest; ChatHistoryQuery, SendConversationMessageRequest, CreateReportRequest,
+│                     ResolveDisputeRequest (tái dùng)
 ├── dto/response/     RecruitmentResponse (+ RecruitmentMatchResponse, VenueRevealResponse, AreaResponse),
 │                     ApplicationResponse, ApplicantResponse (+ ReputationSummaryResponse), ApprovalResponse,
 │                     WithdrawalResponse, ExternalMatchResponse, ExternalMatchCancellationResponse,
-│                     ConversationResponse (+ PartyResponse), ConversationMessageResponse, MercenaryRatingResponse,
+│                     MercenaryRatingResponse,
 │                     MercenaryRatingsResponse, MercenaryReportResponse, UserReputationResponse,
 │                     TeamMercenaryRatingResponse, AdminMercenaryDisputeResponse, AdminMercenaryDisputeDetailResponse (mới);
-│                     ChatHistoryResponse (tổng quát hoá — §4.7)
-└── mapper/           MercenaryMapper, ConversationMapper, MercenaryReputationMapper (MapStruct, mới); MapperSupport (tái dùng)
+│                     ConversationResponse (+ PartyResponse), ConversationMessageResponse, ChatHistoryResponse (tái dùng MATCH-001)
+└── mapper/           MercenaryMapper, MercenaryReputationMapper (MapStruct, mới); ConversationMapper (sửa — khối mercenary); MapperSupport (tái dùng)
 
 api/           com.phananh.arenaflow.api
 ├── mercenary/        MatchRecruitmentController, RecruitmentController, ApplicationController,
 │                     TeamMercenaryController, ProfileMercenaryController, UserReputationController,
 │                     ExternalMatchController, AdminMercenaryDisputeController (mới)
-├── chat/             ConversationController (mới)
 ├── realtime/         StompAuthChannelInterceptor, StompChatRealtimeGateway (sửa — §4.8)
 └── scheduler/        MatchLifecycleScheduler (sửa — §4.9), VerificationScheduler (sửa — §4.10)
 ```
 
-Thành phần dùng chung mới / sửa → developer MUST chạy `reuse-scan` trước khi tạo: `PositionConverter`, `MercenarySql` (biểu thức trận của tin, trạng thái hiệu lực, thống kê cá nhân), `ConversationAccessPolicy`, `ChatRealtimeGateway` (topic tổng quát), `VerificationRefresher` (gộp đội + cá nhân), `TimeBandPenaltyPolicy.MERCENARY_WITHDRAWAL`, `@ValidMercenarySearch` (so `@ValidMatchSearch` / `@ValidGeoQuery`), `@ValidExternalMatchSchedule` (so `@ValidMatchSchedule` của MATCH-001), `MercenaryAccountCleanup`.
+Thành phần dùng chung mới / sửa → developer MUST chạy `reuse-scan` trước khi tạo: `PositionConverter`, `MercenarySql` (biểu thức trận của tin, trạng thái hiệu lực, thống kê cá nhân), `MercenaryApplicationConversationPolicy` (cài `ConversationAccessPolicy` của MATCH-001), `VerificationRefresher` (gộp đội + cá nhân), `TimeBandPenaltyPolicy.MERCENARY_WITHDRAWAL`, `@ValidMercenarySearch` (so `@ValidMatchSearch` / `@ValidGeoQuery`), `@ValidExternalMatchSchedule` (so `@ValidMatchSchedule` của MATCH-001), `MercenaryAccountCleanup`.
 
 ## 3. Controller Layer
 
@@ -98,7 +98,7 @@ Quy ước như MATCH-001 §3 (`@Validated`, `ResponseEntity<ApiResponse<…>>`,
 | `RecruitmentController` | `/api/v1/mercenary-recruitments` | 2.3–2.8 | `MercenaryRecruitmentService` (2.3–2.6), `MercenaryApplicationService` (2.7, 2.8) |
 | `ProfileMercenaryController` | `/api/v1/profile` (`/mercenary-applications`, `/mercenary-reports`) | 2.9, 2.22 | `MercenaryApplicationService`, `MercenaryReportService` |
 | `ApplicationController` | `/api/v1/mercenary-applications/{applicationId}` | 2.10–2.13, 2.18–2.20 | `MercenaryApplicationService`, `MercenaryRatingService`, `MercenaryReportService` |
-| `ConversationController` | `/api/v1/conversations/{conversationId}` | 2.14–2.17 | `ConversationService` |
+| `ConversationController` (MATCH-001 §3 — tái dùng) | `/api/v1/conversations/{conversationId}` | 2.14–2.17 (= MATCH-001 2.19, 2.16, 2.17, 2.18) | `ConversationService` (MATCH-001) |
 | `UserReputationController` | `/api/v1/users/{userId}/reputation` | 2.23 | `UserReputationService` |
 | `ExternalMatchController` | `/api/v1/external-matches/{externalMatchId}` | 2.30–2.33 | `ExternalMatchService` (2.30–2.32), `MercenaryRecruitmentService` (2.33) |
 | `AdminMercenaryDisputeController` | `/api/v1/admin/mercenary-disputes` | 2.25–2.27 | `AdminMercenaryDisputeService` |
@@ -117,11 +117,11 @@ Quy ước như MATCH-001 §3 (`@Validated`, `ResponseEntity<ApiResponse<…>>`,
 | 2.27 | 200 | B3 (`resolvedAt`, `resolvedByName`), B4 |
 | 2.32 | 200 | B3 (`cancelledAt`, số tin đóng, số đơn bị từ chối) |
 
-**Lý do chọn path/method:** 2.1 tạo tài nguyên con dưới kèo (tiền lệ `POST /matches/{id}/requests`, `/pairings`); 2.28 tạo trận ngoài dưới đội (tài nguyên của đội); 2.33 tạo tin dưới trận ngoài (cùng mẫu 2.1); thao tác trên từng tin / đơn / trận ngoài dùng `/mercenary-recruitments/{id}`, `/mercenary-applications/{id}`, `/external-matches/{id}` (tiền lệ `/match-requests/{id}`). 2.6, 2.11–2.13, 2.32 action sub-resource `POST` (tiền lệ `/match-requests/{id}/accept`, `/teams/{id}/disband`). 2.5, 2.31 cập nhật một phần → `PATCH`. Danh sách của chính người gọi đặt dưới `/profile` (tiền lệ USER-001). Chat theo **cuộc trò chuyện** `/conversations/{id}` để mở rộng cho ngữ cảnh khác (§4.7). Admin `PATCH …/resolve` như REPUTATION-001 2.8.
+**Lý do chọn path/method:** 2.1 tạo tài nguyên con dưới kèo (tiền lệ `POST /matches/{id}/requests`, `/pairings`); 2.28 tạo trận ngoài dưới đội (tài nguyên của đội); 2.33 tạo tin dưới trận ngoài (cùng mẫu 2.1); thao tác trên từng tin / đơn / trận ngoài dùng `/mercenary-recruitments/{id}`, `/mercenary-applications/{id}`, `/external-matches/{id}` (tiền lệ `/match-requests/{id}`). 2.6, 2.11–2.13, 2.32 action sub-resource `POST` (tiền lệ `/match-requests/{id}/accept`, `/teams/{id}/disband`). 2.5, 2.31 cập nhật một phần → `PATCH`. Danh sách của chính người gọi đặt dưới `/profile` (tiền lệ USER-001). Chat theo **cuộc trò chuyện** `/conversations/{id}` — v2.0: dùng chung với chat hai đội (MATCH-001 v2.4 §3). Admin `PATCH …/resolve` như REPUTATION-001 2.8.
 
 - 2.3: `@Valid @ModelAttribute SearchRecruitmentsRequest` (compact constructor: `page = 1`, `pageSize = 20`, `radiusKm = 3` khi có toạ độ) + `@ValidMercenarySearch`. 2.4: `lat`/`lng` tuỳ chọn (cặp).
 - 2.2, 2.8, 2.9, 2.29: enum lọc qua `@RequestParam` (sai → 400). 2.21, 2.22: `MercenaryReportDirection` mặc định `RECEIVED`. 2.25: `DisputeStatusFilter` (REPUTATION-001).
-- 2.16: `@Valid @ModelAttribute ChatHistoryQuery` (MATCH-002 §3, tái dùng).
+- 2.16: `@Valid @ModelAttribute ChatHistoryQuery` (MATCH-001 §3, tái dùng).
 - Không đổi `SecurityConfig`.
 
 ## 4. Service Layer
@@ -213,48 +213,27 @@ AdminMercenaryDisputeDetailResponse resolveDispute(UUID disputeId, UUID adminId,
 - `listTeamMercenaryRatings`: `TeamRepository.existsById` → `TEAM_001` → `RatingRepository.findMercenaryRatingsOfTeam` / count — chỉ đánh giá mà đội đã đánh giá lại mercenary trong cùng đơn (`EXISTS rating` phía đội cùng `application_id` — BR-ME13).
 - `resolveDispute`: `disputeRepository.resolveMercenaryIfPending(...)` (chỉ tranh chấp có `report.application_id IS NOT NULL`) → rỗng → `existsMercenaryDispute(disputeId)` (`EXISTS dispute d JOIN report r … AND r.application_id IS NOT NULL`) → `DISPUTE_001` / `DISPUTE_002` (M5) → `applyDecision` (trả thêm `reportedType`) → `REJECTED`: `INDIVIDUAL` → `refundUserReportPenalty`; `TEAM` → `refundReportPenalty` + refresh bên đó → `DisputeResolvedEvent` (payload tổng quát — §4.12) → `adminAuditLog.afterCommit("RESOLVE_DISPUTE", adminId, "DISPUTE", disputeId)` → đọc lại chi tiết. Developer gom phần chung với `AdminDisputeServiceImpl` khi reuse-scan.
 
-### 4.7. Chat theo cuộc trò chuyện — ConversationService
+### 4.7. Chat theo đơn — ngữ cảnh `MERCENARY_APPLICATION` của lõi cuộc trò chuyện (MATCH-001 §4.14)
 
-**Lựa chọn mô hình:** bảng **tổng quát** `conversation` (ngữ cảnh + hai bên, mỗi bên `TEAM` hoặc `USER`) + `conversation_message`, **tách** khỏi `chat_message` của pairing.
+v2.0: lõi chat (bảng, entity, `ConversationService`, `ConversationAccessPolicy`, endpoint, kênh realtime, cursor, đánh dấu đọc) chuyển sang MATCH-001 (v2.4) và dùng chung cho chat hai đội luồng A/B (ADR-0014 Sửa đổi 2026-11-15, user chọn 2026-11-15 — một API / topic / job xoá cho mọi chat). Mã này chỉ thêm phần riêng của đơn ứng tuyển:
 
-| Phương án | Đánh giá |
-|---|---|
-| Dùng chung `chat_message` (thêm `application_id`, nới `pairing_id`/`sender_team_id` thành nullable + CHECK XOR) | Sửa V7 + mọi truy vấn MATCH-002; bên gửi phía ứng viên không có đội → `sender_team_id` mất nghĩa; mỗi ngữ cảnh mới lại thêm cột + nới CHECK |
-| Bảng riêng chỉ cho mercenary (`mercenary_chat_message`) | Đơn giản nhưng ngữ cảnh kế tiếp (chat đội–đội luồng A/B theo cặp (kèo, đội) — thay đổi đã chốt, làm sau trên nhánh riêng) lại cần bảng thứ ba |
-| **Chọn:** `conversation` + `conversation_message` | Cuộc trò chuyện = (loại ngữ cảnh, khoá ngữ cảnh, trận để tính hạn lưu, hai bên). Quyền đọc / gửi do `ConversationAccessPolicy` theo loại ngữ cảnh; lưu tin, cursor, đánh dấu đọc, kênh realtime dùng chung. Chat đội–đội sau này thêm loại ngữ cảnh + policy (hai bên `TEAM`) — **không** làm trong MERCENARY-001, MATCH-002 giữ nguyên |
-
-```java
-ConversationResponse getConversation(UUID conversationId, UUID callerId);                                // readOnly
-ConversationMessageResponse send(UUID conversationId, UUID callerId, SendConversationMessageRequest r);  // @Transactional
-ChatHistoryResponse history(UUID conversationId, UUID callerId, ChatHistoryQuery q);                     // readOnly
-void markRead(UUID conversationId, UUID callerId);                                                      // @Transactional
-void requireSubscribable(UUID conversationId, UUID userId);                                             // readOnly — STOMP SUBSCRIBE
-```
-```java
-public interface ConversationAccessPolicy {                       // application/support/chat; một bean mỗi loại ngữ cảnh
-    Conversation.ContextType contextType();
-    ConversationAccess resolve(ConversationContextView ctx, UUID callerId, OffsetDateTime now);
-}
-public record ConversationAccess(Conversation.Party viewerParty /* null = không tham gia */, boolean canSend) {}
-```
-- `ConversationRepository.findContext(conversationId, callerId, now)` — một câu: cuộc trò chuyện + cột ngữ cảnh mercenary (trạng thái hiệu lực đơn, đội tuyển: tên, ảnh, trạng thái, đội trưởng hiện tại) + cờ caller (ứng viên, captain ACTIVE đội tuyển, đã xoá) + tên/ảnh caller + tên/ảnh ứng viên. Service chọn policy theo `contextType`.
-- `MercenaryApplicationConversationPolicy`: bên A (`TEAM`) = caller là đội trưởng ACTIVE hiện tại của đội tuyển (đội `INACTIVE` vẫn nhắn; đội giải tán không còn đội trưởng → không tham gia); bên B (`USER`) = caller là ứng viên. `canSend` = đơn **hiệu lực** ∈ {`PENDING`, `APPROVED`} (BR-ME16, user chốt 2026-11-13): `APPROVED` gửi được cả sau khi trận kết thúc / bị huỷ, tới khi tin bị xoá theo hạn lưu; `PENDING` của tin hiệu lực `CLOSED`/`EXPIRED` là `REJECTED` hiệu lực → chỉ xem. Không xét trạng thái trận.
+- **Tạo cuộc trò chuyện** khi ứng tuyển (2.7): `Conversation.builder()` `contextType = MERCENARY_APPLICATION`, `applicationId`, `matchId` **hoặc** `externalMatchId` (theo tin), bên A = `TEAM` đội tuyển, bên B = `USER` ứng viên → `save` cùng transaction với đơn (như v1.0).
+- **Khối cột mercenary của `ConversationRepository.findContext`** (một câu chung — MATCH-001 §5.2): `LEFT JOIN mercenary_application a ON c.context_type = 'MERCENARY_APPLICATION' AND a.id = c.application_id JOIN mercenary_recruitment r <GAME_JOIN> LEFT JOIN team t ON t.id = c.party_a_id … LEFT JOIN team_member cm (đội trưởng ACTIVE hiện tại của đội tuyển) LEFT JOIN "user" cu … LEFT JOIN "user" ap ON ap.id = c.party_b_id` → `applicationId`, `applicationEffectiveStatus` (`MercenarySql`), `externalMatchId`, `source`, đội tuyển (`name`, `avatarUrl`, `captainName`, `captainDeleted`), ứng viên (`displayName`, `avatarUrl`, `deleted`), `callerMercenaryCaptain` (`COALESCE(cm.user_id = :callerId, false)`), `callerApplicant` (`ap.id = :callerId`). Cột / join như `findContext` của v1.0 (§5.2), đặt trong khối `LEFT JOIN … ON c.context_type = 'MERCENARY_APPLICATION'`.
+- **`MercenaryApplicationConversationPolicy`** (`ConversationAccessPolicy`, `contextType = MERCENARY_APPLICATION`): bên A (`TEAM`) = caller là đội trưởng ACTIVE hiện tại của đội tuyển (đội `INACTIVE` vẫn nhắn); không thì đội tuyển `DISBANDED` và caller = `team.disbanded_by` → bên A **chỉ xem** (`viewerReadOnly = true`, `canSend = false` — user chốt 2026-11-15, cùng quy tắc `TeamMatchConversationPolicy` của MATCH-001 §4.14); thành viên khác của đội đã giải tán → không tham gia; bên B (`USER`) = caller là ứng viên (kiểm trước bên A chỉ xem — ứng viên không thể là thành viên đội tuyển, MERCENARY_010). `canSend` = ¬`viewerReadOnly` ∧ đơn **hiệu lực** ∈ {`PENDING`, `APPROVED`} (BR-ME16, user chốt 2026-11-13): `APPROVED` gửi được cả sau khi trận kết thúc / bị huỷ, tới khi tin bị xoá theo hạn lưu; `PENDING` của tin hiệu lực `CLOSED`/`EXPIRED` là `REJECTED` hiệu lực → chỉ xem. Không xét trạng thái trận. `expiryDue` luôn `false` (không có nhánh lazy — `send` của ngữ cảnh này luôn trả `Done`).
 - **Tên đội trưởng trong chat luôn hiện** (BR-ME04 ngoại lệ, user chốt 2026-11-14): `PartyResponse.captainName` và `senderName` không phụ thuộc trạng thái đơn — quy tắc ẩn trước khi duyệt chỉ áp cho tên sân / địa chỉ / toạ độ ở tin, đơn (§7).
-- `send`: ctx → `callerDeleted` → `USER_001` → policy → `CHAT_003` / `CHAT_004` → `ConversationMessage.builder()` `save` → `realtimeGateway.publishConversationAfterCommit(id, ConversationMessageCreated)`. `@Transactional` (không CAS).
-- `history`: `findContext` → `findCursor` → `findLatest/Before/After` (`limit + 1`) — mẫu MATCH-002 §4.2.
-- `markRead`: ctx → `markOtherPartyRead(conversationId, viewerParty)` (mọi trạng thái).
-- `ChatHistoryResponse` (MATCH-002) tổng quát hoá thành `ChatHistoryResponse<T>` hoặc thêm `ConversationHistoryResponse` — developer chọn khi reuse-scan; shape API giống nhau (`items`, `hasMore`).
+- `ConversationMapper` (MATCH-001 §7): khối `MERCENARY_APPLICATION` → `parties` = [đội tuyển (`TEAM`, `captainName`), ứng viên (`USER`, `captainName = null`)], `applicationId`, `applicationStatus`, `source`, `matchId` / `externalMatchId`; field `TEAM_MATCH` (`matchType`, `requestId`, `requestStatus`, `pairingId`, `pairingStatus`) = `null`.
+- **`findMine` (MATCH-001 2.20, §5.2)** — thêm khi code mã này (MATCH-001 đợt 1 chỉ có phần `TEAM_MATCH` — MATCH-001 §1.1): giờ bắt đầu `external_match.match_start_time` (`LEFT JOIN external_match ON e.id = c.external_match_id`) bên cạnh `match.match_start_time`; tên / ảnh bên `USER` (ứng viên: `"user"` `display_name`, `avatar_url`, `deleted_at`); khối cột mercenary dùng chung với `findContext`. Vẫn một câu trang — 2.20 giữ 2 truy vấn.
+- `send`, `history`, `markRead`, `getConversation`, `requireSubscribable`: MATCH-001 §4.14 (v1.0 của mã này mô tả cùng luồng; nay một nơi).
 
-### 4.8. Kênh realtime — sửa thành phần MATCH-002 §4.6 (MATCH-002 v1.2)
+### 4.8. Kênh realtime — frame của đơn (MATCH-001 §4.15)
 
 | Thành phần | Sửa | Lý do |
 |---|---|---|
-| `ChatRealtimeGateway` | + `void publishConversationAfterCommit(UUID conversationId, RealtimeFrame frame)` (MANDATORY, cùng cơ chế `afterCommit`) | Topic thứ hai |
-| `RealtimeFrame` | + `record ConversationMessageCreated(ConversationMessageResponse message)`, `record ApplicationUpdated(UUID applicationId, MercenaryApplication.Status status, UUID recruitmentId, MercenaryRecruitment.Status recruitmentStatus, int quantityApproved)` | Frame `MESSAGE_CREATED`, `APPLICATION_UPDATED` (`API_Spec.md` §1.7) |
-| `StompAuthChannelInterceptor` | `SUBSCRIBE`: thêm mẫu nguyên văn `^/topic/conversations/(UUID)$` → `conversationService.requireSubscribable` (`CHAT_002` / `CHAT_003` → frame `ERROR`); mẫu pairing giữ nguyên; mọi destination khác vẫn `ERROR` | ADR-0014 Sửa đổi 2026-11-13 |
-| `StompChatRealtimeGateway` | `afterCommit` → `convertAndSend("/topic/conversations/" + id, json)` | — |
+| `RealtimeFrame` | + `record ApplicationUpdated(UUID applicationId, MercenaryApplication.Status status, UUID recruitmentId, MercenaryRecruitment.Status recruitmentStatus, int quantityApproved)` | Frame `APPLICATION_UPDATED` (`API_Spec.md` §1.7) |
+| `ChatRealtimeGateway` | Không thêm method (v1.0 thêm `publishConversationAfterCommit` — v2.0 bỏ: MATCH-001 v2.4 chỉ còn `publishAfterCommit(conversationId, frame)`) | Một topic cho mọi cuộc trò chuyện |
+| `StompAuthChannelInterceptor`, `StompChatRealtimeGateway` | Không sửa ở mã này — mẫu `/topic/conversations/{id}` là mẫu duy nhất từ MATCH-001 v2.4 | — |
 
-Frame `APPLICATION_UPDATED` khi **người dùng** duyệt / từ chối / rút (2.11–2.13). Chuyển trạng thái hệ thống (job, huỷ trận ngoài, xoá tài khoản) không đẩy frame.
+Frame `APPLICATION_UPDATED` khi **người dùng** duyệt / từ chối / rút (2.11–2.13): `realtimeGateway.publishAfterCommit(conversationId của đơn, ApplicationUpdated)`. Chuyển trạng thái hệ thống (job, huỷ trận ngoài, xoá tài khoản) không đẩy frame.
 
 ### 4.9. MercenaryLifecycleJobService (ADR-0012)
 ```java
@@ -308,7 +287,7 @@ Mỗi thao tác một event nghiệp vụ mỗi đối tượng (quy tắc 7). `
 | `ReportContextView`, `findTeamReports` / `countTeamReports` (2.3, 2.4), `findAdminDisputes` / `countAdminDisputes` / `findAdminDisputeDetail` / `resolveIfPending` (2.6–2.8) | Thêm `application_id IS NULL` | Giữ hình dạng response REPUTATION-001 |
 | `AdminDisputeServiceImpl.resolveDispute` (2.8) — CAS 0 dòng | `existsById` → `existsTeamDispute(id)` (`EXISTS dispute d JOIN report r … AND r.application_id IS NULL`) → `false` → `DISPUTE_001` (M5) | Id của tranh chấp mercenary trả 404, không 409 |
 | `TeamReputationSql.STATS` — sao trung bình đội | Thêm `application_id IS NULL` | BR-ME13 |
-| `TeamReputationSql.STATS` — `noshow`; `applyCompletion` — trận sạch của đội | **Giữ** mọi report `reported_type = 'TEAM'` của kèo (kể cả từ mercenary) | BR-ME14 (user chốt 2026-11-14). Report của trận ngoài có `match_id = NULL` → không vào thống kê đội |
+| `TeamReputationSql.STATS` — `noshow`; `applyCompletion` — trận sạch của đội | `applyCompletion` (REPUTATION-001 §5.2 chỉ có mệnh đề đối thủ thật): **đổi** điều kiện reporter của câu `clean` thành (giữ nguyên ngoặc): `AND ((r.reporter_type = 'TEAM' AND r.reporter_id IN (m.author_team_id, m.confirmed_opponent_team_id)) OR EXISTS (SELECT 1 FROM mercenary_application a WHERE a.id = r.application_id AND a.status = 'APPROVED'))` — cột `report.application_id` có từ V9 (§5.1); cùng câu, không thêm truy vấn. Kết quả: trận sạch xét report của đối thủ thật + mercenary `APPROVED` của trận; bỏ report qua chat của ứng viên bị từ chối / đã rút; trận ngoài hệ thống không vào (`match_id` = `NULL`) (user chốt 2026-11-15, review 2026-11-15). `STATS`: **giữ** report `reported_type = 'TEAM'` của kèo từ mercenary; `noshow` giữ mọi report bùng | BR-ME14 (user chốt 2026-11-14). Report của trận ngoài có `match_id = NULL` → không vào thống kê đội |
 | `DisputeService.createDispute` + `DisputeContextView` (2.5) | + `reportedType`, `callerIsReportedUser`; `INDIVIDUAL` → caller phải là người bị report (`REPORT_009`); không `JOIN match` bắt buộc | Mercenary tranh chấp; report trận ngoài |
 | `ReportRepository.applyDecision` | `RETURNING` thêm `reported_type` | Hoàn điểm đúng bảng |
 | `ReportDisputedEvent`, `DisputeResolvedEvent`, `TeamReportedEvent` | `reporterTeamId/reportedTeamId` → `reporterType, reporterId, reportedType, reportedId` | Bên bị report có thể là cá nhân |
@@ -319,8 +298,8 @@ Mỗi thao tác một event nghiệp vụ mỗi đối tượng (quy tắc 7). `
 
 | Method | Ranh giới |
 |---|---|
-| `listTeamRecruitments`, `search`, `getRecruitment`, `listApplicants`, `listMyApplications`, `getApplication`, `getConversation`, `history`, `requireSubscribable`, `getRatings`, `listTeamReports`, `listMyReports`, `getUserReputation`, `listTeamMercenaryRatings`, `listDisputes`, `getDispute`, `listTeamExternalMatches`, `getExternalMatch` | `@Transactional(readOnly = true)` |
-| `send`, `markRead` | `@Transactional` (không CAS) |
+| `listTeamRecruitments`, `search`, `getRecruitment`, `listApplicants`, `listMyApplications`, `getApplication`, `getRatings`, `listTeamReports`, `listMyReports`, `getUserReputation`, `listTeamMercenaryRatings`, `listDisputes`, `getDispute`, `listTeamExternalMatches`, `getExternalMatch` | `@Transactional(readOnly = true)` |
+| Chat (`getConversation`, `history`, `requireSubscribable`, `send`, `markRead`) | MATCH-001 `Component_Class_Design.md` §4.12 (v2.0 của mã này: `send` chạy qua retrier `MATCH_014` cho mọi ngữ cảnh — ngữ cảnh đơn không có nhánh lazy nên chỉ thử lại deadlock) |
 | `createRecruitments`, `addExternalRecruitments`, `updateQuantity`, `close`, `apply`, `approve`, `reject`, `withdraw`, `createRating`, `createReport`, `resolveDispute`, `createExternalMatch`, `updateExternalMatch`, `cancelExternalMatch` | Không annotate; `concurrencyConflictRetrier.execute(MATCH_014, …)` (thử lại CAS 0 dòng, `@Version`, deadlock `40P01`) |
 | `ReputationService.*`, `ChatRealtimeGateway.publish*AfterCommit`, `MercenaryAccountCleanup.withdrawForDeletedApplicant` | `MANDATORY` |
 | `VerificationRefresher.refreshNow`, mỗi lô job | `TransactionTemplate` (`REQUIRES_NEW` cho `refreshNow`) |
@@ -428,45 +407,26 @@ CREATE INDEX idx_report_application ON report(application_id) WHERE application_
 -- user: huy hiệu cá nhân (dữ liệu dẫn xuất, chỉ ghi bằng câu refresh có điều kiện)
 ALTER TABLE "user" ADD COLUMN verified_at TIMESTAMPTZ;
 
--- cuộc trò chuyện tổng quát: ngữ cảnh + hai bên (TEAM | USER); hiện chỉ ngữ cảnh đơn ứng tuyển
-CREATE TABLE conversation (
-    id UUID PRIMARY KEY,
-    context_type VARCHAR(30) NOT NULL CHECK (context_type IN ('MERCENARY_APPLICATION')),
-    application_id UUID REFERENCES mercenary_application(id) ON DELETE RESTRICT,
-    match_id UUID REFERENCES match(id) ON DELETE RESTRICT,
-    external_match_id UUID REFERENCES external_match(id) ON DELETE RESTRICT,
-    party_a_type VARCHAR(10) NOT NULL CHECK (party_a_type IN ('TEAM', 'USER')),
-    party_a_id UUID NOT NULL,
-    party_b_type VARCHAR(10) NOT NULL CHECK (party_b_type IN ('TEAM', 'USER')),
-    party_b_id UUID NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT conversation_context_check CHECK ((context_type = 'MERCENARY_APPLICATION') = (application_id IS NOT NULL)),
-    CONSTRAINT conversation_game_check CHECK ((match_id IS NULL) <> (external_match_id IS NULL)),
-    CONSTRAINT conversation_parties_check CHECK (NOT (party_a_type = party_b_type AND party_a_id = party_b_id))
-);
+-- conversation (bảng + conversation_message tạo ở V6 — MATCH-001 v2.4 §5.1): thêm ngữ cảnh đơn ứng tuyển mercenary
+ALTER TABLE conversation ADD COLUMN application_id UUID REFERENCES mercenary_application(id) ON DELETE RESTRICT;
+ALTER TABLE conversation ADD COLUMN external_match_id UUID REFERENCES external_match(id) ON DELETE RESTRICT;
+ALTER TABLE conversation DROP CONSTRAINT conversation_context_type_check;
+ALTER TABLE conversation ADD CONSTRAINT conversation_context_type_check CHECK (context_type IN ('TEAM_MATCH', 'MERCENARY_APPLICATION'));
+ALTER TABLE conversation ADD CONSTRAINT conversation_application_check CHECK ((context_type = 'MERCENARY_APPLICATION') = (application_id IS NOT NULL));
+ALTER TABLE conversation ADD CONSTRAINT conversation_game_check CHECK ((match_id IS NULL) <> (external_match_id IS NULL));
+ALTER TABLE conversation ADD CONSTRAINT conversation_mercenary_parties_check CHECK (
+    context_type <> 'MERCENARY_APPLICATION' OR (party_a_type = 'TEAM' AND party_b_type = 'USER'));
 CREATE UNIQUE INDEX idx_conversation_application ON conversation(application_id) WHERE application_id IS NOT NULL;
 CREATE INDEX idx_conversation_match ON conversation(match_id) WHERE match_id IS NOT NULL;
 CREATE INDEX idx_conversation_external_match ON conversation(external_match_id) WHERE external_match_id IS NOT NULL;
-
-CREATE TABLE conversation_message (
-    id UUID PRIMARY KEY,
-    conversation_id UUID NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
-    sender_party VARCHAR(1) NOT NULL CHECK (sender_party IN ('A', 'B')),
-    sender_user_id UUID NOT NULL REFERENCES "user"(id) ON DELETE RESTRICT,
-    message TEXT NOT NULL CHECK (char_length(message) BETWEEN 1 AND 1000),
-    is_read BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX idx_conversation_message_time ON conversation_message(conversation_id, created_at, id);
-CREATE INDEX idx_conversation_message_unread ON conversation_message(conversation_id, sender_party) WHERE NOT is_read;
 ```
 - **Số hiệu V9:** code có V1–V4; thiết kế đã chiếm V5–V8 (VENUE-001, MATCH-001, MATCH-002, REPUTATION-001). Flyway không chạy out-of-order → V9 chỉ áp sau V5–V8 `[cần xác nhận #1]`. `venue.ward_id` (BR-V11) nằm ở V5 của VENUE-001 (v4.0), không ở V9.
 - **Dữ liệu cũ:** chưa kiểm Neon dev cho mã này. `created_by_user_id NOT NULL` không mặc định và `mercenary_recruitment_closed_check` cần `mercenary_recruitment` 0 dòng (hoặc không có dòng `CLOSED`) — developer kiểm số dòng trên Neon dev trước khi chạy; có dữ liệu → dừng, báo, không tự sửa `[cần xác nhận #4]`. Tên index V1 (`idx_mercenary_recruitment_search`, `idx_mercenary_recruitment_match`) lấy từ `V1__initial_schema.sql`.
 - **Vị trí** giữ CHECK V1 (`'Thủ môn' | 'Hậu vệ' | 'Tiền vệ' | 'Tiền đạo'` — cùng nhãn `preferredPosition` của USER-001). Entity hiện map `@Enumerated(STRING)` với hằng `Thủ_môn`… → ghi ra `'Thủ_môn'`, vi phạm CHECK. Sửa bằng `PositionConverter` (§6), không đổi DB.
 - **Trận ngoài** (`external_match`): `team_id` là đội khai báo; `venue_id` bắt buộc (BR-ME19 chọn sân có sẵn); `skill_levels` cùng kiểu / converter với `match.skill_levels` (MATCH-001, `SkillLevelsConverter`); `version` cho sửa / huỷ bằng câu native có điều kiện `version` (`updateIfVersion`, `cancelIfScheduled` — khoá trận ngoài trước tin, N-m1). Không cột `ended`: kết thúc tính theo `match_end_time`.
 - **Khoá trận XOR** (`match_id` / `external_match_id`) ở tin, đánh giá, report, cuộc trò chuyện — CHECK `…_game_check`. Đánh giá / report của trận ngoài luôn có `application_id` (không có đánh giá đội ↔ đội ngoài hệ thống). `rating.match_id`, `report.match_id` thành nullable: REPUTATION-001 luồng đội ↔ đội luôn có `match_id` (CHECK `application_id IS NULL` ⇒ `TEAM`↔`TEAM`, và `idx_rating_unique` / `idx_report_unique` của V8 vẫn chống trùng cho kèo).
-- `conversation`: khoá ngữ cảnh là cột FK riêng theo loại (`application_id`) + CHECK; `match_id` / `external_match_id` lưu sẵn (bất biến) để tính hạn lưu 90 ngày sau khi trận kết thúc (BR-N01; job xoá thuộc NOTIFICATION-001 — `[cần xác nhận #5]`). Bên A = đội tuyển (`TEAM`), bên B = ứng viên (`USER`); `party_*_id` đa hình → không FK (như `rating.rater_id`).
-- `conversation_message.sender_user_id ON DELETE RESTRICT` (như `chat_message` sau V7 — ADR-0002). Không cột đội gửi: tên đội lấy từ bên A.
+- `conversation` (v2.0 — bảng ở V6 của MATCH-001): V9 thêm khoá ngữ cảnh mercenary là cột FK riêng (`application_id`) + CHECK, `external_match_id` (bảng `external_match` tạo ở V9 nên cột không thể ở V6); `match_id` / `external_match_id` lưu sẵn (bất biến) để tính hạn lưu 90 ngày sau khi trận kết thúc (BR-N01; job xoá thuộc NOTIFICATION-001 — `[cần xác nhận #5]`). `conversation_game_check` cũng đúng cho `TEAM_MATCH` (luôn có `match_id`). Bên A = đội tuyển (`TEAM`), bên B = ứng viên (`USER`) — `conversation_mercenary_parties_check`; `party_*_id` đa hình → không FK (như `rating.rater_id`). Tên constraint `conversation_context_type_check` lấy từ V6 (MATCH-001 §5.1). `idx_conversation_match` phục vụ job xoá cho ngữ cảnh mercenary (ngữ cảnh `TEAM_MATCH` có `idx_conversation_team_match` của V6).
+- `conversation_message`: V6 (MATCH-001 §5.1); không đổi ở V9.
 - `rating_mercenary_fields_check`: đánh giá liên quan mercenary không có tỷ số; chỉ phía đội được chọn "không đến" (BR-ME13). `rating_no_show_check` (V8) vẫn áp.
 - FK mới `ON DELETE RESTRICT` (ADR-0002). FK `mercenary_*` của V1 (`ON DELETE CASCADE` tới `match`) giữ nguyên.
 - **Index:** `idx_mercenary_recruitment_match_position`, `idx_mercenary_recruitment_external_position` (unique, partial) chặn tin trùng vị trí (BR-ME05) và phục vụ tìm kiếm (2.3), claim của job (§4.9) qua tiền tố trận; tin của kèo đã huỷ chưa được job đóng vẫn `OPEN` trong DB nhưng không chặn ai (không tạo được tin cho kèo huỷ). `idx_mercenary_recruitment_match_all` / `…_external_all` thay `idx_mercenary_recruitment_match` (V1) cho mọi truy vấn tin theo trận (gồm tin đã đóng). Danh sách tin của đội: `idx_mercenary_recruitment_team (team_id, status)` (V1); đơn theo tin `idx_mercenary_application_recruitment` (V1); đơn theo ứng viên + kiểm trùng giờ + xoá tài khoản `idx_mercenary_application_applicant` (V1); report của đội / cá nhân `idx_report_reported_created`, `idx_report_reporter_created` (V8) + lọc `application_id`; sao cá nhân `idx_rating_ratee` (V1); trận ngoài của đội `idx_external_match_team`.
@@ -522,16 +482,7 @@ public interface ExternalMatchRepository extends JpaRepository<ExternalMatch, UU
                                    String skillLevels, String opponentName, OffsetDateTime now);                       // 2.31 — CAS, version + 1
     @Modifying int cancelIfScheduled(UUID id, OffsetDateTime now);                                                     // 2.32 — CAS, version + 1
 }
-public interface ConversationRepository extends JpaRepository<Conversation, UUID> {
-    Optional<ConversationContextView> findContext(UUID id, UUID callerId, OffsetDateTime now);
-}
-public interface ConversationMessageRepository extends JpaRepository<ConversationMessage, UUID> {
-    Optional<ChatCursorView> findCursor(UUID conversationId, UUID messageId);                                           // projection MATCH-002
-    List<ConversationMessageView> findLatest(UUID conversationId, int limit);
-    List<ConversationMessageView> findBefore(UUID conversationId, OffsetDateTime createdAt, UUID id, int limit);
-    List<ConversationMessageView> findAfter(UUID conversationId, OffsetDateTime createdAt, UUID id, int limit);
-    @Modifying int markOtherPartyRead(UUID conversationId, String readerParty);
-}
+// ConversationRepository, ConversationMessageRepository: MATCH-001 §5.2 (v2.0 — tái dùng; mã này thêm khối cột mercenary vào findContext, §4.7)
 // RatingRepository (sửa)
 Optional<MercenaryRatingContextView> findMercenaryRatingContext(UUID applicationId, UUID callerId, OffsetDateTime now); // 2.18, 2.19
 Page<TeamMercenaryRatingView> findMercenaryRatingsOfTeam(UUID teamId, Pageable p);                                     // 2.24
@@ -581,10 +532,10 @@ Ghi chú SQL:
 - `findApplicants` (2.8): `mercenary_application a JOIN "user" u JOIN conversation c` + `CROSS JOIN LATERAL (<USER_STATS cho u.id>) s`; `ORDER BY a.applied_at ASC, a.id ASC`; lọc trạng thái trên biểu thức hiệu lực.
 - `findByApplicant` (2.9): đơn của caller ⋈ tin ⋈ trận (`GAME_JOIN`) ⋈ đội ⋈ sân ⋈ khu vực ⋈ `conversation` ⋈ đội trưởng hiện tại; `ORDER BY a.applied_at DESC, a.id DESC`.
 - `ExternalMatchRepository.findDetail` / `findByTeam`: `external_match x JOIN venue v LEFT JOIN administrative_unit vw … vp … JOIN team t` + `EXISTS (SELECT 1 FROM mercenary_recruitment r WHERE r.external_match_id = x.id AND r.quantity_approved > 0) AS has_approved_mercenary` + cờ caller captain; `findByTeam` lọc `UPCOMING` (`status = 'SCHEDULED' AND match_end_time > :now`), `ENDED` (`SCHEDULED` và `≤ :now`), `CANCELLED`, `ALL`.
-- `ConversationRepository.findContext`: `conversation c JOIN mercenary_application a ON a.id = c.application_id JOIN mercenary_recruitment r <GAME_JOIN> JOIN team t ON t.id = c.party_a_id JOIN "user" ap ON ap.id = c.party_b_id LEFT JOIN team_member cm ON cm.team_id = t.id AND cm.role = 'CAPTAIN' AND cm.status = 'ACTIVE' LEFT JOIN "user" cu ON cu.id = cm.user_id LEFT JOIN "user" me ON me.id = :callerId WHERE c.id = :id` → cột ngữ cảnh + `COALESCE(cm.user_id = :callerId, false) AS caller_captain`, `(ap.id = :callerId) AS caller_applicant`, `me.display_name`, `me.avatar_url`, `(me.deleted_at IS NOT NULL) AS caller_deleted`.
-- Tin nhắn: cursor theo `(created_at, id)`, `JOIN "user" su ON su.id = cm.sender_user_id` — y hệt MATCH-002 §5.2 trên bảng mới. `markOtherPartyRead`: `UPDATE conversation_message SET is_read = TRUE WHERE conversation_id = :c AND sender_party <> :readerParty AND NOT is_read`.
+- `ConversationRepository.findContext` — khối `MERCENARY_APPLICATION` (§4.7) trong câu chung của MATCH-001 §5.2: `LEFT JOIN mercenary_application a ON c.context_type = 'MERCENARY_APPLICATION' AND a.id = c.application_id LEFT JOIN mercenary_recruitment r <GAME_JOIN> LEFT JOIN team t ON c.context_type = 'MERCENARY_APPLICATION' AND t.id = c.party_a_id LEFT JOIN "user" ap ON c.context_type = 'MERCENARY_APPLICATION' AND ap.id = c.party_b_id LEFT JOIN team_member cm ON cm.team_id = t.id AND cm.role = 'CAPTAIN' AND cm.status = 'ACTIVE' LEFT JOIN "user" cu ON cu.id = cm.user_id` → cột ngữ cảnh + `COALESCE(cm.user_id = :callerId, false) AS caller_mercenary_captain`, `COALESCE(ap.id = :callerId, false) AS caller_applicant`, `t.status AS mercenary_team_status`, `COALESCE(t.disbanded_by = :callerId, false) AS caller_mercenary_disbanded_by` (v2.0, user chốt 2026-11-15 — cột trên dòng `team` đã join, không thêm câu) (cột người gọi `me.*` dùng chung).
+- Tin nhắn (cursor, đánh dấu đã đọc): MATCH-001 §5.2.
 - `findMercenaryRatingContext`: caller đã xoá + đơn ⋈ tin ⋈ trận (`g.ended`) ⋈ đội tuyển (`status`) + cờ caller captain / ứng viên + `LEFT JOIN rating` theo `application_id` (0..2 dòng, gom bằng `max(…) FILTER (WHERE rater_type = …)` thành 1 dòng).
-- `findMercenaryReportContext`: như trên (không cột đánh giá) + `EXISTS (SELECT 1 FROM conversation_message cm JOIN conversation c ON c.id = cm.conversation_id WHERE c.application_id = :applicationId) AS has_messages` + `EXISTS` report cùng (trận, reporter, reported, `report_type`) của phía caller.
+- `findMercenaryReportContext`: như trên (không cột đánh giá) + `EXISTS (SELECT 1 FROM conversation_message cm JOIN conversation c ON c.id = cm.conversation_id WHERE c.application_id = :applicationId) AS has_messages` + `EXISTS` report cùng (trận, reporter, reported, `report_type`) của phía caller + `t.status`, `COALESCE(t.disbanded_by = :callerId, false) AS caller_disbanded_by` (v2.0 — `TEAM_016` ở 2.20; cột trên dòng `team` đã join, không thêm câu).
 - `findMercenaryReports`: `subjectType = TEAM` → `RECEIVED`: `r.reported_type = 'TEAM' AND r.reported_id = :id`, `SENT`: `r.reporter_type = 'TEAM' AND r.reporter_id = :id`; `INDIVIDUAL` tương tự; luôn `AND r.application_id IS NOT NULL`; `JOIN mercenary_application a JOIN mercenary_recruitment rc <GAME_JOIN rc> JOIN team t ON t.id = rc.team_id JOIN "user" u ON u.id = a.applicant_id LEFT JOIN dispute d` → `ORDER BY r.created_at DESC, r.id DESC LIMIT/OFFSET`. Bốn câu cố định (không nối chuỗi cột).
 - `resolveMercenaryIfPending`: như `resolveIfPending` (REPUTATION-001 §5.2) + `AND EXISTS (SELECT 1 FROM report r WHERE r.id = dispute.report_id AND r.application_id IS NOT NULL)`. `existsMercenaryDispute` / `existsTeamDispute`: `SELECT EXISTS (SELECT 1 FROM dispute d JOIN report r ON r.id = d.report_id WHERE d.id = :id AND r.application_id IS [NOT] NULL)`. `findAdminMercenary*`: `dispute d JOIN report r ON r.id = d.report_id AND r.application_id IS NOT NULL JOIN mercenary_application a JOIN mercenary_recruitment rc <GAME_JOIN rc> JOIN team t JOIN "user" mu ON mu.id = a.applicant_id JOIN "user" ru (r.created_by_user_id) JOIN "user" du (d.created_by_user_id) LEFT JOIN "user" au (d.resolved_by_user_id) LEFT JOIN sport s ON s.id = m.sport_id` → tên thật + cờ đã xoá (ADR-0002 Sửa đổi 2026-11-12). Thứ tự như REPUTATION-001 2.6.
 - `UserRepository.applyMercenaryCompletion` — khung (cùng công thức `applyCompletion` đội của REPUTATION-001 §5.2 cho một dòng):
@@ -661,8 +612,8 @@ FROM f
 | `ApprovedCountView` | `recruitmentId`, `n` |
 | `WithdrawnApplicationView` | `id`, `recruitmentId`, `teamId`, `matchId`, `externalMatchId`, `wasApproved` |
 | `RejectedApplicationView` | `id`, `recruitmentId` |
-| `ConversationContextView` | cuộc trò chuyện (`id`, `contextType`, bên A/B) + `applicationId`, `applicationEffectiveStatus`, `matchId`, `externalMatchId` + đội (`name`, `avatarUrl`, `captainName`, `captainDeleted`) + ứng viên (`displayName`, `avatarUrl`, `deleted`) + `callerCaptain`, `callerApplicant`, `callerName`, `callerAvatarUrl`, `callerDeleted` |
-| `ConversationMessageView` | `id`, `conversationId`, `senderParty`, `senderPartyType`, `senderPartyId`, `senderUserId`, `senderName`, `senderAvatarUrl`, `senderDeleted`, `message`, `isRead`, `createdAt` |
+| `ConversationContextView` (projection chung — MATCH-001 §5.3; cột dưới là khối `MERCENARY_APPLICATION`) | cuộc trò chuyện (`id`, `contextType`, bên A/B) + `applicationId`, `applicationEffectiveStatus`, `matchId`, `externalMatchId` + đội (`name`, `avatarUrl`, `captainName`, `captainDeleted`) + ứng viên (`displayName`, `avatarUrl`, `deleted`) + `callerCaptain`, `callerApplicant`, `callerName`, `callerAvatarUrl`, `callerDeleted` |
+| `ConversationMessageView` | Tái dùng MATCH-001 §5.3 (`senderPartyType`, `senderPartyId` suy ra ở mapper từ `senderParty` + bên A/B của ctx) |
 | `MercenaryRatingContextView` | `callerDeleted`, đơn (`status`, `applicantId`), trận (`matchId`, `externalMatchId`, `gameEnded`), đội (`id`, `status`), `callerCaptain`, `callerApplicant`, cột đánh giá phía đội và phía mercenary (nullable) |
 | `MercenaryReportContextView` | như trên (không cột đánh giá) + `hasMessages`, `alreadyReported` |
 | `MercenaryReportView` | cột report + `applicationId`, `gameStart`, đội (`id`, `name`, `avatarUrl`), mercenary (`userId`, `displayName`, `avatarUrl`, `deleted`) + cột dispute |
@@ -685,8 +636,8 @@ Thời gian là `Instant`, mapper chuyển UTC (USER-001 §5).
 | `mercenary.MercenaryRecruitment` | `position`: bỏ `@Enumerated` → `@Convert(converter = PositionConverter.class)`; `enum Position { GOALKEEPER("Thủ môn"), DEFENDER("Hậu vệ"), MIDFIELDER("Tiền vệ"), FORWARD("Tiền đạo") }` · `matchId` nullable · + `externalMatchId` · + `createdByUserId` (`nullable = false`, `updatable = false`) · + `closedAt` · `status`, `quantityNeeded`, `quantityApproved`, `closedAt` `updatable = false` (chỉ CAS native — ADR-0003 Sửa đổi 2026-11-14) · `@Builder.Default status = OPEN` |
 | `mercenary.MercenaryApplication` | `status`, `respondedAt`, `withdrawnAt` `updatable = false` (chỉ CAS native) · + `gameCancelNotifiedAt` (`insertable = false, updatable = false`) · `@Builder.Default status = PENDING` |
 | `mercenary.ExternalMatch` (mới) | Map V9; `@UuidGenerator(VERSION_7)`; `@Version Long version`; `skillLevels` (`List<String>`, `@Convert(SkillLevelsConverter)`, `@Builder.Default List.of()`); `enum Status { SCHEDULED, CANCELLED }`; mọi cột nghiệp vụ `updatable = false` — chỉ INSERT + đọc qua JPA; sửa (2.31 `updateIfVersion`) và huỷ (2.32 `cancelIfScheduled`) là câu native có điều kiện `version` / trạng thái, tự `version + 1` (N-m1 — để khoá trận ngoài trước khi khoá tin); `createdAt` `@PrePersist` |
-| `chat.Conversation` (mới) | Map V9; `@UuidGenerator(VERSION_7)`; `enum ContextType { MERCENARY_APPLICATION }`, `enum PartyType { TEAM, USER }`, `enum Party { A, B }`; mọi cột `updatable = false` |
-| `chat.ConversationMessage` (mới) | Map V9; `senderParty` (`Conversation.Party`), `isRead` (`@Builder.Default false`, chỉ đổi bằng `markOtherPartyRead`); `createdAt` `@PrePersist` |
+| `chat.Conversation` (sửa — entity tạo ở MATCH-001 v2.4 §6) | + `applicationId`, `externalMatchId` (`UUID`, nullable, `updatable = false`); `ContextType` + `MERCENARY_APPLICATION` (MATCH-001 đợt 1 chỉ có `TEAM_MATCH` — MATCH-001 §1.1; thêm cùng `MercenaryApplicationConversationPolicy` vì thiếu policy cho một giá trị là lỗi khởi động) |
+| `chat.ConversationMessage` | Tái dùng MATCH-001 §6 |
 | `rating.Rating`, `rating.Report` | `matchId` nullable · + `externalMatchId`, `applicationId` (`updatable = false`) |
 | `user.User` | + `verifiedAt` (`insertable = false, updatable = false` — chỉ `refreshVerification`) |
 
@@ -700,17 +651,17 @@ Thời gian là `Instant`, mapper chuyển UTC (USER-001 §5).
 - `CreateExternalMatchRequest(@NotNull UUID venueId, @NotNull OffsetDateTime startsAt, @NotNull OffsetDateTime endsAt, @ValidSkillLevels List<String> skillLevels, @Size(max = 100) String opponentName, @NotEmpty @Size(max = 4) @UniquePositions List<@Valid RecruitmentPositionRequest> positions)` + `@ValidExternalMatchSchedule` (mức lớp: `startsAt ≥ now + MIN_LEAD_TIME`, `endsAt > startsAt`, `endsAt − startsAt ≤ MAX_DURATION` — hằng `MatchRules` của MATCH-001, user chốt 2026-11-14 (BR-ME19); lỗi gắn `startsAt` / `endsAt`). `UpdateExternalMatchRequest`: cùng field (tuỳ chọn, không `positions`); validator kiểm cặp giờ sau khi áp thay đổi ở service.
 - `SearchRecruitmentsRequest(Double lat, Double lng, @DecimalMin("1") @DecimalMax("20") Double radiusKm, @OneOf(vị trí) String position, Integer page, Integer pageSize)` + `@ValidMercenarySearch`.
 - `WithdrawApplicationRequest(@NotNull @OneOf({"PENDING","APPROVED"}) String expectedStatus)`.
-- `SendConversationMessageRequest(@NotBlank @Size(max = 1000) String content)`.
+- `SendConversationMessageRequest`: tái dùng MATCH-001 §7.
 - `CreateMercenaryRatingRequest(Boolean isNoShow, Integer score, @Size(max = 500) String comment)` + `@ValidRating` (REPUTATION-001; developer tổng quát hoá qua interface chung khi reuse-scan). `isNoShow` của phía mercenary kiểm ở service (`MERCENARY_016`).
 - Report dùng lại `CreateReportRequest`; Admin dùng lại `ResolveDisputeRequest`.
-- Hằng một nơi `MercenaryRules`: `MAX_QUANTITY = 10` (BR-ME05), `DEFAULT_RADIUS_KM = 3`, `MIN_RADIUS_KM = 1`, `MAX_RADIUS_KM = 20`, `MAX_POSITIONS = 4`, `DISTANCE_ROUNDING_KM = 0.5`, `MAX_OPPONENT_NAME = 100`. Giới hạn tin nhắn dùng lại `PairingRules.MAX_MESSAGE_LENGTH` (chuyển sang `ChatRules` khi reuse-scan).
+- Hằng một nơi `MercenaryRules`: `MAX_QUANTITY = 10` (BR-ME05), `DEFAULT_RADIUS_KM = 3`, `MIN_RADIUS_KM = 1`, `MAX_RADIUS_KM = 20`, `MAX_POSITIONS = 4`, `DISTANCE_ROUNDING_KM = 0.5`, `MAX_OPPONENT_NAME = 100`. Giới hạn tin nhắn: `ConversationRules.MAX_MESSAGE_LENGTH` (MATCH-001 §4.14).
 - `MercenaryMapper` (`uses MapperSupport`, `unmappedTargetPolicy = ERROR`):
   - **Hiện sân / đội trưởng ở tin, đơn (BR-ME04):** `match.venue` và `captainName` khác `null` khi `viewerIsCaptain` **hoặc** đơn của người xem ở tin có trạng thái hiệu lực `APPROVED`; ngược lại `null`. `match.area` luôn trả khi sân có phường. Chat: `ConversationMapper` luôn trả tên đội trưởng / người gửi (ngoại lệ chat — §4.7).
   - `distanceKm` = `ceil(d / 0.5) × 0.5`, tối thiểu `0.5` (MINOR 15 — làm tròn thô để không tam giác hoá ra vị trí sân).
   - `reliabilityPenalty` mọi response = số điểm bị trừ **≥ 0** (MINOR 11): 2.13 trả `-delta`; report trả cột `reliability_penalty` (đã dương).
   - `match.source` = `SYSTEM` khi `matchId != null`, `EXTERNAL` khi `externalMatchId != null`.
   - Tên user đã xoá → `MapperSupport.maskName` / `maskAvatar` (endpoint thường — BC-U02); API Admin trả tên thật + cờ.
-- `ConversationMapper`: `senderPartyType`, `senderPartyId` suy ra từ `senderParty` + bên A/B.
+- `ConversationMapper` (MATCH-001 §7): thêm khối `MERCENARY_APPLICATION` (§4.7).
 - `MercenaryReputationMapper`: dùng chung hàm làm tròn / mức điểm với `ReputationMapper` (REPUTATION-001 §7).
 
 ## 8. Cấu hình & Dependencies
@@ -727,7 +678,7 @@ arenaflow.mercenary.lifecycle.cancel-notice-lookback-days=7
 | `batch-size` 200 × `max-batches-per-run` 50 | Như MATCH-001 §8 — transaction ngắn; dùng chung cho đóng tin và quét đơn mồ côi |
 | `cancel-notice-lookback-days` 7 | Báo huỷ trận chỉ quét trận bị huỷ có giờ kết thúc trong 7 ngày gần nhất (huỷ chỉ trước giờ bắt đầu → job 5 phút gặp lại ngay); đủ bù job ngừng vài ngày |
 
-Không thêm Maven dependency (WebSocket đã thêm ở MATCH-002).
+Không thêm Maven dependency (WebSocket đã thêm ở MATCH-001 v2.4).
 
 ## 9. Security
 
@@ -756,26 +707,28 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 
 | Tài liệu | Nội dung | Nhánh |
 |---|---|---|
-| `docs/database/schema.dbml`, `schema-design.md` (`mercenary_*`, `external_match`, `rating`, `report`, `"user"`, bảng `conversation*`) | V9 | `feature/MERCENARY-001-*` |
+| `docs/database/schema.dbml`, `schema-design.md` (`mercenary_*`, `external_match`, `rating`, `report`, `"user"`, cột / CHECK mercenary của `conversation` — bảng do MATCH-001 V6 tạo) | V9 | `feature/MERCENARY-001-*` |
 | `docs/database/data-model.md` §3.6, §3.7 | Bảo vệ vị trí "phường, tỉnh"; sửa / đóng tin; trận ngoài hệ thống; cấu trúc lưu đánh giá cho mercenary (đóng `[cần xác nhận]` ở §3.4 "Cách lưu đối với mercenary") | `feature/MERCENARY-001-*` |
-| `docs/agent/api-convention.md` §5 (33 endpoint vào bảng 2xx — §3), §6 (domain `MERCENARY`, `CHAT_002..004`, `REPORT_009`), §7 (cursor cho `GET /conversations/{id}/messages`) | Coordinator | `chore/agent-framework-*` |
+| `docs/agent/api-convention.md` §5 (29 endpoint của mã này vào bảng 2xx — §3; 2.14–2.17 do MATCH-001 v2.4 thêm), §6 (domain `MERCENARY`, `REPORT_009`; `CHAT_002..004` do MATCH-001 v2.4) | Coordinator | `chore/agent-framework-*` |
 | `docs/agent/convention-backend.md` §1 | `application/support/mercenary/`, `application/event/mercenary/` | `chore/agent-framework-*` |
 | `docs/agent/CLAUDE.md` §2 | Dòng điều hướng MERCENARY-001 | `chore/agent-framework-*` |
-| NOTIFICATION-001 (khi thiết kế) | Xoá `conversation_message` sau 90 ngày theo trận của cuộc trò chuyện (kèo: kết thúc / huỷ; trận ngoài: `match_end_time` / `cancelled_at`); nghe event §4.11 | — |
+| NOTIFICATION-001 (khi thiết kế) | Job xoá chat hết hạn lưu dùng chung mọi cuộc trò chuyện — điều kiện chung ở MATCH-001 `Component_Class_Design.md` §11; phần riêng mã này: cuộc trò chuyện có `external_match_id` → trận ngoài `SCHEDULED` (mốc `match_end_time`) / `CANCELLED` (mốc `cancelled_at`) + 90 ngày < now; xoá dòng `conversation` (tin xoá theo `ON DELETE CASCADE`); nghe event §4.11 | — |
 
 ## 12. Danh sách [cần xác nhận]
 
-Đánh số toàn thiết kế MERCENARY-001: 1–7 ở đây, 8–15 ở `Processing_Flow.md` §9. Câu hỏi nghiệp vụ còn mở: `API_Spec.md` §6.
+Đánh số toàn thiết kế MERCENARY-001: 1–7, 16, 17 ở đây, 8–15 ở `Processing_Flow.md` §9. Câu hỏi nghiệp vụ còn mở: `API_Spec.md` §6.
 
 | # | Nội dung | Loại |
 |---|---|---|
-| 1 | **Thứ tự implement:** V9 cần V5–V8 (VENUE-001, MATCH-001, MATCH-002, REPUTATION-001) đã code; MATCH-002 `[cần xác nhận #4]`, `#5` đã kiểm | **Chặn code** — implement sau bốn mã kia |
+| 1 | **Thứ tự implement:** V9 cần V5–V8 (VENUE-001, MATCH-001, MATCH-002, REPUTATION-001) đã code — gồm lõi cuộc trò chuyện và kênh realtime của MATCH-001 v2.4 (bảng `conversation*` ở V6, `ConversationService`); MATCH-002 `[cần xác nhận #4]`, `#5` đã kiểm | **Chặn code** — implement sau bốn mã kia |
 | 2 | ~~Quy tắc chờ câu hỏi nghiệp vụ B1–B12~~ — **đã chốt** (user, 2026-11-14; §13) | Đã đóng |
 | 3 | ~~Report bùng của mercenary nhắm vào đội tác động như report đội–đội~~ — **đã chốt** B9 (BR-ME14) | Đã đóng |
 | 4 | Dữ liệu `mercenary_recruitment` trên Neon dev trước V9 (cột `NOT NULL` không mặc định) | Không chặn — kiểm khi lập kế hoạch |
-| 5 | Job xoá tin nhắn theo hạn lưu cho `conversation_message` thuộc NOTIFICATION-001 (chưa thiết kế) | Không chặn |
+| 5 | Job xoá tin nhắn theo hạn lưu cho mọi cuộc trò chuyện thuộc NOTIFICATION-001 (chưa thiết kế) — điều kiện: §11 + MATCH-001 §11 | Không chặn |
 | 6 | ~~Hai CTE ghi `team` và `"user"` trong một câu~~ — **bỏ** (2026-11-14): mercenary không còn được cộng điểm trong câu hoàn tất trận của đội (BR-ME15 sửa) | Đã đóng |
 | 7 | ~~Rủi ro ước lượng vị trí sân~~ — **đã xử lý** bằng làm tròn 0,5 km (MINOR 15) | Đã đóng |
+| 16 | ~~Đội tuyển đã giải tán trong chat theo đơn~~ — **user chốt 2026-11-15:** áp như chat hai đội — người đã giải tán đội tuyển chỉ xem (§4.7); 2.20 với người đó → `TEAM_016` (§4.5); +2 cột ở `findContext` (khối mercenary) và +2 cột ở `findMercenaryReportContext`, không thêm câu | Đã đóng |
+| 17 | ~~Người đã giải tán đội tuyển lấy `conversationId` từ đâu~~ — **user chốt 2026-11-15:** MATCH-001 2.20 "Tin nhắn của tôi" (`findMine` dùng khối cột mercenary của `findContext` — §4.7; `ConversationListRowView` mở rộng `ConversationContextView` gồm cột mercenary §5.5) | Đã đóng |
 
 ## 13. Quyết định nghiệp vụ đã chốt (user, 2026-11-14 — SRS `SYSTEM-001` cập nhật cùng ngày)
 

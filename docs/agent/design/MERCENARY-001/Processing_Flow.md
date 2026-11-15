@@ -6,8 +6,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL ≥ 18 · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush) · ADR-0003 (+ Sửa đổi 2026-11-10, 2026-11-12, 2026-11-14) · ADR-0007 (+ Sửa đổi 2026-11-14) · ADR-0011, ADR-0012, ADR-0013, ADR-0014 · retrier: VENUE-001 `Component_Class_Design.md` §4.9 |
-| Ràng buộc dữ liệu | V1–V8 + `V9__mercenary_recruitment_chat_reputation.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 |
+| Ràng buộc dữ liệu | V1–V8 (V6 gồm `conversation`, `conversation_message` — MATCH-001 v2.4) + `V9__mercenary_recruitment_chat_reputation.sql` (`Component_Class_Design.md` §5.1) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -21,7 +21,7 @@ Thao tác ghi có CAS chạy trong `ConcurrencyConflictRetrier.execute(MATCH_014
 
 ### 1.1. Thứ tự guard (nguồn duy nhất)
 
-Sau JWT (401; `/admin/**` → 403 `AUTH_004` ở filter). Người gọi đã xoá tài khoản (token còn hạn) → `USER_001` ngay sau Bean Validation ở 2.7, 2.15, 2.18, 2.20 (cột `caller_deleted` trong câu context — không thêm truy vấn). Tồn tại → đội (trạng thái rồi quyền) → trạng thái trận / tin → trạng thái đơn → điều kiện ứng viên → trùng lặp.
+Sau JWT (401; `/admin/**` → 403 `AUTH_004` ở filter). Người gọi đã xoá tài khoản (token còn hạn) → `USER_001` ngay sau Bean Validation ở 2.7, 2.18, 2.20 (2.15: sau `CHAT_002` — MATCH-001 `Processing_Flow.md` §1.1) (cột `caller_deleted` trong câu context — không thêm truy vấn). Tồn tại → đội (trạng thái rồi quyền) → trạng thái trận / tin → trạng thái đơn → điều kiện ứng viên → trùng lặp.
 
 | Endpoint | Thứ tự |
 |---|---|
@@ -38,12 +38,10 @@ Sau JWT (401; `/admin/**` → 403 `AUTH_004` ở filter). Người gọi đã xo
 | 2.11 | `MERCENARY_002` → `TEAM_016` → `TEAM_015` → `TEAM_002` → `MERCENARY_007` → `MERCENARY_012` (đơn hiệu lực ≠ `PENDING`) → `MERCENARY_013` (`now ≥ g.start`) → `MERCENARY_006` → `MERCENARY_010` (ứng viên) → `MERCENARY_011` (ứng viên — gồm đơn `APPROVED` khác của chính trận) |
 | 2.12 | `MERCENARY_002` → `TEAM_016` → `TEAM_002` (đội `INACTIVE` được) → `MERCENARY_007` → `MERCENARY_012` |
 | 2.13 | Bean Validation (`expectedStatus`) → `MERCENARY_002` → `MERCENARY_014` (caller ≠ ứng viên) → `MERCENARY_012` (đơn hiệu lực ≠ `expectedStatus`) → `APPROVED`: `MERCENARY_004` (`g.cancelled` hoặc trận đã kết thúc) → `MERCENARY_013` (`now ≥ g.start`) |
-| 2.14, 2.17 | `CHAT_002` → `CHAT_003` |
-| 2.15 | Bean Validation → `USER_001` → `CHAT_002` → `CHAT_003` → `CHAT_004` (đơn hiệu lực ∉ {`PENDING`, `APPROVED`}) |
-| 2.16 | Bean Validation (cursor) → `CHAT_002` → `CHAT_003` → `CHAT_001` |
+| 2.14–2.17 | Như MATCH-001 `Processing_Flow.md` §1.1 (2.19, 2.16, 2.17, 2.18 — cùng endpoint). Ngữ cảnh đơn: không có nhánh lazy; `CHAT_003` khi không phải ứng viên, đội trưởng ACTIVE của đội tuyển hay người đã giải tán đội tuyển; `CHAT_004` khi đơn hiệu lực ∉ {`PENDING`, `APPROVED`} **hoặc** người gọi là người đã giải tán đội tuyển (chỉ xem — user chốt 2026-11-15) |
 | 2.18 | Bean Validation → `USER_001` → `MERCENARY_002` → `MERCENARY_019` (caller vừa là ứng viên vừa là đội trưởng) → `MERCENARY_014` → phía đội trưởng: `TEAM_015` (đội tuyển `INACTIVE`, BR-R10) → `MERCENARY_015` (`NOT g.ended` hoặc đơn ≠ `APPROVED`) → `MERCENARY_016` (phía mercenary gửi `isNoShow = true`) → `MERCENARY_017` (phía mình đã đánh giá; race → unique index) |
 | 2.19 | `MERCENARY_002` → `MERCENARY_019` → `MERCENARY_014` → phía đội trưởng: `TEAM_015` |
-| 2.20 | Bean Validation → `USER_001` → `MERCENARY_002` → `MERCENARY_019` → `MERCENARY_014` → phía đội trưởng: `TEAM_015` → `MERCENARY_020` (không tham gia trận **và** chưa có tin nhắn) → `MERCENARY_021` (chỉ có ngữ cảnh tin nhắn và loại ≠ `BAD_COMMUNICATION`) → `MERCENARY_022` (đã report loại này; race → unique index) |
+| 2.20 | Bean Validation → `USER_001` → `MERCENARY_002` → `MERCENARY_019` → `TEAM_016` (caller không phải ứng viên, không phải đội trưởng ACTIVE, là người đã giải tán đội tuyển — v2.0, BR-R10) → `MERCENARY_014` → phía đội trưởng: `TEAM_015` → `MERCENARY_020` (không tham gia trận **và** chưa có tin nhắn) → `MERCENARY_021` (chỉ có ngữ cảnh tin nhắn và loại ≠ `BAD_COMMUNICATION`) → `MERCENARY_022` (đã report loại này; race → unique index) |
 | 2.21 | Bean Validation → `TEAM_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` (`requireActiveCaptain`, BR-R10) |
 | 2.22 | Bean Validation |
 | 2.23 | `USER_001` (không có / đã xoá tài khoản) |
@@ -58,7 +56,7 @@ Sau JWT (401; `/admin/**` → 403 `AUTH_004` ở filter). Người gọi đã xo
 | 2.32 | `MERCENARY_024` → `TEAM_016` → `TEAM_002` (đội `INACTIVE` được) → `MERCENARY_004` → `MERCENARY_013` (`now ≥ g.start` — BR-ME19, như BR-M11) |
 | 2.33 | Bean Validation → `MERCENARY_024` → `TEAM_016` → `TEAM_015` → `TEAM_002` → `MERCENARY_004` → `MERCENARY_013` → `MERCENARY_023` |
 
-Phía đánh giá / report (2.18–2.20) xác định từ người gọi, không gửi lên: caller là ứng viên → phía mercenary; caller là đội trưởng ACTIVE hiện tại của đội tuyển → phía đội trưởng. Đội tuyển đã giải tán không còn đội trưởng → người gọi không phải ứng viên nhận `MERCENARY_014`.
+Phía đánh giá / report (2.18–2.20) xác định từ người gọi, không gửi lên: caller là ứng viên → phía mercenary; caller là đội trưởng ACTIVE hiện tại của đội tuyển → phía đội trưởng. Đội tuyển đã giải tán không còn đội trưởng → người gọi không phải ứng viên nhận `MERCENARY_014` ở 2.18, 2.19; ở 2.20 người đã giải tán đội tuyển nhận `TEAM_016` (vì vẫn là bên chỉ xem của cuộc trò chuyện — user chốt 2026-11-15), người khác `MERCENARY_014`.
 
 Thứ tự guard của REPUTATION-001 2.5 (tranh chấp, gồm nhánh report nhắm vào cá nhân): nguồn duy nhất là REPUTATION-001 `Processing_Flow.md` §1.1 (v1.1).
 
@@ -115,20 +113,7 @@ sequenceDiagram
 
 ### 2.3. Gửi tin (2.15)
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant S as ConversationServiceImpl
-    participant P as ConversationAccessPolicy
-    participant DB as PostgreSQL
-    participant G as ChatRealtimeGateway
-    C->>S: POST /conversations/{id}/messages
-    S->>DB: Q1 S findContext (cuộc trò chuyện + ngữ cảnh đơn + cờ caller + tên caller, caller đã xoá?)
-    S->>P: resolve(ctx, caller, now) → bên của caller, canSend
-    S->>DB: Q2 I conversation_message
-    S->>G: MESSAGE_CREATED → /topic/conversations/{id} (sau commit)
-    S-->>C: 201
-```
+Như MATCH-001 `Processing_Flow.md` §2.4 (v2.0 — một luồng cho mọi cuộc trò chuyện); ngữ cảnh đơn đi nhánh không lazy: Q1 `findContext` (khối mercenary — `Component_Class_Design.md` §4.7) → `MercenaryApplicationConversationPolicy` → Q2 INSERT tin → frame `MESSAGE_CREATED` sau commit.
 
 ### 2.4. Đội trưởng đánh giá mercenary bằng sao (2.18) — tính hoàn thành (BR-ME15)
 
@@ -204,7 +189,7 @@ sequenceDiagram
 | 2.13 | `POST …/withdraw` — `PENDING` | S ctx, U đơn CAS | 2 / W6 ✅ |
 | 2.13 | — `APPROVED` | S ctx, U tin, U đơn CAS, U user (điểm, chuỗi) · sau commit: U `verified_at` | 5 / W6 ✅ |
 | 2.14 | `GET /conversations/{id}` | S ctx | 1 / D3 ✅ |
-| 2.15 | `POST …/messages` | S ctx, I tin | 2 / W6 ✅ |
+| 2.15 | `POST …/messages` | S ctx, I tin (MATCH-001 2.16 — retrier, ngữ cảnh đơn không lazy) | 2 / W6 ✅ |
 | 2.16 | `GET …/messages` | S ctx, S cursor (khi có), S trang | 3 / L4 ✅ |
 | 2.17 | `POST …/messages/read` | S ctx, U | 2 / W6 ✅ |
 | 2.18 | `POST …/ratings` — đội trưởng chấm sao | S ctx, I rating, U user (hoàn thành + 5 sao, 1 câu) RETURNING · sau commit: U `verified_at` | 4 / W6 ✅ |
@@ -280,11 +265,7 @@ Q1 `findContext` → guard (mọi lần thử so `expectedStatus` với trạng 
 Mọi trường hợp rút `APPROVED`: chuỗi trận sạch cá nhân = 0; điểm chặn [0, 100].
 
 ### 3.10. Cuộc trò chuyện (2.14–2.17)
-- 2.14: Q1 `findContext(conversationId, callerId, now)` → policy → `CHAT_003` khi không tham gia → response (bên A/B kèm tên đội trưởng hiện tại — luôn hiện, BR-ME04 ngoại lệ chat; `canSend`, bên của người xem).
-- 2.15: Q1 → `callerDeleted` → `USER_001` → policy → `CHAT_003` / `CHAT_004` → Q2 `save(ConversationMessage)` → frame `MESSAGE_CREATED` (người gửi lấy từ cột `caller*` của ctx, không đọc lại).
-- 2.16: Q1 → policy (chỉ cần quyền đọc, mọi trạng thái) → có con trỏ: Q2 `findCursor` → không có → `CHAT_001` → Q3 `findBefore` / `findAfter` / `findLatest` (`limit + 1`) → `hasMore`.
-- 2.17: Q1 → policy → Q2 `markOtherPartyRead(conversationId, viewerParty)` → 204.
-- STOMP `SUBSCRIBE /topic/conversations/{id}`: `requireSubscribable` = Q1 + policy (1 truy vấn mỗi lần subscribe — như ADR-0014).
+MATCH-001 `Processing_Flow.md` §3.15–§3.20 (cùng endpoint, cùng số truy vấn; người đã giải tán đội tuyển không thêm câu). Test (v2.0): đội tuyển giải tán → người đã giải tán: 2.14 `canSend = false`, 2.16 / 2.17 / `SUBSCRIBE` thành công, 2.15 → `CHAT_004`, 2.20 → `TEAM_016`; thành viên khác của đội → 2.14–2.17 `CHAT_003`; ứng viên vẫn gửi được khi đơn `PENDING` / `APPROVED`. Riêng ngữ cảnh đơn: policy `MercenaryApplicationConversationPolicy` (`Component_Class_Design.md` §4.7) — bên A/B, `canSend` theo trạng thái hiệu lực của đơn, tên đội trưởng luôn hiện (BR-ME04 ngoại lệ chat); `send` qua retrier nhưng luôn `Done` (không lazy). Cuộc trò chuyện tạo ở 2.7 (`Conversation …MERCENARY_APPLICATION…`).
 
 ### 3.11. Đánh giá, report (2.18–2.22)
 - 2.18: Q1 `findMercenaryRatingContext(applicationId, callerId, now)` → guard → Q2 `saveAndFlush(Rating)` (`matchId` / `externalMatchId` theo tin; bắt `idx_rating_mercenary_unique` → `MERCENARY_017`) → phía đội trưởng, **chấm sao**: Q3 `reputationService.applyMercenaryCompletion(applicantId, matchId, externalMatchId, ratingBonus = score == 5 ? 1 : 0, ratingId)` + `refreshUsersAfterCommit({applicant})` (Q4 sau commit); "Không đến": không ghi điểm, không refresh; phía mercenary: không ghi điểm, không refresh → `MercenaryRatingCreatedEvent`.
@@ -302,6 +283,14 @@ Mọi trường hợp rút `APPROVED`: chuỗi trận sạch cá nhân = 0; đi�
 | 80, 3, 1 | Có | 5 | 83 (+2+1), **0**, 1 |
 | 99, 4, 0 | Không | 3 | 100 (chặn), 5, 0 |
 | — | — | "Không đến" | Không gọi |
+
+**Bảng kiểm trận sạch của đội khi trận `COMPLETED`** (`applyCompletion` của REPUTATION-001 có mệnh đề mercenary — `Component_Class_Design.md` §4.12; test bắt buộc, chuyển từ REPUTATION-001 `Processing_Flow.md` §3.1):
+
+| Trước (điểm, chuỗi, bộ đếm bùng) | Report đội chưa bác trong trận | Sau |
+|---|---|---|
+| 80, 2, 0 | Chỉ report "giao tiếp tệ" qua chat theo đơn của ứng viên bị từ chối (đơn `REJECTED`) | 82, **3**, 0 (không tính) |
+| 80, 2, 0 | Chỉ report "giao tiếp tệ" qua chat theo đơn của ứng viên đã rút đơn chờ (`WITHDRAWN`) | 82, **3**, 0 (không tính) |
+| 80, 2, 0 | Report của mercenary đơn `APPROVED` của trận | 82, **0**, 0 |
 
 **Bảng kiểm ngữ cảnh report (2.20):**
 

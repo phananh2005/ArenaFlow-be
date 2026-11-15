@@ -9,17 +9,17 @@
 | Mã chức năng | `MATCH-001` |
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo | ArenaFlow-be |
-| Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1; mã lỗi `TEAM_*` dùng lại từ USER-001/USER-002 `API_Spec.md`, `VENUE_*` từ VENUE-001 `API_Spec.md`; ghép kèo luồng B (thương lượng, chat) và mã `MATCH_016`: MATCH-002 `API_Spec.md` |
-| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.8) — UC-M01, M02, M03, M04, M08, M09, UC-C01, C02; BR-M01..M06, BR-M09..M18, BR-C01..C05; Business_Rules §2.1, §2.2, §3.1, §4 (BC-M01..M07), §5.2, §5.4, §7.3; AC-M01..M03, M06..M12, AC-C01; Scenario 1, 2 (tạo kèo), 4, 5, 6, 10, 11 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.3** (solution-architect · 2026-11-13) — lịch sử thay đổi: `CHANGELOG.md` |
+| Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1; mã lỗi `TEAM_*` dùng lại từ USER-001/USER-002 `API_Spec.md`, `VENUE_*` từ VENUE-001 `API_Spec.md`; ghép kèo luồng B (thương lượng), frame `PAIRING_UPDATED` và mã `MATCH_016`: MATCH-002 `API_Spec.md`; chat dùng chung (§1.6, §1.7, 2.16–2.20) — cuộc trò chuyện theo đơn ứng tuyển: MERCENARY-001 `API_Spec.md` §1.7; [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (kênh realtime) |
+| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10) — UC-M01, M02, M03, M04, M08, M09, UC-C01, C02; BR-M01..M06, BR-M09..M18, BR-C01..C05, BR-N01, BR-N03..BR-N06 (chat giữa hai đội, danh sách tin nhắn); UC-N01, UC-N04; Business_Rules §2.1, §2.2, §3.1, §4 (BC-M01..M07), §5.2, §5.4, §7.3; AC-M01..M03, M06..M12, AC-C01, AC-N01, AC-N03, AC-N04; Scenario 1, 2 (tạo kèo), 4, 5, 6, 10, 11, 12 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.4** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
-Đội trưởng tạo kèo **luồng A** (đội đã tự đặt sân) cho một bộ môn đang bật. Đội khác tìm kèo và gửi yêu cầu ghép; đội tạo kèo chấp nhận đúng một yêu cầu → kèo `CONFIRMED`, các yêu cầu đang chờ khác → `SUPERSEDED`. Đội tạo kèo nhập thoả thuận chi phí khi kèo còn mở (chỉ để hiển thị — ArenaFlow không thu/giữ tiền). Huỷ kèo hoặc rút yêu cầu **sau khi đã ghép** bị trừ điểm uy tín của đội thực hiện (§1.5). Kèo tự hết hạn / tự lưu trữ theo thời gian (§1.3). Admin bật/tắt bộ môn.
+Đội trưởng tạo kèo **luồng A** (đội đã tự đặt sân) cho một bộ môn đang bật. Đội khác tìm kèo và gửi yêu cầu ghép — mỗi đội gửi có ngay một **cuộc trò chuyện** riêng với đội tạo kèo (`conversationId` trong yêu cầu; chat theo §1.6, 2.16–2.20 — bộ endpoint chat dùng chung cho mọi cuộc trò chuyện, gồm luồng B và mercenary); đội tạo kèo chấp nhận đúng một yêu cầu → kèo `CONFIRMED`, các yêu cầu đang chờ khác → `SUPERSEDED`. Đội tạo kèo nhập thoả thuận chi phí khi kèo còn mở (chỉ để hiển thị — ArenaFlow không thu/giữ tiền). Huỷ kèo hoặc rút yêu cầu **sau khi đã ghép** bị trừ điểm uy tín của đội thực hiện (§1.5). Kèo tự hết hạn / tự lưu trữ theo thời gian (§1.3). Admin bật/tắt bộ môn.
 
-Kèo **luồng B** (`type = NEED_VENUE` — đội chưa có sân) được tạo, tìm, xem, huỷ bằng chính các endpoint ở đây, với 1–5 lựa chọn địa điểm và 1–5 khung giờ thay cho một địa điểm + một giờ. Kèo B **không** nhận yêu cầu ghép (2.6–2.10) và không dùng 2.4: đội khác "nhận kèo" để mở thương lượng, hai đội trưởng chat, chốt địa điểm/giờ, chi phí và tiền cọc, rồi cùng xác nhận — theo MATCH-002 `API_Spec.md`. Khi thương lượng hoàn tất, kèo B `CONFIRMED` có một địa điểm, một khung giờ, một đội đã ghép như kèo A.
+Kèo **luồng B** (`type = NEED_VENUE` — đội chưa có sân) được tạo, tìm, xem, huỷ bằng chính các endpoint ở đây, với 1–5 lựa chọn địa điểm và 1–5 khung giờ thay cho một địa điểm + một giờ. Kèo B **không** nhận yêu cầu ghép (2.6–2.10) và không dùng 2.4: đội khác "nhận kèo" để mở thương lượng, hai đội trưởng chat, chốt địa điểm/giờ, chi phí và tiền cọc, rồi cùng xác nhận — theo MATCH-002 `API_Spec.md`. Khi thương lượng hoàn tất, kèo B `CONFIRMED` có một địa điểm, một khung giờ, một đội đã ghép như kèo A. Luồng B mở cùng bản phát hành MATCH-002; trước đó 2.1 với `type = NEED_VENUE` trả `422 MATCH_016` — FE ẩn lựa chọn "Chưa có sân" tới khi luồng B được phát hành.
 
-**Ngoài phạm vi:** ghép kèo luồng B — thương lượng, chat, chốt địa điểm/giờ, chi phí và tiền cọc của luồng B (MATCH-002) · đánh giá trận, `ARCHIVED → COMPLETED`, Completion Rate (REPUTATION-001) · tuyển người lẻ (mercenary) · gửi thông báo đẩy (NOTIFICATION-001) · **sửa nội dung kèo sau khi tạo**: không có endpoint sửa; muốn đổi thì huỷ rồi tạo kèo mới (BR-M02, BR-M04) · header `Idempotency-Key` (`api-convention.md` §13) chưa hỗ trợ — FE chặn bấm lặp nút tạo kèo.
+**Ngoài phạm vi:** ghép kèo luồng B — thương lượng, chốt địa điểm/giờ, chi phí và tiền cọc của luồng B (MATCH-002) · report "giao tiếp tệ" qua chat (REPUTATION-001 2.10) · quy tắc chat riêng của thương lượng luồng B (MATCH-002) và của đơn ứng tuyển (MERCENARY-001) · đánh giá trận, `ARCHIVED → COMPLETED`, Completion Rate (REPUTATION-001) · tuyển người lẻ (mercenary) · gửi thông báo đẩy (NOTIFICATION-001) · **sửa nội dung kèo sau khi tạo**: không có endpoint sửa; muốn đổi thì huỷ rồi tạo kèo mới (BR-M02, BR-M04) · header `Idempotency-Key` (`api-convention.md` §13) chưa hỗ trợ — FE chặn bấm lặp nút tạo kèo.
 
 ### 1.1. Quy ước chung
 
@@ -31,7 +31,7 @@ Kèo **luồng B** (`type = NEED_VENUE` — đội chưa có sân) được tạ
 - Chuỗi: server bỏ khoảng trắng đầu/cuối; field tuỳ chọn gửi `""` được coi là không nhập (response trả `null`).
 - Danh sách: `page` ≥ 1 (mặc định 1), `pageSize` 1..100 (mặc định 20). Thứ tự cố định, ghi ở từng endpoint; không có tham số `sort`.
 - Enum UPPERCASE, trừ nhãn trình độ (tiếng Việt) — đủ giá trị ở §4.1.
-- Tên đội luôn hiển thị; kèo không trả thông tin cá nhân của đội trưởng.
+- Tên đội luôn hiển thị; kèo không trả thông tin cá nhân của đội trưởng (chat 2.16–2.20 trả tên / ảnh đội trưởng và người gửi — §1.6, §4.7–§4.9).
 
 ### 1.2. Thao tác thay mặt đội
 
@@ -87,6 +87,67 @@ Huỷ kèo (2.5) và rút yêu cầu (2.10) **bắt buộc** gửi `expectedStat
 - Mỗi lần huỷ chỉ trừ điểm một lần: đội đã ghép bấm "Huỷ kèo" (2.5) hay "Rút yêu cầu" (2.10) cho cùng kết quả (BR-M12).
 - Huỷ kèo `CONFIRMED` / rút yêu cầu `ACCEPTED` cũng đưa chuỗi trận sạch của đội huỷ về 0 (cách tính chuỗi: REPUTATION-001 `API_Spec.md` §1.3).
 
+### 1.6. Cuộc trò chuyện giữa hai đội (luồng A và B) — chat dùng chung
+
+Chat của hệ thống (giữa hai đội trong một kèo, và chat 1–1 theo đơn ứng tuyển mercenary — MERCENARY-001 `API_Spec.md` §1.7) dùng chung một bộ endpoint **2.16–2.20** (`/conversations/…`, `/profile/conversations`), kiểu dữ liệu §4.7–§4.9 và kênh realtime §1.7. Mục này ghi quy tắc của **chat giữa hai đội**.
+
+- **Mỗi cặp (kèo, đội tham gia) có đúng một cuộc trò chuyện** với đội tạo kèo (BR-N04, BC-N04):
+  - Luồng A: mở khi đội gửi yêu cầu ghép kèo (2.6), kể cả khi yêu cầu còn `PENDING`. Mỗi đội gửi có một cuộc trò chuyện riêng với đội tạo kèo; đội khác không thấy (vd X không thấy chat Alpha–Y). Đội **gửi lại** yêu cầu sau khi rút / hết hạn → dùng tiếp cuộc trò chuyện cũ (giữ lịch sử, cùng `conversationId`).
+  - Luồng B: mở khi đội nhận kèo (MATCH-002 2.1) — mỗi thương lượng một cuộc trò chuyện.
+  - Sau khi ghép, hai đội nhắn tiếp trong chính cuộc trò chuyện đó (không mở cuộc mới).
+- `conversationId` có trong: yêu cầu ghép kèo (§4.4 — 2.6, 2.7, 2.12), thương lượng (MATCH-002 §4.2, §4.3 — 2.1–2.4) và danh sách "Tin nhắn của tôi" (2.20 — mọi cuộc trò chuyện người gọi xem được, kể cả người đã giải tán đội). FE mở phòng chat bằng 2.19 + 2.17 với id này.
+- **Ai xem / nhắn:** chỉ **đội trưởng đang hoạt động hiện tại** của đội tạo kèo hoặc của đội tham gia. Thành viên thường, đội trưởng cũ (đã chuyển quyền), đội khác → `403 CHAT_003`. Đội trưởng mới sau khi chuyển quyền tiếp quản cuộc trò chuyện (đọc được cả tin cũ). Người làm đội trưởng của **cả hai** đội (BR-M18) xem và nhắn với vai trò **đội tạo kèo** (`viewerPartyId` = đội tạo kèo; tin mang tên đội tạo kèo; report qua chat vẫn bị chặn — REPUTATION-001 2.10 `REPORT_005`) — user chốt 2026-11-15. Tài khoản đã xoá (token còn hạn) → `404 USER_001` ở mọi endpoint chat.
+- **Đội đã giải tán** (BR-N05 (3), user chốt 2026-11-15): người đã bấm giải tán (đội trưởng cuối của đội) vẫn mở được cuộc trò chuyện với tư cách đội đó — xem đầu phòng (2.19), đọc lịch sử (2.17), đánh dấu đã đọc (2.18), `SUBSCRIBE`, thấy trong 2.20 — nhưng **không gửi được** (`canSend = false`; 2.16 → `409 CHAT_004`). Thành viên khác của đội đã giải tán → `403 CHAT_003`. Đội còn lại vẫn xem và nhắn theo bảng dưới. Áp như nhau cho luồng A và luồng B (và chat theo đơn — MERCENARY-001 §1.7). Ví dụ: Beta đã chat với Alpha, Nam (đội trưởng Beta) giải tán Beta → Nam vẫn đọc chat Alpha–Beta nhưng ô chat bị khoá; Alpha vẫn nhắn được nếu hai đội đã ghép / yêu cầu còn chờ.
+- **Nhắn được / chỉ xem** (BR-N05) — tính tại lúc gửi theo trạng thái hiện hành của yêu cầu / thương lượng; trạng thái đội (tạm ngưng, đội kia không hoạt động) và bộ môn tắt **không** ảnh hưởng:
+
+| Đội tham gia | Luồng A — yêu cầu ghép kèo gần nhất của đội | Luồng B — thương lượng (MATCH-002 §1.3) | Gửi tin (2.16) |
+|---|---|---|---|
+| Chưa có kết quả | `PENDING`, kèo chưa quá `expiresAt` | `NEGOTIATING`, kèo chưa quá `expiresAt` | Nhắn được |
+| Chưa có kết quả nhưng kèo `OPEN` đã quá `expiresAt` | `PENDING` (hiển thị `EXPIRED`) | `NEGOTIATING` (hiển thị `EXPIRED`) | `409 MATCH_004` — kèo, yêu cầu / thương lượng chuyển `EXPIRED` ngay (BR-M17); từ đó chỉ xem |
+| **Đã ghép** | `ACCEPTED`, hoặc `WITHDRAWN` sau khi đã được chấp nhận (= huỷ kèo, BR-M12) | `CONFIRMED` | Nhắn được — trước, trong, sau trận và cả khi kèo bị huỷ, tới khi cuộc trò chuyện bị xoá |
+| Không được ghép | `REJECTED`, `SUPERSEDED`, `EXPIRED`, `WITHDRAWN` khi còn `PENDING` | `SUPERSEDED`, `EXPIRED` | **Chỉ xem** — `409 CHAT_004` |
+
+  "Đã ghép" = đội tham gia là đội đã ghép của kèo (§4.2 `opponentTeam`), giữ nguyên khi kèo bị huỷ sau đó. Đọc lịch sử (2.17), đánh dấu đã đọc (2.18), đầu phòng (2.19), danh sách (2.20): mọi trạng thái.
+- Ví dụ (Scenario 12): kèo luồng A của Alpha; X, Y, Z gửi yêu cầu → 3 cuộc trò chuyện Alpha–X, Alpha–Y, Alpha–Z, đều nhắn được. Z rút khi còn chờ → Alpha–Z chỉ xem. Alpha chấp nhận X → Alpha–Y (`SUPERSEDED`) chỉ xem; Alpha–X nhắn được. X huỷ kèo (rút yêu cầu đã chấp nhận) → Alpha–X **vẫn** nhắn được.
+- **Report "giao tiếp tệ" qua chat:** cuộc trò chuyện đã có ít nhất 1 tin (của bất kỳ bên nào) → mỗi đội trưởng report được đội kia một lần mỗi kèo, bất kể trạng thái yêu cầu / thương lượng / kèo — REPUTATION-001 `API_Spec.md` 2.10 (BR-R07).
+- **Hạn lưu:** cuộc trò chuyện và tin nhắn bị xoá 90 ngày sau khi kèo kết thúc (`COMPLETED`, `ARCHIVED`, `CANCELLED`, `EXPIRED`) — mọi cuộc trò chuyện của kèo, gồm của đội không được ghép (BR-N01). Sau khi xoá: 2.16–2.19 → `404 CHAT_002`; không còn trong 2.20.
+
+### 1.7. Kênh realtime (STOMP over WebSocket)
+
+Dùng để nhận tin nhắn mới (và thay đổi của thương lượng / đơn ứng tuyển) ngay khi xảy ra. Một **topic cho mỗi cuộc trò chuyện** (`/topic/conversations/{conversationId}`) — dùng chung cho mọi loại cuộc trò chuyện (§1.6). **Không** gửi tin qua kênh này (gửi bằng 2.16). Không bảo đảm giao frame — sau mỗi lần kết nối lại, FE làm **đúng thứ tự**:
+1. `CONNECT` rồi `SUBSCRIBE` lại các cuộc trò chuyện đang mở (từ lúc này tin mới đến qua frame);
+2. gọi 2.17 với `after` = `messageId` mới nhất đang có (lặp khi `hasMore = true`) để bù tin bị lỡ trong lúc mất kết nối; gọi 2.19 để lấy `canSend` mới; màn hình thương lượng gọi thêm MATCH-002 2.4 để lấy trạng thái gói mới;
+3. gộp kết quả 2.17 với frame `MESSAGE_CREATED` nhận được trong lúc gọi 2.17, **bỏ trùng theo `messageId`** (một tin có thể đến qua cả hai đường).
+
+Gọi 2.17 trước khi `SUBSCRIBE` có thể lỡ tin gửi giữa hai bước. Hiếm khi một tin gửi đúng lúc mất kết nối có thể không có trong kết quả `after`; tin đó vẫn hiện khi tải lại trang mới nhất (2.17 không con trỏ) — FE nên tải lại trang mới nhất mỗi khi mở lại màn hình chat.
+
+| Bước | Cách làm |
+|---|---|
+| Kết nối | SockJS tới `/ws` (cùng host với API, không có tiền tố `/api/v1`) `[cần xác nhận #12]`, rồi STOMP `CONNECT` với header `Authorization: Bearer <access token>`. Heartbeat `10000,10000` |
+| Lỗi kết nối | Token thiếu / sai / hết hạn / là refresh token → frame `ERROR` header `message: AUTH_001` rồi đóng. FE refresh token (USER-001) rồi kết nối lại |
+| Đăng ký | `SUBSCRIBE` `/topic/conversations/{conversationId}` cho từng cuộc trò chuyện đang mở trên màn hình (`conversationId` từ §4.4, §4.9, MATCH-002 §4.2/§4.3, đơn ứng tuyển MERCENARY-001). Destination phải đúng mẫu này (không wildcard, vd `/topic/**` → `ERROR`). Header `selector` không được hỗ trợ (bị bỏ qua) — FE tự lọc frame theo `type` |
+| Lỗi đăng ký | Destination sai mẫu → `ERROR`; không có cuộc trò chuyện → `ERROR` `message: CHAT_002`; tài khoản đã xoá → `ERROR` `message: USER_001`; không tham gia cuộc trò chuyện (§1.6) → `ERROR` `message: CHAT_003`; token đã hết hạn → `ERROR` `message: AUTH_001`. Server đóng kết nối sau frame `ERROR` → FE xử lý rồi kết nối lại |
+| Gửi | `SEND` bị từ chối (frame `ERROR`) |
+| Thời gian sống | Kết nối không tự hết hạn theo token; quyền chỉ kiểm lúc `CONNECT` và `SUBSCRIBE` — đội trưởng vừa chuyển quyền vẫn nhận frame của cuộc trò chuyện đã đăng ký tới khi ngắt kết nối. FE kết nối lại sau mỗi lần refresh token |
+
+**Frame server gửi** (body JSON):
+
+| `type` | Khi nào | Nội dung |
+|---|---|---|
+| `MESSAGE_CREATED` | Có tin mới trong cuộc trò chuyện (kể cả tin của chính mình) | `message`: object Tin nhắn (§4.8) |
+| `PAIRING_UPDATED` | Chỉ trên cuộc trò chuyện của thương lượng luồng B | MATCH-002 `API_Spec.md` §1.6 |
+| `APPLICATION_UPDATED` | Chỉ trên cuộc trò chuyện theo đơn ứng tuyển | MERCENARY-001 `API_Spec.md` §1.7 |
+
+```json
+{ "type": "MESSAGE_CREATED",
+  "message": { "messageId": "01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e01", "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e31",
+               "senderPartyType": "TEAM", "senderPartyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02",
+               "senderUserId": "01932e00-5a6b-7c7d-8e8f-9a0b1c2d3e12", "senderName": "Nam", "senderAvatarUrl": null,
+               "content": "18:00 sân Y được không?", "isRead": false, "createdAt": "2026-11-10T08:00:00Z" } }
+```
+
+- **Không** có frame khi yêu cầu ghép kèo luồng A đổi trạng thái (chấp nhận / từ chối / rút / thay thế / hết hạn) hoặc kèo bị huỷ: FE biết qua lỗi (`CHAT_004`, `MATCH_004`) ở lần gửi kế tiếp, hoặc khi tải lại 2.19 (user chốt 2026-11-15).
+
 ## 2. Endpoints
 
 | # | Method + Path | Dùng khi | Ai gọi được | Thành công |
@@ -106,6 +167,11 @@ Huỷ kèo (2.5) và rút yêu cầu (2.10) **bắt buộc** gửi `expectedStat
 | 2.13 | `GET /api/v1/sports` | Chọn bộ môn khi tạo kèo / lọc tìm kèo | Người dùng đã đăng nhập | 200 |
 | 2.14 | `GET /api/v1/admin/sports` | Admin xem mọi bộ môn | Admin | 200 |
 | 2.15 | `PATCH /api/v1/admin/sports/{sportId}` | Admin bật/tắt bộ môn | Admin | 200 |
+| 2.16 | `POST /api/v1/conversations/{conversationId}/messages` | Gửi tin nhắn (mọi cuộc trò chuyện) | Hai bên của cuộc trò chuyện (§1.6; mercenary: MERCENARY-001 §1.7) | 201 |
+| 2.17 | `GET /api/v1/conversations/{conversationId}/messages` | Đọc lịch sử chat, bù tin sau khi kết nối lại | Hai bên của cuộc trò chuyện | 200 |
+| 2.18 | `POST /api/v1/conversations/{conversationId}/messages/read` | Đánh dấu đã đọc tin của bên kia | Hai bên của cuộc trò chuyện | 204 |
+| 2.19 | `GET /api/v1/conversations/{conversationId}` | Đầu phòng chat: hai bên, bên của mình, có gửi được không | Hai bên của cuộc trò chuyện | 200 |
+| 2.20 | `GET /api/v1/profile/conversations` | Màn hình "Tin nhắn": mọi cuộc trò chuyện của tôi | Người dùng đã đăng nhập | 200 |
 
 Lỗi chung `400 VALIDATION_ERROR`, `401 AUTH_001` (§1.1) áp dụng cho mọi endpoint; bảng lỗi từng endpoint liệt kê `400` khi có quy tắc riêng cần lưu ý.
 
@@ -263,6 +329,7 @@ Ví dụ luồng B (chỉ các field khác luồng A; field còn lại như trê
 | HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
 | 400 | `VALIDATION_ERROR` | Sai field / quy tắc thời gian / nhãn trình độ / field không đúng luồng / số lựa chọn | Hiện lỗi cạnh field |
+| 422 | `MATCH_016` | `type = NEED_VENUE` khi luồng B chưa được phát hành (§1) | Ẩn lựa chọn "Chưa có sân"; nếu vẫn gặp → hiện message |
 | 403 | `TEAM_002` | Người dùng không phải đội trưởng của `teamId` | Chỉ cho chọn đội mình làm đội trưởng; tải lại danh sách đội |
 | 404 | `TEAM_001` | Không có đội `teamId` | Tải lại danh sách đội |
 | 404 | `SPORT_001` | Không có bộ môn `sportId` | Tải lại danh sách bộ môn (2.13) |
@@ -591,7 +658,7 @@ Server kiểm trạng thái kèo (`MATCH_004`, `MATCH_005`, `MATCH_015`) **trư�
 **Dùng khi:** nút "Gửi yêu cầu" trên kèo **luồng A** đang mở (UC-M03). Kèo luồng B dùng "Nhận kèo" (MATCH-002 2.1).
 **Ai gọi được:** đội trưởng của đội `teamId`; đội phải `ACTIVE`; không phải đội tạo kèo.
 
-Tạo yêu cầu `PENDING`. Mỗi đội có tối đa một yêu cầu đang hiệu lực cho một kèo: sau khi rút (`WITHDRAWN`) hoặc hết hạn (`EXPIRED`) được gửi lại; sau khi bị từ chối (`REJECTED`) hoặc bị thay thế (`SUPERSEDED`) thì không (`409 MATCH_006`). Hai đội có cùng đội trưởng vẫn gửi được cho nhau (BR-M18).
+Tạo yêu cầu `PENDING` và mở **cuộc trò chuyện** giữa đội gửi và đội tạo kèo (`conversationId` trong response — BR-N04); đội **gửi lại** sau khi rút / hết hạn → dùng tiếp cuộc trò chuyện cũ (cùng `conversationId`, giữ lịch sử). Hai đội trưởng nhắn được ngay khi yêu cầu còn `PENDING` (§1.6). Mỗi đội có tối đa một yêu cầu đang hiệu lực cho một kèo: sau khi rút (`WITHDRAWN`) hoặc hết hạn (`EXPIRED`) được gửi lại; sau khi bị từ chối (`REJECTED`) hoặc bị thay thế (`SUPERSEDED`) thì không (`409 MATCH_006`). Hai đội có cùng đội trưởng vẫn gửi được cho nhau (BR-M18).
 
 **Request body**
 
@@ -610,6 +677,7 @@ Tạo yêu cầu `PENDING`. Mỗi đội có tối đa một yêu cầu đang hi
   "data": {
     "requestId": "01933c20-5d6e-7f80-9a1b-2c3d4e5f6a01",
     "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b01",
+    "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e32",
     "requesterTeamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02",
     "requesterTeamName": "Team Beta",
     "requesterTeamReliabilityScore": 75,
@@ -669,6 +737,7 @@ Tạo yêu cầu `PENDING`. Mỗi đội có tối đa một yêu cầu đang hi
     {
       "requestId": "01933c20-5d6e-7f80-9a1b-2c3d4e5f6a01",
       "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b01",
+      "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e32",
       "requesterTeamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02",
       "requesterTeamName": "Team Beta",
       "requesterTeamReliabilityScore": 75,
@@ -935,6 +1004,7 @@ Bấm rút hai lần: lần sau nhận `MATCH_008` (gửi lần lượt) hoặc 
     {
       "requestId": "01933c20-5d6e-7f80-9a1b-2c3d4e5f6a01",
       "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b01",
+      "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e32",
       "requesterTeamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02",
       "requesterTeamName": "Team Beta",
       "requesterTeamReliabilityScore": 75,
@@ -1060,6 +1130,254 @@ Tắt bộ môn: chặn tạo kèo mới; kèo `OPEN` của bộ môn ẩn khỏ
 
 ---
 
+### 2.16. Gửi tin nhắn — `POST /api/v1/conversations/{conversationId}/messages`
+
+**Dùng khi:** ô chat của phòng chat — giữa hai đội trong một kèo (UC-N01, AC-N01, AC-N03; luồng A từ yêu cầu ghép kèo, luồng B từ thương lượng) hoặc theo đơn ứng tuyển mercenary (MERCENARY-001 §1.7).
+**Ai gọi được:** một trong hai bên của cuộc trò chuyện, khi cuộc trò chuyện đang **nhắn được** (chat hai đội: §1.6; mercenary: MERCENARY-001 §1.7). Không gửi `teamId` — người gửi luôn là người gọi API, bên gửi do hệ thống xác định.
+
+Tin được lưu rồi mới đẩy cho cả hai bên qua frame `MESSAGE_CREATED` (§1.7). Không sửa / xoá tin. Tin được lưu tới 90 ngày sau khi kèo kết thúc (BR-N01).
+
+**Request body**
+
+| Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `content` | string | Có | Sau khi bỏ khoảng trắng đầu/cuối: 1..1000 ký tự | `"18:00 sân Y được không?"` |
+
+```json
+{ "content": "18:00 sân Y được không?" }
+```
+
+**Response 201** — Tin nhắn (§4.8).
+
+```json
+{
+  "data": {
+    "messageId": "01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e01",
+    "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e31",
+    "senderPartyType": "TEAM",
+    "senderPartyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02",
+    "senderUserId": "01932e00-5a6b-7c7d-8e8f-9a0b1c2d3e12",
+    "senderName": "Nam",
+    "senderAvatarUrl": null,
+    "content": "18:00 sân Y được không?",
+    "isRead": false,
+    "createdAt": "2026-11-10T08:00:00Z"
+  }
+}
+```
+
+FE hiển thị tin từ response; frame `MESSAGE_CREATED` của chính tin này (cùng `messageId`) bỏ qua để không hiện trùng.
+
+**Lỗi** (thứ tự kiểm từ trên xuống)
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 400 | `VALIDATION_ERROR` | `content` rỗng sau trim / > 1000 ký tự | Hiện lỗi cạnh ô nhập |
+| 404 | `CHAT_002` | Không có cuộc trò chuyện (hoặc đã bị xoá theo hạn lưu) | Quay lại |
+| 404 | `USER_001` | Tài khoản đã xoá (token còn hạn) | Xoá token, về đăng nhập |
+| 403 | `CHAT_003` | Không tham gia cuộc trò chuyện (§1.6 — vd vừa chuyển quyền đội trưởng) | Khoá ô chat, tải lại 2.19 |
+| 409 | `MATCH_004` | Chat hai đội: yêu cầu còn chờ / thương lượng còn mở nhưng kèo đã quá hạn bài đăng — kèo chuyển `EXPIRED` (BR-M17) | Hiện "Kèo đã hết hạn"; khoá ô chat, vẫn cho đọc |
+| 409 | `CHAT_004` | Cuộc trò chuyện chỉ còn xem (chat hai đội: đội tham gia không được ghép, hoặc người gọi là người đã giải tán đội của mình — §1.6; mercenary: MERCENARY-001 §1.7) | Khoá ô chat, vẫn cho đọc |
+| 409 | `MATCH_014` | Hiếm — thao tác khác cập nhật kèo cùng lúc | Cho gửi lại |
+
+---
+
+### 2.17. Lịch sử chat — `GET /api/v1/conversations/{conversationId}/messages`
+
+**Dùng khi:** mở phòng chat (trang mới nhất), cuộn lên xem tin cũ (`before`), bù tin sau khi kết nối realtime lại (`after`).
+**Ai gọi được:** hai bên của cuộc trò chuyện; mọi trạng thái (kể cả khi chỉ còn xem).
+
+**Query params**
+
+| Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `before` | string (UUID) | Không | `messageId` trong cuộc trò chuyện này; lấy tin **cũ hơn** tin đó | `01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e01` |
+| `after` | string (UUID) | Không | `messageId` trong cuộc trò chuyện này; lấy tin **mới hơn** tin đó | `01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e01` |
+| `limit` | integer | Không | 1..100, mặc định 50 | `50` |
+
+Không gửi đồng thời `before` và `after` (`400 VALIDATION_ERROR`, `field` = `after`).
+
+| Gửi | Trả | Thứ tự `items` | `hasMore = true` khi |
+|---|---|---|---|
+| Không con trỏ | `limit` tin mới nhất | Mới nhất trước | Còn tin cũ hơn |
+| `before` | `limit` tin ngay trước tin `before` | Mới nhất trước | Còn tin cũ hơn |
+| `after` | `limit` tin ngay sau tin `after` | **Cũ nhất trước** | Còn tin mới hơn → gọi tiếp với `after` = `messageId` cuối |
+
+Thứ tự theo thời điểm gửi `createdAt`; hai tin cùng thời điểm xếp theo `messageId`. Bản thân tin mốc (`before` / `after`) không có trong kết quả.
+
+**Response 200** — `items`: mảng Tin nhắn (§4.8), `hasMore`.
+
+```json
+{
+  "data": {
+    "items": [
+      { "messageId": "01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e03", "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e31",
+        "senderPartyType": "TEAM", "senderPartyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02", "senderUserId": "01932e00-5a6b-7c7d-8e8f-9a0b1c2d3e13",
+        "senderName": "Lan", "senderAvatarUrl": "https://res.cloudinary.com/demo/image/upload/lan.jpg",
+        "content": "Mình là đội trưởng mới của Beta, giữ 18:00 nhé", "isRead": false, "createdAt": "2026-11-10T09:00:00Z" },
+      { "messageId": "01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e02", "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e31",
+        "senderPartyType": "TEAM", "senderPartyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01", "senderUserId": "01932e00-5a6b-7c7d-8e8f-9a0b1c2d3e11",
+        "senderName": "Người dùng đã xóa", "senderAvatarUrl": null,
+        "content": "OK", "isRead": true, "createdAt": "2026-11-10T08:01:00Z" },
+      { "messageId": "01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e01", "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e31",
+        "senderPartyType": "TEAM", "senderPartyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02", "senderUserId": "01932e00-5a6b-7c7d-8e8f-9a0b1c2d3e12",
+        "senderName": "Nam", "senderAvatarUrl": null,
+        "content": "18:00 sân Y được không?", "isRead": true, "createdAt": "2026-11-10T08:00:00Z" }
+    ],
+    "hasMore": false
+  }
+}
+```
+
+Ví dụ: đội Beta, Nam nhắn rồi chuyển quyền đội trưởng cho Lan → tin cũ vẫn là "Team Beta · Nam", tin mới "Team Beta · Lan"; người gửi tin "OK" của Team Alpha đã xoá tài khoản.
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 400 | `VALIDATION_ERROR` | Gửi cả `before` và `after`; `limit` ngoài 1..100; con trỏ không phải UUID | Sửa tham số |
+| 404 | `CHAT_002` | Không có cuộc trò chuyện | Quay lại |
+| 404 | `USER_001` | Tài khoản đã xoá (token còn hạn) | Xoá token, về đăng nhập |
+| 403 | `CHAT_003` | Không tham gia cuộc trò chuyện | Quay lại |
+| 422 | `CHAT_001` | `before` / `after` không phải tin của cuộc trò chuyện này | Tải lại trang mới nhất (bỏ con trỏ) |
+
+---
+
+### 2.18. Đánh dấu đã đọc — `POST /api/v1/conversations/{conversationId}/messages/read`
+
+**Dùng khi:** người dùng mở / đang xem phòng chat.
+**Ai gọi được:** hai bên của cuộc trò chuyện; mọi trạng thái. Không body.
+
+Đánh dấu **mọi** tin của **bên kia** trong cuộc trò chuyện là đã đọc (`isRead = true`). Không có frame realtime cho việc đánh dấu đọc; bên gửi thấy `isRead` mới khi tải lại 2.17.
+
+**Response 204** — không body. Gọi lặp → `204`, không đổi gì.
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 404 | `CHAT_002` | Không có cuộc trò chuyện | Quay lại |
+| 404 | `USER_001` | Tài khoản đã xoá (token còn hạn) | Xoá token, về đăng nhập |
+| 403 | `CHAT_003` | Không tham gia cuộc trò chuyện | Bỏ qua (không chặn người dùng) |
+
+---
+
+### 2.19. Đầu phòng chat — `GET /api/v1/conversations/{conversationId}`
+
+**Dùng khi:** mở phòng chat — hiện hai bên (tên đội + đội trưởng **hiện tại**, hoặc đội tuyển + ứng viên), bên của mình, có gửi được tin không; tải lại sau `CHAT_004` / `MATCH_004` hoặc sau khi kết nối realtime lại.
+**Ai gọi được:** hai bên của cuộc trò chuyện; mọi trạng thái.
+
+**Response 200** — Cuộc trò chuyện (§4.7). Ví dụ chat luồng A giữa Alpha (đội tạo kèo) và Beta (yêu cầu đang chờ), người gọi là đội trưởng Beta:
+
+```json
+{
+  "data": {
+    "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e32",
+    "contextType": "TEAM_MATCH",
+    "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b01",
+    "matchType": "HAS_VENUE",
+    "requestId": "01933c20-5d6e-7f80-9a1b-2c3d4e5f6a01",
+    "requestStatus": "PENDING",
+    "pairingId": null,
+    "pairingStatus": null,
+    "applicationId": null,
+    "applicationStatus": null,
+    "source": "SYSTEM",
+    "externalMatchId": null,
+    "parties": [
+      { "partyType": "TEAM", "partyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01", "name": "Team Alpha", "avatarUrl": null, "captainName": "Minh" },
+      { "partyType": "TEAM", "partyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02", "name": "Team Beta", "avatarUrl": null, "captainName": "Nam" }
+    ],
+    "viewerPartyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02",
+    "canSend": true
+  }
+}
+```
+
+Ví dụ cuộc trò chuyện theo đơn ứng tuyển: MERCENARY-001 `API_Spec.md` 2.14.
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 404 | `CHAT_002` | Không có cuộc trò chuyện | Quay lại |
+| 404 | `USER_001` | Tài khoản đã xoá (token còn hạn) | Xoá token, về đăng nhập |
+| 403 | `CHAT_003` | Không tham gia cuộc trò chuyện | Quay lại |
+
+### 2.20. Tin nhắn của tôi — `GET /api/v1/profile/conversations`
+
+**Dùng khi:** màn hình "Tin nhắn" — mọi cuộc trò chuyện người gọi xem được, tin mới nhất lên đầu; đường vào chat cho người không còn danh sách nào khác (vd người đã giải tán đội — §1.6). Mở một dòng → 2.19 + 2.17 với `conversationId`.
+**Ai gọi được:** mọi người dùng đã đăng nhập. Danh sách gồm cuộc trò chuyện mà người gọi là một bên **ngay lúc gọi** (cùng quy tắc 2.16–2.19):
+- chat giữa hai đội (luồng A, B): người gọi là đội trưởng đang hoạt động hiện tại của đội tạo kèo hoặc đội tham gia, hoặc là người đã giải tán một trong hai đội (chỉ xem);
+- chat theo đơn ứng tuyển (MERCENARY-001 §1.7): người gọi là đội trưởng hiện tại của đội tuyển, người đã giải tán đội tuyển (chỉ xem), hoặc là ứng viên.
+
+Gồm cả cuộc trò chuyện chỉ xem (`canSend = false`). Đội trưởng mới sau khi chuyển quyền thấy mọi cuộc trò chuyện của đội; đội trưởng cũ không còn thấy. Cuộc trò chuyện đã bị xoá theo hạn lưu (BR-N01) không còn. Cuộc trò chuyện chưa có tin nhắn nào vẫn có trong danh sách (`lastMessage = null`), xếp theo thứ tự dưới (user chốt 2026-11-15).
+
+**Query params**
+
+| Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `page`, `pageSize` | integer | Không | §1.1 (`page` ≥ 1, mặc định 1; `pageSize` 1..100, mặc định 20) | `1`, `20` |
+
+**Thứ tự:** `lastActivityAt` ↓, `conversationId` ↓. `lastActivityAt` = thời điểm tin cuối; cuộc trò chuyện chưa có tin: luồng A → lúc **gửi yêu cầu gần nhất** của đội tham gia (kể cả gửi lại sau khi rút / hết hạn), luồng B và chat theo đơn → lúc mở cuộc trò chuyện (user chốt 2026-11-15). Danh sách đổi thứ tự khi có tin mới → FE tải lại trang 1 khi nhận frame `MESSAGE_CREATED` hoặc khi quay lại màn hình; trang sau có thể lệch một vài dòng (trùng / sót) nếu có tin mới giữa hai lần tải — FE bỏ trùng theo `conversationId`.
+
+**Response 200** — mảng Cuộc trò chuyện rút gọn (§4.9) + `pagination`. Ví dụ đội trưởng Alpha: một chat luồng A với Beta (có tin chưa đọc), một chat theo đơn với ứng viên đã xoá tài khoản (chỉ xem):
+
+```json
+{
+  "data": [
+    {
+      "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e32",
+      "contextType": "TEAM_MATCH",
+      "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b01",
+      "externalMatchId": null,
+      "startsAt": "2026-11-16T11:00:00Z",
+      "requestId": "01933c20-5d6e-7f80-9a1b-2c3d4e5f6a01",
+      "pairingId": null,
+      "applicationId": null,
+      "viewerParty": { "partyType": "TEAM", "partyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01", "name": "Team Alpha", "avatarUrl": null },
+      "otherParty": { "partyType": "TEAM", "partyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02", "name": "Team Beta", "avatarUrl": null },
+      "lastMessage": {
+        "messageId": "01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e09",
+        "contentPreview": "Sân X có chỗ để xe không?",
+        "senderPartyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02",
+        "senderName": "Nam",
+        "createdAt": "2026-11-15T09:30:00Z"
+      },
+      "lastActivityAt": "2026-11-15T09:30:00Z",
+      "hasUnread": true,
+      "canSend": true
+    },
+    {
+      "conversationId": "019370a2-6c7d-7e8f-a001-2b3c4d5e6f01",
+      "contextType": "MERCENARY_APPLICATION",
+      "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708",
+      "externalMatchId": null,
+      "startsAt": "2026-11-14T11:00:00Z",
+      "requestId": null,
+      "pairingId": null,
+      "applicationId": "019370a1-5b6c-7d8e-9f00-1a2b3c4d5e01",
+      "viewerParty": { "partyType": "TEAM", "partyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01", "name": "Team Alpha", "avatarUrl": null },
+      "otherParty": { "partyType": "USER", "partyId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10", "name": "Người dùng đã xóa", "avatarUrl": null },
+      "lastMessage": null,
+      "lastActivityAt": "2026-11-13T09:00:00Z",
+      "hasUnread": false,
+      "canSend": false
+    }
+  ],
+  "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 2 }
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 400 | `VALIDATION_ERROR` | `page` / `pageSize` ngoài miền | Sửa tham số |
+| 404 | `USER_001` | Tài khoản đã xoá (token còn hạn) | Xoá token, về đăng nhập |
+
+---
+
 ## 3. Hành động theo trạng thái
 
 Cột vai trò = **đội trưởng** của đội đó (§1.2); thành viên thường của mọi đội chỉ xem. Mọi người dùng đã đăng nhập xem được chi tiết kèo (2.3) ở mọi trạng thái — không lặp lại trong bảng.
@@ -1101,6 +1419,8 @@ Ghi chú hiển thị nút:
 
 Gọi thao tác trên yêu cầu không ở trạng thái cho phép → `MATCH_008`.
 
+**Chat theo trạng thái yêu cầu** (cuộc trò chuyện `conversationId`, cả hai đội trưởng — §1.6, BR-N05): `PENDING` (kèo chưa quá `expiresAt`), `ACCEPTED`, `WITHDRAWN` sau khi đã được chấp nhận (= huỷ kèo) → **nhắn được** (đã ghép: cả sau trận, khi kèo bị huỷ); `REJECTED`, `SUPERSEDED`, `EXPIRED`, `WITHDRAWN` khi còn `PENDING` → **chỉ xem** (gửi lại yêu cầu mới → nhắn được lại). Mọi trạng thái: cuộc trò chuyện đã có tin nhắn → report "giao tiếp tệ" đội kia (REPUTATION-001 2.10). FE khoá ô chat theo `canSend` của 2.19.
+
 ## 4. Kiểu dữ liệu dùng chung
 
 ### 4.1. Enum
@@ -1134,6 +1454,15 @@ Gọi thao tác trên yêu cầu không ở trạng thái cho phép → `MATCH_0
 | Nhãn trình độ (`skillLevels`, `skillLevel`) | `Chill`, `Nhiệt tình`, `Máu lửa`, `Vui chơi`, `Rèn luyện`, `Thi đấu`, `Mới bắt đầu`, `Đã có kinh nghiệm`, `Lão làng` | 9 nhãn tiếng Việt, gửi đúng chữ (có dấu, phân biệt hoa thường); cùng danh sách trình độ của đội (USER-001) |
 
 Không có loại chi phí "tuỳ chỉnh" — khoản khác nhập qua `customItems`.
+
+**Chat (2.16–2.20):**
+
+| Kiểu / enum | Giá trị | Ý nghĩa |
+|---|---|---|
+| `contextType` | `TEAM_MATCH` \| `MERCENARY_APPLICATION` | Chat giữa hai đội trong một kèo (§1.6) / chat theo đơn ứng tuyển (MERCENARY-001 §1.7). Có thể thêm giá trị ở bản sau — FE bỏ qua cuộc trò chuyện có giá trị lạ |
+| `partyType`, `senderPartyType` | `TEAM` \| `USER` | Bên của cuộc trò chuyện là đội / người dùng (ứng viên mercenary) |
+| `source` | `SYSTEM` \| `EXTERNAL` | Kèo trên hệ thống / trận ngoài hệ thống (chỉ `MERCENARY_APPLICATION` — MERCENARY-001 §4.1). `TEAM_MATCH` luôn `SYSTEM` |
+| `type` (frame realtime) | `MESSAGE_CREATED` \| `PAIRING_UPDATED` \| `APPLICATION_UPDATED` | §1.7 |
 
 ### 4.2. Kèo (chi tiết) — response 2.1, 2.3
 
@@ -1192,6 +1521,7 @@ Không có loại chi phí "tuỳ chỉnh" — khoản khác nhập qua `customI
 |---|---|---|
 | `requestId` | string (UUID) | |
 | `matchId` | string (UUID) | |
+| `conversationId` | string (UUID) | Cuộc trò chuyện giữa đội gửi và đội tạo kèo (§1.6) — các yêu cầu của cùng đội cho cùng kèo (gửi lại) có cùng giá trị. Mở phòng chat bằng 2.19 + 2.17 |
 | `requesterTeamId`, `requesterTeamName` | string | Đội gửi |
 | `requesterTeamReliabilityScore` | integer | 0..100 |
 | `status` | string | Trạng thái hiển thị (§1.3) |
@@ -1223,6 +1553,54 @@ Không có loại chi phí "tuỳ chỉnh" — khoản khác nhập qua `customI
 | `isActive` | boolean | Đang bật |
 | `createdAt` | string (thời gian) | |
 
+### 4.7. Cuộc trò chuyện — response 2.19
+
+| Field | Kiểu | Ý nghĩa |
+|---|---|---|
+| `conversationId` | string (UUID) | |
+| `contextType` | string | §4.1 |
+| `matchId` | string (UUID) \| null | Kèo của cuộc trò chuyện; `null` chỉ khi cuộc trò chuyện mercenary của trận ngoài hệ thống |
+| `matchType` | string \| null | `TEAM_MATCH`: `HAS_VENUE` (luồng A) \| `NEED_VENUE` (luồng B). Loại khác: `null` |
+| `requestId`, `requestStatus` | string (UUID), string \| null | `TEAM_MATCH` luồng A: yêu cầu ghép kèo **gần nhất** của đội tham gia và trạng thái hiển thị của nó (§1.3, §4.1). Còn lại: `null` |
+| `pairingId`, `pairingStatus` | string (UUID), string \| null | `TEAM_MATCH` luồng B: thương lượng và trạng thái hiển thị (MATCH-002 §1.3). Còn lại: `null` |
+| `applicationId`, `applicationStatus` | string (UUID), string \| null | `MERCENARY_APPLICATION`: đơn ứng tuyển và trạng thái hiển thị (MERCENARY-001 §1.3). Còn lại: `null` |
+| `source` | string | §4.1 |
+| `externalMatchId` | string (UUID) \| null | Trận ngoài hệ thống (chỉ `MERCENARY_APPLICATION`); còn lại `null` |
+| `parties` | array (2 phần tử) | Mỗi phần tử: `partyType`, `partyId` (`teamId` hoặc `userId`), `name`, `avatarUrl` (string \| null), `captainName` (chỉ bên `TEAM`: đội trưởng **hiện tại**; `"Người dùng đã xóa"` nếu tài khoản đó đã xoá; `null` khi đội đã giải tán hoặc bên `USER`). `TEAM_MATCH`: phần tử đầu = đội tạo kèo, phần tử sau = đội tham gia |
+| `viewerPartyId` | string (UUID) | Bên của người gọi (`partyId` của một phần tử `parties`) |
+| `canSend` | boolean | Người gọi gửi tin được ngay lúc này (§1.6; MERCENARY-001 §1.7). `false` → khoá ô chat |
+
+### 4.8. Tin nhắn — response 2.16, 2.17, frame `MESSAGE_CREATED`
+
+| Field | Kiểu | Ý nghĩa |
+|---|---|---|
+| `messageId`, `conversationId` | string (UUID) | |
+| `senderPartyType`, `senderPartyId` | string, string (UUID) | Bên gửi — khớp một phần tử `parties` của 2.19; FE lấy tên đội / tên bên gửi từ đó |
+| `senderUserId` | string (UUID) | Người **thực sự** đã gửi tin (đội trưởng của đội gửi tại lúc gửi, hoặc ứng viên); không đổi khi đội chuyển quyền đội trưởng sau đó |
+| `senderName` | string | Tên hiển thị của người gửi; `"Người dùng đã xóa"` nếu tài khoản đó đã xoá |
+| `senderAvatarUrl` | string \| null | Ảnh đại diện người gửi; `null` khi chưa có ảnh hoặc tài khoản đã xoá |
+| `content` | string | 1..1000 ký tự |
+| `isRead` | boolean | Bên nhận đã đánh dấu đọc (2.18) |
+| `createdAt` | string (thời gian) | |
+
+Hiển thị tin của bên đội: `<tên đội> · <senderName>` (vd "Team Beta · Nam"), tên đội hiện tại lấy từ `parties` của 2.19 theo `senderPartyId`.
+
+### 4.9. Cuộc trò chuyện rút gọn — phần tử 2.20
+
+| Field | Kiểu | Ý nghĩa |
+|---|---|---|
+| `conversationId` | string (UUID) | Mở phòng chat: 2.19 + 2.17 |
+| `contextType` | string | §4.1 |
+| `matchId`, `externalMatchId` | string (UUID) \| null | Kèo / trận ngoài hệ thống của cuộc trò chuyện (như §4.7) |
+| `startsAt` | string (thời gian) | Giờ bắt đầu kèo / trận (kèo luồng B chưa ghép: khung giờ sớm nhất) |
+| `requestId`, `pairingId`, `applicationId` | string (UUID) \| null | Yêu cầu gần nhất (luồng A) / thương lượng (luồng B) / đơn ứng tuyển — theo `contextType`, còn lại `null` |
+| `viewerParty` | object | Bên của người gọi: `partyType`, `partyId`, `name`, `avatarUrl` — vd đội nào của tôi (người làm đội trưởng nhiều đội) |
+| `otherParty` | object | Bên kia: `partyType` (`TEAM` \| `USER`), `partyId`, `name` (tên đội; tên người — `"Người dùng đã xóa"` nếu tài khoản đã xoá), `avatarUrl` (`null` khi chưa có ảnh / tài khoản đã xoá) |
+| `lastMessage` | object \| null | Tin cuối: `messageId`, `contentPreview` (100 ký tự đầu của nội dung — nội dung đủ ở 2.17), `senderPartyId`, `senderName` (che như §4.8), `createdAt`. `null` khi chưa có tin |
+| `lastActivityAt` | string (thời gian) | `lastMessage.createdAt`; chưa có tin: luồng A → lúc gửi yêu cầu gần nhất của đội tham gia, còn lại → lúc mở cuộc trò chuyện — khoá sắp xếp (2.20) |
+| `hasUnread` | boolean | Có tin của bên kia chưa được phía mình đánh dấu đọc (2.18) |
+| `canSend` | boolean | Như 2.19 tại lúc gọi |
+
 ## 5. Mã lỗi
 
 Mã mới của MATCH-001:
@@ -1232,7 +1610,7 @@ Mã mới của MATCH-001:
 | `MATCH_001` | 404 | "Không tìm thấy kèo" | 2.3, 2.4, 2.5, 2.6, 2.7 |
 | `MATCH_002` | 404 | "Không tìm thấy yêu cầu ghép kèo" | 2.8, 2.9, 2.10 |
 | `MATCH_003` | 409 | "Kèo đã được ghép" | 2.4, 2.6, 2.8 |
-| `MATCH_004` | 409 | "Kèo đã hết hạn" | 2.4, 2.5, 2.6, 2.8, 2.9, 2.10 |
+| `MATCH_004` | 409 | "Kèo đã hết hạn" | 2.4, 2.5, 2.6, 2.8, 2.9, 2.10, 2.16 |
 | `MATCH_005` | 409 | "Kèo không còn ở trạng thái cho phép thao tác này" | 2.4, 2.5, 2.6, 2.8, 2.10 |
 | `MATCH_006` | 409 | "Đội đã gửi yêu cầu cho kèo này" | 2.6 |
 | `MATCH_007` | 422 | "Không thể gửi yêu cầu cho kèo của đội mình" | 2.6 |
@@ -1242,7 +1620,11 @@ Mã mới của MATCH-001:
 | `MATCH_011` | 422 | "Vui lòng nhập lý do hủy" | 2.5, 2.10 |
 | `MATCH_012` | 422 | "Trận đã bắt đầu, không thể hủy" | 2.5, 2.10 |
 | `MATCH_013` | 422 | "Đội đối phương hiện không hoạt động" | 2.6, 2.8 |
-| `MATCH_014` | 409 | "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại" | 2.4, 2.5, 2.6, 2.8, 2.9, 2.10 |
+| `MATCH_014` | 409 | "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại" | 2.4, 2.5, 2.6, 2.8, 2.9, 2.10, 2.16 |
+| `CHAT_001` | 422 | "Tin nhắn mốc không thuộc cuộc trò chuyện này" | 2.17 |
+| `CHAT_002` | 404 | "Không tìm thấy cuộc trò chuyện" | 2.16–2.19, kênh realtime (REPUTATION-001 2.10) |
+| `CHAT_003` | 403 | "Bạn không tham gia cuộc trò chuyện này" | 2.16–2.19, kênh realtime (REPUTATION-001 2.10) |
+| `CHAT_004` | 409 | "Cuộc trò chuyện chỉ còn xem" | 2.16 |
 | `MATCH_015` | 409 | "Trạng thái đã thay đổi, vui lòng tải lại" | 2.5, 2.10 |
 | `SPORT_001` | 404 | "Không tìm thấy bộ môn" | 2.1, 2.15 |
 | `SPORT_002` | 422 | "Bộ môn hiện không được hỗ trợ" | 2.1, 2.6, 2.8 |
@@ -1256,14 +1638,20 @@ Mã dùng lại (message theo `API_Spec.md` của mã gốc):
 | `AUTH_004` | 403 | "Cần quyền quản trị" | USER-001 | 2.14, 2.15 |
 | `TEAM_001` | 404 | "Không tìm thấy đội" | USER-001 | 2.1, 2.5, 2.6, 2.11, 2.12 |
 | `TEAM_002` | 403 | "Chỉ đội trưởng được thực hiện" | USER-001 | 2.1, 2.4–2.10, 2.12 |
+| `USER_001` | 404 | "Không tìm thấy người dùng" | USER-001 | 2.16–2.20, kênh realtime (tài khoản đã xoá, token còn hạn) |
 | `TEAM_015` | 422 | "Đội đang tạm ngưng hoạt động" | USER-001 | 2.1, 2.4, 2.6, 2.8 |
 | `TEAM_016` | 422 | "Đội đã giải tán" | USER-002 | 2.1, 2.4–2.10, 2.12 |
 | `VENUE_001` | 404 | "Không tìm thấy địa điểm" | VENUE-001 | 2.1 |
 | `VENUE_002` | 422 | "Địa điểm đã ngừng hoạt động" | VENUE-001 | 2.1 |
-| `MATCH_016` | 422 | "Thao tác không áp dụng cho loại kèo này" | MATCH-002 | 2.4, 2.6, 2.7 (gọi trên kèo luồng B) |
+| `MATCH_016` | 422 | "Thao tác không áp dụng cho loại kèo này" | MATCH-002 | 2.4, 2.6, 2.7 (gọi trên kèo luồng B); 2.1 (`type = NEED_VENUE` khi luồng B chưa được phát hành — §1) |
 
 Lỗi hệ thống `SYS_*` theo `api-convention.md` §6. `MATCH_009` (403 nghiệp vụ: đội không liên quan tới kèo) khác `AUTH_004` (403 không phải admin).
 
 ## 6. Danh sách [cần xác nhận]
 
-Không còn mục mở. Quyết định nghiệp vụ chốt 2026-11-09 đã đồng bộ vào SRS `SYSTEM-001` v1.3 (BR-M09..BR-M18, BR-C03..BR-C04; AC-M06, AC-M09..AC-M12). `costAgreement` lồng trong Kèo (chi tiết): 5 field (user chốt 2026-11-10), từ v2.0 thêm `depositAmount`, `depositHolder` cho kèo luồng B (§4.2). Luồng B chốt 2026-11-10 (MATCH-002); các câu SRS liên quan sẽ được cập nhật sau.
+Mở (đánh số chung toàn thiết kế MATCH-001, số không dùng lại; các số khác ở tài liệu nội bộ BE):
+
+12. Đường dẫn và hỗ trợ SockJS của kênh realtime (`/ws`): phụ thuộc phiên bản framework BE — sẽ chốt khi cài đặt; nếu không còn SockJS, FE kết nối WebSocket thuần tới `/ws` và dùng 2.17 (`after`) khi không mở được WebSocket (ADR-0014). (Chuyển từ MATCH-002.)
+18. ~~Không có frame khi yêu cầu ghép kèo luồng A đổi trạng thái / kèo bị huỷ~~ — **user chốt 2026-11-15:** giữ không có frame ở bản này (§1.7). Nếu FE cần cập nhật tức thời `canSend` → bổ sung frame ở bản sau.
+
+Các mục trước: Không còn mục mở. Quyết định nghiệp vụ chốt 2026-11-09 đã đồng bộ vào SRS `SYSTEM-001` v1.3 (BR-M09..BR-M18, BR-C03..BR-C04; AC-M06, AC-M09..AC-M12). `costAgreement` lồng trong Kèo (chi tiết): 5 field (user chốt 2026-11-10), từ v2.0 thêm `depositAmount`, `depositHolder` cho kèo luồng B (§4.2). Luồng B chốt 2026-11-10 (MATCH-002); các câu SRS liên quan sẽ được cập nhật sau.
