@@ -326,11 +326,13 @@
 2. Đội trưởng chọn "Gửi yêu cầu"
 3. Đội trưởng submit
 4. Hệ thống tạo Match_Request với trạng thái PENDING
-5. Hệ thống gửi notification cho đội trưởng tác giả Match
-6. Hệ thống hiển thị "Yêu cầu đã được gửi"
+5. Hệ thống mở cuộc chat giữa đội gửi và đội tạo kèo (BR-N04)
+6. Hệ thống gửi notification cho đội trưởng tác giả Match
+7. Hệ thống hiển thị "Yêu cầu đã được gửi"
 
 **Postconditions:**
 - Match_Request được tạo với trạng thái PENDING
+- Cuộc chat giữa đội gửi và đội tạo kèo được mở; hai đội trưởng nhắn được ngay khi request còn PENDING (UC-N01, BR-N05). Gửi lại request sau khi rút / hết hạn: dùng tiếp cuộc chat cũ (BR-N04)
 - Tác giả Match nhận notification
 
 **Exception Flows:**
@@ -375,6 +377,7 @@
 - Match chuyển sang CONFIRMED (không được sửa giờ/sân/trình độ)
 - 1 request ACCEPTED, các request khác SUPERSEDED
 - Tối đa 1 request ACCEPTED mỗi Match (ràng buộc dữ liệu)
+- Cuộc chat với đội được chấp nhận vẫn nhắn được (kể cả sau trận, khi kèo bị hủy); cuộc chat với các đội SUPERSEDED thành chỉ xem (BR-N05)
 
 **Exception Flows:**
 
@@ -408,12 +411,12 @@
 1. Đội trưởng xem Match luồng B trong danh sách
 2. Đội trưởng chọn "Nhận kèo"
 3. Hệ thống tạo Pairing với trạng thái NEGOTIATING
-4. Hệ thống mở chat giữa 2 đội trưởng
+4. Hệ thống mở cuộc chat giữa đội tạo kèo và đội nhận (BR-N04)
 5. Hệ thống gửi notification cho tác giả Match
 
 **Postconditions:**
 - Pairing được tạo với trạng thái NEGOTIATING, chưa có phương án chốt và chưa có thỏa thuận chi phí
-- Chat giữa 2 đội trưởng được kích hoạt
+- Cuộc chat giữa đội tạo kèo và đội nhận được mở, nhắn được (UC-N01, BR-N05)
 - Match vẫn ở OPEN (cho phép đội khác cũng nhận)
 - Mỗi đội chỉ có một Pairing cho một Match; không có thao tác rút hay kết thúc Pairing — Pairing chỉ kết thúc khi CONFIRMED, SUPERSEDED hoặc EXPIRED (BR-M21)
 
@@ -427,15 +430,16 @@
 - Pairing đang ở trạng thái NEGOTIATING
 
 **Main Flow:**
-1. Đội trưởng gửi tin nhắn trong chat
+1. Hai đội trưởng nhắn tin trong cuộc chat của Pairing (UC-N01)
 2. Hệ thống lưu tin nhắn
 3. Hệ thống gửi tin nhắn real-time cho đội trưởng kia
 4. Hai bên trao đổi để thống nhất địa điểm/giờ; một trong hai đội trưởng **chốt phương án**: chọn 1 địa điểm trong danh sách lựa chọn địa điểm + 1 khung giờ trong danh sách khung giờ của Match (BR-M19). Chốt lại phương án khác thay phương án cũ và xoá xác nhận của cả hai bên; chốt lại đúng phương án đang có không đổi gì
 
 **Postconditions:**
-- Tin nhắn được lưu (retention 90 ngày sau khi Match kết thúc)
+- Tin nhắn được lưu (BR-N01)
 - Pairing có phương án chốt (nếu đã chốt) để hai bên xác nhận (UC-M07)
 - Hai bên có thể thương lượng cho đến khi xác nhận hoặc hết hạn
+- Pairing kết thúc: CONFIRMED → cuộc chat vẫn nhắn được; SUPERSEDED/EXPIRED → chỉ xem (BR-N05)
 
 **Exception Flows:**
 
@@ -471,6 +475,7 @@
 - Pairing và Match chuyển sang CONFIRMED
 - Các Pairing/Request khác SUPERSEDED
 - Match không được sửa giờ/sân/trình độ
+- Cuộc chat của Pairing thắng vẫn nhắn được; cuộc chat của các Pairing/Request SUPERSEDED thành chỉ xem (BR-N05)
 
 **Exception Flows:** (2a–2c áp dụng cho cả lần xác nhận của đội B ở bước 3–4)
 
@@ -527,6 +532,7 @@
 - (Nếu CONFIRMED) Chuỗi trận sạch của đội hủy về 0 (Business_Rules §3.1 — user chốt 2026-11-12)
 - (Nếu đội đã ghép hủy) Match_Request đã ACCEPTED của đội đó chuyển WITHDRAWN (BR-M12)
 - (Luồng B, Match OPEN) Mọi Pairing NEGOTIATING chuyển SUPERSEDED; đội tạo kèo không phải đóng Pairing trước khi hủy (BC-M04)
+- Chat (BR-N05): (Nếu CONFIRMED) cuộc chat giữa hai đội đã ghép vẫn nhắn được sau khi hủy; (Nếu OPEN) cuộc chat với các đội có request bị từ chối / Pairing SUPERSEDED chỉ xem
 - (Nếu CONFIRMED, hủy ≥24h trước) Match không tính vào mẫu số Completion Rate của đội nào
 - (Nếu CONFIRMED, hủy <24h trước) Match chỉ tính vào mẫu số Completion Rate của **đội hủy** (kể cả đội rút Match_Request đã ACCEPTED); đội còn lại không tính (Business_Rules §3.3 — user chốt 2026-11-12)
 
@@ -571,12 +577,13 @@
 
 **Postconditions:**
 - Trạng thái được cập nhật sang EXPIRED
+- Cuộc chat của các request/Pairing chuyển EXPIRED thành chỉ xem (BR-N05)
 - Notification được gửi
 
 **Alternative Flow (Lazy check):**
 - 1a. API được gọi (vd: xem chi tiết Match)
 - 1a1. System kiểm tra `expires_at`
-- 1a2. Nếu hết hạn và chưa EXPIRED (BR-M17): khi xem → hiển thị EXPIRED ngay; khi thao tác trên Match (gửi/chấp nhận/từ chối/rút request, hủy, sửa chi phí; luồng B: nhận kèo, chốt phương án, sửa chi phí của Pairing, xác nhận, nhắn tin) → chuyển Match sang EXPIRED ngay, request PENDING và Pairing NEGOTIATING chuyển EXPIRED, và báo "Kèo đã hết hạn"
+- 1a2. Nếu hết hạn và chưa EXPIRED (BR-M17): khi xem → hiển thị EXPIRED ngay; khi thao tác trên Match (gửi/chấp nhận/từ chối/rút request, hủy, sửa chi phí, nhắn tin trong cuộc chat của đội có request PENDING / Pairing NEGOTIATING; luồng B: nhận kèo, chốt phương án, sửa chi phí của Pairing, xác nhận) → chuyển Match sang EXPIRED ngay, request PENDING và Pairing NEGOTIATING chuyển EXPIRED, và báo "Kèo đã hết hạn"
 - 1a3. Tiếp tục xử lý (xem) hoặc kết thúc (thao tác)
 
 ---
@@ -628,8 +635,8 @@
 **Actor:** Team Captain
 
 **Preconditions:**
-- Match đã ARCHIVED hoặc COMPLETED (cả 4 loại), hoặc CANCELLED sau khi đã CONFIRMED (chỉ "giao tiếp tệ") — BR-R07
-- Đội trưởng chưa report đối phương trong trận này cho loại report này
+- Match đã ARCHIVED hoặc COMPLETED (cả 4 loại), hoặc CANCELLED sau khi đã CONFIRMED (chỉ "giao tiếp tệ"); **hoặc** cuộc chat giữa hai đội của kèo (BR-N04) đã có ít nhất 1 tin nhắn — chỉ "giao tiếp tệ", bất kể trạng thái request/Pairing/kèo — BR-R07
+- Đội trưởng chưa report đối phương trong kèo này cho loại report này ("giao tiếp tệ": mỗi chiều 1 lần mỗi kèo, dù qua chat hay sau trận — BR-R07)
 - Người report không là đội trưởng của cả hai đội trong trận (BR-R08)
 - Đội của đội trưởng report phải đang ACTIVE; đội INACTIVE hoặc DISBANDED không report được. Đội bị report ở trạng thái nào cũng report được (BR-R10)
 
@@ -650,11 +657,11 @@
 
 **Exception Flows:**
 
-**2a. Match CANCELLED sau khi đã CONFIRMED mà chọn loại khác "giao tiếp tệ" (BR-R07):**
+**2a. Chọn loại khác "giao tiếp tệ" khi trận chưa ARCHIVED/COMPLETED — Match CANCELLED sau khi đã CONFIRMED, hoặc report qua chat hai đội (BR-R07):**
 - 2a1. Hệ thống từ chối, chỉ cho chọn "giao tiếp tệ"
 - 2a2. Quay về bước 2
 
-**2b. Match chưa kết thúc hoặc không có đối phương (OPEN, CONFIRMED, EXPIRED, CANCELLED khi còn OPEN — BR-R07):**
+**2b. Match chưa kết thúc hoặc không có đối phương (OPEN, CONFIRMED, EXPIRED, CANCELLED khi còn OPEN) và hai đội chưa có tin nhắn nào trong cuộc chat của kèo (BR-R07):**
 - 2b1. Hệ thống từ chối, không lưu report
 - 2b2. Use case kết thúc
 
@@ -1245,16 +1252,18 @@
 
 ## DOMAIN: NOTIFICATION & CHAT
 
-### UC-N01: Chat giữa 2 đội trưởng (luồng B)
+### UC-N01: Chat giữa 2 đội trưởng trong một kèo (luồng A và B)
 
-**Actor:** Team Captain (cả 2 bên)
+**Actor:** Team Captain (đội trưởng hiện tại của đội tạo kèo hoặc của đội tham gia — BR-N04)
 
 **Preconditions:**
-- Pairing đang ở trạng thái NEGOTIATING
+- Cuộc chat đã được mở: luồng A khi đội gửi Match Request (UC-M03), luồng B khi đội nhận kèo (UC-M05) — BR-N04
+- Người dùng là đội trưởng hiện tại của một trong hai đội của cuộc chat
+- (Gửi tin) Cuộc chat đang ở trạng thái **nhắn được** (BR-N05)
 
 **Main Flow:**
-1. Đội trưởng A gửi tin nhắn (1..1000 ký tự — BR-N03)
-2. Hệ thống lưu tin nhắn thuộc Pairing: đội gửi, người thực sự gửi (đội trưởng của đội gửi lúc gửi), nội dung, thời điểm gửi, trạng thái đã đọc. Không lưu người nhận (người nhận = đội còn lại của Pairing)
+1. Đội trưởng A mở cuộc chat và gửi tin nhắn (1..1000 ký tự — BR-N03)
+2. Hệ thống lưu tin nhắn thuộc cuộc chat: đội gửi, người thực sự gửi (đội trưởng của đội gửi lúc gửi), nội dung, thời điểm gửi, trạng thái đã đọc. Không lưu người nhận (người nhận = đội còn lại của cuộc chat)
 3. Hệ thống gửi tin nhắn real-time cho đội trưởng B
 4. Đội trưởng B nhận tin nhắn
 5. Hệ thống hiển thị mỗi tin với **tên đội gửi + tên (và ảnh) người thực sự đã gửi** (BR-N03); đầu phòng chat hiển thị tên hai đội + **đội trưởng hiện tại** của mỗi đội
@@ -1263,8 +1272,27 @@
 **Postconditions:**
 - Tin nhắn được lưu
 - Tin cũ giữ người gửi lúc đó dù đội đã chuyển quyền đội trưởng (vd đội Beta: tin của Nam vẫn hiển thị "Beta · Nam" sau khi Lan làm đội trưởng; đầu phòng hiển thị Lan); người gửi đã xóa tài khoản → "Người dùng đã xóa", không ảnh
-- Retention: 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED/EXPIRED)
+- Retention: BR-N01
+- Từ cuộc chat đã có tin nhắn, mỗi đội trưởng report được đội kia loại "giao tiếp tệ" bất kể trạng thái request/Pairing/kèo (UC-R02, BR-R07)
 - Chat không hỗ trợ tìm kiếm/xuất trong MVP
+
+**Exception Flows:**
+
+**1a. Cuộc chat chỉ xem (đội tham gia không được ghép — request bị từ chối / bị thay thế / rút khi còn chờ / hết hạn; Pairing bị thay thế / hết hạn — BR-N05):**
+- 1a1. Hệ thống không cho gửi tin; đội trưởng vẫn xem lịch sử
+- 1a2. Use case kết thúc
+
+**1b. Kèo OPEN đã quá thời hạn bài đăng khi request còn PENDING / Pairing còn NEGOTIATING (BR-M17):**
+- 1b1. Hệ thống chuyển kèo, request PENDING / Pairing NEGOTIATING sang EXPIRED và hiển thị "Kèo đã hết hạn"; cuộc chat thành chỉ xem
+- 1b2. Use case kết thúc
+
+**1c. Người gửi là người đã giải tán đội của mình (BR-N05, `USER-002` BR-T11):**
+- 1c1. Hệ thống không cho gửi tin; vẫn xem lịch sử
+- 1c2. Use case kết thúc
+
+**1d. Người dùng không còn là đội trưởng hiện tại của đội nào trong cuộc chat, trừ người đã giải tán đội — 1c (vd vừa chuyển quyền đội trưởng — BR-N04):**
+- 1d1. Hệ thống không cho xem và không cho gửi
+- 1d2. Use case kết thúc
 
 > **Implementation note:** Gửi tin và đọc lịch sử qua REST; nhận tin ngay qua STOMP/WebSocket (SockJS tuỳ kết quả kiểm khi cài đặt — MATCH-002 `[cần xác nhận #1]`, ADR-0014). Lịch sử chat phân trang theo con trỏ; sau khi kết nối lại, ứng dụng đọc lịch sử để bù tin bị lỡ.
 
@@ -1298,7 +1326,7 @@
 
 **Main Flow:**
 1. Scheduled job chạy hàng ngày
-2. System query chat có `Match.end_time + 90 ngày < now` (`end_time` = lúc Match chuyển COMPLETED/ARCHIVED/CANCELLED/EXPIRED — BC-N03; vd kèo hết hạn 12/11/2026 → chat xóa 10/02/2027)
+2. System query mọi cuộc chat giữa hai đội (luồng A và B — BR-N04) có `Match.end_time + 90 ngày < now` (`end_time` = lúc Match chuyển COMPLETED/ARCHIVED/CANCELLED/EXPIRED — BC-N03; vd kèo hết hạn 12/11/2026 → chat xóa 10/02/2027)
 3. System xóa chat hết retention
 4. System query notification có `created_at + 30 ngày < now`
 5. System xóa notification hết retention
@@ -1306,6 +1334,30 @@
 **Postconditions:**
 - Chat/notification hết retention được xóa
 - Giảm tải DB
+
+---
+
+### UC-N04: Xem danh sách tin nhắn của tôi
+
+**Actor:** Người dùng đã đăng nhập (đội trưởng, người đã giải tán đội, ứng viên mercenary)
+
+**Preconditions:**
+- Đã đăng nhập
+
+**Main Flow:**
+1. Người dùng mở màn hình "Tin nhắn"
+2. Hệ thống hiển thị mọi cuộc chat người dùng đang xem được (BR-N06), cuộc chat có tin mới nhất ở trên
+3. Mỗi dòng hiển thị: bên kia (tên và ảnh đội hoặc người), đội của mình trong cuộc chat, kèo / trận liên quan (giờ bắt đầu), tin cuối (đoạn đầu nội dung, người gửi, thời điểm — cuộc chat chưa có tin thì để trống), dấu "chưa đọc" nếu bên kia có tin mình chưa đọc, và cuộc chat còn nhắn được hay chỉ xem
+4. Người dùng chọn một dòng → mở cuộc chat (UC-N01 / UC-ME09)
+
+**Exception Flows:**
+
+**1a. Người dùng không tham gia cuộc chat nào:**
+- 1a1. Hệ thống hiển thị danh sách rỗng
+- 1a2. Use case kết thúc
+
+**Postconditions:**
+- Không thay đổi dữ liệu
 
 ---
 
