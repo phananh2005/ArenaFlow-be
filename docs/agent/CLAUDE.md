@@ -29,8 +29,9 @@ _(Chưa có file kiến trúc/thuật ngữ — thêm khi dự án phát triển
 | Làm việc với user/hồ sơ/đội/lời mời/xác thực (USER-001) | `docs/agent/design/USER-001/` |
 | Làm việc với giải tán đội / quy tắc xoá tài khoản đội trưởng / lịch sử thành viên (Admin) (USER-002) | `docs/agent/design/USER-002/` |
 | Làm việc với địa điểm sân / ảnh sân (Cloudinary) / report địa điểm / cảnh báo admin (VENUE-001) | `docs/agent/design/VENUE-001/` |
-| Làm việc với kèo luồng A / Match Request / huỷ kèo & trừ Reliability / job hết hạn–ARCHIVED / thoả thuận chi phí / bật-tắt bộ môn (MATCH-001) | `docs/agent/design/MATCH-001/` |
-| Làm việc với thương lượng ghép kèo luồng B / pairing / chat realtime / tiền cọc / xác nhận ghép kèo (MATCH-002) | `docs/agent/design/MATCH-002/` |
+| Làm việc với kèo luồng A / Match Request / huỷ kèo & trừ Reliability / job hết hạn–ARCHIVED / thoả thuận chi phí / bật-tắt bộ môn / chat dùng chung (`conversation`) / kênh realtime STOMP / Tin nhắn của tôi (MATCH-001) | `docs/agent/design/MATCH-001/` |
+| Làm việc với thương lượng ghép kèo luồng B / pairing / tiền cọc / xác nhận ghép kèo (MATCH-002) | `docs/agent/design/MATCH-002/` |
+| Làm việc với đánh giá trận / report đội & tranh chấp / uy tín đội (Reliability, Completion Rate, huy hiệu) / report giao tiếp tệ qua chat (REPUTATION-001) | `docs/agent/design/REPUTATION-001/` |
 | Làm việc với tuyển mercenary / tin tuyển & đơn ứng tuyển / chat theo đơn (`conversation`) / đánh giá–report–uy tín cá nhân / trận ngoài hệ thống (MERCENARY-001) | `docs/agent/design/MERCENARY-001/` |
 | Publish SRS/API_Spec cho FE (repo `ArenaFlow-spec`, workflow `publish-spec`) | `docs/agent/README.md` mục "Publish tài liệu cho FE" |
 
