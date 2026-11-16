@@ -41,7 +41,7 @@ node docs/agent/scripts/wip-handoff.cjs push --dry-run
     dữ liệu giả có chủ đích → `allow-secret` trên dòng đó (hỏi user trước). Secret đã nằm trong commit chưa push → hỏi user cách xử lý.
   - **máy khác đã đẩy ảnh chụp mới hơn** → hướng dẫn chạy `/af-resume-pull` trước. Áp bị đụng độ **không** có nghĩa ảnh chụp
     lỗi thời → hỏi user. Chỉ khi user **xác nhận** nó đã lỗi thời → `apply <nhánh> --skip` (giữ bản dự phòng local
-    `refs/wip-skipped/<nhánh>`, không xoá gì) rồi push lại. Chỉ dùng `--force-overwrite` khi user yêu cầu rõ
+    `refs/wip-skipped/<nhánh>/<sha12>`, mỗi lần bỏ qua một ref riêng, không xoá gì) rồi push lại. Chỉ dùng `--force-overwrite` khi user yêu cầu rõ
     (ghi đè mất ảnh chụp của máy kia, không có bản dự phòng). Ảnh chụp của máy khác mà nội dung đã có trên `origin/<nhánh>` (đã cũ) thì không chặn.
   - **ref không phải ảnh chụp hợp lệ** ở `refs/wip/<nhánh>` → báo user; bỏ qua bằng `apply <nhánh> --skip` khi user xác nhận.
   - **worktree HEAD tách rời có file dở** (vd đang rebase) → việc dở đó không đẩy được; báo user xử lý.

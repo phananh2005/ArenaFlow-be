@@ -50,7 +50,7 @@ node docs/agent/scripts/wip-handoff.cjs apply <nhánh> [--stash | --skip]
   (file dở của máy kia vẫn có thể chỉ có ở đó). **Hỏi user** chọn:
   - áp tay (lệnh script in sẵn) — **NEVER** tự sửa đụng độ khi user chưa yêu cầu;
   - user **xác nhận** ảnh chụp đã lỗi thời → `apply <nhánh> --skip`: ghi nhận đã xem, giữ bản dự phòng local
-    `refs/wip-skipped/<nhánh>` (lấy lại: `git cherry-pick --no-commit refs/wip-skipped/<nhánh> && git reset`), không đổi working tree,
+    `refs/wip-skipped/<nhánh>/<sha12>` (mỗi lần bỏ qua một ref riêng; script in sẵn lệnh lấy lại), không đổi working tree,
     không xoá ref → `/af-handoff-push` được ghi đè nó;
   - để nguyên, xử lý sau.
 - Máy này ghi nhận đã lấy ảnh chụp (`refs/wip-seen/<nhánh>`) → `/af-handoff-push` sau đó được phép ghi đè nó.

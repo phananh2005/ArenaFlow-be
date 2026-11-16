@@ -700,14 +700,23 @@ test('R4-#1: --skip giữ ref dự phòng refs/wip-skipped/<nhánh> trỏ tới 
   assert.equal(run(b, 'push').status, 0);
   const fromB = remoteRefs(b)['refs/wip/feature/X-001-demo'];
 
+  const backup1 = `refs/wip-skipped/feature/X-001-demo/${fromB.slice(0, 12)}`;
   const skipped = run(a, 'apply', 'feature/X-001-demo', '--skip');
   assert.equal(skipped.status, 0, skipped.stderr);
-  assert.match(skipped.stdout, /refs\/wip-skipped\/feature\/X-001-demo/);
+  assert.ok(skipped.stdout.includes(backup1), skipped.stdout);
   write(a, 'other.md', 'A\n');
   assert.equal(run(a, 'push').status, 0);
   assert.notEqual(remoteRefs(a)['refs/wip/feature/X-001-demo'], fromB);
-  assert.equal(git(a, 'rev-parse', 'refs/wip-skipped/feature/X-001-demo'), fromB);
-  assert.equal(git(a, 'show', 'refs/wip-skipped/feature/X-001-demo:note.md'), 'dở ở B');
+  assert.equal(git(a, 'rev-parse', backup1), fromB);
+  assert.equal(git(a, 'show', `${backup1}:note.md`), 'dở ở B');
+
+  // R5-#3: lần --skip sau cho cùng nhánh không ghi đè bản dự phòng lần trước.
+  write(b, 'note.md', 'dở ở B lần 2\n');
+  assert.equal(run(b, 'push', '--force-overwrite').status, 0);
+  const fromB2 = remoteRefs(b)['refs/wip/feature/X-001-demo'];
+  assert.equal(run(a, 'apply', 'feature/X-001-demo', '--skip').status, 0);
+  assert.equal(git(a, 'rev-parse', backup1), fromB, 'bản dự phòng lần 1 phải còn');
+  assert.equal(git(a, 'rev-parse', `refs/wip-skipped/feature/X-001-demo/${fromB2.slice(0, 12)}`), fromB2);
 });
 
 test('R4-#1: thông báo đụng độ / bị chặn ghi rõ --skip chỉ khi user xác nhận lỗi thời', () => {
@@ -763,6 +772,29 @@ test('R4-#2: khôi phục — KHÔNG về được nhánh ban đầu → giữ s
   assert.equal(read(b, 'README.md'), 'base\n', 'không được pop stash lên nhánh khác');
   assert.ok(notes.some(n => /KHÔNG về lại/.test(n)), notes.join(' | '));
   assert.ok(notes.some(n => /fast-forward/.test(n)), notes.join(' | '));
+});
+
+test('R5-#1: khôi phục — vẫn đúng nhánh nhưng nhánh đã được fast-forward → giữ stash, không pop lên commit khác', () => {
+  const { b } = setup();
+  const { restoreAfterFailedApply } = loadModule();
+  git(b, 'switch', '-q', '-c', 'feature/X-001-demo', 'origin/feature/X-001-demo');
+  write(b, 'README.md', 'B dở\n');
+  const origHead = git(b, 'rev-parse', 'HEAD');
+  git(b, 'stash', 'push', '-q', '-m', 'wip-handoff: test');
+  commitFile(b, 'ff.md', 'ff\n', 'docs: giả lập fast-forward');
+  const notes = restoreAfterFailedApply(b, { currentBranch: 'feature/X-001-demo', origHead, branch: 'feature/X-001-demo', stashed: true, local: 'behind' });
+  assert.match(tryGit(b, 'stash', 'list').stdout, /wip-handoff: test/, 'stash phải còn nguyên');
+  assert.equal(read(b, 'README.md'), 'base\n');
+  assert.ok(notes.some(n => /stash/.test(n) && /chưa lấy lại/.test(n)), notes.join(' | '));
+});
+
+test('R5-#2: khôi phục — không có gì cần khôi phục → không có ghi chú', () => {
+  const { b } = setup();
+  const { restoreAfterFailedApply } = loadModule();
+  git(b, 'switch', '-q', '-c', 'feature/X-001-demo', 'origin/feature/X-001-demo');
+  const origHead = git(b, 'rev-parse', 'HEAD');
+  const notes = restoreAfterFailedApply(b, { currentBranch: 'feature/X-001-demo', origHead, branch: 'feature/X-001-demo', stashed: false, local: 'same' });
+  assert.deepEqual(notes, []);
 });
 
 test('tham số sai → exit 2', () => {
