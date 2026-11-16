@@ -32,8 +32,8 @@ build/
 ### VS Code ###
 .vscode/
 
-### Agent state (phiên cá nhân, không commit) ###
-docs/agent/state/*/
+### Agent state ###
+!docs/agent/state/*/
 !docs/agent/state/_template/
 
 ### Claude Code logs ###
