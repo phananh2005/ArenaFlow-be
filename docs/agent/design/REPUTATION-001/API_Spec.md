@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1.1, §1.2 và MATCH-001 `API_Spec.md` §1.1; kèo, trạng thái kèo, mã `MATCH_*`: MATCH-001 `API_Spec.md`; cuộc trò chuyện giữa hai đội, mã `CHAT_*`: MATCH-001 `API_Spec.md` §1.6, §5; mã `TEAM_*`, `AUTH_*`: USER-001/USER-002 `API_Spec.md`; hiển thị user đã xoá ở API Admin: [ADR-0002](../../decisions/0002-soft-delete-policy.md) (Sửa đổi 2026-11-12) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10) — UC-R01..R07; BR-ME14 (report của mercenary với đội); BR-R01..R10 (BR-R07 trường hợp 3: report qua chat hai đội), BC-R01..R07; BR-N04; Business_Rules §3.1–§3.3, §6, §7, §8.2, §8.4; AC-R01..R08; Scenario 8, 9 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.2** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.3** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 

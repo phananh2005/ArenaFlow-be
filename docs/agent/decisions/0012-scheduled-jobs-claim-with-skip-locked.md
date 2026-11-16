@@ -2,10 +2,11 @@
 
 | | |
 |---|---|
-| **Trạng thái** | Proposed |
+| **Trạng thái** | Accepted (chủ repo chốt 2026-11-16) |
 | **Ngày** | 2026-11-09 |
-| **Người quyết định** | solution-architect (đề xuất) · chờ chủ repo duyệt |
-| **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) (ngoại lệ có phạm vi — cần mục Sửa đổi khi ADR này Accepted) · [ADR-0007](0007-scoped-pessimistic-lock-for-account-deletion.md) §Phạm vi ngoại lệ · [ADR-0011](0011-domain-events-after-commit.md) · `docs/agent/design/MATCH-001/Processing_Flow.md` §3.13, §5 · `docs/agent/design/VENUE-001/Component_Class_Design.md` §12 #14 |
+| **Người quyết định** | solution-architect (đề xuất) · chủ repo (chốt 2026-11-16) |
+| **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) (ngoại lệ có phạm vi — ADR-0003 Sửa đổi 2026-11-16) · [ADR-0007](0007-scoped-pessimistic-lock-for-account-deletion.md) §Phạm vi ngoại lệ · [ADR-0011](0011-domain-events-after-commit.md) · `docs/agent/design/MATCH-001/Processing_Flow.md` §3.13, §5 · `docs/agent/design/VENUE-001/Component_Class_Design.md` §12 #14 |
+| **Sửa đổi** | 2026-11-16 — việc "thêm mục `Sửa đổi` vào ADR-0003" ở §Cần theo dõi đã xong |
 
 ## Bối cảnh (Context)
 - MATCH-001 cần job mỗi 5 phút: `OPEN` quá `expires_at` → `EXPIRED` (kèm yêu cầu `PENDING`), `CONFIRMED` quá `match_end_time` → `ARCHIVED`; mỗi kèo chuyển phải phát đúng một event (ADR-0011). Sau này: pairing (MATCH-002), tin tuyển (MERCENARY-001), retention (NOTIFICATION-001).
@@ -47,3 +48,8 @@ Chúng tôi cho **job chuyển trạng thái theo lô** dùng mẫu **claim → 
 - Log `ERROR` lô job lặp lại, hoặc `40P01` liên quan job → xem lại thứ tự khoá.
 - Khi ADR này Accepted: thêm mục `Sửa đổi` vào ADR-0003 trỏ tới đây.
 - Job mới (MATCH-002, MERCENARY-001, NOTIFICATION-001) theo mẫu này hoặc ghi rõ giả định một instance.
+
+## Sửa đổi 2026-11-16 — Việc theo dõi đã hoàn tất
+
+- §Cần theo dõi "Khi ADR này Accepted: thêm mục `Sửa đổi` vào ADR-0003 trỏ tới đây" đã xong: ADR-0003 có mục "Sửa đổi 2026-11-16 — Job chuyển trạng thái theo lô claim bằng `SKIP LOCKED` (ADR-0012)".
+- Các mục khác của §Cần theo dõi vẫn hiệu lực.

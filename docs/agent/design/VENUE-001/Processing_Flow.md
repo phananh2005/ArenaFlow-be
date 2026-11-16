@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway · Cloudinary |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + `Component_Class_Design.md` §4.9 |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.1** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.2** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -78,8 +78,7 @@ sequenceDiagram
         VS->>DB: Q3 U closure_alerted_at (WHERE … IS NULL)
         VS->>EP: VenueAdminAlertEvent(CLOSURE_REPORTED) nếu Q3 = 1
     end
-    VS->>EP: VenueReportedEvent
-    Note over EP: listener NOTIFICATION-001 chạy AFTER_COMMIT
+    Note over EP: listener NOTIFICATION-001 chạy AFTER_COMMIT (chỉ VenueAdminAlertEvent — v4.2)
     VS-->>C: 201
 ```
 
@@ -153,7 +152,7 @@ Q1 `findDetailById` → `VENUE_001`; Q2 `findByVenueIdOrderByDisplayOrderAsc`.
 Q1–Q2 `lockForImageWrite` (`VENUE_001`) → `requireWritable` (`VENUE_002`) → Q3 `clearPrimary` → Q4 `setPrimary`: 0 dòng → `VENUE_004` (exception → rollback hoàn tác Q3) → Q5 danh sách ảnh. Hai câu riêng vì PostgreSQL kiểm unique index theo từng dòng trong một `UPDATE`; gộp có thể vi phạm tạm thời.
 
 ### 3.7. `POST …/reports` (`@Transactional`)
-`actor.admin()` → `VENUE_015` → Q1 `activeVenue` (`VENUE_001`, `VENUE_002`) → Q2 `saveAndFlush` report (`PENDING`); `uq_venue_report_pending` → `VENUE_014` (index là nguồn duy nhất, không SELECT kiểm trước) → nếu `reason = CLOSED` và `closureAlertedAt == null` (đọc ở Q1): Q3 `markClosureAlerted` (`WHERE status = 'ACTIVE' AND closure_alerted_at IS NULL`, `version + 1`); 1 dòng → `VenueAdminAlertEvent(CLOSURE_REPORTED)` → luôn `VenueReportedEvent` `[cần xác nhận #1, #2]`.
+`actor.admin()` → `VENUE_015` → Q1 `activeVenue` (`VENUE_001`, `VENUE_002`) → Q2 `saveAndFlush` report (`PENDING`); `uq_venue_report_pending` → `VENUE_014` (index là nguồn duy nhất, không SELECT kiểm trước) → nếu `reason = CLOSED` và `closureAlertedAt == null` (đọc ở Q1): Q3 `markClosureAlerted` (`WHERE status = 'ACTIVE' AND closure_alerted_at IS NULL`, `version + 1`); 1 dòng → `VenueAdminAlertEvent(CLOSURE_REPORTED)` `[cần xác nhận #2]`. Không phát event cho từng report (v4.2 — đóng #1).
 
 ### 3.8. `GET /admin/venue-reports`
 Q1 `findAdminReports` (JOIN venue, LEFT JOIN user reporter/handler) + Q2 count. `toAdminReport` không che tên reporter/handler, trả cờ đã xoá (cột cờ đã có trong projection — không thêm truy vấn).
@@ -227,7 +226,7 @@ Xoá asset trong `rootPrefix("venues")` không còn dòng `venue_image` tham chi
 | Report `CLOSED` vs mark-inactive | Report commit trước → mark-inactive retry, verify luôn report mới. Mark-inactive commit trước Q1 → `VENUE_002`; sau Q1 → không cảnh báo, report có thể nằm `PENDING` trên địa điểm vừa `INACTIVE` (admin xử lý bằng 2.9) |
 | Double-submit report | INSERT thứ hai chờ entry index chưa commit → vi phạm `uq_venue_report_pending` → `VENUE_014` |
 | Hai report `CLOSED` khác user | Cổng `closure_alerted_at IS NULL` → 1 `VenueAdminAlertEvent` |
-| Resolve vs report `CLOSED` mới chưa commit | Cổng có thể mở trong khi report mới không phát `CLOSURE_REPORTED` (vẫn có `VenueReportedEvent`); chấp nhận |
+| Resolve vs report `CLOSED` mới chưa commit | Cổng có thể mở trong khi report mới không phát `CLOSURE_REPORTED` (Admin vẫn thấy report ở 2.8; không có thông báo cho report đó); chấp nhận |
 | Hai admin resolve / resolve vs mark-inactive | `resolveIfPending … WHERE status = 'PENDING'` → bên sau `VENUE_010`; bulk verify bỏ qua report đã xử lý |
 | `markSelected` vs mark-inactive / reactivate | Bulk tăng version → admin retry; kèo đã qua `requireSelectable` trước đó vẫn tham chiếu địa điểm vừa `INACTIVE` (như kèo cũ) |
 | Job 180 ngày vs `markSelected` | Cùng dòng, bên sau đánh giá lại điều kiện; tệ nhất cảnh báo thừa 1 lần |
@@ -295,7 +294,7 @@ Native projection + JOIN, ảnh chính bằng `LEFT JOIN … AND is_primary`, kh
 
 | # | Nội dung | Loại |
 |---|---|---|
-| 1 | Report phát cả `VenueReportedEvent` (mỗi report, UC-V03 bước 6) lẫn `VenueAdminAlertEvent(CLOSURE_REPORTED)` một lần (BC-V05); NOTIFICATION-001 quyết định gộp (chuyển từ `API_Spec.md` v1.0) | Không chặn |
+| 1 | ~~Report phát cả `VenueReportedEvent` (mỗi report, UC-V03 bước 6) lẫn `VenueAdminAlertEvent(CLOSURE_REPORTED)` một lần (BC-V05); NOTIFICATION-001 quyết định gộp~~ — **Đóng v4.2 (user chốt Q8, 2026-11-16):** Admin chỉ nhận thông báo theo `VenueAdminAlertEvent`; bỏ `VenueReportedEvent`. SRS UC-V03 bước 6 / AC-V03 cần sửa (NOTIFICATION-001 `Component_Class_Design.md` §11 S4) | Đã đóng |
 | 2 | Mở lại cổng "cảnh báo 1 lần": `CLOSURE_REPORTED` khi hết report `CLOSED` `PENDING` hoặc reactivate; `STALE_180_DAYS` khi được chọn lại hoặc reactivate (chuyển từ `API_Spec.md` v1.0) | Không chặn |
 | 16 | Deadlock resolve vs mark-inactive (§5): chọn cho `resolveReport` chạy qua retrier thay vì đổi thứ tự khoá | Không chặn (đã có mặc định) |
 | 17 | Trùng địa điểm: không khoá tự nhiên, spec không có quy tắc | Không chặn |

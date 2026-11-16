@@ -1,5 +1,21 @@
 # CHANGELOG — VENUE-001 Quản lý địa điểm sân
 
+## [v4.2] — 2026-11-16
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** ADR-0009 đã `Accepted` (2026-11-16) — bỏ nhãn "Proposed" ở header API_Spec. Cập nhật tài liệu nội bộ BE theo phạm vi thông báo NOTIFICATION-001: Admin chỉ nhận thông báo theo đợt cảnh báo địa điểm, không theo từng report; không ảnh hưởng FE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | User chốt 2026-11-16 (NOTIFICATION-001 Q8) | Không — thông báo cho Admin: NOTIFICATION-001 `API_Spec.md` §4.2 `VENUE_ADMIN_ALERT` |
+| 2 | `API_Spec.md` header "Quyết định liên quan" | Sửa | "ADR-0009 (`Proposed`)" → "ADR-0009" | ADR-0009 `Accepted` 2026-11-16 | Không |
+| 3 | Header 3 tài liệu | Ghi nhận | v4.1 → v4.2 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract VENUE-001: không đổi.
+- Nghiệp vụ / SRS: UC-V03 bước 6, AC-V03 ("Admin nhận notification" mỗi report) cần sửa theo NOTIFICATION-001 — business-analyst.
+
 ## [v4.1] — 2026-11-15
 
 **Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE: ghi chú FK `venue_report.reporter_id` trỏ chính sách cùng loại sang `conversation_message.sender_user_id` ở V6 (MATCH-001 v2.4 bỏ bảng `chat_message`), không ảnh hưởng FE.

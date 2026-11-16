@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Trạng thái** | Proposed |
+| **Trạng thái** | Accepted (chủ repo chốt 2026-11-16) |
 | **Ngày** | 2026-11-09 |
 | **Người quyết định** | Chủ repo (chốt repo riêng `ArenaFlow-spec`, FE gắn submodule, BE là nguồn duy nhất, 2026-11-09) |
 | **Liên quan** | `.github/workflows/publish-spec.yml` · `docs/agent/scripts/publish-spec.cjs` · `docs/agent/README.md` mục "Publish tài liệu cho FE" |

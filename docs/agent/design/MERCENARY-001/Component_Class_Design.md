@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL ≥ 18 |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §7–§8 (`DeletedUserMasking` qua `MapperSupport`); VENUE-001 §4.6 (`VenueSelectionService`), §4.9 (retrier overload), §5.2 (hộp + Haversine); MATCH-001 §4.5 (`TeamGuard`), §4.8 (`ReputationService`, `TimeBandPenaltyPolicy`), §4.9 (event), §4.10 (scheduler); MATCH-001 (v2.4) §4.14 (lõi cuộc trò chuyện `ConversationService`, `ConversationAccessPolicy`), §4.15 (kênh realtime), §5.1 (bảng `conversation*` ở V6), §5.2 (`ConversationRepository.findContext`, cursor `(created_at, id)`), §7 (`ChatHistoryQuery`, `@ValidChatCursor`, `ConversationMapper`); REPUTATION-001 §4.6 (`ReputationService`, `ReportPenaltyPolicy`, `ReputationRules`), §4.8 (refresher huy hiệu), §4.10 (trạng thái report hiệu lực), §5.3 (thống kê) · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-10, 2026-11-12, 2026-11-14), ADR-0007 (+ Sửa đổi 2026-11-14), ADR-0008, ADR-0011, ADR-0012, ADR-0013, ADR-0014 (+ Sửa đổi 2026-11-13, 2026-11-15) |
 | Ràng buộc dữ liệu | V1–V4 (code) + V5 (VENUE-001, gồm `venue.ward_id` v4.0), V6 (MATCH-001), V6 (MATCH-001 — gồm bảng `conversation`, `conversation_message` từ v2.4), V8 (REPUTATION-001) — **chưa có trong code** + `V9__mercenary_recruitment_chat_reputation.sql` (§5.1 — v2.0: chỉ thêm phần riêng mercenary vào `conversation`). Entity hiện có `domain/.../entity/mercenary/{MercenaryRecruitment, MercenaryApplication}`, `rating/{Rating, Report}`, `user/User`, `venue/Venue` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v2.1** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -241,7 +241,7 @@ int closeDueRecruitments();     // mỗi lô một TransactionTemplate
 int rejectOrphanPending();      // mỗi lô một TransactionTemplate
 int notifyCancelledGames();     // mỗi lô một TransactionTemplate
 ```
-Gọi từ `MatchLifecycleScheduler` (MATCH-001 §4.10, v2.3) **sau** `archiveFinishedMatches()` trong cùng lần chạy 5 phút; lỗi log `ERROR`, không chặn tác vụ khác. Không thêm job định kỳ → `spring.task.scheduling.pool.size` giữ 4.
+Gọi từ `MatchLifecycleScheduler` (MATCH-001 §4.10, v2.3) **sau** `archiveFinishedMatches()` trong cùng lần chạy 5 phút; lỗi log `ERROR`, không chặn tác vụ khác. Không thêm job định kỳ → không đổi `spring.task.scheduling.pool.size` (giá trị: MATCH-001 `Component_Class_Design.md` §8).
 - `closeDueRecruitments`: mỗi lô `claimDue(now, batchSize)` (`FOR NO KEY UPDATE OF r SKIP LOCKED`, trả `id, matchId, externalMatchId, teamId, cause`) → `markClosedOrExpired(closedIds, expiredIds, now)` → `rejectPendingByRecruitmentIds(ids, now)` RETURNING `RejectedApplicationView(id, recruitmentId)` → `MercenaryRecruitmentClosedEvent(cause = MATCH_CANCELLED | EXPIRED, rejectedApplicationIds)` mỗi tin.
 - `rejectOrphanPending` (MINOR 5): đơn `PENDING` trên tin đã `CLOSED`/`EXPIRED` (ứng tuyển commit ngay sau khi tin đóng) → `REJECTED` + `MercenaryApplicationRejectedEvent(cause = RECRUITMENT_CLOSED)`. SQL: `Processing_Flow.md` §3.12.
 - `notifyCancelledGames` (N-M2 — BR-ME09 "mercenary nhận thông báo" khi trận bị huỷ, kể cả tin đã `CLOSED` từ trước): mỗi lô `applicationRepository.markGameCancelNotified(now, now − cancel-notice-lookback-days, batchSize)` (đơn `APPROVED`, `game_cancel_notified_at IS NULL` của kèo / trận ngoài **bị huỷ có `match_end_time > lookbackStart`** → đánh dấu; claim `FOR NO KEY UPDATE OF a2 SKIP LOCKED`; RETURNING `GameCancelNoticeView(id, matchId, externalMatchId)` — SQL: `Processing_Flow.md` §3.12 bước 3) → gom theo trận → `MercenaryGameCancelledEvent` mỗi trận. Đây là đường **duy nhất** báo huỷ kèo trên hệ thống cho mercenary: không nghe `MatchCancelledEvent` (listener chạy sau commit trên luồng request sẽ thêm truy vấn vào MATCH-001 2.5/2.10 — đang 6/W6). Trận ngoài: 2.32 đánh dấu và phát ngay (§4.15). Cột `game_cancel_notified_at` (§5.1) chống báo trùng giữa 2.32, các lần job và nhiều instance.
@@ -265,7 +265,7 @@ public record TimeBandPenaltyPolicy(…) { public static final TimeBandPenaltyPo
 
 ### 4.11. Domain event (`application/event/mercenary`, ADR-0011)
 
-| Event | Payload | Phát khi | Người nghe dự kiến (NOTIFICATION-001) |
+| Event | Payload | Phát khi | Người nghe (NOTIFICATION-001 — loại thông báo chốt ở NOTIFICATION-001 `Component_Class_Design.md` §4.3, v2.1) |
 |---|---|---|---|
 | `MercenaryApplicationSubmittedEvent` | `applicationId, recruitmentId, matchId, externalMatchId, teamId, applicantId, occurredAt` | 2.7 | `MERCENARY_APPLICATION` cho đội trưởng hiện tại |
 | `MercenaryApplicationApprovedEvent` | như trên | 2.11 | Ứng viên |
@@ -273,7 +273,7 @@ public record TimeBandPenaltyPolicy(…) { public static final TimeBandPenaltyPo
 | `MercenaryApplicationWithdrawnEvent` | như trên + `previousStatus`, `cause` (`APPLICANT` \| `ACCOUNT_DELETED`) | 2.13; xoá tài khoản (§4.14) | Đội trưởng ("Mercenary rút lui" khi `APPROVED`; xoá tài khoản: mọi đơn) |
 | `MercenaryRecruitmentClosedEvent` | `recruitmentId, matchId, externalMatchId, teamId, cause` (`CAPTAIN` \| `MATCH_CANCELLED` \| `EXTERNAL_MATCH_CANCELLED` \| `EXPIRED`)`, rejectedApplicationIds, occurredAt` | 2.6, 2.32, job | Ứng viên có đơn bị từ chối (theo `rejectedApplicationIds` — MINOR 12). **Không** báo mercenary `APPROVED` — việc đó thuộc `MercenaryGameCancelledEvent` (tránh báo trùng) |
 | `MercenaryGameCancelledEvent` | `matchId` \| `externalMatchId` (một trong hai khác `null`)`, applicationIds` (đơn `APPROVED` vừa được đánh dấu đã báo)`, occurredAt` | 2.32 (trận ngoài); job `notifyCancelledGames` (kèo, và đơn trận ngoài được duyệt đồng thời lúc huỷ) | Mọi mercenary `APPROVED` của trận bị huỷ, kể cả của tin đã `CLOSED` từ trước (BR-ME09, N-M2) |
-| `MercenaryRatingCreatedEvent` | `ratingId, applicationId, direction, occurredAt` | 2.18 | "Rating nhận" (REPUTATION-001 `[cần xác nhận #11]`) |
+| `MercenaryRatingCreatedEvent` | `ratingId, applicationId, direction, occurredAt` | 2.18 | `RATING_RECEIVED` cho bên được đánh giá **chỉ khi** bên đó đã đánh giá lại trong cùng đơn (user chốt Q3 2026-11-16 — BC-R03/R04) |
 | `MercenaryReportCreatedEvent` | `reportId, applicationId, direction, reportType, occurredAt` | 2.20 | "Report nhận"; `NOSHOW`: "Bạn có 24h để tranh chấp" |
 | `UserVerificationChangedEvent` | `userId, verified, occurredAt` | `VerificationRefresher` | Cấp / thu hồi huy hiệu cá nhân |
 
@@ -674,7 +674,7 @@ arenaflow.mercenary.lifecycle.cancel-notice-lookback-days=7
 
 | Tham số | Lý do |
 |---|---|
-| Chạy trong `MatchLifecycleScheduler` (cron `arenaflow.match.lifecycle.cron` của MATCH-001, 5 phút) | Tin hết hạn theo giờ kết thúc trận — cùng nhịp job `ARCHIVED`; không thêm luồng scheduling (`spring.task.scheduling.pool.size` giữ 4) |
+| Chạy trong `MatchLifecycleScheduler` (cron `arenaflow.match.lifecycle.cron` của MATCH-001, 5 phút) | Tin hết hạn theo giờ kết thúc trận — cùng nhịp job `ARCHIVED`; không thêm luồng scheduling (`spring.task.scheduling.pool.size` không đổi — giá trị ở MATCH-001 §8) |
 | `batch-size` 200 × `max-batches-per-run` 50 | Như MATCH-001 §8 — transaction ngắn; dùng chung cho đóng tin và quét đơn mồ côi |
 | `cancel-notice-lookback-days` 7 | Báo huỷ trận chỉ quét trận bị huỷ có giờ kết thúc trong 7 ngày gần nhất (huỷ chỉ trước giờ bắt đầu → job 5 phút gặp lại ngay); đủ bù job ngừng vài ngày |
 
@@ -712,7 +712,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 | `docs/agent/api-convention.md` §5 (29 endpoint của mã này vào bảng 2xx — §3; 2.14–2.17 do MATCH-001 v2.4 thêm), §6 (domain `MERCENARY`, `REPORT_009`; `CHAT_002..004` do MATCH-001 v2.4) | Coordinator | `chore/agent-framework-*` |
 | `docs/agent/convention-backend.md` §1 | `application/support/mercenary/`, `application/event/mercenary/` | `chore/agent-framework-*` |
 | `docs/agent/CLAUDE.md` §2 | Dòng điều hướng MERCENARY-001 | `chore/agent-framework-*` |
-| NOTIFICATION-001 (khi thiết kế) | Job xoá chat hết hạn lưu dùng chung mọi cuộc trò chuyện — điều kiện chung ở MATCH-001 `Component_Class_Design.md` §11; phần riêng mã này: cuộc trò chuyện có `external_match_id` → trận ngoài `SCHEDULED` (mốc `match_end_time`) / `CANCELLED` (mốc `cancelled_at`) + 90 ngày < now; xoá dòng `conversation` (tin xoá theo `ON DELETE CASCADE`); nghe event §4.11 | — |
+| ~~NOTIFICATION-001 (khi thiết kế)~~ **Đã thiết kế (v2.1):** NOTIFICATION-001 `Component_Class_Design.md` §4.3, §4.8 | Job xoá chat hết hạn lưu dùng chung mọi cuộc trò chuyện — điều kiện chung ở MATCH-001 `Component_Class_Design.md` §11; phần riêng mã này: cuộc trò chuyện có `external_match_id` → trận ngoài `SCHEDULED` (mốc `match_end_time`) / `CANCELLED` (mốc `cancelled_at`) + 90 ngày < now; xoá dòng `conversation` (tin xoá theo `ON DELETE CASCADE`); nghe event §4.11 | — |
 
 ## 12. Danh sách [cần xác nhận]
 
@@ -724,7 +724,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 | 2 | ~~Quy tắc chờ câu hỏi nghiệp vụ B1–B12~~ — **đã chốt** (user, 2026-11-14; §13) | Đã đóng |
 | 3 | ~~Report bùng của mercenary nhắm vào đội tác động như report đội–đội~~ — **đã chốt** B9 (BR-ME14) | Đã đóng |
 | 4 | Dữ liệu `mercenary_recruitment` trên Neon dev trước V9 (cột `NOT NULL` không mặc định) | Không chặn — kiểm khi lập kế hoạch |
-| 5 | Job xoá tin nhắn theo hạn lưu cho mọi cuộc trò chuyện thuộc NOTIFICATION-001 (chưa thiết kế) — điều kiện: §11 + MATCH-001 §11 | Không chặn |
+| 5 | ~~Job xoá tin nhắn theo hạn lưu cho mọi cuộc trò chuyện thuộc NOTIFICATION-001 (chưa thiết kế)~~ — **Đóng v2.1:** NOTIFICATION-001 `Component_Class_Design.md` §4.8, §5.2 (`deleteExpiredConversations` gồm nhánh trận ngoài `SCHEDULED`/`CANCELLED`) | Đã đóng |
 | 6 | ~~Hai CTE ghi `team` và `"user"` trong một câu~~ — **bỏ** (2026-11-14): mercenary không còn được cộng điểm trong câu hoàn tất trận của đội (BR-ME15 sửa) | Đã đóng |
 | 7 | ~~Rủi ro ước lượng vị trí sân~~ — **đã xử lý** bằng làm tròn 0,5 km (MINOR 15) | Đã đóng |
 | 16 | ~~Đội tuyển đã giải tán trong chat theo đơn~~ — **user chốt 2026-11-15:** áp như chat hai đội — người đã giải tán đội tuyển chỉ xem (§4.7); 2.20 với người đó → `TEAM_016` (§4.5); +2 cột ở `findContext` (khối mercenary) và +2 cột ở `findMercenaryReportContext`, không thêm câu | Đã đóng |

@@ -1,5 +1,22 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v4.2] — 2026-11-16
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Đăng ký, mời vào đội, chấp nhận / từ chối lời mời, chuyển quyền đội trưởng, Admin tạm ngưng / kích hoạt lại đội tạo thông báo in-app (NOTIFICATION-001); người được mời lấy `invitationId` từ thông báo `TEAM_INVITATION` (chốt §6 #1); API USER-001 không đổi.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Hành vi 2.1/2.3, 2.12, 2.13, 2.14, 2.15, 2.19, 2.20 | Thêm | Thao tác thành công → thêm: người liên quan nhận thông báo in-app vài giây sau — đăng ký (2.1/2.3): người vừa đăng ký `WELCOME`; mời (2.12): người được mời `TEAM_INVITATION`; chấp nhận / từ chối lời mời (2.13 / 2.14): đội trưởng `TEAM_INVITATION_ACCEPTED` / `TEAM_INVITATION_REJECTED`; chuyển quyền (2.15): chỉ đội trưởng mới `CAPTAIN_TRANSFERRED`; Admin tạm ngưng / kích hoạt lại (2.19 / 2.20): đội trưởng `TEAM_MARKED_INACTIVE` / `TEAM_REACTIVATED`. Request, response, mã lỗi không đổi | AC-U01, AC-T02, UC-T03, UC-T04 / AC-T03 (chỉ đội trưởng mới nhận), UC-T05 — NOTIFICATION-001 (user chốt 2026-11-16) | Không đổi cách gọi; đọc thông báo qua NOTIFICATION-001 `API_Spec.md` 2.1 |
+| 2 | §6 #1; path param `invitationId` 2.13 (2.14 dùng như 2.13) | Chốt `[cần xác nhận]` | Chưa rõ người được mời lấy `invitationId` từ đâu (chặn luồng FE 2.13–2.14) → lấy từ `referenceId` của thông báo `TEAM_INVITATION`; rủi ro đã chấp nhận: thông báo là kênh duy nhất, có thể mất khi sự cố máy chủ hoặc hết hiển thị sau 30 ngày; endpoint "lời mời của tôi" để USER-003 | User chốt 2026-11-16 | Màn hình lời mời mở từ thông báo `TEAM_INVITATION` (`referenceId` → 2.13 / 2.14) |
+| 3 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE ngoài các mục trên | — | — |
+| 4 | Header 3 tài liệu | Ghi nhận | v4.1 → v4.2 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract USER-001: không đổi (path, body, response, mã lỗi).
+- Sửa chức năng đã code: thực hiện cùng đợt implement NOTIFICATION-001.
+
 ## [v4.1] — 2026-11-14
 
 **Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi) · **Tóm tắt:** Xoá tài khoản (2.7) tự rút các đơn ứng tuyển mercenary đang chờ / đã duyệt của trận chưa bắt đầu (kèo đã ghép hoặc trận ngoài chưa huỷ), không trừ điểm (BR-ME18).

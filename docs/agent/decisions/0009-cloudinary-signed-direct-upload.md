@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Trạng thái** | Proposed |
+| **Trạng thái** | Accepted (chủ repo chốt 2026-11-16) |
 | **Ngày** | 2026-11-09 |
 | **Người quyết định** | Chủ repo (chốt Cloudinary + signed upload, job dọn định kỳ, chỉ người xin chữ ký được lưu ảnh, 2026-11-09) · solution-architect (đề xuất cách thực hiện) |
 | **Liên quan** | `docs/agent/design/VENUE-001/` (`Component_Class_Design.md` §4.5, §4.12, §8; `Processing_Flow.md` §3.4–§3.5, §3.16, §9) · `docs/agent/security-backend.md` §12 · UC-V02, UC-V06, BR-V02, BR-V03 |

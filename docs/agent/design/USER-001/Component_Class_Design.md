@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 · v4.1: xoá tài khoản (2.7) cần bảng mercenary của V9 (MERCENARY-001 `Component_Class_Design.md` §5.1) — implement sau MERCENARY-001 phần dữ liệu |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.1** (solution-architect · 2026-11-14) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.2** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -110,7 +110,9 @@ OtpSentResponse sendOtp(SendOtpRequest request);           // mock, không chạ
 AuthResult verifyOtp(VerifyOtpRequest request);            // register-or-login, provider=phone
 AuthResponse refresh(RefreshTokenRequest request);
 ```
-`AuthResult` = record `(AuthResponse body, boolean isNewUser)`. Deps: `UserRepository`, `OAuthAccountRepository`, `JwtTokenService`, `JwtProperties` (`expiresIn` trong response), `TransactionTemplate` (tạo tài khoản, §4.6).
+`AuthResult` = record `(AuthResponse body, boolean isNewUser)`. Deps: `UserRepository`, `OAuthAccountRepository`, `JwtTokenService`, `JwtProperties` (`expiresIn` trong response), `TransactionTemplate` (tạo tài khoản, §4.6), `ApplicationEventPublisher` (v4.2).
+
+**v4.2 (NOTIFICATION-001 — thông báo chào mừng, AC-U01):** `createAccount` phát `UserRegisteredEvent(userId, occurredAt)` (`application/event/user`) **trong** `TransactionTemplate` tạo tài khoản, sau `saveAndFlush` liên kết OAuth — đăng ký song song đụng unique thì transaction rollback, không phát. Không thêm truy vấn; không đổi API. Người nghe: NOTIFICATION-001 `Component_Class_Design.md` §4.3, §4.9.
 
 ### 4.2. ProfileService
 ```java
@@ -131,7 +133,9 @@ PageResponse<CaptainHistoryResponse> listCaptainHistory(UUID teamId, int page, i
 ```
 `TeamStatusFilter` = enum `ACTIVE | INACTIVE | ALL`; `toQueryValue()` trả `null` cho `ALL`, còn lại `name()` (tham số `status` của `TeamRepository.findSummaries`).
 
-Deps: `UserRepository`, `TeamRepository`, `TeamMemberRepository`, `TeamCaptainHistoryRepository`, `ConcurrencyConflictRetrier`, `TeamMapper`, `PageRequestFactory`, `TeamGuard`.
+Deps: `UserRepository`, `TeamRepository`, `TeamMemberRepository`, `TeamCaptainHistoryRepository`, `ConcurrencyConflictRetrier`, `TeamMapper`, `PageRequestFactory`, `TeamGuard`, `ApplicationEventPublisher` (v4.2).
+
+**v4.2 (NOTIFICATION-001 — UC-T04, AC-T03; user chốt Q13 2026-11-16: chỉ đội trưởng mới nhận):** `transferCaptain` phát `CaptainTransferredEvent(teamId, newCaptainUserId, previousCaptainUserId, occurredAt)` (`application/event/team`) trong lambda retrier, sau bước ghi lịch sử đội trưởng (lần thử rollback → không phát). 2.15 giữ 6/6 truy vấn; không đổi API.
 
 **Phân trang dùng chung** (cho `TeamService`, `TeamMembershipService`, `AdminTeamService`):
 - `PageRequestFactory` là `@Component`, inject vào service; dựng `Pageable` từ `page` (bắt đầu 1) + `pageSize`.
@@ -145,7 +149,9 @@ void rejectInvitation(UUID invitationId, UUID userId);
 PageResponse<MemberResponse> listMembers(UUID teamId, int page, int pageSize);
 void leaveTeam(UUID teamId, UUID userId);
 ```
-Deps: `UserRepository`, `TeamMemberRepository`, `ConcurrencyConflictRetrier`, `MembershipMapper`, `PageRequestFactory`, `TeamGuard` (không inject `TeamRepository` trực tiếp).
+Deps: `UserRepository`, `TeamMemberRepository`, `ConcurrencyConflictRetrier`, `MembershipMapper`, `PageRequestFactory`, `TeamGuard` (không inject `TeamRepository` trực tiếp), `ApplicationEventPublisher` (v4.2).
+
+**v4.2 (NOTIFICATION-001 — thông báo lời mời, AC-T02, UC-T03):** `inviteMember` phát `TeamInvitationCreatedEvent(invitationId, teamId, inviteeUserId, occurredAt)` (`application/event/team`) trong lambda retrier, sau `saveAndFlush` lời mời (lần thử rollback → không phát). 2.12 giữ 6/6 truy vấn. `acceptInvitation` / `rejectInvitation` phát `TeamInvitationRespondedEvent(invitationId, teamId, accepted, occurredAt)` trong lambda retrier, sau `save` lời mời (2.13 giữ 4, 2.14 giữ 3 truy vấn). Lời mời bị từ chối tự động khi người được mời xoá tài khoản (2.7) không phát. Không đổi API. Người nghe: NOTIFICATION-001 `Component_Class_Design.md` §4.3, §4.9.
 
 ### 4.5. AdminTeamService
 ```java
@@ -153,7 +159,8 @@ AdminTeamResponse markInactive(UUID teamId, MarkInactiveRequest request);
 AdminTeamResponse reactivate(UUID teamId);
 PageResponse<AdminTeamSummaryResponse> listTeams(TeamStatusFilter status, int page, int pageSize);
 ```
-Deps: `TeamRepository`, `TeamMemberRepository`, `ConcurrencyConflictRetrier`, `TeamMapper`, `MembershipMapper`, `PageRequestFactory`, `TeamGuard` (không phụ thuộc `TeamService`).
+Deps: `TeamRepository`, `TeamMemberRepository`, `ConcurrencyConflictRetrier`, `TeamMapper`, `MembershipMapper`, `PageRequestFactory`, `TeamGuard` (không phụ thuộc `TeamService`), `ApplicationEventPublisher` (v4.2).
+- **v4.2 (NOTIFICATION-001 — UC-T05):** `markInactive` / `reactivate` phát `TeamStatusChangedByAdminEvent(teamId, status, occurredAt)` (`status` = `INACTIVE` / `ACTIVE`, `application/event/team`) trong lambda retrier, sau `UPDATE` trạng thái. 2.19 giữ 3, 2.20 giữ 4 truy vấn; không đổi API.
 - Response Admin không che user đã xoá, kèm cờ `is…Deleted` (`API_Spec.md` §1.1, ADR-0002 sửa đổi 2026-11-12).
 - `markInactive`/`reactivate` đọc lại chi tiết qua helper private `adminDetail(teamId)`: `teamRepository.findDetailById` (cùng projection `TeamDetailView` với `TeamService#getTeam`) → `TeamMapper#toAdminResponse`; không thấy → `TEAM_001`. Không gọi `TeamService#getTeam` vì method đó trả `TeamResponse` đã che tên.
 

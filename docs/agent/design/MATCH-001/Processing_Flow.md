@@ -5,9 +5,9 @@
 | Mã chức năng | `MATCH-001` |
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
-| Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + VENUE-001 `Component_Class_Design.md` §4.9 · ADR-0011, ADR-0012, ADR-0013 (`Proposed`) |
+| Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + VENUE-001 `Component_Class_Design.md` §4.9 · ADR-0011, ADR-0012, ADR-0013 |
 | Ràng buộc dữ liệu | V1 + V5 + `V6__match_flow_a_lifecycle.sql` (`Component_Class_Design.md` §5.1) · đợt MATCH-002 (nhánh luồng B — `Component_Class_Design.md` §1.1): + `V7__match_flow_b_pairing.sql` (MATCH-002 `Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.4** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.5** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -37,7 +37,7 @@ Chuyển từ `API_Spec.md` v1.0 §2.0 (nội bộ BE; `API_Spec.md` chỉ giữ
 | 2.17 | Bean Validation (cursor) → `CHAT_002` → `USER_001` → `CHAT_003` → `CHAT_001` |
 | 2.18, 2.19 | `CHAT_002` → `USER_001` → `CHAT_003` (người đã giải tán đội của mình: được, chỉ xem) |
 | 2.20 | Bean Validation (`page`, `pageSize`) → `USER_001` (cột của câu đếm). Danh sách rỗng khi người gọi không tham gia cuộc trò chuyện nào |
-| STOMP `SUBSCRIBE` | destination không khớp `/topic/conversations/{UUID}` → `ERROR` → `AUTH_001` (token hết hạn) → `CHAT_002` → `USER_001` → `CHAT_003` |
+| STOMP `SUBSCRIBE` | destination không khớp một trong hai mẫu (`/topic/conversations/{UUID}`, `/user/queue/notifications`) → `ERROR` → `AUTH_001` (token hết hạn) → (chỉ `/topic/conversations/{UUID}`) `CHAT_002` → `USER_001` → `CHAT_003` |
 
 Chat (v2.4): quyền (`CHAT_003`) đứng trước nhánh lazy của 2.16 để người không tham gia không kích hoạt chuyển `EXPIRED`. Đội đã giải tán: người đã bấm giải tán → bên của đội đó, chỉ xem (2.16 → `CHAT_004`); thành viên khác → `CHAT_003` (user chốt 2026-11-15).
 
@@ -243,7 +243,7 @@ Q1 `requireCaptainAllowInactive(teamId, callerId)` → Q2/Q3 `findByRequesterTea
 2.13/2.14: `SportRepository` page (sort trong tên method). 2.15 (`@Transactional`): Q1 `findById` → `SPORT_001` → khác giá trị → setter → Q2 UPDATE lúc commit → `adminAuditLog.afterCommit("SET_SPORT_ACTIVE", …)`; giống giá trị → không ghi, không audit.
 
 ### 3.15. `POST /conversations/{id}/messages` (retrier `MATCH_014`) — 2.16
-Bean Validation (`content` ≤ 1000, không rỗng sau trim) → lần thử: Q1 `conversationRepository.findContext(id, callerId, now)` → rỗng → `CHAT_002` → `callerDeleted` → `USER_001` → policy theo `contextType` (`Component_Class_Design.md` §4.14) → `viewerParty = null` → `CHAT_003` → `expiryDue` (chỉ `TEAM_MATCH`) → [lazy] `matchExpiry.expireIfDue(matchId, authorTeamId, matchType, now)` (U match + U yêu cầu `PENDING` (kèo A) / pairing `NEGOTIATING` (kèo B) + `MatchExpiredEvent`) → trả `Expired` → commit → `MATCH_004` → `!canSend` → `CHAT_004` → Q2 `ConversationMessage.builder()` `save` (INSERT lúc commit; id v7 sinh trước khi INSERT nên response dựng được trước commit) → `publishAfterCommit(conversationId, MESSAGE_CREATED)` → response. Người gửi lấy từ cột caller của Q1, bên gửi = `viewerParty` — không truy vấn thêm. `expireIfDue` 0 dòng (job / request khác vừa chuyển) → vẫn trả `Expired` → `MATCH_004`.
+Bean Validation (`content` ≤ 1000, không rỗng sau trim) → lần thử: Q1 `conversationRepository.findContext(id, callerId, now)` → rỗng → `CHAT_002` → `callerDeleted` → `USER_001` → policy theo `contextType` (`Component_Class_Design.md` §4.14) → `viewerParty = null` → `CHAT_003` → `expiryDue` (chỉ `TEAM_MATCH`) → [lazy] `matchExpiry.expireIfDue(matchId, authorTeamId, matchType, now)` (U match + U yêu cầu `PENDING` (kèo A) / pairing `NEGOTIATING` (kèo B) + `MatchExpiredEvent`) → trả `Expired` → commit → `MATCH_004` → `!canSend` → `CHAT_004` → Q2 `ConversationMessage.builder()` `save` (INSERT lúc commit; id v7 sinh trước khi INSERT nên response dựng được trước commit) → `publishAfterCommit(conversationId, MESSAGE_CREATED)` → (v2.5, NOTIFICATION-001) `userRealtimeGateway.publishAfterCommit(người xem được − người gửi, CONVERSATION_ACTIVITY)` — người xem được lấy từ cột id đội trưởng / người giải tán của Q1 (`Component_Class_Design.md` §4.14) → response. Người gửi lấy từ cột caller của Q1, bên gửi = `viewerParty` — không truy vấn thêm. `expireIfDue` 0 dòng (job / request khác vừa chuyển) → vẫn trả `Expired` → `MATCH_004`.
 
 ### 3.16. `GET /conversations/{id}/messages` (readOnly) — 2.17
 Bean Validation (`@ValidChatCursor`, `limit` 1..100, mặc định 50) → Q1 `findContext` → `CHAT_002` → `USER_001` → policy → `CHAT_003` → có con trỏ: Q2 `findCursor(conversationId, messageId)` → rỗng → `CHAT_001` → Q3 `findBefore` / `findAfter` (hoặc Q2 `findLatest`) với `limit + 1`, JOIN người gửi trong cùng câu → `hasMore` → cắt `limit` → mapper che người gửi đã xoá tài khoản, `senderPartyId` theo bên A/B của ctx. Thứ tự: không con trỏ / `before` → `created_at DESC, id DESC`; `after` → `ASC`.
@@ -259,7 +259,8 @@ Bean Validation → Q1 `countMine(callerId)` → `callerDeleted` → `USER_001`;
 
 ### 3.20. STOMP
 - `CONNECT`: giải mã JWT (không DB) → lưu user + `exp`.
-- `SUBSCRIBE /topic/conversations/{id}`: destination khác mẫu (gồm wildcard `/topic/**`, mẫu cũ `/topic/pairings/{id}`) → `ERROR`; header `selector` (nếu client gửi) bị bỏ qua (broker tắt selector); `exp ≤ now` → `AUTH_001`; Q1 `conversationService.requireSubscribable` (ctx + policy, mọi trạng thái) → `CHAT_002`/`USER_001`/`CHAT_003`.
+- `SUBSCRIBE /user/queue/notifications` (v2.5 — NOTIFICATION-001): đúng nguyên văn → `exp ≤ now` → `AUTH_001` → chấp nhận, không truy vấn (hàng đợi gắn principal của phiên).
+- `SUBSCRIBE /topic/conversations/{id}`: destination khác hai mẫu (gồm `/queue/**` thô, `/user/…` khác mẫu, wildcard `/topic/**`, mẫu cũ `/topic/pairings/{id}`) → `ERROR`; header `selector` (nếu client gửi) bị bỏ qua (broker tắt selector); `exp ≤ now` → `AUTH_001`; Q1 `conversationService.requireSubscribable` (ctx + policy, mọi trạng thái) → `CHAT_002`/`USER_001`/`CHAT_003`.
 - Đẩy: `afterCommit` của 2.16 (và MATCH-002 2.5–2.7, MERCENARY-001 2.11–2.13) → `convertAndSend("/topic/conversations/" + id)`. Lỗi gửi → log `WARN` (`conversationId`, loại frame), không ảnh hưởng response.
 
 ## 4. Transaction Boundary

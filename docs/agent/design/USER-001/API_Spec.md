@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.9) — UC-U01..U03, UC-T01..T05, BR-U01..U06, BR-T01..T06, BR-ME18 (xoá tài khoản rút đơn mercenary — v4.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.1** (solution-architect · 2026-11-14) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.2** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -569,7 +569,7 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
 
 | Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
 |---|---|---|---|---|
-| `invitationId` | UUID | Có | `invitationId` từ response 2.12 | `"0193a1d0-2222-7abc-9def-0123456789cd"` |
+| `invitationId` | UUID | Có | `referenceId` của thông báo `TEAM_INVITATION` mà người được mời nhận (NOTIFICATION-001 `API_Spec.md` §4.2, §4.3; xem §6 #1 tài liệu này) | `"0193a1d0-2222-7abc-9def-0123456789cd"` |
 
 **Request:** không body.
 
@@ -1104,7 +1104,7 @@ Kiểu `datetime` = chuỗi ISO-8601 kèm offset (§1.1). "Null?" = có thể l�
 
 Khoảng trống phạm vi nghiệp vụ: FE cần nhưng chưa có endpoint, SRS (`business-spec/SYSTEM-001/`) chưa đặc tả — cần BA bổ sung và chốt làm ở mã nào. Không chặn code BE của USER-001; mức chặn luồng FE ghi ở từng mục.
 
-1. `[cần xác nhận]` Người được mời lấy `invitationId` từ đâu: UC-T03 bước 1 "User xem lời mời trong notification", nhưng thông báo ngoài phạm vi và chưa có endpoint "lời mời của tôi". **Chặn luồng FE 2.13–2.14.**
+1. ~~`[cần xác nhận]` Người được mời lấy `invitationId` từ đâu: UC-T03 bước 1 "User xem lời mời trong notification", nhưng thông báo ngoài phạm vi và chưa có endpoint "lời mời của tôi". **Chặn luồng FE 2.13–2.14.**~~ — **Đã chốt (user, 2026-11-16):** người được mời biết lời mời qua thông báo in-app loại `TEAM_INVITATION` (NOTIFICATION-001 `API_Spec.md` §4.2, §4.3): `referenceType = TEAM_INVITATION`, `referenceId` = `invitationId` dùng cho 2.13 / 2.14. **Rủi ro đã chấp nhận:** đây là kênh duy nhất — thông báo có thể không được tạo (sự cố máy chủ ngay sau khi mời — NOTIFICATION-001 `API_Spec.md` §1.3) và không còn hiển thị sau 30 ngày trong khi lời mời không hết hạn; khi đó người được mời không tìm lại được lời mời. Endpoint "lời mời của tôi" để USER-003 làm sau. Không còn chặn luồng FE 2.13–2.14.
 2. `[cần xác nhận]` Đội trưởng lấy `userId` để mời từ đâu: UC-T02 bước 2 cho nhập "ID/username", còn 2.12 chỉ nhận `userId` và chưa có endpoint tìm người dùng. **Chặn luồng FE 2.12.**
 3. `[cần xác nhận]` FE lấy `wardId` từ đâu: chưa có endpoint danh mục tỉnh/thành, phường/xã. **Chặn chọn khu vực ở 2.6** (các field khác của 2.6 không bị chặn).
 4. `[cần xác nhận]` Chưa có endpoint "đội của tôi": 2.10 trả mọi đội trong hệ thống. Không chặn luồng nào; FE chưa lọc được đội mình tham gia.

@@ -5,9 +5,9 @@
 | Mã chức năng | `VENUE-001` |
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · Cloudinary (ký/xác minh cục bộ trong request; Admin API chỉ trong job dọn asset) |
-| Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §10 · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) (`Proposed`) |
+| Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §10 · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (§5.1); entity hiện có `domain/.../entity/venue/{Venue,VenueImage,VenueReport}` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.1** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.2** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -35,7 +35,7 @@ application/   com.phananh.arenaflow.application
 ├── service/         VenueService, VenueImageService, AdminVenueService, VenueSelectionService,
 │   │                VenueAlertService, VenueImageCleanupService, VenueStatusFilter, VenueReportStatusFilter
 │   └── impl/        *ServiceImpl
-├── event/           VenueReportedEvent, VenueAdminAlertEvent, VenueAlertType (package mới)
+├── event/           VenueAdminAlertEvent, VenueAlertType (package mới) — v4.2: bỏ VenueReportedEvent
 ├── support/         VenueGuard, AdminAuditLog (mới), ConcurrencyConflictRetrier (sửa — §4.9)
 │   ├── security/    CurrentActor (mới)
 │   ├── storage/     ImageUploadSigner, UploadSignature, SignedPublicId, CloudinaryImageUploadSigner,
@@ -180,12 +180,10 @@ void markSelected(Collection<UUID> venueIds, OffsetDateTime selectedAt); // MAND
 
 ### 4.7. Domain event (`application/event`)
 ```java
-public record VenueReportedEvent(UUID reportId, UUID venueId, String venueName, UUID reporterId,
-                                 VenueReport.Reason reason, OffsetDateTime reportedAt) {}
 public record VenueAdminAlertEvent(UUID venueId, String venueName, VenueAlertType alertType, OffsetDateTime triggeredAt) {}
 public enum VenueAlertType { STALE_180_DAYS, CLOSURE_REPORTED }
 ```
-Phát trong transaction ghi; hợp đồng listener (NOTIFICATION-001): `@TransactionalEventListener(AFTER_COMMIT)` (ADR-0003 §Cần theo dõi). VENUE-001 không có listener. Payload không chứa PII ngoài id. Không có event xoá ảnh (job dọn tự đối chiếu DB). Quy ước event: `[cần xác nhận #10]`.
+Phát trong transaction ghi; hợp đồng listener (NOTIFICATION-001): `@TransactionalEventListener(AFTER_COMMIT)` (ADR-0003 §Cần theo dõi). VENUE-001 không có listener. **v4.2 (NOTIFICATION-001, user chốt Q8 2026-11-16):** Admin chỉ nhận thông báo theo `VenueAdminAlertEvent` (một lần mỗi đợt — BC-V05), không theo từng report → bỏ `VenueReportedEvent` (không người nghe; ADR-0011 chỉ dùng event cho thông báo / dữ liệu dẫn xuất). Payload không chứa PII ngoài id. Không có event xoá ảnh (job dọn tự đối chiếu DB). Quy ước event: [ADR-0011](../../decisions/0011-domain-events-after-commit.md).
 
 ### 4.8. VenueAlertService + scheduler (cảnh báo 180 ngày, BC-V05)
 `int alertStaleVenues()` — mỗi lô một `TransactionTemplate`. `VenueStaleAlertScheduler`: `@Scheduled(cron = "${arenaflow.venue.stale-alert.cron}", zone = "Asia/Ho_Chi_Minh")`, không logic. `SchedulingConfig`: `@EnableScheduling`. Cron `-` = tắt (dùng trong test). Tham số: §8. Luồng: `Processing_Flow.md` §3.14.
@@ -437,7 +435,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 | `docs/agent/convention-backend.md` §1 | Package `application/event/`, `application/support/storage/`, `api/scheduler/`; `@CurrentUser CurrentActor` | `chore/agent-framework-*` |
 | `docs/agent/design/USER-001/Component_Class_Design.md` §9.4, `Processing_Flow.md` §5 | Resolver hỗ trợ `CurrentActor`; retrier có overload mã lỗi | `feature/VENUE-001-*` (+ `USER-001/CHANGELOG.md`) |
 | `docs/agent/decisions/0003-optimistic-locking-strategy.md` | Mục Sửa đổi 2026-11-09 (đã viết sẵn trong thay đổi thiết kế này) — kiểm lại khớp code | Cùng nhánh thiết kế |
-| `docs/agent/decisions/0009-*.md` | `Proposed` → `Accepted` khi user duyệt qua PR | Theo PR |
+| `docs/agent/decisions/0009-*.md` | `Proposed` → `Accepted` — đã chốt 2026-11-16 | Đã xong |
 
 ## 12. Danh sách [cần xác nhận]
 
@@ -447,7 +445,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 |---|---|---|
 | 8 | Tìm `q` bằng `ILIKE '%…%'` không có index phù hợp; nhanh hơn cần `pg_trgm` + GIN (kiểm extension Neon) | Không chặn |
 | 9 | **Cloudinary upload chưa chạy thử:** cách nối chuỗi chữ ký response; `allowed_formats` và `overwrite=false` có được ký và có tác dụng chặn không; ký tự `-`/`_` trong `public_id`; giới hạn kích thước file (chữ ký không chặn được); hành vi khi vượt 25 credit/tháng; chế độ "dynamic folders" với `/` trong `public_id` | **Chặn code** — spike trên cloud dev trước khi viết `CloudinaryImageUploadSigner` |
-| 10 | ADR riêng cho quy ước domain event (VENUE-001 đặt tiền lệ) trước MATCH-001 / NOTIFICATION-001 | Không chặn |
+| 10 | ~~ADR riêng cho quy ước domain event (VENUE-001 đặt tiền lệ) trước MATCH-001 / NOTIFICATION-001~~ — **Đã chốt:** ADR-0011 `Accepted` (2026-11-16) | Đã đóng |
 | 11 | Spring Data chạy native `UPDATE … RETURNING` không `@Modifying` (§5.2) | **Chặn code** job 180 ngày — kiểm bằng integration test đầu tiên; có phương án dự phòng |
 | 12 | **Admin API Cloudinary** (đã tra tài liệu, chưa chạy thử): list `prefix` ≤500 + `next_cursor`; xoá ≤100 `public_ids[]` (định dạng tham số mảng khi gọi HTTP thuần), map `deleted` + `partial`; gói free 500 request/giờ, vượt → 420, header `X-FeatureRateLimit-*`; `invalidate` CDN mặc định tắt; `prefix` với "dynamic folders" | **Chặn code** job dọn — spike trên cloud dev |
 | 13 | Grace period user đã xoá: 2.4–2.7, 2.12, 2.13 chỉ dựa JWT → tối đa 1h sau xoá tài khoản vẫn ghi được (mức USER-001 `Processing_Flow.md` §9) | Không chặn |
