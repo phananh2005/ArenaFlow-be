@@ -619,7 +619,86 @@ test('R2-M2: ảnh chụp của máy khác đã cũ (nội dung đã lên origin
   assert.equal(git(a, 'show', `${remoteRefs(a)['refs/wip/feature/X-001-demo']}:other.md`), 'A dở');
 });
 
+test('R3-M1: ảnh chụp máy kia đụng độ → từ chối trước khi đụng vào gì (không stash, không chuyển nhánh); --skip gỡ chặn push', () => {
+  const { a, b } = setup();
+  git(b, 'switch', '-q', '-c', 'feature/X-001-demo', 'origin/feature/X-001-demo');
+  write(b, 'note.md', 'v1\n');
+  assert.equal(run(b, 'push').status, 0);
+  commitFile(b, 'note.md', 'v2\n', 'docs: note v2');
+  git(b, 'push', '-q', 'origin', 'feature/X-001-demo');
+
+  git(a, 'fetch', '-q', 'origin');
+  git(a, 'merge', '-q', '--ff-only', 'origin/feature/X-001-demo');
+  const headA = git(a, 'rev-parse', 'HEAD');
+  write(a, 'a.md', 'A dở\n');
+  assert.equal(run(a, 'push').status, 1, 'ảnh chụp chưa cũ của máy khác vẫn chặn');
+
+  const applied = run(a, 'apply', 'feature/X-001-demo', '--stash');
+  assert.equal(applied.status, 1);
+  assert.match(applied.stderr, /đụng độ/);
+  assert.match(applied.stderr, /note\.md/);
+  assert.match(applied.stderr, /--skip/);
+  assert.equal(tryGit(a, 'stash', 'list').stdout, '', 'không được stash khi biết trước sẽ đụng độ');
+  assert.equal(git(a, 'branch', '--show-current'), 'feature/X-001-demo');
+  assert.equal(git(a, 'rev-parse', 'HEAD'), headA);
+  assert.equal(read(a, 'a.md'), 'A dở\n');
+
+  const skipped = run(a, 'apply', 'feature/X-001-demo', '--skip');
+  assert.equal(skipped.status, 0, skipped.stderr);
+  assert.equal(read(a, 'a.md'), 'A dở\n', '--skip không đổi working tree');
+  const pushed = run(a, 'push');
+  assert.equal(pushed.status, 0, pushed.stderr);
+  assert.equal(git(a, 'show', `${remoteRefs(a)['refs/wip/feature/X-001-demo']}:a.md`), 'A dở');
+});
+
+test('R3-#3: máy chưa có nhánh, áp lên đầu origin bị đụng độ → không tạo nhánh, không chuyển nhánh', () => {
+  const { dir, a, b } = setup();
+  const c = path.join(dir, 'c');
+  git(dir, 'clone', '-q', path.join(dir, 'origin.git'), c);
+  originMovesAhead(b, 'README.md', 'B sửa\n');
+  write(a, 'README.md', 'A sửa\n');
+  assert.equal(run(a, 'push').status, 0);
+
+  const result = run(c, 'apply', 'feature/X-001-demo');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /đụng độ/);
+  assert.equal(git(c, 'branch', '--show-current'), 'main');
+  assert.notEqual(tryGit(c, 'rev-parse', '--verify', '--quiet', 'refs/heads/feature/X-001-demo').status, 0);
+});
+
+test('R3-M2: rất nhiều file dở (đường dẫn dài) + origin đi trước → list/push không crash', () => {
+  const { a, b } = setup();
+  originMovesAhead(b, 'from-b.md', 'B\n');
+  git(b, 'switch', '-q', 'main');
+  const deep = 'src/main/java/com/arenaflow/backend/module/notification/application/service/internal/handler';
+  for (let i = 0; i < 1000; i++) write(a, `${deep}/GeneratedNotificationHandler${i}.java`, `class H${i} {}\n`);
+  assert.equal(run(a, 'push').status, 0);
+
+  const listed = run(b, 'list', '--json');
+  assert.equal(listed.status, 0, listed.stderr);
+  assert.equal(JSON.parse(listed.stdout)[0].stale, false);
+  const pushed = run(b, 'push', '--dry-run');
+  assert.equal(pushed.status, 0, pushed.stderr);
+});
+
+test('R3-#5: refs/wip/<nhánh> không hợp lệ → push báo riêng; --skip gỡ chặn', () => {
+  const { a } = setup();
+  pushCrafted(a, 'refs/wip/feature/X-001-demo', 'commit thường\n');
+  write(a, 'note.md', 'x\n');
+  const refused = run(a, 'push');
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /không phải ảnh chụp/);
+  assert.doesNotMatch(refused.stderr, /lưu \?/);
+  assert.equal(run(a, 'apply', 'feature/X-001-demo', '--skip').status, 0);
+  assert.equal(run(a, 'push').status, 0);
+});
+
 test('tham số sai → exit 2', () => {
+  const { a: repo } = setup();
+  assert.equal(run(repo, 'apply', 'feature/X-001-demo', '--skip', '--stash').status, 2, '--skip không đi cùng --stash');
+});
+
+test('tham số sai (cơ bản) → exit 2', () => {
   const { a } = setup();
   assert.equal(run(a).status, 2);
   assert.equal(run(a, 'lam-gi-do').status, 2);

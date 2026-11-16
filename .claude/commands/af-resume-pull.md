@@ -40,13 +40,16 @@ node docs/agent/scripts/wip-handoff.cjs list
 
 ### Bước 3 — Áp (chỉ ảnh chụp user đã chọn; các ảnh chụp chỉ-commit trước, ảnh chụp có file dở sau cùng)
 ```bash
-node docs/agent/scripts/wip-handoff.cjs apply <nhánh> [--stash]
+node docs/agent/scripts/wip-handoff.cjs apply <nhánh> [--stash | --skip]
 ```
-- Nhánh local chưa có → tạo tại base (upstream `origin/<nhánh>` nếu có); đi sau → fast-forward tới base; ảnh chụp có file dở →
-  checkout nhánh, `cherry-pick --no-commit` + `reset` → file về trạng thái **chưa commit** (staging không được giữ),
-  nhánh **không** chứa commit tạm.
-- Áp lên đầu nhánh bị **đụng độ** → script tự huỷ (`reset --merge`), working tree trở về như trước khi áp, in file đụng độ
-  và lệnh áp tay. Báo user; **NEVER** tự sửa đụng độ khi user chưa yêu cầu. Nếu đã `--stash` trước đó → nhắc stash vẫn còn.
+- Nhánh local chưa có → tạo tại base, hoặc tại `origin/<nhánh>` khi phải áp lên đầu nhánh (upstream `origin/<nhánh>` nếu có);
+  đi sau → fast-forward tới base; đi trước → giữ nguyên. Ảnh chụp có file dở → checkout nhánh, `cherry-pick --no-commit` + `reset`
+  → file về trạng thái **chưa commit** (staging không được giữ), nhánh **không** chứa commit tạm.
+- Áp lên đầu nhánh: script **thử trước trong bộ nhớ** (`git merge-tree`). Sẽ **đụng độ** → từ chối khi **chưa** stash / chuyển /
+  tạo nhánh, in file đụng độ. **Hỏi user** chọn:
+  - áp tay (lệnh script in sẵn) — **NEVER** tự sửa đụng độ khi user chưa yêu cầu;
+  - ảnh chụp đã lỗi thời → `apply <nhánh> --skip` (chỉ ghi nhận đã xem; không đổi working tree, không xoá ref) → `/af-handoff-push` được ghi đè nó;
+  - để nguyên, xử lý sau.
 - Máy này ghi nhận đã lấy ảnh chụp (`refs/wip-seen/<nhánh>`) → `/af-handoff-push` sau đó được phép ghi đè nó.
 - Exit 1 → báo nguyên văn, **dừng** các ảnh chụp còn lại, hỏi user.
 

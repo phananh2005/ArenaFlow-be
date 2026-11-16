@@ -4,7 +4,7 @@
 // Dùng (chạy tại gốc repo):
 //   node wip-handoff.cjs push [--dry-run] [--force-overwrite]  Ảnh chụp mọi nhánh local chưa đồng bộ → push refs/wip/*
 //   node wip-handoff.cjs list [--json]                         Fetch refs/wip/* và liệt kê ảnh chụp + trạng thái
-//   node wip-handoff.cjs apply <nhánh> [--stash]               Đưa nhánh local tới base của ảnh chụp, áp file dở
+//   node wip-handoff.cjs apply <nhánh> [--stash | --skip]      Áp ảnh chụp (--skip: đánh dấu lỗi thời, không áp)
 // Exit: 0 thành công · 1 lỗi/từ chối vì an toàn · 2 sai tham số.
 //
 // Mỗi máy có mã riêng (git config --local wip-handoff.machine) ghi vào trailer WIP-Machine. Ảnh chụp trên remote
@@ -191,8 +191,22 @@ function isStale(root, originTip, base, sha, dirty) {
   if (!originTip || !isAncestor(root, base, originTip)) return false;
   if (!dirty) return true;
   if (originTip === base) return false;
-  const paths = git(root, ['diff', '--name-only', '--no-renames', '-z', base, sha]).split('\0').filter(Boolean);
-  return git(root, ['diff', '--quiet', sha, originTip, '--', ...paths], { allowFail: true }).status === 0;
+  // So hai danh sách file trong JS (không truyền pathspec — tránh vượt giới hạn dòng lệnh khi có rất nhiều file).
+  const changed = new Set(diffNames(root, base, sha));
+  return !diffNames(root, sha, originTip).some(p => changed.has(p));
+}
+
+function diffNames(root, from, to) {
+  return git(root, ['diff', '--name-only', '--no-renames', '-z', from, to]).split('\0').filter(Boolean);
+}
+
+// Thử áp ảnh chụp (diff base..sha) lên `onto` trong bộ nhớ, không đụng working tree/index/nhánh.
+// Trả danh sách file đụng độ (rỗng = áp sạch).
+function conflictsOnto(root, base, onto, sha) {
+  const result = git(root, ['merge-tree', '--write-tree', '--name-only', '--no-messages', `--merge-base=${base}`, onto, sha], { allowFail: true });
+  if (result.status === 0) return [];
+  if (result.status === 1) return lines(result.stdout).slice(1);
+  throw new Refusal(`Không thử áp được bằng git merge-tree (cần Git ≥ 2.40): ${(result.stderr || '').trim()}`);
 }
 
 // Đọc ảnh chụp ở ref; trả { invalid } nếu không phải ảnh chụp hợp lệ của lệnh này.
@@ -246,6 +260,7 @@ function push(root, { dryRun, forceOverwrite }) {
   const saved = nowLocal();
   const snapshots = [];
   const conflicts = [];
+  const invalidRefs = [];
   const warnings = missing.map(p => `Bỏ qua worktree đã mất thư mục: ${p} (dọn bằng git worktree prune nếu không cần)`);
   const detachedDirty = detached.filter(isDirty);
 
@@ -265,6 +280,10 @@ function push(root, { dryRun, forceOverwrite }) {
     if (remoteSha && !forceOverwrite && remoteSha !== tryRev(root, `${SEEN_PREFIX}${branch}`)) {
       const other = readSnapshot(root, ref, remoteSha);
       const otherMachine = parseTrailers(git(root, ['log', '-1', '--format=%B', remoteSha]))['WIP-Machine'];
+      if (other.invalid) {
+        invalidRefs.push(other.invalid);
+        continue;
+      }
       // Ảnh chụp đã cũ (nội dung đã lên origin) thì ghi đè không mất gì.
       if (!other.stale && (!myMachine || otherMachine !== myMachine)) {
         conflicts.push(`${branch} (ảnh chụp lưu ${other.saved || '?'})`);
@@ -281,11 +300,13 @@ function push(root, { dryRun, forceOverwrite }) {
   }
 
   for (const w of warnings) process.stderr.write(`Cảnh báo: ${w}\n`);
-  if (conflicts.length) {
+  if (conflicts.length || invalidRefs.length) {
     throw new Refusal([
-      'Dừng: máy khác đã đẩy ảnh chụp mới hơn mà máy này chưa lấy về — không đẩy gì:',
-      ...conflicts.map(c => `  - ${c}`),
-      'Chạy /af-resume-pull trước; chắc chắn muốn ghi đè thì chạy lại với --force-overwrite.',
+      'Dừng — không đẩy gì:',
+      ...(conflicts.length ? ['Ảnh chụp do máy khác đẩy, mới hơn và máy này chưa lấy về:', ...conflicts.map(c => `  - ${c}`)] : []),
+      ...(invalidRefs.length ? ['Ref không phải ảnh chụp hợp lệ của lệnh này:', ...invalidRefs.map(c => `  - ${c}`)] : []),
+      'Chạy /af-resume-pull trước. Áp không được (đụng độ) / ảnh chụp đó đã lỗi thời → apply <nhánh> --skip;',
+      'chắc chắn muốn ghi đè thì chạy lại push với --force-overwrite.',
     ].join('\n'));
   }
 
@@ -376,12 +397,19 @@ function list(root, { json }) {
   return 0;
 }
 
-function apply(root, branch, { stash }) {
+function apply(root, branch, { stash, skip }) {
   const ref = `${WIP_PREFIX}${branch}`;
   const exists = git(root, ['ls-remote', '--exit-code', REMOTE, ref], { allowFail: true });
   if (exists.status !== 0) throw new Refusal(`Không có ảnh chụp ${ref} trên ${REMOTE}.`);
   fetchWip(root, ref);
-  const snap = readSnapshot(root, ref, git(root, ['rev-parse', ref]));
+  const sha = git(root, ['rev-parse', ref]);
+  if (skip) {
+    // User quyết định ảnh chụp này lỗi thời: chỉ ghi nhận đã xem để push không bị chặn; không đổi gì khác, không xoá ref.
+    git(root, ['update-ref', `${SEEN_PREFIX}${branch}`, sha]);
+    console.log(`Đã đánh dấu bỏ qua ${ref} (${sha.slice(0, 7)}) — /af-handoff-push sẽ được ghi đè nó. Ảnh chụp vẫn còn trên ${REMOTE}.`);
+    return 0;
+  }
+  const snap = readSnapshot(root, ref, sha);
   if (snap.invalid) throw new Refusal(snap.invalid);
   if (snap.stale) throw new Refusal(`Ảnh chụp ${ref} (lưu ${snap.saved}) cũ hơn nhánh ${REMOTE}/${branch} (nội dung đã có trên ${REMOTE}) — không áp; pull nhánh thật thay vào đó.`);
   if (snap.local === 'diverged') throw new Refusal(`Nhánh local ${branch} lệch lịch sử với ảnh chụp — không áp; cần xử lý tay.`);
@@ -397,11 +425,28 @@ function apply(root, branch, { stash }) {
   const currentBranch = currentBranchOf(root);
   const touchesWorkingTree = snap.dirty || (currentBranch === branch && snap.local === 'behind');
 
+  // Áp lên đầu nhánh: thử trước trong bộ nhớ — đụng độ thì từ chối khi CHƯA stash/chuyển/tạo nhánh.
+  if (snap.onto) {
+    const ontoCommit = snap.local === 'missing' ? snap.originTip : snap.head;
+    const conflicted = conflictsOnto(root, snap.base, ontoCommit, snap.sha);
+    if (conflicted.length) {
+      throw new Refusal([
+        `Áp ${ref} (lưu ${snap.saved}) lên đầu nhánh ${branch} sẽ bị đụng độ — không áp, chưa thay đổi gì.`,
+        `File đụng độ: ${conflicted.join(', ')}`,
+        'Chọn một:',
+        `  - áp tay: git switch ${branch} && git cherry-pick --no-commit ${ref} → sửa đụng độ → git reset`,
+        `  - ảnh chụp đã lỗi thời: wip-handoff.cjs apply ${branch} --skip (không xoá gì; push được ghi đè nó)`,
+      ].join('\n'));
+    }
+  }
+
+  let stashed = false;
   if (touchesWorkingTree && isDirty(root)) {
     if (!stash) {
       throw new Refusal('Working tree đang có thay đổi chưa commit (có thể từ ảnh chụp vừa áp — mỗi working tree chỉ chứa được một ảnh chụp có file dở) — không áp. Commit/stash trước, hoặc chạy lại với --stash.');
     }
     git(root, ['stash', 'push', '--include-untracked', '-m', `wip-handoff: cất trước khi áp ${ref} (${nowLocal()})`]);
+    stashed = true;
     console.log('Đã cất thay đổi hiện tại vào git stash (xem: git stash list).');
   }
 
@@ -419,14 +464,18 @@ function apply(root, branch, { stash }) {
     if (currentBranch !== branch) git(root, ['switch', '--quiet', branch]);
     const picked = git(root, ['cherry-pick', '--no-commit', snap.sha], { allowFail: true });
     if (picked.status !== 0) {
-      // Working tree đã sạch trước khi áp → reset --merge đưa về đúng trạng thái trước đó, không đụng file chưa track.
-      const conflicted = lines(git(root, ['diff', '--name-only', '--diff-filter=U'], { allowFail: true }).stdout);
+      // Hiếm (đụng độ đã thử trước bằng merge-tree), vd file chưa track sẽ bị ghi đè. Working tree đã sạch trước khi áp
+      // → reset --merge đưa về trạng thái đó; rồi trả lại nhánh ban đầu và stash của lượt này (nếu có).
       git(root, ['reset', '--merge', '--quiet'], { allowFail: true });
       git(root, ['cherry-pick', '--quit'], { allowFail: true });
+      const restored = [];
+      if (currentBranch && currentBranch !== branch && git(root, ['switch', '--quiet', currentBranch], { allowFail: true }).status === 0) restored.push(`đã về lại nhánh ${currentBranch}`);
+      if (stashed) restored.push(git(root, ['stash', 'pop', '--quiet'], { allowFail: true }).status === 0 ? 'đã lấy lại stash' : 'stash vẫn ở stash@{0} (pop lỗi — lấy tay)');
+      if (snap.local === 'missing') restored.push(`nhánh ${branch} vừa tạo vẫn còn`);
       throw new Refusal([
-        `Áp ${ref} lên đầu nhánh ${branch} bị đụng độ — đã huỷ, working tree như trước khi áp.`,
-        conflicted.length ? `File đụng độ: ${conflicted.join(', ')}` : (picked.stderr || '').trim(),
-        `Ảnh chụp vẫn còn trên ${REMOTE}; áp tay: git cherry-pick --no-commit ${ref} rồi sửa đụng độ, git reset.`,
+        `Áp ${ref} vào nhánh ${branch} thất bại — đã huỷ phần áp${restored.length ? `; ${restored.join('; ')}` : ''}.`,
+        (picked.stderr || '').trim(),
+        `Ảnh chụp vẫn còn trên ${REMOTE}; áp tay: git cherry-pick --no-commit ${ref} rồi git reset.`,
       ].join('\n'));
     }
     git(root, ['reset', '--quiet']);
@@ -442,10 +491,11 @@ function main(argv) {
   const [command, ...rest] = argv;
   const flags = new Set(rest.filter(a => a.startsWith('--')));
   const positional = rest.filter(a => !a.startsWith('--'));
-  const usage = 'Dùng: wip-handoff.cjs push [--dry-run] [--force-overwrite] | list [--json] | apply <nhánh> [--stash]';
-  const allowed = { push: ['--dry-run', '--force-overwrite'], list: ['--json'], apply: ['--stash'] };
+  const usage = 'Dùng: wip-handoff.cjs push [--dry-run] [--force-overwrite] | list [--json] | apply <nhánh> [--stash | --skip]';
+  const allowed = { push: ['--dry-run', '--force-overwrite'], list: ['--json'], apply: ['--stash', '--skip'] };
   const arity = { push: 0, list: 0, apply: 1 };
-  if (!allowed[command] || [...flags].some(f => !allowed[command].includes(f)) || positional.length !== arity[command]) {
+  if (!allowed[command] || [...flags].some(f => !allowed[command].includes(f)) || positional.length !== arity[command]
+    || (flags.has('--skip') && flags.has('--stash'))) {
     process.stderr.write(`${usage}\n`);
     return 2;
   }
@@ -453,7 +503,7 @@ function main(argv) {
     const root = git(process.cwd(), ['rev-parse', '--show-toplevel']);
     if (command === 'push') return push(root, { dryRun: flags.has('--dry-run'), forceOverwrite: flags.has('--force-overwrite') });
     if (command === 'list') return list(root, { json: flags.has('--json') });
-    return apply(root, positional[0], { stash: flags.has('--stash') });
+    return apply(root, positional[0], { stash: flags.has('--stash'), skip: flags.has('--skip') });
   } catch (error) {
     process.stderr.write(`${error instanceof Refusal ? error.message : error.stack || error}\n`);
     return 1;
