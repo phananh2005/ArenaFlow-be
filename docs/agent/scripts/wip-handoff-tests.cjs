@@ -693,6 +693,78 @@ test('R3-#5: refs/wip/<nhánh> không hợp lệ → push báo riêng; --skip g�
   assert.equal(run(a, 'push').status, 0);
 });
 
+test('R4-#1: --skip giữ ref dự phòng refs/wip-skipped/<nhánh> trỏ tới ảnh chụp bị bỏ qua, kể cả sau khi bị ghi đè', () => {
+  const { a, b } = setup();
+  git(b, 'switch', '-q', '-c', 'feature/X-001-demo', 'origin/feature/X-001-demo');
+  write(b, 'note.md', 'dở ở B\n');
+  assert.equal(run(b, 'push').status, 0);
+  const fromB = remoteRefs(b)['refs/wip/feature/X-001-demo'];
+
+  const skipped = run(a, 'apply', 'feature/X-001-demo', '--skip');
+  assert.equal(skipped.status, 0, skipped.stderr);
+  assert.match(skipped.stdout, /refs\/wip-skipped\/feature\/X-001-demo/);
+  write(a, 'other.md', 'A\n');
+  assert.equal(run(a, 'push').status, 0);
+  assert.notEqual(remoteRefs(a)['refs/wip/feature/X-001-demo'], fromB);
+  assert.equal(git(a, 'rev-parse', 'refs/wip-skipped/feature/X-001-demo'), fromB);
+  assert.equal(git(a, 'show', 'refs/wip-skipped/feature/X-001-demo:note.md'), 'dở ở B');
+});
+
+test('R4-#1: thông báo đụng độ / bị chặn ghi rõ --skip chỉ khi user xác nhận lỗi thời', () => {
+  const { a, b } = setup();
+  originMovesAhead(b, 'README.md', 'B sửa\n');
+  write(a, 'README.md', 'A sửa\n');
+  assert.equal(run(a, 'push').status, 0);
+  const applied = run(b, 'apply', 'feature/X-001-demo');
+  assert.equal(applied.status, 1);
+  assert.match(applied.stderr, /user xác nhận/);
+});
+
+// Hàm khôi phục khi cherry-pick lỗi sau khi merge-tree báo sạch (hiếm, khó tạo qua luồng thật) → test trực tiếp.
+function loadModule() {
+  Object.assign(process.env, {
+    GIT_CONFIG_GLOBAL: env.GIT_CONFIG_GLOBAL,
+    GIT_CONFIG_NOSYSTEM: env.GIT_CONFIG_NOSYSTEM,
+    GIT_AUTHOR_NAME: env.GIT_AUTHOR_NAME,
+    GIT_AUTHOR_EMAIL: env.GIT_AUTHOR_EMAIL,
+    GIT_COMMITTER_NAME: env.GIT_COMMITTER_NAME,
+    GIT_COMMITTER_EMAIL: env.GIT_COMMITTER_EMAIL,
+  });
+  return require(script);
+}
+
+test('R4-#2: khôi phục — về được nhánh ban đầu → lấy lại stash', () => {
+  const { b } = setup();
+  const { restoreAfterFailedApply } = loadModule();
+  write(b, 'README.md', 'B dở\n');
+  const origHead = git(b, 'rev-parse', 'HEAD');
+  git(b, 'stash', 'push', '-q', '-m', 'wip-handoff: test');
+  git(b, 'switch', '-q', '-c', 'feature/X-001-demo', 'origin/feature/X-001-demo');
+  const notes = restoreAfterFailedApply(b, { currentBranch: 'main', origHead, branch: 'feature/X-001-demo', stashed: true, local: 'missing' });
+  assert.equal(git(b, 'branch', '--show-current'), 'main');
+  assert.equal(tryGit(b, 'stash', 'list').stdout, '');
+  assert.equal(read(b, 'README.md'), 'B dở\n');
+  assert.ok(notes.some(n => /lấy lại stash/.test(n)), notes.join(' | '));
+});
+
+test('R4-#2: khôi phục — KHÔNG về được nhánh ban đầu → giữ stash, không pop lên nhánh khác', () => {
+  const { b } = setup();
+  const { restoreAfterFailedApply } = loadModule();
+  // Nhánh chỉ có ở local (không có origin/<tên> để git switch tự tạo lại) → xoá đi thì switch về chắc chắn lỗi.
+  git(b, 'switch', '-q', '-c', 'local-only');
+  write(b, 'README.md', 'B dở\n');
+  const origHead = git(b, 'rev-parse', 'HEAD');
+  git(b, 'stash', 'push', '-q', '-m', 'wip-handoff: test');
+  git(b, 'switch', '-q', '-c', 'feature/X-001-demo', 'origin/feature/X-001-demo');
+  git(b, 'update-ref', '-d', 'refs/heads/local-only');
+  const notes = restoreAfterFailedApply(b, { currentBranch: 'local-only', origHead, branch: 'feature/X-001-demo', stashed: true, local: 'behind' });
+  assert.equal(git(b, 'branch', '--show-current'), 'feature/X-001-demo');
+  assert.match(tryGit(b, 'stash', 'list').stdout, /wip-handoff: test/, 'stash phải còn nguyên');
+  assert.equal(read(b, 'README.md'), 'base\n', 'không được pop stash lên nhánh khác');
+  assert.ok(notes.some(n => /KHÔNG về lại/.test(n)), notes.join(' | '));
+  assert.ok(notes.some(n => /fast-forward/.test(n)), notes.join(' | '));
+});
+
 test('tham số sai → exit 2', () => {
   const { a: repo } = setup();
   assert.equal(run(repo, 'apply', 'feature/X-001-demo', '--skip', '--stash').status, 2, '--skip không đi cùng --stash');

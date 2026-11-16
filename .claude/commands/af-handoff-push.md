@@ -39,10 +39,11 @@ node docs/agent/scripts/wip-handoff.cjs push --dry-run
 - Exit 1 → **DỪNG**, báo nguyên văn:
   - **secret** (trong file dở hoặc trong commit chưa push) → báo `file:dòng`, không push. Sửa bằng biến môi trường/placeholder;
     dữ liệu giả có chủ đích → `allow-secret` trên dòng đó (hỏi user trước). Secret đã nằm trong commit chưa push → hỏi user cách xử lý.
-  - **máy khác đã đẩy ảnh chụp mới hơn** → hướng dẫn chạy `/af-resume-pull` trước. Ảnh chụp đó áp không được (đụng độ) hoặc
-    user xác nhận đã lỗi thời → `apply <nhánh> --skip` (không xoá gì) rồi push lại. Chỉ dùng `--force-overwrite` khi user yêu cầu rõ
-    (ghi đè mất ảnh chụp của máy kia). Ảnh chụp của máy khác mà nội dung đã có trên `origin/<nhánh>` (đã cũ) thì không chặn.
-  - **ref không phải ảnh chụp hợp lệ** ở `refs/wip/<nhánh>` → báo user; bỏ qua bằng `apply <nhánh> --skip` khi user đồng ý.
+  - **máy khác đã đẩy ảnh chụp mới hơn** → hướng dẫn chạy `/af-resume-pull` trước. Áp bị đụng độ **không** có nghĩa ảnh chụp
+    lỗi thời → hỏi user. Chỉ khi user **xác nhận** nó đã lỗi thời → `apply <nhánh> --skip` (giữ bản dự phòng local
+    `refs/wip-skipped/<nhánh>`, không xoá gì) rồi push lại. Chỉ dùng `--force-overwrite` khi user yêu cầu rõ
+    (ghi đè mất ảnh chụp của máy kia, không có bản dự phòng). Ảnh chụp của máy khác mà nội dung đã có trên `origin/<nhánh>` (đã cũ) thì không chặn.
+  - **ref không phải ảnh chụp hợp lệ** ở `refs/wip/<nhánh>` → báo user; bỏ qua bằng `apply <nhánh> --skip` khi user xác nhận.
   - **worktree HEAD tách rời có file dở** (vd đang rebase) → việc dở đó không đẩy được; báo user xử lý.
 - "Không có nhánh nào chưa đồng bộ" → báo và kết thúc (handoff đã lưu ở Bước 1 nhưng **chưa** lên GitHub — nói rõ).
 - Dòng "Gợi ý: … ảnh chụp thừa" → chuyển nguyên cho user; **không** tự xoá.
@@ -63,7 +64,7 @@ node docs/agent/scripts/wip-handoff.cjs push
 
 ## Ràng buộc
 - **NEVER** commit/push lên nhánh thật, **NEVER** tạo PR, **NEVER** `--no-verify` / bỏ secret scan.
-- **NEVER** `--force-overwrite` khi user chưa yêu cầu rõ.
+- **NEVER** `--force-overwrite` khi user chưa yêu cầu rõ; **NEVER** `apply --skip` khi user chưa xác nhận ảnh chụp đó đã lỗi thời.
 - **NEVER** tự xoá `refs/wip/*` trên remote; chỉ xoá khi user yêu cầu rõ ref nào: `git push origin --delete refs/wip/<nhánh>`.
 - Quy tắc đồng bộ `main` (rebase trước commit/push) và cổng `code-reviewer` (`CLAUDE.md` §8) **không áp dụng** cho ảnh chụp:
   không commit lên nhánh, không push nhánh, không tạo PR. Hai quy tắc đó vẫn áp dụng khi commit/push thật.

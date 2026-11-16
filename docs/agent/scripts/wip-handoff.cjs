@@ -18,6 +18,7 @@ const { spawnSync } = require('node:child_process');
 const REMOTE = 'origin';
 const WIP_PREFIX = 'refs/wip/';
 const SEEN_PREFIX = 'refs/wip-seen/';
+const SKIPPED_PREFIX = 'refs/wip-skipped/';
 const HEADS_PREFIX = 'refs/heads/';
 const HOOKS = path.join(__dirname, '..', 'hooks', 'agent-hooks.cjs');
 
@@ -305,8 +306,8 @@ function push(root, { dryRun, forceOverwrite }) {
       'Dừng — không đẩy gì:',
       ...(conflicts.length ? ['Ảnh chụp do máy khác đẩy, mới hơn và máy này chưa lấy về:', ...conflicts.map(c => `  - ${c}`)] : []),
       ...(invalidRefs.length ? ['Ref không phải ảnh chụp hợp lệ của lệnh này:', ...invalidRefs.map(c => `  - ${c}`)] : []),
-      'Chạy /af-resume-pull trước. Áp không được (đụng độ) / ảnh chụp đó đã lỗi thời → apply <nhánh> --skip;',
-      'chắc chắn muốn ghi đè thì chạy lại push với --force-overwrite.',
+      'Chạy /af-resume-pull trước. Đụng độ KHÔNG có nghĩa ảnh chụp lỗi thời — chỉ khi user xác nhận nó đã lỗi thời',
+      'mới chạy apply <nhánh> --skip (giữ bản dự phòng ở refs/wip-skipped/<nhánh>); muốn ghi đè ngay thì push --force-overwrite.',
     ].join('\n'));
   }
 
@@ -397,6 +398,31 @@ function list(root, { json }) {
   return 0;
 }
 
+// Khôi phục sau khi cherry-pick lỗi (hiếm — đụng độ đã thử trước bằng merge-tree; vd file chưa track sẽ bị ghi đè).
+// Working tree đã sạch trước khi áp → reset --merge đưa về trạng thái đó. Chỉ lấy lại stash khi đã đứng lại đúng
+// nhánh/commit ban đầu, để không đổ stash lên nhánh khác. Trả các ghi chú về những gì đã/không khôi phục.
+function restoreAfterFailedApply(root, { currentBranch, origHead, branch, stashed, local }) {
+  git(root, ['reset', '--merge', '--quiet'], { allowFail: true });
+  git(root, ['cherry-pick', '--quit'], { allowFail: true });
+  const notes = [];
+  let onOriginal = currentBranch === branch;
+  if (!onOriginal) {
+    const back = currentBranch
+      ? git(root, ['switch', '--quiet', currentBranch], { allowFail: true })
+      : git(root, ['switch', '--quiet', '--detach', origHead], { allowFail: true });
+    onOriginal = back.status === 0;
+    const where = currentBranch ? `nhánh ${currentBranch}` : `commit ${origHead.slice(0, 7)}`;
+    notes.push(onOriginal ? `đã về lại ${where}` : `KHÔNG về lại được ${where} — đang ở ${branch}`);
+  }
+  if (stashed) {
+    if (!onOriginal) notes.push('stash của lượt này vẫn ở stash@{0} (chưa lấy lại vì chưa về đúng chỗ cũ)');
+    else notes.push(git(root, ['stash', 'pop', '--quiet'], { allowFail: true }).status === 0 ? 'đã lấy lại stash' : 'stash vẫn ở stash@{0} (pop lỗi — lấy tay)');
+  }
+  if (local === 'missing') notes.push(`nhánh ${branch} vừa tạo vẫn còn`);
+  if (local === 'behind') notes.push(`nhánh ${branch} đã được fast-forward tới base của ảnh chụp`);
+  return notes;
+}
+
 function apply(root, branch, { stash, skip }) {
   const ref = `${WIP_PREFIX}${branch}`;
   const exists = git(root, ['ls-remote', '--exit-code', REMOTE, ref], { allowFail: true });
@@ -404,9 +430,15 @@ function apply(root, branch, { stash, skip }) {
   fetchWip(root, ref);
   const sha = git(root, ['rev-parse', ref]);
   if (skip) {
-    // User quyết định ảnh chụp này lỗi thời: chỉ ghi nhận đã xem để push không bị chặn; không đổi gì khác, không xoá ref.
+    // User xác nhận ảnh chụp này lỗi thời: ghi nhận đã xem để push không bị chặn, giữ bản dự phòng local
+    // (push sau đó sẽ ghi đè ref trên remote); không đổi working tree/nhánh.
+    const backup = `${SKIPPED_PREFIX}${branch}`;
+    git(root, ['update-ref', backup, sha]);
     git(root, ['update-ref', `${SEEN_PREFIX}${branch}`, sha]);
-    console.log(`Đã đánh dấu bỏ qua ${ref} (${sha.slice(0, 7)}) — /af-handoff-push sẽ được ghi đè nó. Ảnh chụp vẫn còn trên ${REMOTE}.`);
+    console.log([
+      `Đã đánh dấu bỏ qua ${ref} (${sha.slice(0, 7)}) — /af-handoff-push sẽ được ghi đè nó.`,
+      `Bản dự phòng trên máy này: ${backup}. Lấy lại khi cần: git cherry-pick --no-commit ${backup} && git reset`,
+    ].join('\n'));
     return 0;
   }
   const snap = readSnapshot(root, ref, sha);
@@ -423,6 +455,7 @@ function apply(root, branch, { stash, skip }) {
   const wt = byBranch.get(branch);
   if (wt && !samePath(wt, root)) throw new Refusal(`Nhánh ${branch} đang checkout ở worktree khác (${wt}) — không áp.`);
   const currentBranch = currentBranchOf(root);
+  const origHead = git(root, ['rev-parse', 'HEAD']);
   const touchesWorkingTree = snap.dirty || (currentBranch === branch && snap.local === 'behind');
 
   // Áp lên đầu nhánh: thử trước trong bộ nhớ — đụng độ thì từ chối khi CHƯA stash/chuyển/tạo nhánh.
@@ -435,7 +468,8 @@ function apply(root, branch, { stash, skip }) {
         `File đụng độ: ${conflicted.join(', ')}`,
         'Chọn một:',
         `  - áp tay: git switch ${branch} && git cherry-pick --no-commit ${ref} → sửa đụng độ → git reset`,
-        `  - ảnh chụp đã lỗi thời: wip-handoff.cjs apply ${branch} --skip (không xoá gì; push được ghi đè nó)`,
+        `  - CHỈ khi user xác nhận ảnh chụp đã lỗi thời: wip-handoff.cjs apply ${branch} --skip (giữ bản dự phòng local; push được ghi đè nó)`,
+        '  - để nguyên, xử lý sau.',
       ].join('\n'));
     }
   }
@@ -464,16 +498,9 @@ function apply(root, branch, { stash, skip }) {
     if (currentBranch !== branch) git(root, ['switch', '--quiet', branch]);
     const picked = git(root, ['cherry-pick', '--no-commit', snap.sha], { allowFail: true });
     if (picked.status !== 0) {
-      // Hiếm (đụng độ đã thử trước bằng merge-tree), vd file chưa track sẽ bị ghi đè. Working tree đã sạch trước khi áp
-      // → reset --merge đưa về trạng thái đó; rồi trả lại nhánh ban đầu và stash của lượt này (nếu có).
-      git(root, ['reset', '--merge', '--quiet'], { allowFail: true });
-      git(root, ['cherry-pick', '--quit'], { allowFail: true });
-      const restored = [];
-      if (currentBranch && currentBranch !== branch && git(root, ['switch', '--quiet', currentBranch], { allowFail: true }).status === 0) restored.push(`đã về lại nhánh ${currentBranch}`);
-      if (stashed) restored.push(git(root, ['stash', 'pop', '--quiet'], { allowFail: true }).status === 0 ? 'đã lấy lại stash' : 'stash vẫn ở stash@{0} (pop lỗi — lấy tay)');
-      if (snap.local === 'missing') restored.push(`nhánh ${branch} vừa tạo vẫn còn`);
+      const restored = restoreAfterFailedApply(root, { currentBranch, origHead, branch, stashed, local: snap.local });
       throw new Refusal([
-        `Áp ${ref} vào nhánh ${branch} thất bại — đã huỷ phần áp${restored.length ? `; ${restored.join('; ')}` : ''}.`,
+        `Áp ${ref} vào nhánh ${branch} thất bại — đã huỷ phần áp; ${restored.join('; ')}.`,
         (picked.stderr || '').trim(),
         `Ảnh chụp vẫn còn trên ${REMOTE}; áp tay: git cherry-pick --no-commit ${ref} rồi git reset.`,
       ].join('\n'));
@@ -510,4 +537,5 @@ function main(argv) {
   }
 }
 
-process.exitCode = main(process.argv.slice(2));
+if (require.main === module) process.exitCode = main(process.argv.slice(2));
+else module.exports = { restoreAfterFailedApply };
