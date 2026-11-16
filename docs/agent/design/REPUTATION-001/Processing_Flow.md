@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL ≥ 18 · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush) · ADR-0003 (+ Sửa đổi 2026-11-10, 2026-11-12) · ADR-0011, ADR-0012, ADR-0013 (+ Sửa đổi 2026-11-12) · retrier: VENUE-001 `Component_Class_Design.md` §4.9 |
 | Ràng buộc dữ liệu | V1–V7 (v1.2: 2.10 đọc `conversation`, `conversation_message` của V6 — MATCH-001 v2.4) + `V8__reputation_rating_report_dispute.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.2** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.3** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 

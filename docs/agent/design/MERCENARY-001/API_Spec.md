@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang offset / con trỏ, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1.1, §1.2 và MATCH-001 `API_Spec.md` §1.1; kèo, trạng thái kèo, mã `MATCH_*`: MATCH-001 `API_Spec.md`; cuộc trò chuyện (2.14–2.17 = MATCH-001 2.19, 2.16, 2.17, 2.18), kênh realtime, mã `CHAT_*`: MATCH-001 `API_Spec.md` §1.7, §4.4, §4.5, §5; report / tranh chấp / uy tín đội, mã `RATING_*`/`REPORT_*`/`DISPUTE_*`: REPUTATION-001 `API_Spec.md`; mã `TEAM_*`, `USER_*`, `AUTH_*`: USER-001/USER-002 `API_Spec.md`; hiển thị user đã xoá: ADR-0002 (Sửa đổi 2026-11-12) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10; mercenary theo v1.9, cập nhật 2026-11-14) — UC-ME01..ME09 (gồm UC-ME01 A1 trận ngoài hệ thống), UC-U03; BR-ME01..BR-ME19, BR-V11, BC-ME01..ME05; Business_Rules §2.4, §2.5, §3.1–§3.3, §5.1, §5.2, §5.5, §6, §8.2; AC-ME01..ME11; BR-R01..R10, BR-N01, BR-N03; Scenario 7 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v2.1** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 

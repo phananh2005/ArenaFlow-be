@@ -27,7 +27,7 @@
 | **Rating** | Đánh giá sau trận (đội/cá nhân) | Lưu mãi | Tính vào rating trung bình |
 | **Report** | Report sau trận (4 loại) | Lưu mãi | Trừ Reliability theo số lần |
 | **Dispute** | Tranh chấp report bùng | pending → resolved | Admin quyết định cuối |
-| **Notification** | Thông báo (11 loại) | Lưu 30 ngày | — |
+| **Notification** | Thông báo trong app (35 loại — Business_Rules §8.6) | Lưu 30 ngày | — |
 | **Reliability_Score** | Điểm uy tín (0-100) | Cập nhật liên tục | Đội & cá nhân độc lập |
 | **Completion_Rate** | Tỉ lệ hoàn thành | Cập nhật liên tục | Đội & cá nhân độc lập |
 | **Verification_Badge** | Badge xác minh | Cấp/thu hồi tự động | Đội & cá nhân |
@@ -547,17 +547,17 @@
 **Attributes:**
 - ID
 - User ID (khóa ngoại, người nhận)
-- Loại (11 loại: Match request nhận, request chấp nhận/từ chối, Match confirmed, Match cancelled, Pairing mới, reminder trước trận, Match completed, rating nhận, report nhận, mercenary application, invitation vào đội)
-- Nội dung
-- Liên kết (vd: Match ID, Team ID)
+- Loại (35 loại — Business_Rules §8.6)
+- Tiêu đề, nội dung (tiếng Việt, soạn tại lúc tạo, không có tên cá nhân — BR-N09)
+- Màn hình liên quan (loại + ID đối tượng: kèo, thương lượng, đội, lời mời, người dùng, địa điểm, report, tranh chấp, đơn ứng tuyển; có thể không có)
 - Trạng thái đọc (boolean)
 - Timestamp
 - Ngày hết hạn (timestamp + 30 ngày)
 
 **Relationships:**
-- N Notification thuộc về 1 User
+- N Notification thuộc về 1 User (một sự kiện có nhiều người nhận → mỗi người một Notification, đọc riêng — BR-N08)
 
-**Ghi chú:** Lưu 30 ngày; sau đó xóa.
+**Ghi chú:** Lưu 30 ngày; quá 30 ngày không còn hiển thị, sau đó xóa (BR-N02). Tin nhắn chat không tạo Notification (BR-N12). Mỗi trận có tối đa một lượt nhắc trước trận và (trận ngoài hệ thống) một lượt nhắc mercenary đánh giá (BC-N05).
 
 ---
 
@@ -728,12 +728,12 @@ erDiagram
 3. **GPS permission revocation:** Fallback sang khu vực hồ sơ ngay. Thông báo "Bật GPS để tìm kèo gần bạn hơn".
 4. **Report cooldown:** Không giới hạn. Mỗi trận chỉ report 1 lần/loại.
 5. **Hard-delete policy:** Giữ mãi, không hard-delete. Lịch sử luôn khả dụng.
-6. **Push notification:** FCM + APNs (miễn phí), push tất cả 11 loại. Device token được lưu khi user cấp quyền.
+6. **Push notification (sửa 2026-11-16 — user chốt):** bản hiện tại chỉ có thông báo trong app (35 loại); chưa lưu thiết bị (device token) — làm sau cùng lúc tích hợp FCM (Business_Rules §8.6).
 7. **Chat read receipt:** Boolean `is_read` đơn giản (không cần timestamp đọc chi tiết trong MVP).
 8. **Team Captain uniqueness:** Một User có thể là CAPTAIN của nhiều đội cùng lúc (không có unique constraint).
 9. **Rating aggregation:** Rating trung bình tính on-the-fly từ bảng Rating (không denormalize trong MVP).
 10. **Reliability Score history:** Chỉ lưu giá trị hiện tại (không lưu lịch sử thay đổi trong MVP).
-11. **Notification push delivery status:** Không lưu delivery status (sent/delivered/failed) trong MVP. FCM/APNs có log riêng nếu cần debug.
+11. **Notification push delivery status:** Không lưu delivery status (sent/delivered/failed) trong MVP. Bản hiện tại chưa có push (#6); khi tích hợp FCM/APNs, dùng log của dịch vụ đó nếu cần debug.
 
 > **Implementation notes đã chốt:**
 > - Match luồng B: danh sách lựa chọn địa điểm (1–5) và danh sách khung giờ (1–5) là hai tập riêng; phương án chốt của Pairing tham chiếu một phần tử mỗi tập (sửa 2026-11-10, thay JSONB `location_option_ids` / `time_options`)

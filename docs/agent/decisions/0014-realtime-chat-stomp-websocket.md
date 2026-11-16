@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Trạng thái** | Proposed |
+| **Trạng thái** | Accepted (chủ repo chốt 2026-11-16) |
 | **Ngày** | 2026-11-10 |
-| **Sửa đổi** | 2026-11-13 — MERCENARY-001: thêm topic cuộc trò chuyện tổng quát `/topic/conversations/{conversationId}` · 2026-11-15 — mọi chat (hai đội luồng A, B và mercenary) dùng một mô hình cuộc trò chuyện; bỏ `chat_message`, REST `/pairings/{id}/messages` và topic `/topic/pairings/{id}` |
+| **Sửa đổi** | 2026-11-13 — MERCENARY-001: thêm topic cuộc trò chuyện tổng quát `/topic/conversations/{conversationId}` · 2026-11-15 — mọi chat (hai đội luồng A, B và mercenary) dùng một mô hình cuộc trò chuyện; bỏ `chat_message`, REST `/pairings/{id}/messages` và topic `/topic/pairings/{id}` · 2026-11-16 — NOTIFICATION-001: thêm destination theo người dùng `/user/queue/notifications` (thông báo mới, tín hiệu hoạt động chat) |
 | **Người quyết định** | Chủ repo (chốt cơ chế chat MATCH-002, 2026-11-10) · solution-architect (đề xuất cách thực hiện) |
 | **Liên quan** | `docs/agent/design/MATCH-001/` (lõi chat + kênh realtime từ 2026-11-15 — `API_Spec.md` §1.6, §1.7; `Component_Class_Design.md` §4.14, §4.15) · [ADR-0001](0001-jwt-authentication-strategy.md) (JWT) · [ADR-0011](0011-domain-events-after-commit.md) (side effect sau commit, một instance) · `docs/agent/design/MATCH-002/` (chỉ còn frame `PAIRING_UPDATED` — `API_Spec.md` §1.6, `Component_Class_Design.md` §4.6) · SRS `SYSTEM-001` UC-N01, AC-N01, Acceptance_Criteria §3.1 · `docs/agent/design/MERCENARY-001/` (chat theo đơn ứng tuyển — Component_Class_Design §4.7–§4.8; BR-ME16, UC-ME09, AC-ME10) · SRS `SYSTEM-001` v1.10 BR-N04, BR-N05 (chat hai đội luồng A và B) |
 
@@ -79,3 +79,16 @@ Bổ sung, không thay §Quyết định 1–2, 4, 6–7. Mở rộng §Quyết 
 **Rủi ro "chỉ kiểm quyền lúc `SUBSCRIBE`" — phạm vi lớn hơn bản 2026-11-10** (review 2026-11-15): cuộc trò chuyện nay sống tới 90 ngày sau khi kèo kết thúc (hai đội đã ghép vẫn nhắn sau trận), có người chỉ xem (người đã giải tán đội) và có danh sách mọi cuộc trò chuyện của một người. Một kết nối mở lâu của đội trưởng vừa chuyển quyền / người vừa xoá tài khoản / token đã hết hạn vẫn nhận frame của các cuộc trò chuyện đã đăng ký trong thời gian dài. Vẫn chấp nhận cho MVP, nhưng **nâng ưu tiên** mục "thu hồi quyền tức thời" ở §Cần theo dõi: làm trước khi mở rộng người dùng — ngắt phiên / huỷ đăng ký theo user khi chuyển quyền đội trưởng, giải tán đội, xoá tài khoản (registry phiên STOMP), hoặc kiểm lại quyền khi đẩy frame. Theo dõi ở MATCH-001 `Processing_Flow.md` §9.
 
 Chi tiết: `docs/agent/design/MATCH-001/` (Component_Class_Design §4.14, §4.15, §5.1 — v2.4), `docs/agent/design/MATCH-002/` (Component_Class_Design §4.2, §4.6 — v2.0), `docs/agent/design/MERCENARY-001/` (Component_Class_Design §4.7–§4.8, §5.1 — v2.0).
+
+## Sửa đổi 2026-11-16 — NOTIFICATION-001: kênh theo người dùng
+
+**Bối cảnh.** NOTIFICATION-001 (user chốt Q6, Q9 — 2026-11-16): app đang mở phải nhận ngay thông báo in-app mới và tín hiệu "có tin nhắn mới" để cập nhật chấm đỏ "Tin nhắn", kể cả khi người dùng không mở phòng chat nào. Topic theo cuộc trò chuyện không phục vụ được: người dùng phải `SUBSCRIBE` mọi cuộc trò chuyện của mình, và thông báo không gắn cuộc trò chuyện.
+
+**Quyết định bổ sung** (mở rộng §Quyết định 3, 5; giữ 1–2, 4, 6–7):
+- Bật thêm prefix `/queue` cho simple broker và user destination prefix `/user` (mặc định Spring). Client `SUBSCRIBE` đúng nguyên văn `/user/queue/notifications`; server gửi bằng `convertAndSendToUser(userId, "/queue/notifications", …)` — chỉ các phiên có principal = người nhận nhận được frame.
+- `SUBSCRIBE` chấp nhận đúng hai mẫu: `/topic/conversations/{id}` (như cũ, một truy vấn phân quyền) và `/user/queue/notifications` (không truy vấn — hàng đợi gắn principal của phiên đã xác thực ở `CONNECT`). Mọi destination khác, gồm `/queue/**` thô (hàng đợi đã dịch theo phiên của người khác) và `/user/…` khác mẫu → `ERROR`.
+- Port mới ở tầng application `UserRealtimeGateway.publishAfterCommit(deliveries)` (cùng cơ chế `afterCommit` như `ChatRealtimeGateway`); frame `NOTIFICATION_CREATED` (thông báo in-app — NOTIFICATION-001) và `CONVERSATION_ACTIVITY` (id cuộc trò chuyện + id tin + thời điểm, không nội dung — phát từ gửi tin MATCH-001 2.16 tới người xem được trừ người gửi).
+
+**Phương án loại:** topic `/topic/users/{userId}` (phải so khớp id khi `SUBSCRIBE`, dễ sai phân quyền); `SUBSCRIBE` mọi cuộc trò chuyện để biết tin mới (nhiều đăng ký, không phủ thông báo); polling định kỳ đếm chưa đọc (tải DB, trễ).
+
+**Hệ quả:** không thêm dependency; không truy vấn khi đăng ký kênh cá nhân. Rủi ro "kết nối không hết hạn theo token" như §Hệ quả: người vừa xoá tài khoản không còn được tạo thông báo mới; `CONVERSATION_ACTIVITY` gửi theo danh sách người xem được tại lúc gửi tin (đội trưởng hiện tại), không theo đăng ký cũ — chuyển quyền đội trưởng có hiệu lực ngay với kênh này. Một instance như cũ. Chi tiết: `docs/agent/design/NOTIFICATION-001/` (API_Spec §1.4, Component_Class_Design §4.5), [ADR-0015](0015-notification-async-listener-and-user-channel.md); MATCH-001 `API_Spec.md` §1.7, `Component_Class_Design.md` §4.14, §4.15 (v2.5).

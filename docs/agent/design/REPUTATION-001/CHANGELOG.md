@@ -1,5 +1,20 @@
 # CHANGELOG — REPUTATION-001 Đánh giá, report, tranh chấp & uy tín đội
 
+## [v1.3] — 2026-11-16
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE: chốt quy tắc thông báo "nhận đánh giá" (chỉ khi người nhận đã đánh giá trước) và nhắc đánh giá lúc kèo kết thúc; không ảnh hưởng FE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE (đóng điểm mở về thông báo "nhận đánh giá" mâu thuẫn quy tắc không tiết lộ đánh giá; người nghe sự kiện tranh chấp), không ảnh hưởng FE | User chốt 2026-11-16 (NOTIFICATION-001 Q3, Q8) | Không — thông báo: NOTIFICATION-001 `API_Spec.md` §4.2 `RATING_RECEIVED`, `REPORT_DISPUTED`, `DISPUTE_CREATED` |
+| 2 | Header 3 tài liệu | Ghi nhận | v1.2 → v1.3 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract REPUTATION-001: không đổi.
+- Nghiệp vụ / SRS: "rating nhận" (Overview §4, Business_Rules §8.6) cần ghi điều kiện — business-analyst.
+
 ## [v1.2] — 2026-11-15
 
 **Type:** MINOR (thêm endpoint 2.10, thêm mã lỗi `REPORT_010`, `REPORT_011` (+ `TEAM_016` dùng lại ở 2.10); ghi rõ quy tắc chuỗi trận sạch; không đổi endpoint, field, mã thành công, mã lỗi đã có) · **Tóm tắt:** Report "giao tiếp tệ" qua chat hai đội: cuộc trò chuyện của một kèo đã có tin nhắn → hai đội trưởng report được nhau bất kể trạng thái yêu cầu / thương lượng / kèo (SRS `SYSTEM-001` v1.10 — BR-R07 trường hợp 3, AC-R08).

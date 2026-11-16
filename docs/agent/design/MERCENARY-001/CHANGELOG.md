@@ -1,5 +1,19 @@
 # CHANGELOG — MERCENARY-001 Tuyển mercenary, ứng tuyển, chat theo đơn, uy tín cá nhân
 
+## [v2.1] — 2026-11-16
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE: người nghe sự kiện và job xoá tin nhắn hết hạn lưu đã thiết kế ở NOTIFICATION-001; không ảnh hưởng FE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE (loại thông báo cho từng sự kiện tuyển mercenary; "nhận đánh giá" chỉ khi người nhận đã đánh giá lại; đóng điểm mở job xoá tin nhắn), không ảnh hưởng FE | NOTIFICATION-001 (user chốt 2026-11-16 — Q1, Q3) | Không — thông báo: NOTIFICATION-001 `API_Spec.md` §4.2 |
+| 2 | Header 3 tài liệu | Ghi nhận | v2.0 → v2.1 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract MERCENARY-001: không đổi.
+
 ## [v2.0] — 2026-11-15
 
 **Type:** MAJOR (2.20 đổi mã lỗi cho người đã giải tán đội tuyển `403 MERCENARY_014` → `422 TEAM_016`; người đó nay xem được chat 2.14, 2.16, 2.17 và kênh realtime (trước: `403 CHAT_003`); thêm field `null` vào response 2.14, thêm giá trị enum `contextType`, thêm `MATCH_014` hiếm ở 2.15) · **Tóm tắt:** Chat theo đơn dùng chung bộ endpoint / kiểu dữ liệu / kênh realtime với chat giữa hai đội trong kèo (MATCH-001 v2.4); người đã giải tán đội tuyển được xem chat (không gửi) như chat hai đội.

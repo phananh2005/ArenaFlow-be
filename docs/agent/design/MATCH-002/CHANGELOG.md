@@ -1,5 +1,19 @@
 # CHANGELOG — MATCH-002 Thương lượng ghép kèo luồng B (pairing) & chat
 
+## [v2.1] — 2026-11-16
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, frame) · **Tóm tắt:** ADR-0014 đã `Accepted` (2026-11-16) — cập nhật tài liệu nội bộ BE, bỏ nhãn "Proposed" khi trỏ tới nó; không ảnh hưởng FE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | ADR-0014 `Accepted` | Không |
+| 2 | Header 3 tài liệu | Ghi nhận | v2.0 → v2.1 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract MATCH-002: không đổi.
+
 ## [v2.0] — 2026-11-15
 
 **Type:** MAJOR (bỏ 3 endpoint chat theo thương lượng và topic `/topic/pairings/{pairingId}`; chat chuyển sang bộ endpoint dùng chung của MATCH-001 với path, body, shape tin nhắn, mã lỗi khác) · **Tóm tắt:** Chat giữa hai đội trở thành **cuộc trò chuyện** dùng chung cho luồng A (từ lúc gửi yêu cầu ghép kèo), luồng B (từ lúc nhận kèo) và chat mercenary, định nghĩa ở MATCH-001 (v2.4); tài liệu này chỉ giữ phần riêng của thương lượng. Hai đội đã ghép nhắn tiếp sau khi ghép, sau trận và khi kèo bị huỷ; đội không được ghép chỉ xem (SRS `SYSTEM-001` v1.10 — BR-N04, BR-N05).

@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL ≥ 18 |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §10; VENUE-001 `Component_Class_Design.md` §4.9 (retrier overload), §4.13 (audit); MATCH-001 `Component_Class_Design.md` §4.5 (`TeamGuard`), §4.8 (`ReputationService` — sửa ở đây §4.6), §4.9 (event), §4.10 (scheduler), §4.11 (`AdminAuditLog.afterCommit(action, adminId, targetType, targetId)`), §8 (pool) · ADR-0002 (Sửa đổi 2026-11-12), ADR-0003 (Sửa đổi 2026-11-12), ADR-0008, ADR-0011, ADR-0012, ADR-0013 (Sửa đổi 2026-11-12) |
 | Ràng buộc dữ liệu | V1–V4 (code) + V5 (VENUE-001), V6 (MATCH-001), V7 (MATCH-002) — **chưa có trong code** + `V8__reputation_rating_report_dispute.sql` (§5.1). v1.2 (2.10) đọc `conversation`, `conversation_message` của V6 (MATCH-001 v2.4 §5.1) — không đổi V8. Entity hiện có `domain/.../entity/rating/{Rating, Report}`, `team/Team`, `user/User` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.2** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.3** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -168,9 +168,9 @@ public enum ReliabilityReason { MATCH_CANCELLED_AFTER_CONFIRMED, MATCH_REQUEST_W
 
 | Event | Payload | Phát khi | Người nghe dự kiến |
 |---|---|---|---|
-| `MatchRatedEvent` | `ratingId, matchId, raterTeamId, rateeTeamId, isNoShow, matchCompleted, occurredAt` | 2.1 | NOTIFICATION-001 (`Match completed` khi `matchCompleted`; "rating nhận" — xem `[cần xác nhận #11]`) |
+| `MatchRatedEvent` | `ratingId, matchId, raterTeamId, rateeTeamId, isNoShow, matchCompleted, occurredAt` | 2.1 | NOTIFICATION-001 (v1.3, user chốt Q3 2026-11-16): `RATING_RECEIVED` cho đội `ratee` **chỉ khi** đội đó đã đánh giá trận trước (listener tự kiểm) — không lộ BC-R04; `matchCompleted` **không** tạo thông báo (nhắc đánh giá gửi lúc `ARCHIVED` — MATCH-001 `MatchArchivedEvent`). Loại thông báo của mọi event dưới: NOTIFICATION-001 `Component_Class_Design.md` §4.3 |
 | `TeamReportedEvent` | `reportId, matchId, reporterTeamId, reportedTeamId, reportType, occurredAt` | 2.3 | NOTIFICATION-001 ("report nhận"; `NOSHOW`: "Bạn có 24h để tranh chấp") |
-| `ReportDisputedEvent` | `disputeId, reportId, reporterTeamId, reportedTeamId, occurredAt` | 2.5 | NOTIFICATION-001 (tuỳ chọn — báo đội report) |
+| `ReportDisputedEvent` | `disputeId, reportId, reporterTeamId, reportedTeamId, occurredAt` | 2.5 | NOTIFICATION-001 (`REPORT_DISPUTED` cho bên đã report + `DISPUTE_CREATED` cho mọi Admin — user chốt Q1, Q8 2026-11-16) |
 | `DisputeResolvedEvent` | `disputeId, reportId, reporterTeamId, reportedTeamId, decision, occurredAt` | 2.8 | NOTIFICATION-001 (cả hai đội — UC-R04 bước 5) |
 | `TeamVerificationChangedEvent` | `teamId, verified, occurredAt` | `TeamVerificationRefresher` (sau commit của thao tác gốc, trong transaction riêng) | NOTIFICATION-001 (cấp/thu hồi huy hiệu — UC-R07 bước 4) |
 | `ReliabilityScoreChangedEvent` | MATCH-001 §4.9 | `ReputationService` | Như MATCH-001 |
@@ -482,7 +482,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 | 8 | **Thứ tự implement:** V8 cần V5–V7 (VENUE-001, MATCH-001, MATCH-002) đã code — MATCH-001 `[cần xác nhận #5]` | **Chặn code** — implement sau ba mã kia |
 | 9 | Mở transaction mới (`REQUIRES_NEW`) trong `afterCommit` (Spring: tài nguyên transaction cũ còn bind lúc `afterCommit`) [Inference — theo Javadoc `TransactionSynchronization`] | Không chặn — test tích hợp refresher |
 | 10 | Kiểm `spring.task.scheduling.pool.size` 4 đủ (MATCH-001 `[cần xác nhận #10]`) | Không chặn |
-| 11 | Thông báo "rating nhận" (Business_Rules §8.6) mâu thuẫn BC-R04 (không tiết lộ đối phương đã đánh giá) — NOTIFICATION-001 chốt nội dung; REPUTATION-001 chỉ phát `MatchRatedEvent` | Không chặn — chuyển NOTIFICATION-001 |
+| 11 | ~~Thông báo "rating nhận" (Business_Rules §8.6) mâu thuẫn BC-R04~~ — **Đóng v1.3 (user chốt Q3, 2026-11-16):** "nhận đánh giá" chỉ gửi khi người nhận đã đánh giá trước; nhắc đánh giá gửi lúc `ARCHIVED`; `ARCHIVED → COMPLETED` không báo (NOTIFICATION-001 `Component_Class_Design.md` §4.3). Payload `MatchRatedEvent` không đổi | Đã đóng |
 | 14 | ~~Report qua chat của đội không được ghép làm trận không sạch lúc hoàn thành~~ — **user chốt 2026-11-15:** chỉ tính report của đối thủ thật + mercenary của trận (§5.2 `applyCompletion`, không thêm câu) | Đã đóng |
 
 ## 13. Quyết định đã chốt (user, 2026-11-12)

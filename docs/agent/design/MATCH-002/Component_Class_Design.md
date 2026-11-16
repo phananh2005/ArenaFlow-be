@@ -5,9 +5,9 @@
 | Mã chức năng | `MATCH-002` |
 | Phạm vi tầng | Backend (Spring Boot REST API; frame realtime trên kênh STOMP của MATCH-001). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL ≥ 18 |
-| Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa MATCH-001 `Component_Class_Design.md` (v2.4) §4.5–§4.9, §4.12, §4.14 (lõi chat), §4.15 (kênh realtime), §5.2, §7; VENUE-001 §4.6 (port, v1.2), §4.9 (retrier overload); USER-001 §9 (JWT), §7–§8 (`DeletedUserMasking` qua `MapperSupport`) · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09, 2026-11-10), ADR-0008 (+ Sửa đổi 2026-11-09), ADR-0011, ADR-0012, ADR-0013, [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (`Proposed`, + Sửa đổi 2026-11-13, 2026-11-15) |
+| Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa MATCH-001 `Component_Class_Design.md` (v2.4) §4.5–§4.9, §4.12, §4.14 (lõi chat), §4.15 (kênh realtime), §5.2, §7; VENUE-001 §4.6 (port, v1.2), §4.9 (retrier overload); USER-001 §9 (JWT), §7–§8 (`DeletedUserMasking` qua `MapperSupport`) · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09, 2026-11-10), ADR-0008 (+ Sửa đổi 2026-11-09), ADR-0011, ADR-0012, ADR-0013, [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (+ Sửa đổi 2026-11-13, 2026-11-15) |
 | Ràng buộc dữ liệu | V1 + V5 (VENUE-001) + V6 (MATCH-001) + `V7__match_flow_b_pairing.sql` (§5.1). Bảng chat `conversation*` ở V6 (MATCH-001 v2.4 §5.1). Neon dev `misty-dew-90700890` kiểm 2026-11-10: Flyway V4, `server_version = 18.6`, `match`/`pairing`/`chat_message`/`match_venue_option`/`match_time_option`/`cost_custom_item` đều 0 dòng; tên CHECK V1 `match_check2` (type ↔ `venue_id`). |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-15) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v2.1** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 

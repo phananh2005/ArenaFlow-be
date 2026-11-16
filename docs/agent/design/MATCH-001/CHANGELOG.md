@@ -1,5 +1,22 @@
 # CHANGELOG — MATCH-001 Kèo (luồng A, luồng B) & vòng đời kèo
 
+## [v2.5] — 2026-11-16
+
+**Type:** MINOR (thêm destination đăng ký trên kết nối realtime; không đổi endpoint, field, mã thành công, mã lỗi, frame của topic cuộc trò chuyện) · **Tóm tắt:** Kết nối realtime có thêm kênh cá nhân `/user/queue/notifications` (thông báo in-app mới, tín hiệu "có tin nhắn mới") cho NOTIFICATION-001; gửi tin (2.16) phát thêm tín hiệu tới người xem được cuộc trò chuyện.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | §1.7 | Thêm | Chỉ `SUBSCRIBE /topic/conversations/{id}` → thêm `SUBSCRIBE /user/queue/notifications` (một lần mỗi kết nối); frame `NOTIFICATION_CREATED`, `CONVERSATION_ACTIVITY` theo NOTIFICATION-001 `API_Spec.md` §1.4; "Lỗi đăng ký": kênh cá nhân chỉ lỗi sai mẫu / `AUTH_001`, `CHAT_002` / `USER_001` / `CHAT_003` chỉ với topic cuộc trò chuyện | NOTIFICATION-001 (user chốt 2026-11-16 — Q6, Q9) | Sau `CONNECT`, đăng ký kênh cá nhân; cập nhật badge thông báo và chấm đỏ "Tin nhắn" theo frame |
+| 2 | 2.16 (hành vi) | Thêm | Gửi tin → `MESSAGE_CREATED` trên topic cuộc trò chuyện → thêm `CONVERSATION_ACTIVITY` trên kênh cá nhân của những người xem được cuộc trò chuyện, trừ người gửi | Q9: tin chat không tạo thông báo, chỉ tín hiệu | Không đổi cách gọi 2.16 |
+| 3 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE ngoài các mục trên | — | — |
+| 4 | Header 3 tài liệu | Ghi nhận | v2.4 → v2.5 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract: chỉ thêm (destination + frame) — tương thích ngược.
+- Nghiệp vụ / SRS: theo phạm vi NOTIFICATION-001 user chốt 2026-11-16 (SRS chưa cập nhật — NOTIFICATION-001 `API_Spec.md` header).
+
 ## [v2.4] — 2026-11-15
 
 **Type:** MINOR (thêm endpoint chat 2.16–2.20, thêm field `conversationId` vào yêu cầu ghép kèo, thêm mã lỗi `CHAT_*` cho endpoint mới, thêm `MATCH_016` tạm thời ở 2.1; tương thích ngược, trừ 2.1 `type = NEED_VENUE` tạm trả `422 MATCH_016` cho tới khi luồng B phát hành (chưa có bản chạy; user duyệt 2026-11-15); endpoint, field, mã thành công đã có của 2.1–2.15 giữ nguyên) · **Tóm tắt:** Gửi yêu cầu ghép kèo luồng A mở cuộc trò chuyện giữa đội gửi và đội tạo kèo; bộ endpoint chat và kênh realtime dùng chung cho mọi cuộc trò chuyện (luồng A, luồng B, mercenary) đặt ở mã này (chuyển từ MATCH-002 v2.0); thêm màn hình "Tin nhắn của tôi" (SRS `SYSTEM-001` v1.10 — BR-N01, BR-N03..BR-N06).

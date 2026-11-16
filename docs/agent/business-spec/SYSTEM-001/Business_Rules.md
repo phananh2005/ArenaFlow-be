@@ -95,11 +95,19 @@
 | BR-C05 | Luồng B: thỏa thuận chi phí thuộc Pairing trong lúc thương lượng; hai đội trưởng của Pairing đều nhập/sửa được khi Pairing NEGOTIATING; mỗi lần lưu thay toàn bộ thỏa thuận cũ (kể cả khoản tự nhập) và xoá xác nhận của cả hai bên (BR-M19). Tiền cọc (chỉ luồng B): số tiền cọc 1..1.000.000.000 VND hoặc không có cọc; "ai giữ tiền cọc" (văn bản ≤100 ký tự) chỉ nhập khi có số tiền cọc; không chia tiền cọc. Khi Pairing CONFIRMED, chi phí + tiền cọc + khoản tự nhập được **chép** sang Match (Pairing giữ nguyên thỏa thuận của mình) (2026-11-10, chép khoản tự nhập 2026-11-11) | Khi nhập thỏa thuận chi phí luồng B, khi ghép kèo luồng B |
 | **NOTIFICATION** | | |
 | BR-N01 | Chat lưu 90 ngày sau khi Match kết thúc (COMPLETED/ARCHIVED/CANCELLED/EXPIRED) — vd kèo hết hạn 12/11/2026 → mọi cuộc chat giữa hai đội của kèo đó (BR-N04) bị xóa ngày 10/02/2027 (EXPIRED bổ sung 2026-11-11; áp cho cả luồng A 2026-11-15) | Khi lưu chat |
-| BR-N02 | Notification lưu 30 ngày | Khi tạo notification |
+| BR-N02 | Notification lưu 30 ngày kể từ lúc tạo. Thông báo quá 30 ngày không còn hiển thị với người nhận (danh sách, số chưa đọc — BR-N11), kể cả khi chưa đọc và ngay cả trước lượt xóa hằng ngày; lượt xóa hằng ngày xóa hẳn (user chốt 2026-11-16) | Khi tạo, hiển thị, xóa notification |
 | BR-N03 | Tin nhắn trong cuộc chat giữa hai đội (BR-N04, luồng A và B): nội dung 1..1000 ký tự. Mỗi tin hiển thị tên đội gửi (tên hiện tại của đội) + tên và ảnh của **người thực sự đã gửi**; tin cũ giữ người gửi lúc đó dù đội đã chuyển quyền đội trưởng; người gửi đã xóa tài khoản → "Người dùng đã xóa", không ảnh. Đầu phòng chat hiển thị tên hai đội + đội trưởng hiện tại của mỗi đội (2026-11-10) | Khi gửi và hiển thị tin nhắn |
 | BR-N04 | **Cuộc chat giữa hai đội trong một kèo:** mỗi cặp (kèo, đội tham gia) có đúng một cuộc chat giữa đội tạo kèo và đội tham gia đó. Luồng A: mở khi đội gửi Match Request — mỗi đội gửi có một cuộc chat riêng với đội tạo kèo, kể cả khi request còn PENDING. Luồng B: mở khi đội nhận kèo — mỗi Pairing một cuộc chat. Sau khi ghép, hai đội nhắn tiếp trong chính cuộc chat đó (không mở cuộc chat mới). Chỉ **đội trưởng hiện tại** của mỗi đội xem và nhắn; thành viên đội và các đội khác không thấy cuộc chat (vd X không thấy chat Alpha–Y). Đội gửi lại request sau khi đã rút hoặc request đã hết hạn (UC-M03): theo "mỗi cặp một cuộc chat", dùng tiếp cuộc chat cũ (giữ lịch sử, nhắn được lại khi request mới PENDING — BR-N05) (user chốt 2026-11-13; gửi lại request: 2026-11-15) | Khi gửi request, nhận kèo, xem/nhắn chat |
 | BR-N05 | **Nhắn được / chỉ xem** trong cuộc chat giữa hai đội (BR-N04): (1) **Nhắn được** khi đội tham gia chưa có kết quả — request PENDING (luồng A) / Pairing NEGOTIATING (luồng B) và kèo chưa quá thời hạn bài đăng (quá hạn → BR-M17); hoặc khi hai đội **đã ghép** — request đã được chấp nhận (kể cả khi sau đó đội gửi rút = hủy kèo, BR-M12) / Pairing CONFIRMED: nhắn được trước, trong, sau trận và cả khi kèo bị hủy, đến khi chat bị xóa (BR-N01). (2) **Chỉ xem** (cả hai đội đọc lịch sử, không gửi được) khi đội tham gia **không được ghép**: request REJECTED, SUPERSEDED, EXPIRED hoặc WITHDRAWN khi còn PENDING; Pairing SUPERSEDED hoặc EXPIRED. (3) Trạng thái đội và bộ môn — áp dụng như luồng B hiện tại: đội tạm ngưng (INACTIVE), đội còn lại không hoạt động hoặc bộ môn của kèo đang tắt → vẫn nhắn được; đội đã giải tán → người đã giải tán đội (đội trưởng cuối của đội) vẫn mở cuộc chat và đọc lịch sử nhưng không gửi được; thành viên khác của đội đó không xem được; đội còn lại vẫn xem / nhắn theo (1)–(2) (`USER-002` BR-T11; user chốt 2026-11-15). Ví dụ: kèo luồng A của Alpha có 3 đội X, Y, Z gửi request → 3 cuộc chat Alpha–X, Alpha–Y, Alpha–Z, đều nhắn được khi request còn PENDING; Alpha chấp nhận X → chat Alpha–X vẫn nhắn được, kể cả sau trận hoặc khi kèo bị hủy, đến 90 ngày sau khi kèo kết thúc; Alpha–Y, Alpha–Z (SUPERSEDED) thành chỉ xem. Luồng B: Beta và Gamma nhận kèo của Alpha → chat Alpha–Beta, Alpha–Gamma; Pairing của Beta CONFIRMED → Alpha–Beta nhắn tiếp, Alpha–Gamma (SUPERSEDED) chỉ xem (user chốt 2026-11-13) | Khi gửi tin nhắn |
 | BR-N06 | **Danh sách tin nhắn của tôi:** gồm mọi cuộc chat người dùng xem được tại thời điểm xem. (1) Cuộc chat giữa hai đội (BR-N04): người dùng là đội trưởng hiện tại của một trong hai đội, hoặc là người đã giải tán một trong hai đội (chỉ xem — BR-N05). (2) Chat theo đơn ứng tuyển (BR-ME16): người dùng là đội trưởng hiện tại của đội tuyển, người đã giải tán đội tuyển (chỉ xem), hoặc là ứng viên. Gồm cả cuộc chat chỉ xem và cuộc chat chưa có tin nhắn nào (dòng không có tin cuối). Đội trưởng mới sau khi chuyển quyền thấy mọi cuộc chat của đội; đội trưởng cũ không còn thấy. Cuộc chat đã bị xóa theo BR-N01 không hiển thị. Sắp xếp: tin cuối mới nhất trước; cuộc chat chưa có tin: chat hai đội luồng A xếp theo lúc đội tham gia gửi request gần nhất (gửi lại sau khi rút / hết hạn đẩy cuộc chat lên), chat luồng B và chat theo đơn ứng tuyển xếp theo lúc mở cuộc chat. "Chưa đọc" = bên kia có tin mà phía mình chưa xem. Vd: Minh là đội trưởng Alpha; kèo luồng A của Alpha có Beta và Gamma gửi request; Alpha có ứng viên mercenary Trần Văn C → danh sách của Minh có 3 dòng Alpha–Beta, Alpha–Gamma, Alpha–Trần Văn C; Nam giải tán Beta → danh sách của Nam vẫn có Alpha–Beta, đánh dấu chỉ xem (user chốt 2026-11-15) | Khi xem màn hình Tin nhắn |
+| BR-N07 | **Loại thông báo:** hệ thống tạo thông báo trong app cho đúng 35 loại sự kiện ở §8.6 (mỗi loại: khi nào, ai nhận). Không có thông báo cho: tin nhắn chat (BR-N12); đội trưởng cũ khi chuyển quyền đội trưởng; ứng viên tự rút đơn PENDING; Match chuyển ARCHIVED → COMPLETED; từng report địa điểm (Admin chỉ nhận cảnh báo theo BC-V05) (user chốt 2026-11-16) | Khi có sự kiện |
+| BR-N08 | **Người nhận:** (1) Sự kiện nhắm vào một đội → **đội trưởng của đội tại lúc hệ thống tạo thông báo** — có thể vài giây sau sự kiện, không phải đội trưởng đúng lúc sự kiện xảy ra: đội chuyển quyền đội trưởng trong khoảng đó thì đội trưởng mới nhận. Thành viên thường không nhận; đội đã giải tán (không còn đội trưởng) → không ai nhận. (2) Sự kiện nhắm vào một người dùng (người được mời, ứng viên / mercenary, người bị report cá nhân…) → chính người đó. (3) Sự kiện cho Admin (cảnh báo địa điểm — BC-V05; tranh chấp report bùng mới, giữa hai đội hoặc liên quan mercenary) → **mỗi** Admin đang hoạt động nhận một thông báo riêng, đọc riêng. (4) Chuyển quyền đội trưởng không chuyển thông báo: thông báo đã tạo ở lại người nhận cũ; đội trưởng mới chỉ nhận thông báo tạo từ lúc nhận quyền. (5) Người đã xóa tài khoản không nhận thông báo mới. (6) Một người là đội trưởng của cả hai đội trong cùng sự kiện (BR-M18) nhận một thông báo cho mỗi loại. Vd: Beta hủy kèo đã ghép với Alpha lúc 10:00:00, Minh chuyển quyền đội trưởng Alpha cho Lan lúc 10:00:02, hệ thống tạo thông báo lúc 10:00:03 → Lan nhận "Kèo bị hủy", Minh không nhận (user chốt 2026-11-16) | Khi tạo thông báo |
+| BR-N09 | **Nội dung thông báo:** tiêu đề và nội dung tiếng Việt do hệ thống soạn tại lúc tạo — là ảnh chụp tại thời điểm đó: đội đổi tên, kèo đổi giờ sau này không cập nhật thông báo cũ. Nội dung chỉ có tên đội, tên sân, giờ, vị trí, loại report — **không** có tên cá nhân; không đưa lý do Admin tạm ngưng đội. Thông báo kèm màn hình liên quan (kèo, thương lượng, đội, lời mời, hồ sơ, địa điểm, report, tranh chấp, đơn ứng tuyển) để người nhận mở xem; lúc mở, đối tượng có thể đã đổi trạng thái hoặc người nhận không còn quyền xem (vd đã chuyển quyền đội trưởng) (user chốt 2026-11-16) | Khi tạo, hiển thị thông báo |
+| BR-N10 | **Thời điểm tạo và nhận:** thông báo của thao tác người dùng được tạo vài giây sau khi thao tác thành công; thao tác thất bại không tạo thông báo. Thông báo do hệ thống tự chuyển trạng thái (hết hạn, kết thúc trận, tự đóng tin tuyển…) tạo theo chu kỳ của tác vụ đó (phần lớn trễ tối đa khoảng 5 phút; huy hiệu đối soát và cảnh báo địa điểm 180 ngày: hằng ngày). App đang mở nhận thông báo mới ngay (tín hiệu realtime); mất kết nối thì khi kết nối lại app cập nhật lại số chưa đọc. Không bảo đảm tuyệt đối mọi thông báo được tạo: sự cố máy chủ đúng lúc vừa thao tác có thể làm mất thông báo của thao tác đó; trạng thái thật luôn xem ở chức năng tương ứng. Push điện thoại khi app đóng: chưa có (§8.6) (user chốt 2026-11-16) | Khi tạo, khi nhận thông báo |
+| BR-N11 | **Người dùng xem thông báo:** chỉ thấy thông báo của chính mình trong 30 ngày gần nhất (BR-N02): xem danh sách (mới nhất trước, lọc "chỉ chưa đọc"), xem số chưa đọc (không tính tin nhắn chat — BR-N12), đánh dấu một thông báo đã đọc, đánh dấu tất cả đã đọc (mọi thông báo chưa đọc có tại lúc thao tác; thông báo đến sau vẫn chưa đọc). Không xóa thủ công (tự xóa sau 30 ngày), không đánh dấu lại chưa đọc (user chốt 2026-11-16) | Khi xem thông báo |
+| BR-N12 | **Tin nhắn chat không tạo thông báo:** tin nhắn mới (chat giữa hai đội — BR-N04; chat theo đơn ứng tuyển — BR-ME16) không tạo thông báo và không tính vào số thông báo chưa đọc. Mỗi tin mới, những người xem được cuộc chat (BR-N06) trừ người gửi, nếu đang mở app, nhận tín hiệu realtime để cập nhật dấu "chưa đọc" của màn hình "Tin nhắn". Push điện thoại cho tin nhắn quyết khi làm push (§8.6) (user chốt 2026-11-16) | Khi gửi tin nhắn |
+| BR-N13 | **Nhắc trước trận:** một lần, khoảng 2 giờ trước giờ bắt đầu (trễ tối đa khoảng 5 phút). Match CONFIRMED: đội trưởng hai đội + mọi mercenary APPROVED của trận. Trận ngoài hệ thống (BR-ME19) chưa hủy: chỉ mercenary APPROVED (không nhắc đội trưởng đội khai báo). Kèo được ghép / trận ngoài hệ thống được khai báo khi còn dưới 2 giờ trước giờ bắt đầu → không nhắc. Mỗi trận chỉ nhắc một lần: mercenary được duyệt sau lần nhắc không được nhắc bù. Vd: kèo 18:00 → nhắc khoảng 16:00–16:05; kèo được ghép lúc 16:30 cho trận 18:00 → không nhắc (user chốt 2026-11-16) | Trước giờ bắt đầu trận |
+| BR-N14 | **Nhắc đánh giá và thông báo nhận đánh giá:** (1) Match chuyển ARCHIVED (trễ tối đa khoảng 5 phút sau giờ kết thúc dự kiến) → đội trưởng hai đội nhận nhắc nhập tỷ số và đánh giá; mercenary APPROVED của trận nhận nhắc đánh giá đội thuê mình. Match chuyển ARCHIVED → COMPLETED không có thông báo. (2) Trận ngoài hệ thống: mercenary APPROVED nhận nhắc đánh giá đội trong khoảng 5 phút sau giờ kết thúc; chỉ nhắc cho trận kết thúc trong 24 giờ gần nhất — trận đã kết thúc quá 24 giờ mà chưa được nhắc (vd hệ thống gián đoạn) → không nhắc bù. (3) "Nhận đánh giá": bên được đánh giá chỉ nhận thông báo khi chính họ **đã đánh giá** bên kia trước (bên kia đánh giá sau); bên chưa đánh giá không nhận — không lộ "đối phương đã đánh giá" (BC-R04). Áp cho đánh giá giữa hai đội và giữa đội trưởng ↔ mercenary (BC-R03, BR-ME13) (user chốt 2026-11-16) | Khi trận kết thúc, khi đánh giá |
 
 ---
 
@@ -129,9 +137,9 @@ stateDiagram-v2
 | OPEN | CONFIRMED | 1 Match_Request ACCEPTED (A) hoặc 1 Pairing CONFIRMED (B) | Team Captain | Không sửa giờ/sân/trình độ sau CONFIRMED |
 | OPEN | EXPIRED | `expires_at` ≤ now | System | Scheduled job + lazy check (BR-M17) |
 | OPEN | CANCELLED | Tác giả hủy (phải từ chối mọi request PENDING trước) | Team Captain | Không trừ uy tín |
-| CONFIRMED | ARCHIVED | `scheduled_end_time` ≤ now | System | Gửi push cho 2 đội trưởng: "Trận đấu hôm nay thế nào? Hãy nhập tỷ số và đánh giá đồng đội!" |
+| CONFIRMED | ARCHIVED | `scheduled_end_time` ≤ now | System | Gửi thông báo nhắc cho 2 đội trưởng: "Trận đấu hôm nay thế nào? Hãy nhập tỷ số và đánh giá đồng đội!"; mercenary APPROVED nhận nhắc đánh giá đội thuê mình (BR-N14) |
 | CONFIRMED | CANCELLED | Đội trưởng đội tạo kèo hoặc đội đã ghép hủy, hoặc đội đã ghép rút request đã ACCEPTED (BR-M12); chỉ trước giờ bắt đầu trận (BR-M11) | Team Captain | Trừ Reliability của đội hủy theo khoảng cách giờ trận (BR-M09, BR-M10) |
-| ARCHIVED | COMPLETED | ≥1 đội trưởng đánh giá, kể cả đánh giá "đội kia không đến" (user chốt 2026-11-12) | Team Captain | Đội trưởng còn lại vẫn có thể đánh giá sau, không giới hạn |
+| ARCHIVED | COMPLETED | ≥1 đội trưởng đánh giá, kể cả đánh giá "đội kia không đến" (user chốt 2026-11-12) | Team Captain | Đội trưởng còn lại vẫn có thể đánh giá sau, không giới hạn. Không có thông báo cho lần chuyển trạng thái này (BR-N14) |
 
 **Trạng thái terminal:** CANCELLED, EXPIRED, COMPLETED
 
@@ -437,9 +445,10 @@ Không tính: Match CONFIRMED chưa đá, EXPIRED, CANCELLED khi còn OPEN, CANC
 | BC-C02 | Tiền tệ mặc định VND trong MVP |
 | **NOTIFICATION & CHAT** | |
 | BC-N01 | Mọi cuộc chat giữa hai đội của một kèo (luồng A và B — BR-N04) lưu 90 ngày sau khi Match kết thúc (COMPLETED, ARCHIVED, CANCELLED hoặc EXPIRED) |
-| BC-N02 | Notification lưu 30 ngày |
+| BC-N02 | Notification lưu 30 ngày; quá 30 ngày không còn hiển thị, kể cả trước lượt xóa hằng ngày (BR-N02) |
 | BC-N03 | Thời điểm bắt đầu retention chat: khi Match chuyển sang COMPLETED, ARCHIVED, CANCELLED (tính từ lúc hủy) hoặc EXPIRED (tính từ lúc hết hạn — bổ sung 2026-11-11) |
 | BC-N04 | Mỗi cặp (kèo, đội tham gia) có tối đa một cuộc chat giữa hai đội (BR-N04) |
+| BC-N05 | Mỗi trận (Match hoặc trận ngoài hệ thống) có tối đa một lượt nhắc trước trận (BR-N13); mỗi trận ngoài hệ thống có tối đa một lượt nhắc mercenary đánh giá (BR-N14) |
 
 ---
 
@@ -463,6 +472,7 @@ Không tính: Match CONFIRMED chưa đá, EXPIRED, CANCELLED khi còn OPEN, CANC
 | Thêm địa điểm, thêm ảnh sân, đổi ảnh chính | Sửa địa điểm / xóa ảnh của địa điểm do người khác tạo |
 | Sửa địa điểm và xóa ảnh của địa điểm do mình tạo | — |
 | Report địa điểm đang hoạt động | Report trùng khi report cùng lý do còn chờ xử lý; report địa điểm đã ngừng hoạt động |
+| Xem thông báo của mình trong 30 ngày, xem số chưa đọc, đánh dấu một / tất cả đã đọc (BR-N11) | Xem thông báo của người khác; xóa thông báo; đánh dấu lại chưa đọc |
 
 ### 5.2. Team Captain
 
@@ -523,7 +533,7 @@ Không tính: Match CONFIRMED chưa đá, EXPIRED, CANCELLED khi còn OPEN, CANC
 | Tính Reliability Score | Sửa Reliability Score ngoài quy tắc |
 | Tính Completion Rate | — |
 | Chuyển Match sang ARCHIVED khi đến giờ kết thúc dự kiến | Chuyển sang COMPLETED (phải có đánh giá) |
-| Gửi push notification "Trận đấu hôm nay thế nào?" | — |
+| Gửi thông báo nhắc trước trận (BR-N13) và nhắc đánh giá khi Match ARCHIVED / trận ngoài hệ thống kết thúc (BR-N14) | Push điện thoại khi app đóng (chưa có — §8.6) |
 | Tự động chấp nhận report và trừ Reliability Score | Tự bác report (chỉ admin qua tranh chấp) |
 | Chuyển Pairing/Request PENDING sang SUPERSEDED khi Match CONFIRMED; chuyển Pairing NEGOTIATING sang SUPERSEDED khi Match bị hủy lúc OPEN (BC-M04) | — |
 | Xóa chat/notification hết retention | Xóa trước retention |
@@ -558,7 +568,7 @@ Không tính: Match CONFIRMED chưa đá, EXPIRED, CANCELLED khi còn OPEN, CANC
 2. System tự động chấp nhận report và trừ điểm
 3. System gửi notification cho đội bị report: "Đội [X] report bạn bùng kèo. Bạn có 24h để tranh chấp."
 4a. **Nếu đội bị report KHÔNG phản hồi trong 24h:** report được xác nhận tự động; Match tiếp tục không tính tử số Completion Rate (đã loại từ lúc report — §3.3)
-4b. **Nếu đội bị report phản hồi trong 24h:** tranh chấp được chuyển admin xem xét
+4b. **Nếu đội bị report phản hồi trong 24h:** tranh chấp được chuyển admin xem xét; đội đã report và mỗi Admin nhận thông báo (BR-N08)
 5. Admin xem bằng chứng từ cả 2 bên và đưa ra quyết định cuối cùng:
    - **Xác nhận report đúng:** giữ nguyên mức trừ Reliability, không trừ thêm; Match không tính tử số Completion Rate (user chốt 2026-11-12)
    - **Bác report:** hoàn đúng số điểm đã thực trừ của report đó (có thể ít hơn mức trong bảng §3.2 nếu lúc trừ điểm đã chạm 0) và giảm 1 lần bị report bùng; Match tính lại vào tử số Completion Rate (nếu đã COMPLETED); chuỗi trận sạch đã bị cắt **không** được khôi phục (user chốt 2026-11-12)
@@ -632,7 +642,47 @@ Sau khi hoàn thành **5 trận sạch liên tiếp**, tất cả bộ đếm s�
 - **Quyết định:** Tài khoản soft-deleted giữ mãi trong DB, không bao giờ hard-delete.
 - **Lý do:** Đơn giản (không cần scheduled job purge), lịch sử/đánh giá luôn khả dụng. Dung lượng DB tăng theo thời gian nhưng không đáng kể cho hầu hết quy mô.
 
-### 8.6. Push Notification
-- **Quyết định:** Sử dụng FCM (Android) + APNs (iOS), push tất cả 11 loại notification quan trọng.
-- **Lý do:** FCM/APNs miễn phí 100%, backend chỉ gọi REST API. App xin quyền lúc cài đặt; user chấp nhận → nhận push; từ chối → chỉ in-app notification.
-- **11 loại push:** Match request nhận, request chấp nhận/từ chối, Match confirmed, Match cancelled, Pairing mới, reminder trước trận, Match completed, rating nhận, report nhận, mercenary application, invitation vào đội.
+### 8.6. Thông báo trong app (push điện thoại để sau)
+- **Quyết định (user chốt 2026-11-16 — thay quyết định cũ "FCM + APNs, push tất cả 11 loại"):** bản hiện tại chỉ có thông báo trong app (lưu, xem, đánh dấu đã đọc — BR-N11) và tín hiệu realtime khi app đang mở (BR-N10). Push điện thoại khi app đóng (FCM/APNs) và đăng ký thiết bị làm sau, trọn gói cùng lúc tích hợp FCM; loại nào được push (kể cả tin nhắn chat — BR-N12) quyết khi đó.
+- **Lý do:** Tách phần thông báo dùng được ngay (trong app) khỏi phần tích hợp dịch vụ push bên ngoài.
+- **35 loại thông báo** (người nhận theo BR-N08; "đội trưởng" = đội trưởng của đội tại lúc tạo thông báo):
+
+| # | Loại (mã) | Khi nào | Người nhận |
+|---|---|---|---|
+| 1 | Chào mừng (`WELCOME`) | Đăng ký tài khoản mới (UC-U01) | Người vừa đăng ký |
+| 2 | Lời mời vào đội (`TEAM_INVITATION`) | Đội trưởng mời (UC-T02) | Người được mời |
+| 3 | Lời mời được chấp nhận (`TEAM_INVITATION_ACCEPTED`) | Người được mời chấp nhận (UC-T03) | Đội trưởng |
+| 4 | Lời mời bị từ chối (`TEAM_INVITATION_REJECTED`) | Người được mời từ chối (UC-T03) | Đội trưởng |
+| 5 | Được chuyển quyền đội trưởng (`CAPTAIN_TRANSFERRED`) | Đội trưởng chuyển quyền (UC-T04) | **Chỉ** đội trưởng mới (đội trưởng cũ — người thao tác — không nhận) |
+| 6 | Đội bị tạm ngưng (`TEAM_MARKED_INACTIVE`) | Admin đánh dấu đội INACTIVE (UC-T05) — không kèm lý do | Đội trưởng |
+| 7 | Đội được kích hoạt lại (`TEAM_REACTIVATED`) | Admin kích hoạt lại đội INACTIVE (UC-T05) | Đội trưởng |
+| 8 | Yêu cầu ghép kèo mới (`MATCH_REQUEST_RECEIVED`) | Đội khác gửi Match Request (UC-M03) | Đội trưởng đội tạo kèo |
+| 9 | Yêu cầu bị rút (`REQUEST_WITHDRAWN`) | Đội gửi rút request còn PENDING | Đội trưởng đội tạo kèo |
+| 10 | Yêu cầu được chấp nhận (`REQUEST_ACCEPTED`) | Request được chấp nhận — kèo luồng A đã ghép (UC-M04) | Đội trưởng đội được chấp nhận |
+| 11 | Yêu cầu bị từ chối (`REQUEST_REJECTED`) | Đội tạo kèo từ chối request | Đội trưởng đội gửi |
+| 12 | Yêu cầu bị thay thế (`REQUEST_SUPERSEDED`) | Kèo luồng A ghép với đội khác khi request của đội còn PENDING | Đội trưởng mỗi đội có request bị thay thế |
+| 13 | Yêu cầu hết hạn (`REQUEST_EXPIRED`) | Kèo luồng A hết hạn khi request của đội còn PENDING (UC-M09) | Đội trưởng mỗi đội có request hết hạn |
+| 14 | Có đội nhận kèo (`PAIRING_NEW`) | Đội khác nhận kèo luồng B — mở thương lượng (UC-M05) | Đội trưởng đội tạo kèo |
+| 15 | Thương lượng bị thay thế (`PAIRING_SUPERSEDED`) | Kèo luồng B ghép với đội khác khi Pairing của đội còn NEGOTIATING | Đội trưởng mỗi đội có Pairing bị thay thế |
+| 16 | Thương lượng hết hạn (`PAIRING_EXPIRED`) | Kèo luồng B hết hạn khi Pairing của đội còn NEGOTIATING (UC-M09) | Đội trưởng mỗi đội có Pairing hết hạn |
+| 17 | Kèo đã ghép (`MATCH_CONFIRMED`) | Pairing hoàn tất — kèo luồng B đã ghép (UC-M07) | Đội trưởng **cả hai** đội |
+| 18 | Kèo bị hủy (`MATCH_CANCELLED`) | Kèo đã ghép bị hủy / đội đã ghép rút request đã ACCEPTED → đội còn lại; kèo luồng B chưa ghép bị hủy → các đội đang thương lượng (UC-M08) | Đội trưởng đội còn lại / đội trưởng mỗi đội đang thương lượng |
+| 19 | Kèo hết hạn (`MATCH_EXPIRED`) | Kèo hết hạn mà chưa ghép (UC-M09) | Đội trưởng đội tạo kèo |
+| 20 | Nhắc trước trận (`REMINDER_BEFORE_MATCH`) | Khoảng 2 giờ trước giờ bắt đầu (BR-N13) | Đội trưởng hai đội của kèo đã ghép; mọi mercenary APPROVED của trận (kèo hoặc trận ngoài hệ thống) |
+| 21 | Trận đã xong — nhắc nhập tỷ số và đánh giá (`MATCH_COMPLETED`) | Match chuyển ARCHIVED (BR-N14) | Đội trưởng hai đội |
+| 22 | Nhắc mercenary đánh giá (`MERCENARY_RATING_REMINDER`) | Trận của đơn đã duyệt kết thúc (BR-N14) | Mercenary APPROVED |
+| 23 | Nhận đánh giá (`RATING_RECEIVED`) | Bên kia đánh giá **sau khi** người nhận đã đánh giá họ (BR-N14) | Đội trưởng đội được đánh giá / mercenary được đánh giá |
+| 24 | Bị report (`REPORT_RECEIVED`) | Bị report (UC-R02, UC-ME08); report bùng: nội dung nhắc hạn 24 giờ tranh chấp | Đội trưởng đội bị report / người bị report |
+| 25 | Report bị tranh chấp (`REPORT_DISPUTED`) | Bên bị report bùng gửi tranh chấp (UC-R03, UC-ME08) | Bên đã report (đội trưởng đội đã report / người đã report) |
+| 26 | Tranh chấp đã có quyết định (`DISPUTE_RESOLVED`) | Admin quyết định tranh chấp (UC-R04, UC-ME08) | Bên report và bên bị report |
+| 27 | Được cấp huy hiệu xác minh (`VERIFICATION_BADGE_GRANTED`) | UC-R07 | Đội trưởng đội / người dùng được cấp |
+| 28 | Bị thu hồi huy hiệu xác minh (`VERIFICATION_BADGE_REVOKED`) | UC-R07 | Đội trưởng đội / người dùng bị thu hồi |
+| 29 | Có người ứng tuyển (`MERCENARY_APPLICATION`) | Ứng tuyển tin tuyển của đội (UC-ME03) | Đội trưởng đội tuyển |
+| 30 | Đơn được duyệt (`MERCENARY_APPLICATION_APPROVED`) | UC-ME04 | Ứng viên |
+| 31 | Đơn bị từ chối (`MERCENARY_APPLICATION_REJECTED`) | Đội trưởng từ chối (UC-ME04), hoặc tin đóng / hết hạn / trận bị hủy khi đơn còn PENDING (BR-ME07, BR-ME09) | Ứng viên |
+| 32 | Mercenary rút lui (`MERCENARY_WITHDRAWN`) | Mercenary đã APPROVED rút lui (UC-ME05); ứng viên xóa tài khoản (BR-ME18) | Đội trưởng đội tuyển |
+| 33 | Trận của mercenary bị hủy (`MERCENARY_GAME_CANCELLED`) | Trận của đơn đã duyệt bị hủy — Match hoặc trận ngoài hệ thống (BR-ME09) | Mercenary APPROVED |
+| 34 | Cảnh báo địa điểm (`VENUE_ADMIN_ALERT`) | Địa điểm bị report ngừng hoạt động hoặc 180 ngày không được chọn — một lần mỗi đợt cảnh báo, **không** báo từng report (BC-V05) | Mỗi Admin |
+| 35 | Tranh chấp mới (`DISPUTE_CREATED`) | Có tranh chấp report bùng mới cần xử lý — giữa hai đội hoặc liên quan mercenary (UC-R03, UC-ME08) | Mỗi Admin |
+
+Không có thông báo: xem BR-N07.

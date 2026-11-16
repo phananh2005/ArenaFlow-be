@@ -171,7 +171,7 @@
 2. User chọn "Chấp nhận" hoặc "Từ chối"
 3. Hệ thống cập nhật trạng thái lời mời
 4. (Nếu chấp nhận) Hệ thống thêm User vào đội với vai trò MEMBER
-5. Hệ thống gửi notification cho đội trưởng
+5. Hệ thống gửi notification cho đội trưởng: lời mời được chấp nhận hoặc bị từ chối (Business_Rules §8.6, BR-N08)
 
 **Postconditions:**
 - Lời mời chuyển sang accepted/rejected
@@ -179,6 +179,8 @@
 - Lịch sử thành viên được ghi nhận
 
 **Exception Flows:** (không có exception đặc biệt)
+
+> **Ghi chú — rủi ro đã chấp nhận (user chốt 2026-11-16):** người được mời biết lời mời **chỉ qua** thông báo lời mời vào đội (UC-T02 bước 5); chưa có màn hình "lời mời của tôi" (để chức năng sau). Thông báo có thể không được tạo khi sự cố máy chủ (BR-N10) và hết hiển thị sau 30 ngày (BR-N02) trong khi lời mời không hết hạn → khi đó người được mời không tìm lại được lời mời.
 
 ---
 
@@ -196,12 +198,13 @@
 3. Đội trưởng xác nhận chuyển quyền
 4. Hệ thống tự động chuyển quyền ngay lập tức (người được chọn bắt buộc nhận)
 5. Hệ thống lưu lịch sử chuyển quyền
-6. Hệ thống gửi notification cho đội trưởng mới và đội trưởng cũ
+6. Hệ thống gửi notification cho **đội trưởng mới**; đội trưởng cũ (người thao tác) không nhận (user chốt 2026-11-16)
 
 **Postconditions:**
 - Đội trưởng cũ trở thành thành viên
 - Thành viên được chọn trở thành đội trưởng
 - Lịch sử chuyển quyền được ghi nhận
+- Thông báo đội trưởng cũ đã nhận ở lại người cũ; đội trưởng mới nhận thông báo của đội từ lúc nhận quyền (BR-N08)
 
 **Exception Flows:**
 
@@ -225,12 +228,16 @@
 3. Admin nhập lý do
 4. Admin xác nhận
 5. Hệ thống chuyển đội sang INACTIVE
-6. Hệ thống gửi notification cho đội trưởng
+6. Hệ thống gửi notification cho đội trưởng (không kèm lý do — BR-N09)
 
 **Postconditions:**
 - Đội chuyển sang INACTIVE
 - Đội không thể tạo kèo mới
 - Lịch sử đội được giữ nguyên
+
+**Alternative Flows:**
+
+**A1. Admin kích hoạt lại đội INACTIVE:** đội về ACTIVE; đội trưởng nhận thông báo đội được kích hoạt lại (user chốt 2026-11-16).
 
 > **Sửa bởi `USER-002`:** admin không khoá được đội đã giải tán. Kích hoạt lại không áp dụng cho đội đã giải tán.
 
@@ -601,7 +608,7 @@
 - Đội của đội trưởng đánh giá phải đang ACTIVE; đội INACTIVE hoặc DISBANDED không đánh giá được. Đội được đánh giá ở trạng thái nào cũng được đánh giá (BR-R10)
 
 **Main Flow:**
-1. Đội trưởng nhận push notification "Trận đấu hôm nay thế nào? Hãy nhập tỷ số và đánh giá đồng đội!"
+1. Đội trưởng nhận thông báo nhắc "Trận đấu hôm nay thế nào? Hãy nhập tỷ số và đánh giá đồng đội!" khi Match chuyển ARCHIVED (BR-N14)
 2. Đội trưởng chọn "Đánh giá"
 3. Đội trưởng chọn 1 trong 2: (a) Đánh giá 1-5 sao, hoặc (b) "Đội kia không đến"
 4. (Nếu chọn a) Đội trưởng chọn số sao nguyên 1–5 và nhập nhận xét (tùy chọn, ≤500 ký tự — BR-R09)
@@ -611,9 +618,10 @@
 8. Hệ thống lưu đánh giá (kể cả đánh giá "đội kia không đến") và chuyển Match sang COMPLETED (nếu đang ARCHIVED). Khi Match chuyển COMPLETED: (a) cả hai đội +2 Reliability Score; (b) "đội kia không đến" → đội đánh giá +2, đội vắng 0 và chuỗi trận sạch của đội vắng giữ nguyên (Business_Rules §3.1 — user chốt 2026-11-12)
 9. (Nếu đánh giá 5 sao) Hệ thống cộng +1 Reliability Score cho đội được đánh giá
 10. Sao trung bình của đội được đánh giá phản ánh đánh giá mới (tính khi hiển thị, không lưu; đánh giá "đội kia không đến" không tính vào trung bình)
+11. (Nếu đội được đánh giá đã đánh giá đội này trước) Đội trưởng đội được đánh giá nhận thông báo "nhận đánh giá"; đội chưa đánh giá không nhận (BR-N14, BC-R04)
 
 **Postconditions:**
-- Match chuyển sang COMPLETED (nếu đang ARCHIVED)
+- Match chuyển sang COMPLETED (nếu đang ARCHIVED); không có thông báo cho việc chuyển COMPLETED (BR-N14)
 - Đánh giá được lưu; không sửa, không xóa sau khi gửi
 - Đội được đánh giá nhận +1 Reliability nếu được đánh giá 5 sao
 - Bên đã đánh giá có thể xem rating đối phương cho mình (sau khi đối phương đánh giá)
@@ -691,6 +699,7 @@
 4. Đội trưởng submit
 5. Hệ thống chuyển tranh chấp cho admin xem xét
 6. Hệ thống tạm giữ mức trừ Reliability (chưa hoàn lại)
+7. Hệ thống gửi thông báo cho đội đã report và cho mỗi Admin (tranh chấp mới — BR-N08)
 
 **Postconditions:**
 - Tranh chấp được tạo và chuyển admin
@@ -939,11 +948,13 @@
 - Mercenary đã tham gia trận
 
 **Main Flow:**
+0. Khi trận kết thúc, mercenary APPROVED nhận thông báo nhắc đánh giá đội thuê mình — Match: lúc chuyển ARCHIVED; trận ngoài hệ thống: trong khoảng 5 phút sau giờ kết thúc, không nhắc trận đã kết thúc quá 24 giờ (BR-N14)
 1. Đội trưởng đánh giá từng mercenary đã tham gia (sao nguyên 1–5 hoặc "không đến" — BR-ME12, BR-ME13)
 2. Mercenary đánh giá đội thuê mình (sao nguyên 1–5)
 3. Hệ thống lưu rating (cấu trúc: rater_type, rater_id, ratee_type, ratee_id)
 4. Rating mercenary nhận được tính vào sao trung bình cá nhân; rating mercenary dành cho đội chỉ hiển thị riêng trên hồ sơ đội, không tính vào sao trung bình đội (BR-ME13)
 5. (Nếu mercenary được đánh giá 5 sao) Hệ thống cộng +1 Reliability cá nhân; đánh giá của mercenary không cộng Reliability đội (BR-ME13)
+6. (Nếu bên được đánh giá đã đánh giá bên kia trước) Bên được đánh giá nhận thông báo "nhận đánh giá"; bên chưa đánh giá không nhận (BR-N14)
 
 **Postconditions:**
 - Rating được lưu
@@ -995,7 +1006,7 @@
 1. Đội trưởng report một mercenary đã tham gia, hoặc mercenary report đội thuê mình; chọn loại (bùng, chơi xấu, giao tiếp tệ, không đúng trình độ) và nhập lý do (BR-R09)
 2. Hệ thống lưu report, tự chấp nhận, trừ Reliability của bên bị report theo số lần (§3.2 — cá nhân khi bên bị report là mercenary) (BR-ME14)
 3. Bên bị report nhận notification
-4. (Nếu report bùng) Bên bị report có 24 giờ để tranh chấp; Admin xử lý như UC-R03, UC-R04
+4. (Nếu report bùng) Bên bị report có 24 giờ để tranh chấp; Admin xử lý như UC-R03, UC-R04. Khi có tranh chấp mới: bên đã report và mỗi Admin nhận thông báo; khi Admin quyết định: cả hai bên nhận thông báo (BR-N08)
 
 **Postconditions:**
 - Report được lưu; Reliability và chuỗi trận sạch của bên bị report cập nhật (BR-ME15)
@@ -1016,6 +1027,7 @@
 
 **Postconditions:**
 - Tin nhắn được lưu; retention 90 ngày sau khi Match kết thúc (BR-N01)
+- Tin nhắn không tạo thông báo; bên còn lại (người xem được cuộc chat, trừ người gửi) đang mở app nhận tín hiệu realtime để cập nhật dấu "chưa đọc" của màn hình "Tin nhắn" (BR-N12)
 
 **Exception Flows:**
 
@@ -1093,7 +1105,7 @@
 3. User nhập chi tiết
 4. User submit
 5. Hệ thống lưu report (người report, lý do, thời gian)
-6. Hệ thống gửi notification cho admin
+6. Hệ thống **không** gửi thông báo cho từng report; (nếu lý do "ngừng hoạt động") địa điểm vào đợt cảnh báo Admin — mỗi Admin nhận một thông báo, một lần mỗi đợt cảnh báo (BC-V05, BR-N08; user chốt 2026-11-16)
 
 **Postconditions:**
 - Report được lưu
@@ -1273,6 +1285,7 @@
 - Tin nhắn được lưu
 - Tin cũ giữ người gửi lúc đó dù đội đã chuyển quyền đội trưởng (vd đội Beta: tin của Nam vẫn hiển thị "Beta · Nam" sau khi Lan làm đội trưởng; đầu phòng hiển thị Lan); người gửi đã xóa tài khoản → "Người dùng đã xóa", không ảnh
 - Retention: BR-N01
+- Tin nhắn không tạo thông báo; người xem được cuộc chat (trừ người gửi) đang mở app nhận tín hiệu realtime để cập nhật dấu "chưa đọc" của màn hình "Tin nhắn" (BR-N12)
 - Từ cuộc chat đã có tin nhắn, mỗi đội trưởng report được đội kia loại "giao tiếp tệ" bất kể trạng thái request/Pairing/kèo (UC-R02, BR-R07)
 - Chat không hỗ trợ tìm kiếm/xuất trong MVP
 
@@ -1300,20 +1313,36 @@
 
 ### UC-N02: Gửi notification
 
-**Actor:** System
+**Actor:** System (tạo, gửi); người dùng đã đăng nhập / Admin (người nhận — xem, đánh dấu đã đọc)
 
 **Preconditions:**
-- Có sự kiện kích hoạt notification (11 loại, xem Overview §4)
+- Có sự kiện kích hoạt notification (35 loại — Business_Rules §8.6, BR-N07) và thao tác gây ra sự kiện đã thành công
 
 **Main Flow:**
-1. System nhận sự kiện (vd: Match confirmed, rating nhận được)
-2. System tạo notification (type, recipient, content, timestamp, read_status)
-3. System lưu notification (retention 30 ngày)
-4. System gửi notification qua kênh (in-app, push nếu có)
+1. System nhận sự kiện (vd: Match confirmed, đội khác gửi Match Request); thao tác người dùng → vài giây sau khi thao tác thành công; hệ thống tự chuyển trạng thái → theo chu kỳ tác vụ (BR-N10)
+2. System xác định người nhận tại lúc tạo thông báo (BR-N08): sự kiện của đội → **đội trưởng của đội tại lúc tạo thông báo** (có thể vài giây sau sự kiện — chuyển quyền trong khoảng đó thì đội trưởng mới nhận); sự kiện của một người → chính người đó; sự kiện cho Admin → mỗi Admin đang hoạt động
+3. System soạn tiêu đề + nội dung tiếng Việt tại lúc tạo, không có tên cá nhân, kèm màn hình liên quan (BR-N09), và lưu mỗi người nhận một thông báo chưa đọc (retention 30 ngày — BR-N02)
+4. Người nhận đang mở app nhận thông báo ngay (tín hiệu realtime); push điện thoại khi app đóng chưa có (BR-N10, Business_Rules §8.6)
+
+**Main Flow — người nhận xem thông báo (BR-N11):**
+1. Người dùng mở màn hình "Thông báo": danh sách thông báo của mình trong 30 ngày gần nhất, mới nhất trước; có thể lọc "chỉ chưa đọc" và cuộn để tải thông báo cũ hơn
+2. App hiển thị số thông báo chưa đọc (badge); sau khi mất kết nối, app lấy lại số chưa đọc khi kết nối lại
+3. Người dùng bấm một thông báo → thông báo thành đã đọc, app mở màn hình liên quan
+4. (Tùy chọn) Người dùng chọn "Đánh dấu tất cả đã đọc" → mọi thông báo chưa đọc có tại lúc thao tác thành đã đọc
 
 **Postconditions:**
-- Notification được lưu và gửi
-- User xem notification trong app
+- Notification được lưu cho từng người nhận; người nhận xem trong app
+- Không xóa thủ công, không đánh dấu lại chưa đọc (BR-N11)
+
+**Exception Flows:**
+
+**1a. Thao tác gây sự kiện thất bại:** không tạo thông báo.
+
+**2a. Sự kiện của đội đã giải tán (không còn đội trưởng), hoặc người nhận đã xóa tài khoản:** không tạo thông báo cho người đó (BR-N08).
+
+**3a. Sự cố máy chủ đúng lúc vừa thao tác:** thông báo của thao tác đó có thể không được tạo; trạng thái thật xem ở chức năng tương ứng (BR-N10).
+
+**U3a. Thông báo đã quá 30 ngày (hoặc không phải của người dùng):** không hiển thị, không đánh dấu được (BR-N02).
 
 ---
 
@@ -1334,6 +1363,7 @@
 **Postconditions:**
 - Chat/notification hết retention được xóa
 - Giảm tải DB
+- Thông báo quá 30 ngày đã không còn hiển thị với người nhận (danh sách, số chưa đọc) ngay cả trước lượt xóa hằng ngày (BR-N02)
 
 ---
 
@@ -1368,6 +1398,6 @@
 3. **GPS permission revocation:** Fallback sang khu vực hồ sơ (phường/xã) ngay lập tức. Hiển thị thông báo "Bật GPS để tìm kèo gần bạn hơn".
 4. **Report cooldown:** Không giới hạn. Mỗi trận chỉ report đối phương 1 lần/loại là đủ chống spam.
 5. **Hard-delete policy:** Giữ mãi, không hard-delete. Lịch sử luôn khả dụng.
-6. **Push notification:** FCM + APNs (miễn phí), push tất cả 11 loại. App xin quyền lúc cài; user chấp nhận → push, từ chối → in-app only.
+6. **Push notification (sửa 2026-11-16 — user chốt):** bản hiện tại chỉ có thông báo trong app (35 loại) + tín hiệu realtime khi app đang mở; push FCM/APNs và đăng ký thiết bị làm sau cùng lúc tích hợp FCM (Business_Rules §8.6).
 7. **Admin panel scope:** 4 chức năng cốt lõi trong MVP: bật/tắt bộ môn, xử lý tranh chấp report bùng, xem/xác minh report địa điểm, đánh dấu đội/venue INACTIVE.
 8. **Hoàn thiện hồ sơ sau đăng ký (2026-11-06):** Khi đăng ký thành công, hệ thống cho ứng dụng biết đây là tài khoản mới; ứng dụng tự đưa User đến màn hình sửa hồ sơ (UC-U02). Không có bước, trạng thái hay quy tắc "hồ sơ chưa hoàn thiện" riêng — lưu hồ sơ theo UC-U02 / BR-U03..U06. User đăng nhập lại vào tài khoản đã có (UC-U01 3a) đi thẳng màn hình chính.
