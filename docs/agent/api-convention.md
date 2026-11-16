@@ -161,6 +161,19 @@ Mã thành công chọn theo **kết quả** của thao tác, không theo HTTP m
 | `POST /teams/{id}/disband` | 200 | B3 (`disbandedAt`, `disbandedByName`), B4 (đội giải tán vẫn xem được) |
 | `POST /invitations/{id}/reject` | 204 | N1 |
 | `POST /teams/{id}/members/leave`, `DELETE /profile` | 204 | N1 |
+| `POST /matches` (tạo kèo), `POST /matches/{matchId}/requests` (gửi yêu cầu ghép kèo) | 201 | B2 |
+| `GET /matches`, `GET /matches/{matchId}`, `GET /matches/{matchId}/requests`, `GET /teams/{teamId}/matches`, `GET /teams/{teamId}/match-requests`, `GET /sports`, `GET /admin/sports` | 200 | B1 |
+| `PUT /matches/{matchId}/cost-agreement` | 200 | B3 (`itemId`, `updatedAt`), B4 |
+| `POST /matches/{matchId}/cancel` | 200 | B3 (`cancelledAt`, `reliabilityPenalty`) |
+| `POST /match-requests/{id}/accept` | 200 | B3 (`respondedAt`, `opponentTeamName`, `matchStatus`) |
+| `POST /match-requests/{id}/withdraw` | 200 | B3 (`withdrawnAt`, `matchStatus`, `reliabilityPenalty`) |
+| `POST /match-requests/{id}/reject` | 204 | N1 |
+| `PATCH /admin/sports/{id}` | 200 | B4 |
+| `POST /matches/{matchId}/ratings`, `POST /matches/{matchId}/reports`, `POST /reports/{reportId}/dispute` | 201 | B2 |
+| `GET /matches/{matchId}/ratings`, `GET /teams/{teamId}/reports`, `GET /admin/disputes`, `GET /admin/disputes/{id}`, `GET /teams/{teamId}/reputation` | 200 | B1 |
+| `PATCH /admin/disputes/{id}/resolve` | 200 | B3 (`resolvedAt`, `resolvedByName`), B4 |
+| `GET /profile/notifications`, `GET /profile/notifications/unread-count` | 200 | B1 |
+| `POST /profile/notifications/{id}/read`, `POST /profile/notifications/read` (đánh dấu đã đọc một / tất cả) | 204 | N1 |
 | `POST /conversations/{id}/messages` (gửi tin), `POST /conversations/{id}/reports` (report giao tiếp tệ qua chat hai đội) | 201 | B2 |
 | `GET /conversations/{id}`, `GET /conversations/{id}/messages`, `GET /profile/conversations` | 200 | B1 |
 | `POST /conversations/{id}/messages/read` | 204 | N1 |
@@ -208,6 +221,12 @@ Format: `<DOMAIN>_<NUMBER>`
 - `REPORT` — Report (báo cáo vi phạm)
 - `CHAT` — Cuộc trò chuyện (dùng chung cho mọi ngữ cảnh chat)
 - `MERCENARY` — Tuyển mercenary: tin tuyển, đơn ứng tuyển, đánh giá / report theo đơn, trận ngoài hệ thống
+- `MATCH` — Kèo và yêu cầu ghép kèo (luồng A), huỷ kèo, thoả thuận chi phí
+- `PAIRING` — Thương lượng ghép kèo (luồng B)
+- `SPORT` — Bộ môn
+- `RATING` — Đánh giá trận
+- `DISPUTE` — Tranh chấp report
+- `NOTIFICATION` — Thông báo in-app
 - `SYS` — Lỗi tầng HTTP/hệ thống, không gắn miền nghiệp vụ; **chỉ** global exception handler phát ra (NEVER ném qua exception nghiệp vụ):
   - `SYS_001` — 404, URL không khớp endpoint nào
   - `SYS_002` — 405, sai HTTP method (kèm header `Allow`)
@@ -231,6 +250,8 @@ Lỗi 400 do framework phát hiện (thiếu query param bắt buộc, sai kiể
 - `REPORT_009` — Report nhắm vào cá nhân mà người gọi tranh chấp không phải người bị report
 - `REPORT_010`, `REPORT_011` — Report qua chat hai đội: cuộc trò chuyện chưa có tin nhắn nào; cuộc trò chuyện không phải giữa hai đội (vd chat theo đơn ứng tuyển)
 - `MERCENARY_001`..`MERCENARY_025` — Tuyển mercenary: không tìm thấy tin / đơn / trận ngoài (`001`, `002`, `024`); điều kiện kèo / trận (`003`, `004`, `013`); đội tuyển không hoạt động (`005`); tin đủ người / đã đóng (`006`, `007`); số lượng thấp hơn số đã duyệt (`008`); trùng đơn / trùng vị trí / trùng đánh giá / trùng report (`009`, `023`, `017`, `022`); thành viên đội trong trận (`010`); trùng giờ (`011`); trạng thái đơn đã đổi (`012`); không tham gia đơn (`014`); điều kiện đánh giá / report (`015`, `016`, `019`–`021`); thiếu vị trí để tìm kèo (`018`); trận ngoài đã có mercenary được duyệt (`025`)
+- `NOTIFICATION_001` — Thông báo không tồn tại (không phải của người gọi, hoặc đã quá 30 ngày)
+- `NOTIFICATION_002` — Thông báo mốc (`before` / `after`) không hợp lệ: không phải của người gọi hoặc đã quá 30 ngày
 
 ---
 
@@ -295,6 +316,7 @@ Bản thân phần tử mốc (`before` / `after`) không có trong kết quả.
 |---|---|---|
 | Mọi danh sách trừ bảng dưới | Offset (`page`/`pageSize`) | — |
 | `GET /conversations/{id}/messages` (lịch sử chat theo cuộc trò chuyện) | Cursor | `before` / `after` = `messageId` |
+| `GET /profile/notifications` (danh sách thông báo của tôi) | Cursor | `before` / `after` = `notificationId` |
 
 ---
 

@@ -33,6 +33,7 @@ _(Chưa có file kiến trúc/thuật ngữ — thêm khi dự án phát triển
 | Làm việc với thương lượng ghép kèo luồng B / pairing / tiền cọc / xác nhận ghép kèo (MATCH-002) | `docs/agent/design/MATCH-002/` |
 | Làm việc với đánh giá trận / report đội & tranh chấp / uy tín đội (Reliability, Completion Rate, huy hiệu) / report giao tiếp tệ qua chat (REPUTATION-001) | `docs/agent/design/REPUTATION-001/` |
 | Làm việc với tuyển mercenary / tin tuyển & đơn ứng tuyển / chat theo đơn (`conversation`) / đánh giá–report–uy tín cá nhân / trận ngoài hệ thống (MERCENARY-001) | `docs/agent/design/MERCENARY-001/` |
+| Làm việc với thông báo in-app / 35 loại thông báo / listener bất đồng bộ sau commit / kênh realtime cá nhân `/user/queue/notifications` / nhắc trước trận & nhắc đánh giá / job xoá chat 90 ngày – thông báo 30 ngày (NOTIFICATION-001) | `docs/agent/design/NOTIFICATION-001/` |
 | Publish SRS/API_Spec cho FE (repo `ArenaFlow-spec`, workflow `publish-spec`) | `docs/agent/README.md` mục "Publish tài liệu cho FE" |
 
 ---

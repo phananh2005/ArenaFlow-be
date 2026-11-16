@@ -26,12 +26,15 @@ ArenaFlow-be/
 │   ├── mapper/              # Entity ↔ DTO mappers (MapStruct)
 │   ├── validation/          # Custom constraint annotation + validator
 │   ├── event/<miền>/        # Domain event (record) theo miền: match/, reputation/, mercenary/… — phát qua ApplicationEventPublisher
+│   ├── listener/            # Listener sau commit (@TransactionalEventListener AFTER_COMMIT) chuyển event thành thông báo — chạy @Async (ADR-0015)
 │   └── support/             # Thành phần hỗ trợ service: guard, retry, phân trang
 │       ├── chat/            # Port realtime (ChatRealtimeGateway) — không phụ thuộc spring-websocket
 │       ├── mercenary/       # MercenaryGuard, MercenaryRules… — guard / quy tắc riêng của miền mercenary
+│       ├── notification/    # NotificationWriter, NotificationTexts, PushSender… — ghi / soạn / đẩy thông báo
+│       ├── realtime/        # Port kênh realtime cá nhân (UserRealtimeGateway) — không phụ thuộc spring-websocket
 │       └── security/        # JwtTokenService, JwtProperties (service gọi trực tiếp)
 └── api/                     # com.phananh.arenaflow (ArenaFlowApplication) + com.phananh.arenaflow.api
-    ├── <nhóm>/              # REST Controllers (@RestController) theo nhóm: auth/, profile/, team/…
+    ├── <nhóm>/              # REST Controllers (@RestController) theo nhóm: auth/, profile/, team/, notification/…
     ├── config/              # @Configuration, SecurityConfig, WebMvcConfig, GlobalExceptionHandler
     ├── realtime/            # WebSocket/STOMP config, interceptor, gateway adapter (kênh realtime)
     └── security/            # Filter/handler/argument resolver của Spring Security
