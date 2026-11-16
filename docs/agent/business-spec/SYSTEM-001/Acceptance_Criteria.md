@@ -70,8 +70,12 @@
 #### NOTIFICATION DOMAIN
 - [ ] Cuộc chat giữa hai đội mở cho cả luồng A (từ khi gửi request) và luồng B (từ khi nhận kèo); nhắn được / chỉ xem đúng BR-N05
 - [ ] Chat lưu 90 ngày sau Match kết thúc
-- [ ] Notification lưu 30 ngày
-- [ ] 11 loại notification hoạt động đúng
+- [ ] Notification lưu 30 ngày; quá 30 ngày không còn hiển thị (BR-N02)
+- [ ] 35 loại notification hoạt động đúng (Business_Rules §8.6); không tạo thông báo cho các trường hợp BR-N07
+- [ ] Người nhận đúng: đội trưởng tại lúc tạo thông báo, mỗi Admin một thông báo, người đã xóa tài khoản không nhận (BR-N08)
+- [ ] Nhắc trước trận đúng một lần, khoảng 2 giờ trước giờ bắt đầu (BR-N13); nhắc đánh giá và "nhận đánh giá" đúng BR-N14
+- [ ] Xem danh sách, số chưa đọc, đánh dấu một / tất cả đã đọc (BR-N11); app đang mở nhận thông báo ngay (BR-N10)
+- [ ] Tin nhắn chat không tạo thông báo; người xem được cuộc chat nhận tín hiệu cập nhật "Tin nhắn" (BR-N12)
 
 ---
 
@@ -155,7 +159,8 @@
 - Đội trưởng cũ trở thành thành viên
 - Thành viên được chọn trở thành đội trưởng (bắt buộc, không có quyền từ chối)
 - Lịch sử chuyển quyền được lưu (Captain_History)
-- Cả 2 nhận notification
+- **Chỉ đội trưởng mới** nhận notification; đội trưởng cũ (người thao tác) không nhận (user chốt 2026-11-16)
+- Thông báo đội trưởng cũ đã nhận ở lại người cũ; thông báo của đội tạo sau khi chuyển quyền đến đội trưởng mới (BR-N08)
 
 ---
 
@@ -273,7 +278,8 @@
 
 **Then:**
 - Match chuyển ARCHIVED
-- Push notification gửi cho 2 đội trưởng: "Trận đấu hôm nay thế nào? Hãy nhập tỷ số và đánh giá đồng đội!"
+- Thông báo nhắc gửi cho 2 đội trưởng: "Trận đấu hôm nay thế nào? Hãy nhập tỷ số và đánh giá đồng đội!"; mỗi mercenary APPROVED của trận nhận nhắc đánh giá đội thuê mình (BR-N14)
+- Match chuyển tiếp ARCHIVED → COMPLETED (sau đánh giá): không có thông báo
 
 ---
 
@@ -348,6 +354,7 @@
 - (Nếu đánh giá 5 sao) Đội được đánh giá nhận +1 Reliability Score; 4 sao trở xuống không cộng (user chốt 2026-11-12)
 - Sao trung bình của đội được đánh giá phản ánh đánh giá mới khi hiển thị; "đội kia không đến" không tính vào trung bình
 - Bên đã đánh giá có thể xem rating đối phương cho mình (sau khi đối phương đánh giá)
+- Đội được đánh giá đã đánh giá trước → đội trưởng của đội đó nhận thông báo "nhận đánh giá"; chưa đánh giá → không nhận thông báo (BR-N14, BC-R04)
 - Người là đội trưởng của cả hai đội trong trận → bị từ chối, không lưu đánh giá (BR-R08)
 - Đội của người đánh giá INACTIVE hoặc DISBANDED → bị từ chối; đội được đánh giá INACTIVE hoặc DISBANDED vẫn đánh giá được (BR-R10)
 
@@ -397,6 +404,7 @@
 
 **Then:**
 - Tranh chấp được tạo và chuyển admin
+- Đội đã report và mỗi Admin nhận thông báo tranh chấp mới (BR-N08)
 - Mức trừ Reliability tạm giữ (chưa hoàn lại)
 - Admin xem xét và đưa ra quyết định cuối cùng, bắt buộc kèm ghi chú lý do 1–500 ký tự (BR-R09)
 - (Nếu admin xác nhận đúng) Giữ nguyên mức trừ, không trừ thêm; Match không tính tử số Completion Rate (user chốt 2026-11-12)
@@ -553,6 +561,7 @@
 - Mercenary nhận 5 sao → +1 Reliability cá nhân; rating tính vào sao trung bình cá nhân
 - Rating mercenary dành cho đội chỉ hiển thị riêng trên hồ sơ đội, không vào sao trung bình đội, không cộng Reliability đội
 - Mỗi cặp (Match, người đánh giá, người được đánh giá) chỉ đánh giá một lần (BC-R02)
+- Mercenary APPROVED nhận nhắc đánh giá đội khi trận kết thúc; bên được đánh giá chỉ nhận thông báo "nhận đánh giá" khi đã đánh giá bên kia trước (BR-N14)
 
 ---
 
@@ -564,7 +573,7 @@
 
 **Then:**
 - Report tự chấp nhận; bên bị report bị trừ Reliability theo số lần (§3.2 — cá nhân khi là mercenary); chuỗi trận sạch về 0 (BR-ME14, BR-ME15)
-- Report bùng: bên bị report có 24 giờ để tranh chấp, Admin quyết định như AC-R03
+- Report bùng: bên bị report có 24 giờ để tranh chấp, Admin quyết định như AC-R03; tranh chấp mới → bên đã report và mỗi Admin nhận thông báo (BR-N08)
 - Đơn đã có tin nhắn chat (kể cả PENDING/REJECTED/WITHDRAWN, trận bị hủy): chỉ report được "giao tiếp tệ"; loại khác bị từ chối (BR-ME14)
 
 ---
@@ -592,6 +601,7 @@
 
 **Then:**
 - Tin được lưu và bên kia nhận real-time; hiển thị người thực sự gửi (BR-ME16)
+- Tin nhắn không tạo notification; bên kia đang mở app nhận tín hiệu cập nhật dấu "chưa đọc" của "Tin nhắn" (BR-N12)
 - Đơn APPROVED vẫn nhắn được sau khi Match kết thúc hoặc bị hủy, đến khi hết hạn lưu
 - Đơn REJECTED/WITHDRAWN → chỉ xem lịch sử, không gửi được
 - Đội tuyển đã giải tán → người đã giải tán đội đọc được lịch sử, không gửi được; ứng viên vẫn nhắn theo trạng thái đơn (BR-ME16)
@@ -648,7 +658,7 @@
 
 **Then:**
 - Report được lưu (người report, lý do, thời gian)
-- Admin nhận notification
+- Admin **không** nhận notification cho từng report; report "ngừng hoạt động" đưa địa điểm vào đợt cảnh báo — mỗi Admin nhận một thông báo, một lần mỗi đợt (BC-V05, BR-N08)
 - Địa điểm KHÔNG tự ẩn (cần admin xác minh)
 - Admin xem chi tiết từng report
 - User đã có report cùng lý do đang chờ xử lý → bị từ chối, không tạo report mới
@@ -708,6 +718,7 @@
 **Then:**
 - Tin nhắn được lưu thuộc cuộc chat: đội gửi, người thực sự gửi, nội dung (1..1000 ký tự), thời điểm gửi, trạng thái đã đọc; không lưu người nhận (= đội còn lại của cuộc chat)
 - Tin nhắn được gửi real-time cho đội trưởng B (độ trễ <1s)
+- Tin nhắn không tạo notification, không tăng số thông báo chưa đọc; đội trưởng B đang mở app nhận tín hiệu cập nhật dấu "chưa đọc" của "Tin nhắn" (BR-N12)
 - Mỗi tin hiển thị tên đội gửi + tên (và ảnh) người thực sự đã gửi; tin cũ giữ người gửi lúc đó sau khi đội chuyển quyền đội trưởng (vd đội Beta: tin của Nam vẫn "Beta · Nam" sau khi Lan làm đội trưởng); người gửi đã xóa tài khoản → "Người dùng đã xóa", không ảnh (BR-N03)
 - Đầu phòng chat hiển thị tên hai đội + đội trưởng hiện tại của mỗi đội
 - Thành viên không phải đội trưởng, đội trưởng cũ (đã chuyển quyền) và đội không thuộc cuộc chat → không xem, không gửi được (BR-N04)
@@ -749,16 +760,81 @@
 
 ---
 
-### AC-N02: 11 loại notification hoạt động đúng
+### AC-N02: 35 loại notification hoạt động đúng
 
-**Given:** Có sự kiện kích hoạt notification
+**Given:** Có sự kiện kích hoạt notification (Business_Rules §8.6) và thao tác gây ra sự kiện đã thành công
 
 **When:** System tạo notification
 
 **Then:**
-- Notification được lưu (type, recipient, content, timestamp, read_status)
-- Notification gửi qua kênh in-app (push nếu có)
-- Notification lưu 30 ngày; sau đó xóa
+- Mỗi người nhận theo bảng §8.6 / BR-N08 có một notification chưa đọc (loại, người nhận, tiêu đề, nội dung, màn hình liên quan, thời điểm, trạng thái đọc)
+- Tiêu đề + nội dung tiếng Việt, không có tên cá nhân; đội đổi tên sau đó → thông báo cũ giữ tên cũ (BR-N09)
+- Thông báo của thao tác người dùng xuất hiện vài giây sau thao tác; thao tác thất bại → không có thông báo (BR-N10)
+- Người nhận đang mở app nhận thông báo ngay; không có push điện thoại (Business_Rules §8.6)
+- Không có thông báo cho các trường hợp BR-N07 (vd ứng viên tự rút đơn PENDING, Match ARCHIVED → COMPLETED)
+- Notification lưu 30 ngày; quá 30 ngày không hiển thị, sau đó bị xóa (BR-N02)
+
+---
+
+### AC-N05: Người nhận thông báo của đội và của Admin
+
+**Given:** Kèo đã ghép giữa Alpha (đội trưởng Minh) và Beta; có 2 Admin đang hoạt động
+
+**When:** Beta hủy kèo; ngay sau đó (trước khi hệ thống tạo thông báo) Minh chuyển quyền đội trưởng Alpha cho Lan
+
+**Then:**
+- Lan nhận "Kèo bị hủy"; Minh và thành viên thường của Alpha không nhận (đội trưởng tại lúc tạo thông báo — BR-N08)
+- Lan nhận thông báo được chuyển quyền đội trưởng; Minh không nhận (UC-T04)
+- Thông báo Minh nhận trước khi chuyển quyền vẫn ở danh sách của Minh, không chuyển sang Lan
+- Đội đã giải tán → thông báo nhắm vào đội không đến ai; người đã xóa tài khoản không nhận thông báo mới
+- Có tranh chấp report bùng mới → mỗi Admin nhận một thông báo riêng, đọc riêng (Admin A đọc không làm thông báo của Admin B thành đã đọc)
+- Một người là đội trưởng cả hai đội của kèo → nhận một thông báo cho mỗi loại
+
+---
+
+### AC-N06: Nhắc trước trận
+
+**Given:** Kèo CONFIRMED bắt đầu 18:00 có 1 mercenary APPROVED; trận ngoài hệ thống bắt đầu 19:00 có 1 mercenary APPROVED
+
+**When:** Hệ thống chạy nhắc trước trận
+
+**Then:**
+- Khoảng 16:00–16:05: đội trưởng hai đội và mercenary của kèo nhận một thông báo nhắc (BR-N13)
+- Khoảng 17:00–17:05: chỉ mercenary của trận ngoài hệ thống nhận nhắc; đội trưởng đội khai báo không nhận
+- Không nhắc lần hai cho cùng trận; mercenary được duyệt sau lần nhắc không được nhắc bù
+- Kèo được ghép lúc 16:30 cho trận 18:00 (hoặc trận ngoài hệ thống khai báo khi còn dưới 2 giờ) → không nhắc
+- Kèo bị hủy trước lúc nhắc → không nhắc
+
+---
+
+### AC-N07: Nhắc đánh giá và thông báo nhận đánh giá
+
+**Given:** Kèo CONFIRMED giữa Alpha và Beta, kết thúc 20:00, có mercenary C APPROVED của Alpha; trận ngoài hệ thống kết thúc 21:00 có mercenary D APPROVED
+
+**When:** Đến giờ kết thúc; sau đó các bên đánh giá
+
+**Then:**
+- Kèo chuyển ARCHIVED (trễ tối đa khoảng 5 phút) → đội trưởng Alpha và Beta nhận nhắc nhập tỷ số và đánh giá; C nhận nhắc đánh giá Alpha (BR-N14)
+- Trong khoảng 5 phút sau 21:00 → D nhận nhắc đánh giá đội; trận ngoài hệ thống đã kết thúc quá 24 giờ mà chưa được nhắc (vd hệ thống gián đoạn) → không nhắc bù
+- Alpha đánh giá Beta trước → Beta **không** nhận thông báo; sau đó Beta đánh giá Alpha → Alpha nhận "nhận đánh giá"
+- Kèo chuyển ARCHIVED → COMPLETED → không có thông báo
+- Đội trưởng Alpha đánh giá C trước, C đánh giá Alpha sau → đội trưởng Alpha nhận "nhận đánh giá"; C đánh giá Alpha khi Alpha chưa đánh giá C → đội trưởng Alpha không nhận
+
+---
+
+### AC-N08: Xem và đánh dấu đã đọc thông báo
+
+**Given:** User có 3 thông báo chưa đọc và 1 đã đọc trong 30 ngày, 1 thông báo chưa đọc tạo 31 ngày trước
+
+**When:** User mở màn hình "Thông báo" và thao tác
+
+**Then:**
+- Danh sách có 4 thông báo, mới nhất trước; lọc "chỉ chưa đọc" → 3; số chưa đọc = 3 (thông báo 31 ngày không hiển thị, không tính — BR-N02)
+- Bấm một thông báo chưa đọc → thành đã đọc, số chưa đọc = 2, app mở màn hình liên quan
+- "Đánh dấu tất cả đã đọc" → số chưa đọc = 0; thông báo đến sau đó vẫn chưa đọc
+- App đang mở → thông báo mới hiện ngay và số chưa đọc tăng; mất kết nối rồi kết nối lại → app lấy lại số chưa đọc (BR-N10)
+- Không xem được thông báo của người khác; không xóa thủ công, không đánh dấu lại chưa đọc (BR-N11)
+- Tin nhắn chat không làm tăng số thông báo chưa đọc (BR-N12)
 
 ---
 
@@ -793,7 +869,7 @@
 - [ ] Uptime ≥99% (downtime <7.2 giờ/tháng)
 - [ ] Graceful degradation khi có lỗi (trả HTTP 503, không crash)
 - [ ] Database backup tự động hàng ngày
-- [ ] Retry logic cho external services (OAuth, push notification)
+- [ ] Retry logic cho external services (OAuth; push notification — khi tích hợp FCM)
 - [ ] Health check endpoint (`/actuator/health`) hoạt động
 
 ### 3.4. Scalability
@@ -1021,11 +1097,7 @@
 3. **GPS permission revocation:** Fallback sang khu vực hồ sơ ngay. Test scenario: User thu hồi GPS → tìm kèo dựa khu vực hồ sơ + thông báo "Bật GPS...".
 4. **Report cooldown:** Không giới hạn. Test scenario: User report 3 trận khác nhau trong 1 ngày → cả 3 report đều được chấp nhận.
 5. **Hard-delete policy:** Giữ mãi. Không có test scenario hard-delete.
-6. **Push notification:** FCM + APNs, push tất cả 11 loại. DoD bổ sung:
-   - [ ] FCM/APNs integration hoạt động (gửi test push thành công)
-   - [ ] Device token được lưu khi user cấp quyền notification
-   - [ ] 11 loại notification gửi push đúng lúc (±1 phút sau sự kiện)
-   - [ ] User từ chối quyền → chỉ in-app, không crash
+6. **Push notification (sửa 2026-11-16 — user chốt):** bản hiện tại chỉ có thông báo trong app (35 loại) + tín hiệu realtime khi app đang mở; **không** có DoD push / lưu thiết bị ở bản này. Push FCM/APNs, đăng ký thiết bị và phạm vi loại được push định nghĩa DoD khi tích hợp FCM (Business_Rules §8.6).
 7. **Admin panel:** 4 chức năng MVP. DoD bổ sung:
    - [ ] Admin có thể bật/tắt bộ môn qua UI
    - [ ] Admin xem chi tiết tranh chấp report bùng, đưa ra quyết định (xác nhận/bác)
