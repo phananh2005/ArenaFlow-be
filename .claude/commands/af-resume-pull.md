@@ -18,22 +18,29 @@ argument-hint: "(không cần tham số)"
 node docs/agent/scripts/wip-handoff.cjs list
 ```
 - Fetch `origin` + `refs/wip/*` rồi in mỗi ảnh chụp: nhánh · thời điểm lưu · có file dở / chỉ commit chưa push ·
-  nhánh đang làm lúc handoff · trạng thái nhánh local (`chưa có` / `= base` / `đi sau` / `đi TRƯỚC` / `LỆCH`).
+  nhánh đang làm lúc handoff · trạng thái (`chưa có nhánh local` / `local = base` / `đi sau` / `đi TRƯỚC` / `LỆCH` /
+  `CŨ HƠN nhánh trên origin`).
+- Dòng "Bỏ qua: …" (ref không hợp lệ) → báo user.
 - Không có ảnh chụp → báo, chuyển thẳng **Bước 4**.
 
 ### Bước 2 — Hỏi
-- Trình danh sách; đề xuất áp **tất cả** ảnh chụp áp được, ảnh chụp "nhánh đang làm lúc handoff" áp **sau cùng**
-  (nó quyết định nhánh được checkout).
-- `đi TRƯỚC` (local mới hơn ảnh chụp) / `LỆCH` → **không áp**; nêu lý do, hỏi user xử lý tay.
-- Working tree hiện tại có thay đổi chưa commit và ảnh chụp cần áp có file dở → hỏi: **stash** (`--stash`, cất vào
+- Ảnh chụp **chỉ có commit chưa push** → đề xuất áp **tất cả** (chỉ tạo/fast-forward nhánh local, không đụng working tree).
+- Ảnh chụp **có file dở** → mỗi lượt chỉ áp **một** (một working tree chỉ chứa được một bộ file dở). Đề xuất ảnh chụp
+  "nhánh đang làm lúc handoff"; nếu có nhiều → hỏi user chọn cái nào. Các ảnh chụp có file dở còn lại để nguyên trên remote
+  (áp sau khi đã commit/stash việc hiện tại).
+- `CŨ HƠN nhánh trên origin` → **không áp**; đề xuất pull nhánh thật (`git switch <nhánh>` + `git pull --ff-only`), ảnh chụp đó là thừa.
+- `đi TRƯỚC` / `LỆCH` → **không áp**; nêu lý do, hỏi user xử lý tay.
+- Working tree hiện tại có thay đổi chưa commit và cần áp ảnh chụp có file dở → hỏi: **stash** (`--stash`, cất vào
   `git stash` kèm message `wip-handoff: …`, lấy lại được) hay dừng. **NEVER** tự bỏ thay đổi.
 
-### Bước 3 — Áp (chỉ ảnh chụp user đã chọn)
+### Bước 3 — Áp (chỉ ảnh chụp user đã chọn; các ảnh chụp chỉ-commit trước, ảnh chụp có file dở sau cùng)
 ```bash
 node docs/agent/scripts/wip-handoff.cjs apply <nhánh> [--stash]
 ```
-- Nhánh local chưa có → tạo tại base; đi sau → fast-forward tới base; rồi (nếu có file dở) checkout nhánh và
-  `cherry-pick --no-commit` + `reset` → file về trạng thái **chưa commit**, nhánh **không** chứa commit tạm.
+- Nhánh local chưa có → tạo tại base (upstream `origin/<nhánh>` nếu có); đi sau → fast-forward tới base; ảnh chụp có file dở →
+  checkout nhánh, `cherry-pick --no-commit` + `reset` → file về trạng thái **chưa commit** (staging không được giữ),
+  nhánh **không** chứa commit tạm.
+- Máy này ghi nhận đã lấy ảnh chụp (`refs/wip-seen/<nhánh>`) → `/af-handoff-push` sau đó được phép ghi đè nó.
 - Exit 1 → báo nguyên văn, **dừng** các ảnh chụp còn lại, hỏi user.
 
 ### Bước 4 — Tiếp tục phiên

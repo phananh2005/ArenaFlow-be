@@ -91,7 +91,7 @@ Claude Code hooks được cấu hình trong `.claude/settings.json`:
 - `PostToolUse` cho `Bash|Write|Edit`: chỉ ghi thời gian và tên tool vào `.claude/logs/tool-use.jsonl`; không lưu lệnh hoặc nội dung file; log được làm rỗng khi vượt 1 MiB.
 - `SessionStart`: nhắc nếu clone chưa cấu hình Git hook.
 
-Git pre-commit dùng cùng module secret-scan. Cấu hình local cho clone hiện tại:
+Git pre-commit dùng cùng module secret-scan (`secret-scan`: staged diff, lỗi môi trường thì cho qua). `wip-handoff.cjs` dùng chế độ `secret-scan-diff <from> <to>` (file thêm/sửa giữa hai commit/tree; lỗi môi trường trả 3 và ảnh chụp không được đẩy). Cấu hình local cho clone hiện tại:
 
 ```sh
 git config --local core.hooksPath .githooks

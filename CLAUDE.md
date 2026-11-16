@@ -124,6 +124,7 @@
   - Đây là cổng review **duy nhất**: không chạy thêm skill `code-review`, không review lại phần đã review sau push / sau khi tạo PR. **Thay đổi không có code** (tài liệu `*.md`, `.claude/settings.json`, `.gitignore`, `.gitattributes`, `.env.example`…) → không chạy `code-reviewer` lẫn `code-review`. Git pre-commit vẫn quét secret ở **mỗi** commit.
 - **Đồng bộ `main`:** trên **mọi nhánh khác `main`**, agent **MUST tự** chạy `git fetch origin && git rebase --autostash origin/main` tại 3 thời điểm: (1) trước khi bắt đầu triển khai một chức năng, (2) trước mỗi commit, (3) trước mỗi push.
   - Không áp dụng cho ảnh chụp `refs/wip/*` của `/af-handoff-push` (không commit lên nhánh, không push nhánh); rebase vẫn làm khi commit/push thật.
+- **Ảnh chụp `refs/wip/*`** (`/af-handoff-push`) không phải push nhánh / tạo PR → **không** qua cổng `code-reviewer`; secret scan vẫn chạy trên file dở và commit chưa push.
   - Conflict khi rebase → `git rebase --abort`, **dừng**, báo danh sách file conflict; **NEVER** tự resolve. Conflict khi áp lại autostash → dừng, báo (stash vẫn còn trong `git stash list`).
   - `fetch` lỗi (mạng/quyền) → báo, **không** khẳng định đã đồng bộ.
   - Rebase kéo về commit mới → chạy lại test liên quan trước khi commit/push.
