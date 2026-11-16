@@ -26,7 +26,9 @@ ArenaFlow-be/
 │   │   └── decisions-relevance/SKILL.md
 │   └── commands/
 │       ├── af-handoff.md
-│       └── af-resume.md
+│       ├── af-resume.md
+│       ├── af-handoff-push.md          # Handoff + đẩy ảnh chụp việc dở lên refs/wip/*
+│       └── af-resume-pull.md           # Lấy ảnh chụp refs/wip/* về + resume
 ├── .githooks/pre-commit                # Secret scan staged
 ├── .github/workflows/publish-spec.yml  # Publish SRS + API_Spec sang ArenaFlow-spec cho FE
 ├── docs/agent/
@@ -64,7 +66,9 @@ ArenaFlow-be/
 │   │   └── fixture-tests.cjs
 │   └── scripts/
 │       ├── publish-spec.cjs            # Chép tài liệu FE cần sang thư mục đích
-│       └── publish-spec-tests.cjs
+│       ├── publish-spec-tests.cjs
+│       ├── wip-handoff.cjs             # Ảnh chụp việc dở ↔ refs/wip/* (push/list/apply)
+│       └── wip-handoff-tests.cjs
 └── .agent-bootstrap/project-profile.md # Hồ sơ dự án
 ```
 
@@ -75,7 +79,7 @@ ArenaFlow-be/
 3. **Chức năng mới:** `solution-architect` (thiết kế) → duyệt → `architect-reviewer` → duyệt → `developer` (code).
 4. **Sửa nhỏ:** thẳng `developer`.
 5. Khi implement, đọc skill `task-state-init`, procedure `developer`, rồi cập nhật `progress-tracker`.
-6. Kết thúc phiên: `/af-handoff`; tiếp tục phiên: `/af-resume`.
+6. Kết thúc phiên: `/af-handoff`; tiếp tục phiên: `/af-resume`. Chuyển sang máy khác: `/af-handoff-push` trên máy đang làm → `/af-resume-pull` trên máy kia. Ảnh chụp nằm ở ref ẩn `refs/wip/<nhánh>` (xem: `git ls-remote origin 'refs/wip/*'`; xoá khi không cần: `git push origin --delete refs/wip/<nhánh>`); `.env.dev` không đi theo. Cần **Git ≥ 2.40** (áp việc dở lên đầu nhánh mới hơn dùng `git merge-tree --merge-base`; Git cũ hơn → lệnh từ chối, áp tay). Ref local `refs/wip-seen/*` (ảnh chụp máy này đã đẩy/đã lấy) và `refs/wip-skipped/*` (bản dự phòng khi `--skip`) chỉ nằm trên máy, không push.
 7. Trước khi push để tạo PR: nhánh có code (`*/src/**`, POM, hook, `docs/agent/scripts/*.cjs`, `.github/workflows/*`) → agent `code-reviewer` trên toàn nhánh so với `origin/main`; commit trên nhánh không cần review; không có code → không review (`CLAUDE.md` §8). Git pre-commit quét secret trong staged content ở mỗi commit.
 8. Rà ADR khi cần bằng skill `decisions-relevance`.
 
@@ -87,7 +91,7 @@ Claude Code hooks được cấu hình trong `.claude/settings.json`:
 - `PostToolUse` cho `Bash|Write|Edit`: chỉ ghi thời gian và tên tool vào `.claude/logs/tool-use.jsonl`; không lưu lệnh hoặc nội dung file; log được làm rỗng khi vượt 1 MiB.
 - `SessionStart`: nhắc nếu clone chưa cấu hình Git hook.
 
-Git pre-commit dùng cùng module secret-scan. Cấu hình local cho clone hiện tại:
+Git pre-commit dùng cùng module secret-scan (`secret-scan`: staged diff, lỗi môi trường thì cho qua). `wip-handoff.cjs` dùng chế độ `secret-scan-diff <from> <to>` (file thêm/sửa giữa hai commit/tree; lỗi môi trường trả 3 và ảnh chụp không được đẩy). Cấu hình local cho clone hiện tại:
 
 ```sh
 git config --local core.hooksPath .githooks
@@ -118,6 +122,7 @@ git config --local --unset core.hooksPath
 node docs/agent/hooks/fixture-tests.cjs
 node docs/agent/hooks/agent-hooks.cjs test
 node docs/agent/scripts/publish-spec-tests.cjs
+node docs/agent/scripts/wip-handoff-tests.cjs
 # Chạy thử publish vào thư mục tạm (không đụng ArenaFlow-spec):
 node docs/agent/scripts/publish-spec.cjs . <thư-mục-tạm>
 ```

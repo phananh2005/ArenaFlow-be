@@ -91,6 +91,7 @@
 - Thư mục state: `docs/agent/state/local-dev/` (copy từ `docs/agent/state/_template/`). **Một giá trị duy nhất** ở mọi file.
 - State cá nhân được gitignore bằng `docs/agent/state/*/`; template `_template/` được giữ trong Git.
 - `/af-handoff` lưu phiên · `/af-resume` đọc lại và **hỏi trước khi code tiếp**.
+- Làm trên nhiều máy: `/af-handoff-push` = `/af-handoff` + đẩy ảnh chụp mọi nhánh local chưa đồng bộ lên ref ẩn `refs/wip/<nhánh>` (không phải nhánh, không tạo PR, nhánh thật không đổi) · máy kia `/af-resume-pull` lấy về, **hỏi** rồi áp, rồi chạy `/af-resume`. Logic: `docs/agent/scripts/wip-handoff.cjs`.
 
 ---
 
@@ -121,7 +122,9 @@
   - Commit trên nhánh **không** cần review (kể cả commit chứa code); nhiều commit trên nhánh → review một lần trước PR.
   - PR đang mở mà sắp push thêm commit có code → `code-reviewer` trên **phần mới** trước khi push (`git diff origin/<nhánh>` + chưa commit; nhánh vừa rebase → `git diff origin/main...HEAD`, chỉ xét phần mới).
   - Đây là cổng review **duy nhất**: không chạy thêm skill `code-review`, không review lại phần đã review sau push / sau khi tạo PR. **Thay đổi không có code** (tài liệu `*.md`, `.claude/settings.json`, `.gitignore`, `.gitattributes`, `.env.example`…) → không chạy `code-reviewer` lẫn `code-review`. Git pre-commit vẫn quét secret ở **mỗi** commit.
+  - Ảnh chụp `refs/wip/*` (`/af-handoff-push`) không phải push nhánh / tạo PR → **không** qua cổng này; secret scan vẫn chạy trên file dở và commit chưa push.
 - **Đồng bộ `main`:** trên **mọi nhánh khác `main`**, agent **MUST tự** chạy `git fetch origin && git rebase --autostash origin/main` tại 3 thời điểm: (1) trước khi bắt đầu triển khai một chức năng, (2) trước mỗi commit, (3) trước mỗi push.
+  - Không áp dụng cho ảnh chụp `refs/wip/*` của `/af-handoff-push` (không commit lên nhánh, không push nhánh); rebase vẫn làm khi commit/push thật.
   - Conflict khi rebase → `git rebase --abort`, **dừng**, báo danh sách file conflict; **NEVER** tự resolve. Conflict khi áp lại autostash → dừng, báo (stash vẫn còn trong `git stash list`).
   - `fetch` lỗi (mạng/quyền) → báo, **không** khẳng định đã đồng bộ.
   - Rebase kéo về commit mới → chạy lại test liên quan trước khi commit/push.

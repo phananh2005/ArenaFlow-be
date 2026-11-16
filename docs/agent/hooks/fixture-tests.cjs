@@ -44,4 +44,42 @@ try {
 } finally {
   rmSync(loggerRoot, { recursive: true, force: true });
 }
-process.stdout.write(`PASS: ${cases.length + 2} hook fixtures\n`);
+// secret-scan-diff <from> <to>: quét file thêm/sửa giữa hai commit/tree (dùng cho ảnh chụp /af-handoff-push).
+const scanRoot = mkdtempSync(path.join(os.tmpdir(), 'arenaflow-hook-scan-diff-'));
+try {
+  const emptyConfig = path.join(scanRoot, 'gitconfig-empty');
+  fs.writeFileSync(emptyConfig, '');
+  const gitEnv = { ...process.env, GIT_CONFIG_GLOBAL: emptyConfig, GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.invalid' };
+  const repoDir = path.join(scanRoot, 'repo');
+  const git = (...args) => {
+    const r = spawnSync('git', args, { cwd: repoDir, env: gitEnv, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout.trim();
+  };
+  fs.mkdirSync(repoDir);
+  git('init', '-q');
+  fs.writeFileSync(path.join(repoDir, 'a.md'), 'sạch\n');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'clean');
+  const clean = git('rev-parse', 'HEAD');
+  fs.writeFileSync(path.join(repoDir, 'config.yml'), 'api_key: "abcd1234efgh5678"\n'); // allow-secret: fixture giả
+  git('add', '-A');
+  git('commit', '-q', '-m', 'secret');
+  const dirty = git('rev-parse', 'HEAD');
+  const scanDiff = (...args) => spawnSync(process.execPath, [hook, 'secret-scan-diff', ...args], { cwd: repoDir, env: { ...gitEnv, CLAUDE_PROJECT_DIR: repoDir }, input: '', encoding: 'utf8' });
+  assert.equal(scanDiff(clean, dirty).status, 1, 'secret trong khoảng clean..dirty phải bị chặn');
+  assert.match(scanDiff(clean, dirty).stderr, /config\.yml:1/);
+  assert.equal(scanDiff(dirty, clean).status, 0, 'file bị xoá không cần quét');
+  assert.equal(scanDiff(`${clean}^{tree}`, `${dirty}^{tree}`).status, 1, 'nhận cả tree');
+  assert.equal(scanDiff('khong-ton-tai', dirty).status, 3, 'rev sai → lỗi môi trường (3), không phải 0');
+  assert.equal(scanDiff(clean).status, 3, 'thiếu tham số → 3');
+  // File > 10 MB: chế độ diff không được bỏ qua âm thầm.
+  fs.writeFileSync(path.join(repoDir, 'big.yml'), `${'# đệm\n'.repeat(1_500_000)}api_key: "abcd1234efgh5678"\n`); // allow-secret: fixture giả
+  git('add', '-A');
+  git('commit', '-q', '-m', 'big');
+  const big = git('rev-parse', 'HEAD');
+  assert.equal(scanDiff(dirty, big).status, 1, 'secret ở cuối file lớn phải bị chặn');
+} finally {
+  rmSync(scanRoot, { recursive: true, force: true });
+}
+process.stdout.write(`PASS: ${cases.length + 3} hook fixtures\n`);
