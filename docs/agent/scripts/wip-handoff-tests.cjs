@@ -256,9 +256,9 @@ test('apply: B đang có thay đổi chưa commit → exit 1, không đụng gì
   assert.equal(read(b, 'note.md'), 'từ A\n');
 });
 
-test('apply: nhánh local của B đã đi trước base (ảnh chụp cũ) → exit 1, không đụng gì', () => {
+test('apply: nhánh local của B đã đi trước base, file dở chưa có ở đâu → áp lên đầu nhánh local', () => {
   const { a, b } = setup();
-  write(a, 'note.md', 'cũ\n');
+  write(a, 'note.md', 'dở từ A\n');
   assert.equal(run(a, 'push').status, 0);
   git(b, 'switch', '-q', 'feature/X-001-demo');
   write(b, 'newer.md', 'mới hơn\n');
@@ -267,9 +267,11 @@ test('apply: nhánh local của B đã đi trước base (ảnh chụp cũ) → 
   const headBefore = git(b, 'rev-parse', 'HEAD');
 
   const result = run(b, 'apply', 'feature/X-001-demo');
-  assert.equal(result.status, 1);
-  assert.equal(git(b, 'rev-parse', 'HEAD'), headBefore);
-  assert.equal(fs.existsSync(path.join(b, 'note.md')), false);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(git(b, 'rev-parse', 'HEAD'), headBefore, 'không dời nhánh, không thêm commit');
+  assert.equal(read(b, 'note.md'), 'dở từ A\n');
+  assert.equal(read(b, 'newer.md'), 'mới hơn\n');
+  assert.match(tryGit(b, 'status', '--porcelain').stdout, /^\?\? note\.md$/m);
 });
 
 test('apply: ảnh chụp không có file sửa (chỉ commit chưa push) → chỉ tạo nhánh local, không chuyển nhánh', () => {
@@ -541,6 +543,80 @@ test('apply: file tracked bị xoá ở máy A → máy B thấy ở trạng th�
   assert.equal(run(a, 'push').status, 0);
   assert.equal(run(b, 'apply', 'feature/X-001-demo').status, 0);
   assert.match(tryGit(b, 'status', '--porcelain').stdout, /^ D README\.md$/m);
+});
+
+// Máy B commit + push nhánh X lên C2 trong khi A (vẫn ở C1, chưa pull) đang có file dở.
+function originMovesAhead(b, file, content) {
+  git(b, 'switch', '-q', '-c', 'feature/X-001-demo', 'origin/feature/X-001-demo');
+  const c2 = commitFile(b, file, content, `docs: ${file} từ B`);
+  git(b, 'push', '-q', 'origin', 'feature/X-001-demo');
+  return c2;
+}
+
+test('R2-M1: file dở chưa có trên origin dù base cũ hơn origin → không "cũ", không gợi ý xoá, B áp lên đầu nhánh', () => {
+  const { a, b } = setup();
+  const c2 = originMovesAhead(b, 'from-b.md', 'B\n');
+  write(a, 'unique.md', 'chỉ có ở A\n');
+  assert.equal(run(a, 'push').status, 0);
+
+  const items = JSON.parse(run(b, 'list', '--json').stdout);
+  assert.equal(items[0].stale, false);
+  assert.equal(items[0].onto, true);
+  const bPush = run(b, 'push');
+  assert.equal(bPush.status, 0, bPush.stderr);
+  assert.doesNotMatch(bPush.stdout, /thừa/);
+
+  const result = run(b, 'apply', 'feature/X-001-demo');
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(git(b, 'rev-parse', 'HEAD'), c2);
+  assert.equal(read(b, 'unique.md'), 'chỉ có ở A\n');
+  assert.equal(read(b, 'from-b.md'), 'B\n');
+});
+
+test('R2-M1: máy chưa có nhánh local, origin mới hơn base → tạo nhánh tại đầu origin rồi áp', () => {
+  const { dir, a, b } = setup();
+  const c = path.join(dir, 'c');
+  git(dir, 'clone', '-q', path.join(dir, 'origin.git'), c);
+  const c2 = originMovesAhead(b, 'from-b.md', 'B\n');
+  write(a, 'unique.md', 'chỉ có ở A\n');
+  assert.equal(run(a, 'push').status, 0);
+
+  const result = run(c, 'apply', 'feature/X-001-demo');
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(git(c, 'rev-parse', 'HEAD'), c2);
+  assert.equal(git(c, 'rev-parse', '--abbrev-ref', 'feature/X-001-demo@{upstream}'), 'origin/feature/X-001-demo');
+  assert.equal(read(c, 'unique.md'), 'chỉ có ở A\n');
+});
+
+test('R2-M1: áp lên đầu nhánh bị đụng độ → huỷ sạch, working tree như trước, báo file đụng độ', () => {
+  const { a, b } = setup();
+  const c2 = originMovesAhead(b, 'README.md', 'B sửa\n');
+  write(a, 'README.md', 'A sửa\n');
+  assert.equal(run(a, 'push').status, 0);
+
+  const result = run(b, 'apply', 'feature/X-001-demo');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /đụng độ/);
+  assert.match(result.stderr, /README\.md/);
+  assert.equal(git(b, 'rev-parse', 'HEAD'), c2);
+  assert.equal(tryGit(b, 'status', '--porcelain').stdout, '', 'working tree phải sạch như trước');
+  assert.notEqual(tryGit(b, 'rev-parse', '--verify', '--quiet', 'CHERRY_PICK_HEAD').status, 0, 'không để lại trạng thái cherry-pick dở');
+  assert.equal(read(b, 'README.md'), 'B sửa\n');
+});
+
+test('R2-M2: ảnh chụp của máy khác đã cũ (nội dung đã lên origin) → không chặn push', () => {
+  const { a, b } = setup();
+  git(b, 'switch', '-q', '-c', 'feature/X-001-demo', 'origin/feature/X-001-demo');
+  write(b, 'note.md', 'dở ở B\n');
+  assert.equal(run(b, 'push').status, 0);
+  git(b, 'add', '-A');
+  git(b, 'commit', '-q', '-m', 'docs: note');
+  git(b, 'push', '-q', 'origin', 'feature/X-001-demo');
+
+  write(a, 'other.md', 'A dở\n');
+  const result = run(a, 'push');
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(git(a, 'show', `${remoteRefs(a)['refs/wip/feature/X-001-demo']}:other.md`), 'A dở');
 });
 
 test('tham số sai → exit 2', () => {

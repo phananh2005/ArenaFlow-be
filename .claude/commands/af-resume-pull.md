@@ -18,8 +18,12 @@ argument-hint: "(không cần tham số)"
 node docs/agent/scripts/wip-handoff.cjs list
 ```
 - Fetch `origin` + `refs/wip/*` rồi in mỗi ảnh chụp: nhánh · thời điểm lưu · có file dở / chỉ commit chưa push ·
-  nhánh đang làm lúc handoff · trạng thái (`chưa có nhánh local` / `local = base` / `đi sau` / `đi TRƯỚC` / `LỆCH` /
-  `CŨ HƠN nhánh trên origin`).
+  nhánh đang làm lúc handoff · trạng thái:
+  - `chưa có nhánh local` / `local = base` / `local đi sau` → áp đúng như máy cũ.
+  - `file dở dựa trên commit cũ hơn đầu nhánh` → áp phần dở **lên đầu nhánh** (local, hoặc origin nếu chưa có local); có thể đụng độ.
+  - `nhánh local đã chứa ảnh chụp` → không cần áp.
+  - `CŨ HƠN nhánh trên origin` → nội dung đã có trên origin; không áp.
+  - `LỆCH lịch sử` → không áp.
 - Dòng "Bỏ qua: …" (ref không hợp lệ) → báo user.
 - Không có ảnh chụp → báo, chuyển thẳng **Bước 4**.
 
@@ -29,7 +33,8 @@ node docs/agent/scripts/wip-handoff.cjs list
   "nhánh đang làm lúc handoff"; nếu có nhiều → hỏi user chọn cái nào. Các ảnh chụp có file dở còn lại để nguyên trên remote
   (áp sau khi đã commit/stash việc hiện tại).
 - `CŨ HƠN nhánh trên origin` → **không áp**; đề xuất pull nhánh thật (`git switch <nhánh>` + `git pull --ff-only`), ảnh chụp đó là thừa.
-- `đi TRƯỚC` / `LỆCH` → **không áp**; nêu lý do, hỏi user xử lý tay.
+- `file dở dựa trên commit cũ hơn đầu nhánh` → nói rõ với user là sẽ áp lên đầu nhánh và có thể đụng độ.
+- `LỆCH lịch sử` → **không áp**; nêu lý do, hỏi user xử lý tay.
 - Working tree hiện tại có thay đổi chưa commit và cần áp ảnh chụp có file dở → hỏi: **stash** (`--stash`, cất vào
   `git stash` kèm message `wip-handoff: …`, lấy lại được) hay dừng. **NEVER** tự bỏ thay đổi.
 
@@ -40,6 +45,8 @@ node docs/agent/scripts/wip-handoff.cjs apply <nhánh> [--stash]
 - Nhánh local chưa có → tạo tại base (upstream `origin/<nhánh>` nếu có); đi sau → fast-forward tới base; ảnh chụp có file dở →
   checkout nhánh, `cherry-pick --no-commit` + `reset` → file về trạng thái **chưa commit** (staging không được giữ),
   nhánh **không** chứa commit tạm.
+- Áp lên đầu nhánh bị **đụng độ** → script tự huỷ (`reset --merge`), working tree trở về như trước khi áp, in file đụng độ
+  và lệnh áp tay. Báo user; **NEVER** tự sửa đụng độ khi user chưa yêu cầu. Nếu đã `--stash` trước đó → nhắc stash vẫn còn.
 - Máy này ghi nhận đã lấy ảnh chụp (`refs/wip-seen/<nhánh>`) → `/af-handoff-push` sau đó được phép ghi đè nó.
 - Exit 1 → báo nguyên văn, **dừng** các ảnh chụp còn lại, hỏi user.
 

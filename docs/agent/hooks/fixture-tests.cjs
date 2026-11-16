@@ -73,6 +73,12 @@ try {
   assert.equal(scanDiff(`${clean}^{tree}`, `${dirty}^{tree}`).status, 1, 'nhận cả tree');
   assert.equal(scanDiff('khong-ton-tai', dirty).status, 3, 'rev sai → lỗi môi trường (3), không phải 0');
   assert.equal(scanDiff(clean).status, 3, 'thiếu tham số → 3');
+  // File > 10 MB: chế độ diff không được bỏ qua âm thầm.
+  fs.writeFileSync(path.join(repoDir, 'big.yml'), `${'# đệm\n'.repeat(1_500_000)}api_key: "abcd1234efgh5678"\n`); // allow-secret: fixture giả
+  git('add', '-A');
+  git('commit', '-q', '-m', 'big');
+  const big = git('rev-parse', 'HEAD');
+  assert.equal(scanDiff(dirty, big).status, 1, 'secret ở cuối file lớn phải bị chặn');
 } finally {
   rmSync(scanRoot, { recursive: true, force: true });
 }

@@ -99,11 +99,17 @@ function scanContent(content, file) {
 }
 
 // Quét các file trong `files`; `objectPrefix` + tên file là object git chứa nội dung (":" = index, "<rev>:" = commit/tree).
-function scanFiles(root, files, objectPrefix, label) {
+// strict: đọc file lỗi (kể cả quá lớn) → trả 3 thay vì bỏ qua file đó.
+function scanFiles(root, files, objectPrefix, label, strict = false) {
   const findings = [];
   for (const file of files) {
-    const content = spawnSync('git', ['show', `${objectPrefix}${file}`], { cwd: root, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
-    if (content.status !== 0) continue;
+    const maxBuffer = (strict ? 256 : 10) * 1024 * 1024;
+    const content = spawnSync('git', ['show', `${objectPrefix}${file}`], { cwd: root, encoding: 'utf8', maxBuffer });
+    if (content.status !== 0) {
+      if (!strict) continue;
+      process.stderr.write(`Không đọc được ${file} để quét secret (${content.error?.code || `git exit ${content.status}`}); secret scan thất bại.\n`);
+      return 3;
+    }
     for (const finding of scanContent(content.stdout, file)) findings.push(`${file}:${finding.line}`);
   }
   if (findings.length) {
@@ -139,7 +145,7 @@ function scanDiff(root, from, to) {
     process.stderr.write(`Không đọc được diff ${from}..${to}; secret scan thất bại.\n`);
     return 3;
   }
-  return scanFiles(root, files, `${to}:`, `diff ${from.slice(0, 12)}..${to.slice(0, 12)}`);
+  return scanFiles(root, files, `${to}:`, `diff ${from.slice(0, 12)}..${to.slice(0, 12)}`, true);
 }
 
 function logToolUse(input) {

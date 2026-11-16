@@ -185,11 +185,14 @@ function localState(root, branch, base) {
   return { local: 'diverged', head: local };
 }
 
-// Ảnh chụp không còn giá trị so với nhánh trên origin: origin đã đi xa hơn base, hoặc = base mà không có file dở.
-function isStale(root, branch, base, dirty) {
-  const originTip = tryRev(root, `refs/remotes/${REMOTE}/${branch}`);
+// Ảnh chụp không còn giá trị so với nhánh trên origin: origin chứa base và
+// (không có file dở, hoặc mọi file dở đã giống hệt trên origin). File dở chưa có ở đâu khác → KHÔNG cũ.
+function isStale(root, originTip, base, sha, dirty) {
   if (!originTip || !isAncestor(root, base, originTip)) return false;
-  return originTip !== base || !dirty;
+  if (!dirty) return true;
+  if (originTip === base) return false;
+  const paths = git(root, ['diff', '--name-only', '--no-renames', '-z', base, sha]).split('\0').filter(Boolean);
+  return git(root, ['diff', '--quiet', sha, originTip, '--', ...paths], { allowFail: true }).status === 0;
 }
 
 // Đọc ảnh chụp ở ref; trả { invalid } nếu không phải ảnh chụp hợp lệ của lệnh này.
@@ -201,6 +204,11 @@ function readSnapshot(root, ref, sha) {
   const base = tryRev(root, `${sha}^`);
   if (!base || base !== t['WIP-Base']) return { ref, branch, invalid: `${ref}: WIP-Base không khớp commit cha — không áp.` };
   const dirty = t['WIP-Dirty'] === 'true';
+  const originTip = tryRev(root, `refs/remotes/${REMOTE}/${branch}`);
+  const state = localState(root, branch, base);
+  const originAhead = Boolean(originTip) && originTip !== base && isAncestor(root, base, originTip);
+  // onto: file dở dựa trên commit cũ hơn đầu nhánh (local đi trước, hoặc chưa có local mà origin mới hơn) → áp lên đầu nhánh.
+  const onto = dirty && (state.local === 'ahead' || (state.local === 'missing' && originAhead));
   return {
     ref,
     sha,
@@ -210,8 +218,10 @@ function readSnapshot(root, ref, sha) {
     current: t['WIP-Current'] === 'true',
     saved: t['WIP-Saved'] || '',
     machine: t['WIP-Machine'] || null,
-    stale: isStale(root, branch, base, dirty),
-    ...localState(root, branch, base),
+    originTip,
+    stale: isStale(root, originTip, base, sha, dirty),
+    onto,
+    ...state,
   };
 }
 
@@ -253,9 +263,11 @@ function push(root, { dryRun, forceOverwrite }) {
     const ref = `${WIP_PREFIX}${branch}`;
     const remoteSha = existing.get(ref);
     if (remoteSha && !forceOverwrite && remoteSha !== tryRev(root, `${SEEN_PREFIX}${branch}`)) {
-      const other = parseTrailers(git(root, ['log', '-1', '--format=%B', remoteSha]));
-      if (!myMachine || other['WIP-Machine'] !== myMachine) {
-        conflicts.push(`${branch} (ảnh chụp lưu ${other['WIP-Saved'] || '?'})`);
+      const other = readSnapshot(root, ref, remoteSha);
+      const otherMachine = parseTrailers(git(root, ['log', '-1', '--format=%B', remoteSha]))['WIP-Machine'];
+      // Ảnh chụp đã cũ (nội dung đã lên origin) thì ghi đè không mất gì.
+      if (!other.stale && (!myMachine || otherMachine !== myMachine)) {
+        conflicts.push(`${branch} (ảnh chụp lưu ${other.saved || '?'})`);
         continue;
       }
     }
@@ -329,13 +341,13 @@ function push(root, { dryRun, forceOverwrite }) {
   return 0;
 }
 
-const LOCAL_LABEL = {
-  missing: 'chưa có nhánh local',
-  same: 'local = base',
-  behind: 'local đi sau (fast-forward được)',
-  ahead: 'local đi TRƯỚC — ảnh chụp cũ hơn',
-  diverged: 'LỆCH lịch sử',
-};
+function stateLabel(i) {
+  if (i.stale) return `CŨ HƠN nhánh trên ${REMOTE} (nội dung đã có trên ${REMOTE}) — không áp, pull nhánh thật`;
+  if (i.local === 'diverged') return 'LỆCH lịch sử — không áp, xử lý tay';
+  if (i.onto) return 'file dở dựa trên commit cũ hơn đầu nhánh — sẽ áp lên đầu nhánh (có thể đụng độ)';
+  if (i.local === 'ahead') return 'nhánh local đã chứa ảnh chụp — không cần áp';
+  return { missing: 'chưa có nhánh local', same: 'local = base', behind: 'local đi sau (fast-forward được)' }[i.local];
+}
 
 function list(root, { json }) {
   fetchWip(root);
@@ -357,7 +369,7 @@ function list(root, { json }) {
       `lưu ${i.saved}`,
       i.dirty ? 'có file dở' : 'chỉ commit chưa push',
       i.current && 'nhánh đang làm lúc handoff',
-      i.stale ? `CŨ HƠN nhánh trên ${REMOTE} — không áp, pull nhánh thật` : LOCAL_LABEL[i.local],
+      stateLabel(i),
     ].filter(Boolean);
     console.log(`${i.branch} · ${flags.join(' · ')}`);
   }
@@ -371,9 +383,13 @@ function apply(root, branch, { stash }) {
   fetchWip(root, ref);
   const snap = readSnapshot(root, ref, git(root, ['rev-parse', ref]));
   if (snap.invalid) throw new Refusal(snap.invalid);
-  if (snap.stale) throw new Refusal(`Ảnh chụp ${ref} (lưu ${snap.saved}) cũ hơn nhánh ${REMOTE}/${branch} — không áp; pull nhánh thật thay vào đó.`);
-  if (snap.local === 'ahead') throw new Refusal(`Nhánh local ${branch} đã đi trước ảnh chụp (lưu ${snap.saved}) — ảnh chụp cũ hơn, không áp.`);
+  if (snap.stale) throw new Refusal(`Ảnh chụp ${ref} (lưu ${snap.saved}) cũ hơn nhánh ${REMOTE}/${branch} (nội dung đã có trên ${REMOTE}) — không áp; pull nhánh thật thay vào đó.`);
   if (snap.local === 'diverged') throw new Refusal(`Nhánh local ${branch} lệch lịch sử với ảnh chụp — không áp; cần xử lý tay.`);
+  if (snap.local === 'ahead' && !snap.dirty) {
+    git(root, ['update-ref', `${SEEN_PREFIX}${branch}`, snap.sha]);
+    console.log(`Nhánh local ${branch} đã chứa ảnh chụp ${ref} — không cần áp.`);
+    return 0;
+  }
 
   const { byBranch } = worktrees(root);
   const wt = byBranch.get(branch);
@@ -389,10 +405,11 @@ function apply(root, branch, { stash }) {
     console.log('Đã cất thay đổi hiện tại vào git stash (xem: git stash list).');
   }
 
-  // Đưa nhánh local tới base: tạo mới (kèm upstream nếu có) hoặc fast-forward (update-ref có kiểm giá trị cũ).
+  // Đưa nhánh local tới base (hoặc đầu origin khi áp lên đầu nhánh): tạo mới kèm upstream, hoặc fast-forward
+  // (update-ref có kiểm giá trị cũ). Nhánh local đi trước base thì giữ nguyên.
   if (snap.local === 'missing') {
-    git(root, ['branch', branch, snap.base]);
-    if (tryRev(root, `refs/remotes/${REMOTE}/${branch}`)) git(root, ['branch', '--quiet', `--set-upstream-to=${REMOTE}/${branch}`, branch]);
+    git(root, ['branch', branch, snap.onto ? snap.originTip : snap.base]);
+    if (snap.originTip) git(root, ['branch', '--quiet', `--set-upstream-to=${REMOTE}/${branch}`, branch]);
   } else if (snap.local === 'behind') {
     if (currentBranch === branch) git(root, ['merge', '--ff-only', '--quiet', snap.base]);
     else git(root, ['update-ref', `${HEADS_PREFIX}${branch}`, snap.base, snap.head]);
@@ -400,12 +417,23 @@ function apply(root, branch, { stash }) {
 
   if (snap.dirty) {
     if (currentBranch !== branch) git(root, ['switch', '--quiet', branch]);
-    git(root, ['cherry-pick', '--no-commit', snap.sha]);
+    const picked = git(root, ['cherry-pick', '--no-commit', snap.sha], { allowFail: true });
+    if (picked.status !== 0) {
+      // Working tree đã sạch trước khi áp → reset --merge đưa về đúng trạng thái trước đó, không đụng file chưa track.
+      const conflicted = lines(git(root, ['diff', '--name-only', '--diff-filter=U'], { allowFail: true }).stdout);
+      git(root, ['reset', '--merge', '--quiet'], { allowFail: true });
+      git(root, ['cherry-pick', '--quit'], { allowFail: true });
+      throw new Refusal([
+        `Áp ${ref} lên đầu nhánh ${branch} bị đụng độ — đã huỷ, working tree như trước khi áp.`,
+        conflicted.length ? `File đụng độ: ${conflicted.join(', ')}` : (picked.stderr || '').trim(),
+        `Ảnh chụp vẫn còn trên ${REMOTE}; áp tay: git cherry-pick --no-commit ${ref} rồi sửa đụng độ, git reset.`,
+      ].join('\n'));
+    }
     git(root, ['reset', '--quiet']);
   }
   git(root, ['update-ref', `${SEEN_PREFIX}${branch}`, snap.sha]);
   console.log(snap.dirty
-    ? `Đã áp ảnh chụp ${ref} (lưu ${snap.saved}) vào working tree của ${branch}; file ở trạng thái chưa commit.`
+    ? `Đã áp ảnh chụp ${ref} (lưu ${snap.saved}) vào working tree của ${branch}${snap.onto ? ' (lên đầu nhánh)' : ''}; file ở trạng thái chưa commit.`
     : `Nhánh ${branch} → ${snap.base.slice(0, 7)} (ảnh chụp chỉ có commit chưa push; không đổi working tree).`);
   return 0;
 }
