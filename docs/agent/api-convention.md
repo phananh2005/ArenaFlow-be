@@ -161,21 +161,23 @@ Mã thành công chọn theo **kết quả** của thao tác, không theo HTTP m
 | `POST /teams/{id}/disband` | 200 | B3 (`disbandedAt`, `disbandedByName`), B4 (đội giải tán vẫn xem được) |
 | `POST /invitations/{id}/reject` | 204 | N1 |
 | `POST /teams/{id}/members/leave`, `DELETE /profile` | 204 | N1 |
-| `POST /matches/{matchId}/pairings` (nhận kèo B), `POST /pairings/{id}/messages` (gửi tin) | 201 | B2 |
-| `GET /matches/{matchId}/pairings`, `GET /teams/{teamId}/pairings`, `GET /pairings/{id}`, `GET /pairings/{id}/messages` | 200 | B1 |
+| `POST /conversations/{id}/messages` (gửi tin), `POST /conversations/{id}/reports` (report giao tiếp tệ qua chat hai đội) | 201 | B2 |
+| `GET /conversations/{id}`, `GET /conversations/{id}/messages`, `GET /profile/conversations` | 200 | B1 |
+| `POST /conversations/{id}/messages/read` | 204 | N1 |
+| `POST /matches/{matchId}/pairings` (nhận kèo B) | 201 | B2 |
+| `GET /matches/{matchId}/pairings`, `GET /teams/{teamId}/pairings`, `GET /pairings/{id}` | 200 | B1 |
 | `PUT /pairings/{id}/proposal` | 200 | B3 (`revision`, `updatedAt`), B4 |
 | `PUT /pairings/{id}/cost-agreement` | 200 | B3 (`revision`, `itemId`, `updatedAt`), B4 |
 | `POST /pairings/{id}/confirm` | 200 | B3 (`…ConfirmedAt`, `confirmedAt`, `status`, `matchStatus`) |
-| `POST /pairings/{id}/messages/read` | 204 | N1 |
-| `POST /matches/{matchId}/mercenary-recruitments`, `POST /external-matches/{id}/mercenary-recruitments` (đăng tin tuyển), `POST /mercenary-recruitments/{id}/applications` (ứng tuyển), `POST /conversations/{id}/messages`, `POST /mercenary-applications/{id}/ratings`, `POST /mercenary-applications/{id}/reports`, `POST /teams/{teamId}/external-matches` | 201 | B2 |
-| `GET /teams/{teamId}/mercenary-recruitments`, `GET /mercenary-recruitments`, `GET /mercenary-recruitments/{id}`, `GET /mercenary-recruitments/{id}/applications`, `GET /profile/mercenary-applications`, `GET /mercenary-applications/{id}`, `GET /conversations/{id}`, `GET /conversations/{id}/messages`, `GET /mercenary-applications/{id}/ratings`, `GET /teams/{teamId}/mercenary-reports`, `GET /profile/mercenary-reports`, `GET /users/{userId}/reputation`, `GET /teams/{teamId}/mercenary-ratings`, `GET /admin/mercenary-disputes`, `GET /admin/mercenary-disputes/{id}`, `GET /teams/{teamId}/external-matches`, `GET /external-matches/{id}` | 200 | B1 |
+| `POST /matches/{matchId}/mercenary-recruitments`, `POST /external-matches/{id}/mercenary-recruitments` (đăng tin tuyển), `POST /mercenary-recruitments/{id}/applications` (ứng tuyển), `POST /mercenary-applications/{id}/ratings`, `POST /mercenary-applications/{id}/reports`, `POST /teams/{teamId}/external-matches` | 201 | B2 |
+| `GET /teams/{teamId}/mercenary-recruitments`, `GET /mercenary-recruitments`, `GET /mercenary-recruitments/{id}`, `GET /mercenary-recruitments/{id}/applications`, `GET /profile/mercenary-applications`, `GET /mercenary-applications/{id}`, `GET /mercenary-applications/{id}/ratings`, `GET /teams/{teamId}/mercenary-reports`, `GET /profile/mercenary-reports`, `GET /users/{userId}/reputation`, `GET /teams/{teamId}/mercenary-ratings`, `GET /admin/mercenary-disputes`, `GET /admin/mercenary-disputes/{id}`, `GET /teams/{teamId}/external-matches`, `GET /external-matches/{id}` | 200 | B1 |
 | `PATCH /mercenary-recruitments/{id}`, `PATCH /external-matches/{id}` | 200 | B3 (`status` tính lại / `updatedAt`), B4 |
 | `POST /mercenary-recruitments/{id}/close` | 200 | B3 (`closedAt`, số đơn bị từ chối), B4 |
 | `POST /mercenary-applications/{id}/approve` | 200 | B3 (`respondedAt`, trạng thái / số đã duyệt của tin) |
 | `POST /mercenary-applications/{id}/withdraw` | 200 | B3 (`withdrawnAt`, `reliabilityPenalty`, trạng thái tin) |
 | `PATCH /admin/mercenary-disputes/{id}/resolve` | 200 | B3 (`resolvedAt`, `resolvedByName`), B4 |
 | `POST /external-matches/{id}/cancel` | 200 | B3 (`cancelledAt`, số tin đóng, số đơn bị từ chối) |
-| `POST /mercenary-applications/{id}/reject`, `POST /conversations/{id}/messages/read` | 204 | N1 |
+| `POST /mercenary-applications/{id}/reject` | 204 | N1 |
 
 ### Client Error (4xx)
 - `400 Bad Request` — request không hợp lệ (validation fail)
@@ -221,12 +223,13 @@ Lỗi 400 do framework phát hiện (thiếu query param bắt buộc, sai kiể
 - `BOOKING_002` — Booking phải đặt tối thiểu 2h trước
 - `AUTH_001` — Token không hợp lệ
 - `USER_001` — User không tồn tại
-- `MATCH_016` — Thao tác không áp dụng cho loại kèo này (luồng A gọi endpoint luồng B hoặc ngược lại)
+- `MATCH_016` — Thao tác không áp dụng cho loại kèo này (luồng A gọi endpoint luồng B hoặc ngược lại; tạo kèo luồng B khi luồng B chưa phát hành)
 - `PAIRING_001`..`PAIRING_008` — Thương lượng ghép kèo (luồng B): không tìm thấy, quyền, trùng, tự nhận, đã kết thúc, revision lệch, chưa chốt, ngoài lựa chọn
 - `CHAT_001` — Tin nhắn mốc không thuộc cuộc trò chuyện
 - `CHAT_002`..`CHAT_004` — Cuộc trò chuyện: không tìm thấy, người gọi không tham gia, chỉ còn xem (không gửi tin được)
 - `VENUE_016` — Địa điểm chưa có phường/xã mà lần sửa không gửi `wardId`
 - `REPORT_009` — Report nhắm vào cá nhân mà người gọi tranh chấp không phải người bị report
+- `REPORT_010`, `REPORT_011` — Report qua chat hai đội: cuộc trò chuyện chưa có tin nhắn nào; cuộc trò chuyện không phải giữa hai đội (vd chat theo đơn ứng tuyển)
 - `MERCENARY_001`..`MERCENARY_025` — Tuyển mercenary: không tìm thấy tin / đơn / trận ngoài (`001`, `002`, `024`); điều kiện kèo / trận (`003`, `004`, `013`); đội tuyển không hoạt động (`005`); tin đủ người / đã đóng (`006`, `007`); số lượng thấp hơn số đã duyệt (`008`); trùng đơn / trùng vị trí / trùng đánh giá / trùng report (`009`, `023`, `017`, `022`); thành viên đội trong trận (`010`); trùng giờ (`011`); trạng thái đơn đã đổi (`012`); không tham gia đơn (`014`); điều kiện đánh giá / report (`015`, `016`, `019`–`021`); thiếu vị trí để tìm kèo (`018`); trận ngoài đã có mercenary được duyệt (`025`)
 
 ---
@@ -291,7 +294,6 @@ Bản thân phần tử mốc (`before` / `after`) không có trong kết quả.
 | Endpoint | Kiểu | Con trỏ |
 |---|---|---|
 | Mọi danh sách trừ bảng dưới | Offset (`page`/`pageSize`) | — |
-| `GET /pairings/{id}/messages` (lịch sử chat) | Cursor | `before` / `after` = `messageId` |
 | `GET /conversations/{id}/messages` (lịch sử chat theo cuộc trò chuyện) | Cursor | `before` / `after` = `messageId` |
 
 ---
