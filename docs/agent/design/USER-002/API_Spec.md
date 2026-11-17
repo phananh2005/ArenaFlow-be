@@ -13,7 +13,7 @@
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
 | Spec nghiệp vụ | `docs/agent/business-spec/USER-002/` (UC-T06, UC-U03 sửa, UC-T05 sửa; BR-T06..BR-T14, BC-T02, BC-T06) · `docs/agent/business-spec/SYSTEM-001/` (v1.7) — BC-U02 |
 | Phụ thuộc | [`USER-001/API_Spec.md`](../USER-001/API_Spec.md) — hợp đồng gốc của đội, lời mời, hồ sơ; file này chỉ mô tả phần USER-002 thêm/đổi |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-12) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v3.1** (solution-architect · 2026-11-17) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -236,7 +236,7 @@ Khi qua điều kiện trên, hành vi như USER-001: user rời mọi đội đ
 | HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
 | 409 | `TEAM_014` | Va chạm với thao tác khác trên đội của user, thử lại vẫn va chạm | Cho người dùng bấm lại |
-| 422 | `USER_003` | Còn là đội trưởng của ít nhất một đội chưa giải tán | Hiện message của `USER_003`; người dùng vào từng đội để chuyển quyền hoặc giải tán (chưa có API liệt kê "đội tôi làm đội trưởng" — mục 6) |
+| 422 | `USER_003` | Còn là đội trưởng của ít nhất một đội chưa giải tán | Hiện message của `USER_003`; mở "Đội của tôi" lọc `role=CAPTAIN` (USER-003 `API_Spec.md` §2.5 — đúng tập đội đang chặn xoá tài khoản) để chuyển quyền hoặc giải tán từng đội |
 
 Mã `USER_003` giữ nguyên từ USER-001, chỉ mở rộng điều kiện và đổi message (mục 4) — FE đang bắt `USER_003` không phải đổi mã.
 
@@ -388,6 +388,6 @@ Field USER-001 giữ nguyên (bản Admin có thêm `inactiveReason` như USER-0
 
 ## 6. Danh sách [cần xác nhận]
 
-1. **Chưa có endpoint "các đội tôi đang làm đội trưởng"** — FE cần để dẫn người dùng tới đội phải chuyển quyền/giải tán khi nhận `USER_003` và để ẩn/cảnh báo nút "Xoá tài khoản" trước. Là chức năng riêng, chưa làm; hiện người dùng phải tự vào từng đội.
+1. ~~**Chưa có endpoint "các đội tôi đang làm đội trưởng"** — FE cần để dẫn người dùng tới đội phải chuyển quyền/giải tán khi nhận `USER_003` và để ẩn/cảnh báo nút "Xoá tài khoản" trước. Là chức năng riêng, chưa làm; hiện người dùng phải tự vào từng đội.~~ — **Đã chốt (user, 2026-11-17):** USER-003 `API_Spec.md` §2.5 (`GET /api/v1/profile/teams?role=CAPTAIN`); danh sách rỗng ⇔ vai trò đội trưởng không còn chặn xoá tài khoản.
 
 Các điểm đã chốt ngày 2026-11-05 (phạm vi lịch sử thành viên Admin, lý do chỉ gồm khoảng trắng, mã lỗi đội đã giải tán, che tên người giải tán, mã lỗi xoá tài khoản đội trưởng) đã phản ánh ở các mục trên.

@@ -140,7 +140,7 @@
 
 **Given:** User là đội trưởng
 
-**When:** Đội trưởng nhập ID/username người được mời và submit
+**When:** Đội trưởng tìm và chọn người được mời (theo số điện thoại hoặc tên hiển thị — `USER-003` UC-U05) và submit
 
 **Then:**
 - Lời mời được tạo với trạng thái pending

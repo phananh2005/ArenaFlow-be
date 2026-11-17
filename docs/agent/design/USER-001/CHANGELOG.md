@@ -1,5 +1,25 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v4.3] — 2026-11-17
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Chốt §6 #2–#4 bằng các endpoint tra cứu của USER-003 (tìm người để mời, danh mục khu vực, đội của tôi) và trỏ nguồn `userId`, `wardId`, `invitationId`; API USER-001 không đổi.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | §6 #2; field `userId` của 2.12 | Chốt `[cần xác nhận]` | Chưa có cách lấy `userId` để mời (chặn luồng FE 2.12) → lấy từ kết quả tìm USER-003 `API_Spec.md` §2.3 | USER-003 (user chốt 2026-11-17) | Màn "Mời thành viên": tìm bằng USER-003 §2.3, gửi `userId` đã chọn vào 2.12 |
+| 2 | §6 #3; field `wardId` của 2.6 | Chốt `[cần xác nhận]` | Chưa có danh mục khu vực (chặn chọn khu vực ở 2.6) → danh mục USER-003 `API_Spec.md` §2.1–§2.2 | Như #1 | Ô "Khu vực": chọn tỉnh/thành (USER-003 §2.1) rồi phường/xã (§2.2), gửi `wardId` vào 2.6 |
+| 3 | §6 #4; cột "FE nên làm gì" của `USER_003` ở 2.7 | Chốt `[cần xác nhận]` | Chưa có "đội của tôi"; nhận `USER_003` thì người dùng tự vào từng đội → mở "Đội của tôi" lọc `role=CAPTAIN` (USER-003 `API_Spec.md` §2.5) | Như #1 | Khi nhận `USER_003`: dẫn tới USER-003 §2.5 với `role=CAPTAIN` |
+| 4 | Path param `invitationId` của 2.13 (2.14 dùng như 2.13) | Thêm nguồn | Chỉ từ `referenceId` của thông báo `TEAM_INVITATION` → thêm "Lời mời của tôi" (USER-003 `API_Spec.md` §2.4) | Khắc phục rủi ro đã chấp nhận ở §6 #1 (thông báo có thể mất hoặc hết hiển thị sau 30 ngày) | Màn "Lời mời của tôi" (USER-003 §2.4) gọi 2.13 / 2.14 với `invitationId` của từng dòng |
+| 4b | §6 #1 | Sửa câu chữ | Rủi ro "thông báo `TEAM_INVITATION` là kênh duy nhất" → chỉ còn tới khi USER-003 triển khai "Lời mời của tôi" (USER-003 `API_Spec.md` §2.4) | Khớp SYSTEM-001 UC-T03 (v1.12) | Không |
+| 5 | §1 "Ngoài phạm vi" | Sửa câu chữ | Thêm trỏ USER-003 cho các chức năng tra cứu | Điều hướng | Không |
+| 6 | Header 3 tài liệu | Ghi nhận | v4.2 → v4.3 | Đánh phiên bản theo entry này | Không |
+
+### Ảnh hưởng
+- API contract USER-001: không đổi (path, body, response, mã lỗi).
+- Endpoint mới nằm ở USER-003 `API_Spec.md` (baseline v1.0). USER-002 v3.1 cùng đợt.
+
 ## [v4.2] — 2026-11-16
 
 **Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Đăng ký, mời vào đội, chấp nhận / từ chối lời mời, chuyển quyền đội trưởng, Admin tạm ngưng / kích hoạt lại đội tạo thông báo in-app (NOTIFICATION-001); người được mời lấy `invitationId` từ thông báo `TEAM_INVITATION` (chốt §6 #1); API USER-001 không đổi.

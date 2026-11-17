@@ -1,5 +1,19 @@
 # CHANGELOG — USER-002 Giải tán đội & quy tắc xoá tài khoản đội trưởng
 
+## [v3.1] — 2026-11-17
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Chốt §6 #1 — đội trưởng bị chặn xoá tài khoản (`USER_003`) xem các đội cần xử lý qua "Đội của tôi" lọc `role=CAPTAIN` của USER-003.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | §6 #1; cột "FE nên làm gì" của `USER_003` ở §2.5 | Chốt `[cần xác nhận]` | Chưa có API liệt kê "đội tôi làm đội trưởng", người dùng tự vào từng đội → USER-003 `API_Spec.md` §2.5 (`GET /api/v1/profile/teams?role=CAPTAIN`), đúng tập đội đang chặn xoá tài khoản | USER-003 (user chốt 2026-11-17) | Khi nhận `USER_003`: mở danh sách USER-003 §2.5 với `role=CAPTAIN`; danh sách rỗng thì cho xoá tài khoản lại |
+| 2 | Header 3 tài liệu thiết kế USER-002 | Ghi nhận | v3.0 → v3.1 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- API contract USER-002: không đổi. Endpoint mới ở USER-003 `API_Spec.md` (v1.0); USER-001 v4.3 cùng đợt.
+
 ## [v3.0] — 2026-11-12
 
 **Type:** MAJOR (đổi shape response danh sách đội Admin: thêm `isCaptainDeleted`, `isDisbandedByDeleted`; `captainName`, `disbandedByName` của user đã xoá tài khoản đổi sang tên thật; lịch sử thành viên Admin: `avatarUrl` của user đã xoá đổi từ `null` sang ảnh thật) · **Tóm tắt:** Mọi endpoint Admin không che user đã xoá tài khoản — tên và ảnh thật, mỗi field tên có cờ đã xoá; endpoint thường giữ nguyên.

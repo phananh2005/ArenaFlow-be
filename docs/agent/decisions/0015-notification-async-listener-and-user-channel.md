@@ -5,6 +5,7 @@
 | **Trạng thái** | Accepted (chủ repo chốt 2026-11-16) |
 | **Ngày** | 2026-11-16 |
 | **Người quyết định** | Chủ repo (chốt phạm vi NOTIFICATION-001 Q1–Q13, 2026-11-16) · solution-architect (đề xuất cách thực hiện) |
+| **Sửa đổi** | 2026-11-17 — rủi ro "lời mời vào đội phụ thuộc thông báo" ở §Hệ quả sẽ được khắc phục khi USER-003 triển khai endpoint "Lời mời của tôi" (mục "Sửa đổi 2026-11-17" cuối file) |
 | **Liên quan** | [ADR-0011](0011-domain-events-after-commit.md) (event `AFTER_COMMIT`, hệ quả "NOTIFICATION-001 cân nhắc `@Async`") · [ADR-0014](0014-realtime-chat-stomp-websocket.md) (Sửa đổi 2026-11-16 — destination `/user/queue/notifications`) · [ADR-0012](0012-scheduled-jobs-claim-with-skip-locked.md) · [ADR-0008](0008-uuid-v7-primary-keys.md) (Sửa đổi 2026-11-09 — `uuidv7()` cho INSERT gom lô) · `docs/agent/design/NOTIFICATION-001/` (Component_Class_Design §4.2–§4.7) |
 
 ## Bối cảnh (Context)
@@ -48,3 +49,7 @@ Chúng tôi:
 - Khiếu nại mất thông báo, hoặc chạy nhiều instance → outbox + worker, broker relay.
 - Log `ERROR` dispatch lặp lại, hàng đợi thường xuyên đầy → tăng executor / xem lại truy vấn audience.
 - Tích hợp FCM: ADR riêng cho thiết bị, retry, timeout của `PushSender`.
+
+## Sửa đổi 2026-11-17 — USER-003: "Lời mời của tôi" sẽ khắc phục rủi ro lời mời phụ thuộc thông báo
+
+Bổ sung, không đổi §Quyết định. Rủi ro ở §Hệ quả "Lời mời vào đội phụ thuộc thông báo" (user chấp nhận 2026-11-16) **sẽ được khắc phục khi USER-003 triển khai** (hiện mới có thiết kế; tới lúc đó rủi ro vẫn còn): USER-003 thêm `GET /api/v1/profile/invitations` liệt kê mọi lời mời đang chờ của người gọi (gồm cả lời mời của đội bị Admin tạm ngưng), không phụ thuộc thông báo. Khi đó, thông báo `TEAM_INVITATION` mất (crash / dispatch lỗi) hoặc hết hiển thị sau 30 ngày thì người được mời vẫn thấy và chấp nhận / từ chối được lời mời. Rủi ro mất thông báo nói chung (§Hệ quả) giữ nguyên. Chi tiết: `docs/agent/design/USER-003/` (API_Spec §2.4), SRS `docs/agent/business-spec/USER-003/` (UC-T07).
