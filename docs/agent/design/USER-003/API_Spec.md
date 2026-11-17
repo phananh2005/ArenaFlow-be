@@ -13,7 +13,7 @@
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
 | Spec nghiệp vụ | `docs/agent/business-spec/USER-003/` (v1.0 — UC-U04, UC-U05, UC-T07, UC-T08; BR-U07..U17, BR-T15..T21) · `docs/agent/business-spec/SYSTEM-001/` (v1.12) |
 | Phụ thuộc | [`USER-001/API_Spec.md`](../USER-001/API_Spec.md) — hồ sơ, đội, mời / chấp nhận / từ chối lời mời; [`USER-002/API_Spec.md`](../USER-002/API_Spec.md) — giải tán đội, điều kiện xoá tài khoản |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-17 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-17 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-18) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 

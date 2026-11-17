@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang con trỏ §7.2, định dạng lỗi, kiểu dữ liệu); quy ước chung MATCH-001 `API_Spec.md` §1.1; kết nối realtime (`/ws`, `CONNECT`, heartbeat, lỗi kết nối): MATCH-001 `API_Spec.md` §1.7; mã `USER_*`, `AUTH_*`: USER-001 `API_Spec.md`; [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (kênh realtime), [ADR-0015](../../decisions/0015-notification-async-listener-and-user-channel.md) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10) — UC-N02, UC-N03; BR-N01, BR-N02; BC-N01..BC-N03; Overview §4 (loại thông báo); Business_Rules §8.6; AC "NOTIFICATION DOMAIN", AC-N02, AC-U01, AC-T02, AC-T03, UC-T03, UC-T04, UC-T05, AC-M03..AC-M09, AC-R02, AC-R06, AC-ME03, AC-ME05, AC-ME06, AC-ME11, AC-V03 · phạm vi user chốt 2026-11-16 (Q1–Q13) — SRS SYSTEM-001 sẽ cập nhật theo phạm vi này |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-16 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-16 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-18) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 

@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL ≥ 18 |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5; MATCH-001 `Component_Class_Design.md` §4.9 (event), §4.10 (scheduler), §4.14 (`ConversationService`, `ConversationContextView`), §4.15 (kênh realtime), §5.2 (`insertAll` mảng + `uuidv7()`), §7 (`@ValidChatCursor`), §8 (pool scheduling); MERCENARY-001 §4.11 (event), §5.3 (`MercenarySql.GAME_*`); REPUTATION-001 §4.7 (event); VENUE-001 §4.7 (event) · ADR-0002, ADR-0008 (+ Sửa đổi 2026-11-09), [ADR-0011](../../decisions/0011-domain-events-after-commit.md), [ADR-0012](../../decisions/0012-scheduled-jobs-claim-with-skip-locked.md), [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (+ Sửa đổi 2026-11-16), [ADR-0015](../../decisions/0015-notification-async-listener-and-user-channel.md) |
 | Ràng buộc dữ liệu | V1–V4 (code) + V5 (VENUE-001), V6 (MATCH-001), V7 (MATCH-002), V8 (REPUTATION-001), V9 (MERCENARY-001) — **chưa có trong code** + `V10__notification.sql` (§5.1). Bảng `notification` có từ V1; entity hiện có `domain/.../entity/chat/Notification`. Neon dev `misty-dew-90700890` (kiểm 2026-11-16): Flyway V4, `notification` 0 dòng, CHECK tên `notification_type_check` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-16 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-16 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-18) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -621,7 +621,7 @@ arenaflow.notification.executor.queue-capacity=1000
 | 7 | Principal STOMP `getName()` = `userId.toString()` khớp `convertAndSendToUser`; interceptor inbound thấy destination gốc `/user/queue/notifications` trước khi chuyển thành hàng đợi theo phiên [Inference — chưa chạy] | Không chặn — kiểm cùng phase realtime (MATCH-001 #12) |
 | 8 | Tên CHECK `notification_type_check` ở môi trường ngoài Neon dev | Không chặn — kiểm trước khi chạy V10; khác → dừng, báo |
 
-## 13. Quyết định đã chốt (user, 2026-11-16 — chi tiết `docs/agent/state/local-dev/notification-001-scope.md`)
+## 13. Quyết định đã chốt (user, 2026-11-16)
 
 | # | Quyết định | Nơi áp dụng |
 |---|---|---|
