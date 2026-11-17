@@ -319,6 +319,16 @@ resilience4j:
         timeout-duration: 0
 ```
 
+> Ví dụ resilience4j ở trên **chưa áp dụng** trong repo (chưa có dependency). Repo hiện chưa có giới hạn chung cho mọi endpoint.
+
+**Mẫu đang dùng — giới hạn theo người dùng, trong bộ nhớ** (USER-003, `GET /teams/{teamId}/invitation-candidates`: 30 lần / 60 giây mỗi `userId`):
+- **Cửa sổ trượt theo nhật ký:** mỗi `userId` một hàng đợi mốc thời gian (`System.nanoTime`, tối đa N mốc) trong `ConcurrentHashMap`; cập nhật nguyên tử bằng `compute`; ném exception **sau** `compute`. Không dùng cửa sổ cố định theo phút (cho tới 2N lần quanh ranh giới).
+- **Dọn bộ nhớ:** dọn lười tối đa một lần mỗi cửa sổ (CAS trên mốc dọn kế tiếp), xoá key khi hàng đợi rỗng — không rò bộ nhớ, không cần `@Scheduled`.
+- **Đặt trước transaction** (ở controller, sau Bean Validation): request bị chặn không chạy SQL và không mượn kết nối DB.
+- **Response:** `429` + mã lỗi theo miền + header `Retry-After` (giây nguyên, tối thiểu 1) — `api-convention.md` §5.
+- **Giới hạn của mẫu:** bộ đếm theo từng instance, mất khi khởi động lại (repo giả định một instance — ADR-0012); theo `userId` nên không chặn người dùng nhiều tài khoản. Chạy nhiều instance / cần chặn theo IP → chọn bộ đếm dùng chung (Redis, gateway) qua ADR.
+- Không thêm dependency (Bucket4j, Caffeine, resilience4j) chỉ cho một endpoint.
+
 ---
 
 ## 8. API Security Headers

@@ -191,6 +191,7 @@ Mã thành công chọn theo **kết quả** của thao tác, không theo HTTP m
 | `PATCH /admin/mercenary-disputes/{id}/resolve` | 200 | B3 (`resolvedAt`, `resolvedByName`), B4 |
 | `POST /external-matches/{id}/cancel` | 200 | B3 (`cancelledAt`, số tin đóng, số đơn bị từ chối) |
 | `POST /mercenary-applications/{id}/reject` | 204 | N1 |
+| `GET /provinces`, `GET /provinces/{provinceId}/wards`, `GET /teams/{teamId}/invitation-candidates`, `GET /profile/invitations`, `GET /profile/teams` | 200 | B1 |
 
 ### Client Error (4xx)
 - `400 Bad Request` — request không hợp lệ (validation fail)
@@ -199,6 +200,7 @@ Mã thành công chọn theo **kết quả** của thao tác, không theo HTTP m
 - `404 Not Found` — resource không tồn tại
 - `409 Conflict` — conflict (vd: slot đã được đặt)
 - `422 Unprocessable Entity` — dữ liệu hợp lệ nhưng nghiệp vụ không cho phép
+- `429 Too Many Requests` — vượt giới hạn số lần gọi; response kèm header `Retry-After` = số giây nguyên (tối thiểu 1) tới khi gọi lại được; mã lỗi theo miền (vd `USER_007`)
 
 ### Server Error (5xx)
 - `500 Internal Server Error` — lỗi hệ thống
@@ -242,6 +244,7 @@ Lỗi 400 do framework phát hiện (thiếu query param bắt buộc, sai kiể
 - `BOOKING_002` — Booking phải đặt tối thiểu 2h trước
 - `AUTH_001` — Token không hợp lệ
 - `USER_001` — User không tồn tại
+- `USER_004`..`USER_007` — Tra cứu cho người dùng: không tìm thấy tỉnh/thành (`004`, 404); số điện thoại tìm kiếm không hợp lệ (`005`, 400); tìm theo tên còn dưới 2 chữ cái/chữ số (`006`, 400); tìm người quá nhanh (`007`, 429 + `Retry-After`)
 - `MATCH_016` — Thao tác không áp dụng cho loại kèo này (luồng A gọi endpoint luồng B hoặc ngược lại; tạo kèo luồng B khi luồng B chưa phát hành)
 - `PAIRING_001`..`PAIRING_008` — Thương lượng ghép kèo (luồng B): không tìm thấy, quyền, trùng, tự nhận, đã kết thúc, revision lệch, chưa chốt, ngoài lựa chọn
 - `CHAT_001` — Tin nhắn mốc không thuộc cuộc trò chuyện
@@ -317,6 +320,8 @@ Bản thân phần tử mốc (`before` / `after`) không có trong kết quả.
 | Mọi danh sách trừ bảng dưới | Offset (`page`/`pageSize`) | — |
 | `GET /conversations/{id}/messages` (lịch sử chat theo cuộc trò chuyện) | Cursor | `before` / `after` = `messageId` |
 | `GET /profile/notifications` (danh sách thông báo của tôi) | Cursor | `before` / `after` = `notificationId` |
+| `GET /provinces`, `GET /provinces/{provinceId}/wards` (danh mục khu vực chỉ đọc) | **Không phân trang** — trả toàn bộ, sắp theo tên (ngoại lệ — `non-functional-standards.md` §2) | — |
+| `GET /teams/{teamId}/invitation-candidates` (gợi ý tìm người để mời) | **Không phân trang** — tối đa 20, dạng `{ items, hasMore }` như §7.2 nhưng không có con trỏ (ngoại lệ — `non-functional-standards.md` §2) | — |
 
 ---
 
@@ -423,7 +428,7 @@ Cùng key → trả về resource đã tạo trước đó (không tạo duplica
 - [ ] Response wrap trong `data` (success) hoặc `error` (fail)
 - [ ] Field names dùng camelCase
 - [ ] Error có `code` + `message` + `timestamp` + `path`
-- [ ] Pagination: offset (`page`, `pageSize`, `totalPages`, `totalItems`) hoặc cursor (`before`/`after`, `limit`, `items`, `hasMore`) — chọn đúng kiểu theo §7
+- [ ] Pagination: offset (`page`, `pageSize`, `totalPages`, `totalItems`) hoặc cursor (`before`/`after`, `limit`, `items`, `hasMore`) — chọn đúng kiểu theo §7; không phân trang chỉ khi endpoint nằm trong bảng ngoại lệ §7
 - [ ] Auth dùng `Authorization: Bearer <token>`
-- [ ] Status code đúng (200/201/204/400/401/403/404/409/500); mã thành công theo tiêu chí B1–B4 / N1 (§5), có dòng trong bảng "Áp dụng cho endpoint hiện có"
+- [ ] Status code đúng (200/201/204/400/401/403/404/409/429/500); mã thành công theo tiêu chí B1–B4 / N1 (§5), có dòng trong bảng "Áp dụng cho endpoint hiện có"
 - [ ] `201` không kèm header `Location`

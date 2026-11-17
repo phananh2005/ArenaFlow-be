@@ -13,6 +13,10 @@
 - **MUST** phân trang mọi API trả danh sách; `size` do server chặn trên.
 - **MUST** sắp xếp tường minh, ổn định.
 - **NEVER** trả toàn bộ bảng; export lớn xử lý theo lô.
+- **Ngoại lệ đã duyệt** (user chốt 2026-11-17, USER-003) — chỉ khi tập kết quả có **chặn trên cố định**, ghi rõ chặn trên trong thiết kế:
+  - **Danh mục chỉ đọc có kích thước giới hạn tự nhiên** (vd tỉnh/thành, phường/xã của một tỉnh): trả toàn bộ, sắp xếp tường minh.
+  - **Gợi ý tìm kiếm có `LIMIT` cố định** (vd tối đa 20 gợi ý): không trang tiếp; báo `hasMore` để người dùng nhập thêm thay vì lật trang.
+  - Endpoint áp dụng: bảng §7 `api-convention.md`. Ngoại lệ mới → được duyệt rồi mới thêm vào bảng đó.
 
 ## 3. Ngưỡng số truy vấn mỗi API
 
