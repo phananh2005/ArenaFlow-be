@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL 18 (Neon) · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) — ngoại lệ phân trang §6 (user chốt D1, 2026-11-17) |
 | Ràng buộc dữ liệu | Schema V1–V4 + `V11__user_name_search.sql` (`Component_Class_Design.md` §6) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-17 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-17 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-18) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -157,4 +157,4 @@ Không có thao tác ghi nên không xung đột. Dữ liệu có thể đổi g
 
 ## 9. Danh sách [cần xác nhận]
 
-Không có điểm riêng của luồng xử lý; xem `Component_Class_Design.md` §9 (#2 kế hoạch truy vấn với tham số bind, #3 ký tự ngoài bảng dấu, #6 chặn trên danh mục khi nạp toàn quốc, #7 bộ đếm giới hạn theo instance, #8 mốc xem lại tìm theo tên, #9 kiểm timeout, #10 `500` hay `503` khi hết giờ, #11 CORS cho `Retry-After`; #1, #4, #5 đã chốt).
+Không có điểm riêng của luồng xử lý; xem `Component_Class_Design.md` §9 (#2 kế hoạch truy vấn với tham số bind, #3 ký tự ngoài bảng dấu, #6 chặn trên danh mục khi nạp toàn quốc, #7 bộ đếm giới hạn theo instance, #8 mốc xem lại tìm theo tên, #9 kiểm timeout, #11 CORS cho `Retry-After`; #1, #4, #5, #10 đã chốt).
