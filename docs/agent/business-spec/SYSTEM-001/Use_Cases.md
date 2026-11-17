@@ -180,7 +180,7 @@
 
 **Exception Flows:** (không có exception đặc biệt)
 
-> **Ghi chú — rủi ro đã chấp nhận (user chốt 2026-11-16):** người được mời biết lời mời **chỉ qua** thông báo lời mời vào đội (UC-T02 bước 5); chưa có màn hình "lời mời của tôi" (để chức năng sau). Thông báo có thể không được tạo khi sự cố máy chủ (BR-N10) và hết hiển thị sau 30 ngày (BR-N02) trong khi lời mời không hết hạn → khi đó người được mời không tìm lại được lời mời.
+> **Ghi chú (user chốt 2026-11-16, sửa 2026-11-17):** thông báo lời mời vào đội (UC-T02 bước 5) có thể không được tạo khi sự cố máy chủ (BR-N10) và hết hiển thị sau 30 ngày (BR-N02) trong khi lời mời không hết hạn. Người được mời vẫn thấy mọi lời mời đang chờ trong "Lời mời của tôi" (UC-T07 — `USER-003`), nên không phụ thuộc thông báo. Rủi ro "chỉ biết lời mời qua thông báo" chấp nhận 2026-11-16 chỉ còn tới khi `USER-003` được triển khai.
 
 ---
 

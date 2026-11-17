@@ -1,20 +1,20 @@
 # Use Cases — Tra cứu cho người dùng (USER-003)
 
 > Quy tắc được trích bằng mã (`BR-U*`, `BR-T*`) — chi tiết trong `Business_Rules.md`. Mã UC tiếp nối SYSTEM-001 (UC-U01..U03) và USER-002 (UC-T06).
-> `[cần xác nhận Q-xx]` — chi tiết và phương án: `Acceptance_Criteria.md` §5.
+> Quyết định đã chốt (Q-01..Q-16, user chốt 2026-11-17): `Acceptance_Criteria.md` §5.
 
 ## UC-U04: Xem danh mục khu vực (mới)
 
 **Actor:** User
 
 **Preconditions:**
-- User đã đăng nhập `[cần xác nhận Q-03]`.
+- User đã đăng nhập (BR-U09).
 
 **Main Flow:**
 1. User chọn ô "Khu vực" khi sửa hồ sơ (UC-U02).
-2. Hệ thống hiển thị danh sách tỉnh/thành (BR-U07, thứ tự: `[cần xác nhận Q-02]`).
+2. Hệ thống hiển thị **toàn bộ** tỉnh/thành, sắp theo tên (BR-U07).
 3. User chọn một tỉnh/thành.
-4. Hệ thống hiển thị danh sách phường/xã thuộc tỉnh/thành đó (BR-U07).
+4. Hệ thống hiển thị **toàn bộ** phường/xã thuộc tỉnh/thành đó, sắp theo tên (BR-U07).
 5. User chọn một phường/xã.
 6. Khu vực vừa chọn (phường/xã kèm tên tỉnh/thành) được điền vào hồ sơ đang sửa; hồ sơ được lưu theo UC-U02 (BR-U05).
 
@@ -27,7 +27,11 @@
 **1a. Hồ sơ đã có khu vực:**
 - 1a1. Hệ thống hiển thị khu vực hiện tại (phường/xã, tỉnh/thành); User có thể chọn lại từ bước 2.
 
-**2a. User tìm tỉnh/thành hoặc phường/xã theo tên:** `[cần xác nhận Q-02]`.
+**2a. User gõ tên để lọc tỉnh/thành hoặc phường/xã** (vd gõ "ben" trong danh sách phường/xã của TP. Hồ Chí Minh):
+- 2a1. Ứng dụng tự lọc trong danh sách đang hiển thị; hệ thống không có chức năng tìm khu vực theo tên (BR-U07).
+
+**2b. Tỉnh/thành của User không có trong danh mục** (danh mục chưa đủ toàn quốc — BR-U08):
+- 2b1. User không chọn được khu vực đúng; các thông tin hồ sơ khác vẫn lưu được (UC-U02). Nạp đủ danh mục là điều kiện trước khi phát hành cho người dùng thật (BC-U05).
 
 **3a. User đổi tỉnh/thành sau khi đã chọn phường/xã:**
 - 3a1. Lựa chọn phường/xã trước đó bị bỏ; quay về bước 4 với tỉnh/thành mới.
@@ -47,20 +51,20 @@
 
 ## UC-U05: Tìm người dùng để mời vào đội (mới)
 
-**Actor:** Đội trưởng (phạm vi quyền: `[cần xác nhận Q-04]`)
+**Actor:** Đội trưởng của **một đội cụ thể** (BR-U15)
 
 **Preconditions:**
 - Đội trưởng đã đăng nhập.
-- Điều kiện quyền và trạng thái đội: `[cần xác nhận Q-04]`.
+- Người tìm đang là đội trưởng của đội được mời vào, và đội đó đang hoạt động (BR-U15) — cùng điều kiện để được mời (UC-T02).
 
 **Main Flow:**
-1. Đội trưởng chọn "Mời thành viên" ở đội của mình (UC-T02).
-2. Đội trưởng nhập số điện thoại hoặc tên hiển thị của người cần mời (cách nhận biết: `[cần xác nhận Q-07]`).
-3. Hệ thống tìm:
-   - Theo **số điện thoại**: so khớp chính xác, cho ra **tối đa một** người (BR-U10, BR-U13).
-   - Theo **tên hiển thị**: khi đã nhập **ít nhất 2 ký tự**, cho ra danh sách gợi ý (BR-U10, so khớp: `[cần xác nhận Q-08]`, giới hạn và thứ tự: `[cần xác nhận Q-09]`).
-4. Hệ thống hiển thị kết quả: **không** có số điện thoại (BR-U11); thông tin mỗi người: `[cần xác nhận Q-10]`; không gồm người đã xoá tài khoản (BR-U12).
-5. Đội trưởng chọn một người trong kết quả.
+1. Đội trưởng mở đội của mình và chọn "Mời thành viên" (UC-T02).
+2. Đội trưởng nhập số điện thoại hoặc tên hiển thị của người cần mời vào **một ô duy nhất** (BR-U10).
+3. Hệ thống nhận biết cách tìm (BR-U10) và tìm:
+   - Theo **số điện thoại**: so khớp chính xác, cho ra **tối đa một** người (BR-U13).
+   - Theo **tên hiển thị**: khi đã nhập **ít nhất 2 ký tự**, cho ra **tối đa 20** gợi ý (BR-U10).
+4. Hệ thống hiển thị kết quả: mỗi người chỉ có tên hiển thị và ảnh đại diện, **không** có số điện thoại (BR-U11); không gồm người đã xoá tài khoản (BR-U12), chính người tìm và tài khoản Admin (BR-U15). Người đã là thành viên đang hoạt động / đang có lời mời chờ từ đội này vẫn hiện, kèm nhãn (BR-U15).
+5. Đội trưởng chọn một người **không** có nhãn trong kết quả.
 6. Tiếp tục UC-T02 (gửi lời mời cho người đã chọn).
 
 **Postconditions:**
@@ -68,18 +72,28 @@
 
 **Alternative Flows:**
 
-**2a. Tên hiển thị nhập vào có ít hơn 2 ký tự** (không tính khoảng trắng đầu/cuối):
+**2a. Tên hiển thị nhập vào có ít hơn 2 chữ cái/chữ số** (không tính khoảng trắng, dấu chấm, gạch ngang và ký tự khác — BR-U10):
 - 2a1. Hệ thống không tìm, nhắc "Nhập ít nhất 2 ký tự". Quay về bước 2.
 
-**2b. Số điện thoại nhập theo dạng khác dạng 10 chữ số bắt đầu bằng 0** (vd có `+84`, khoảng trắng, dấu chấm): `[cần xác nhận Q-06]`.
+**2b. Số điện thoại nhập theo dạng khác** (vd `+84 901 234 567`, `84901234567`, `0901.234.567`, `0901-234-567`):
+- 2b1. Hệ thống quy về dạng 10 chữ số bắt đầu bằng 0 (`0901234567`) rồi tìm như bước 3 (BR-U13).
+- 2b2. Quy đổi xong không phải số điện thoại VN hợp lệ (BR-U01) → báo "Số điện thoại không hợp lệ". Quay về bước 2.
 
-**4a. Người tìm thấy đã là thành viên đang hoạt động hoặc đang có lời mời chờ từ đội này:** `[cần xác nhận Q-05]`.
+**3a. Có hơn 20 người khớp tên:**
+- 3a1. Hệ thống chỉ hiển thị 20 gợi ý đầu (BR-U10) kèm nhắc "Nhập thêm để thu hẹp kết quả". Quay về bước 2 nếu Đội trưởng nhập thêm.
 
-**4b. Kết quả có chính người đang tìm, hoặc tài khoản Admin:** `[cần xác nhận Q-11]`.
+**4a. Người tìm thấy đã là thành viên đang hoạt động hoặc đang có lời mời chờ từ đội này:**
+- 4a1. Người đó vẫn hiện, kèm nhãn "Đã là thành viên" hoặc "Đã được mời"; Đội trưởng không mời được người đó từ kết quả (BR-U15).
 
 **Exception Flows:**
 
-**4c. Không có người nào phù hợp** (gồm số điện thoại chưa đăng ký hoặc thuộc người đã xoá tài khoản):
+**1a. Người tìm không còn là đội trưởng của đội, hoặc đội không còn hoạt động** (vừa chuyển quyền, đội vừa bị admin khoá hoặc giải tán):
+- 1a1. Hệ thống không cho tìm và báo theo quy tắc mời hiện hành (UC-T02 — chỉ đội trưởng của đội đang hoạt động mới mời được).
+
+**1b. Người tìm đã tìm đủ 30 lần trong một phút** (BR-U15):
+- 1b1. Hệ thống không tìm, báo "Bạn tìm quá nhanh, vui lòng thử lại sau". Quay về bước 2 khi hết thời gian chờ.
+
+**4c. Không có người nào phù hợp** (gồm số điện thoại chưa đăng ký, thuộc người đã xoá tài khoản, thuộc chính người tìm hoặc thuộc tài khoản Admin):
 - 4c1. Hệ thống báo "Không tìm thấy người dùng". Quay về bước 2.
 
 **6a. Người đã chọn xoá tài khoản, hoặc vừa trở thành thành viên / vừa được mời, trong khoảng giữa lúc tìm và lúc gửi lời mời:**
@@ -96,7 +110,7 @@
 
 **Main Flow:**
 1. User mở "Lời mời của tôi".
-2. Hệ thống hiển thị các lời mời **đang chờ** gửi tới chính User (BR-T15, BR-T16), mỗi lời mời kèm thông tin đội để quyết định (BR-T17). Thứ tự và phân trang: `[cần xác nhận Q-15]`.
+2. Hệ thống hiển thị tổng số lời mời **đang chờ** gửi tới chính User và danh sách các lời mời đó, mới nhất trước, có phân trang (BR-T15, BR-T16, BR-T17); mỗi lời mời kèm thông tin đội để quyết định (BR-T17).
 3. User chọn "Chấp nhận" hoặc "Từ chối" một lời mời.
 4. Tiếp tục UC-T03 (SYSTEM-001) cho lời mời đó.
 5. Lời mời đã xử lý không còn trong danh sách (BR-T18). Nếu chấp nhận, đội xuất hiện trong "Đội của tôi" (UC-T08).
@@ -112,12 +126,13 @@
 **2b. User muốn xem thêm về đội trước khi quyết định:**
 - 2b1. User mở chi tiết đội từ lời mời (chức năng xem chi tiết đội đã có). Quay về bước 2.
 
-**2c. Lời mời của đội đang bị admin khoá:** hiển thị hay không: `[cần xác nhận Q-13]`.
+**2c. Lời mời của đội đang bị admin khoá:**
+- 2c1. Lời mời vẫn hiển thị, kèm "Đội đang tạm ngưng — chưa thể chấp nhận/từ chối" (BR-T16). Khi đội được kích hoạt lại, User chấp nhận/từ chối bình thường.
 
 **Exception Flows:**
 
-**3a. Đội đang bị admin khoá:**
-- 3a1. Hệ thống báo "Đội đang tạm ngưng hoạt động"; lời mời vẫn chờ, User thử lại sau (hành vi hiện hành).
+**3a. Đội bị admin khoá** (kể cả vừa bị khoá sau khi User mở danh sách):
+- 3a1. Hệ thống báo "Đội đang tạm ngưng hoạt động"; lời mời vẫn chờ, User thử lại sau (hành vi hiện hành, BR-T18).
 
 **3b. Đội vừa bị giải tán:**
 - 3b1. Hệ thống báo "Đội đã giải tán"; lời mời đã tự bị từ chối (USER-002 BR-T10) và không còn trong danh sách.
@@ -136,7 +151,7 @@
 
 **Main Flow:**
 1. User mở "Đội của tôi".
-2. Hệ thống hiển thị **một** danh sách các đội User đang là thành viên đang hoạt động, gồm đội đang hoạt động và đội bị admin khoá (BR-T19), mỗi đội kèm vai trò của User và trạng thái đội (BR-T20). Thứ tự và phân trang: `[cần xác nhận Q-16]`.
+2. Hệ thống hiển thị **một** danh sách các đội User đang là thành viên đang hoạt động, gồm đội đang hoạt động và đội bị admin khoá, không có lọc theo trạng thái đội (BR-T19); đội User làm đội trưởng xếp trước, sau đó theo thời điểm User tham gia đội mới nhất trước, có phân trang (BR-T20). Mỗi đội kèm vai trò của User và trạng thái đội (BR-T20).
 3. (Tuỳ chọn) User bật lọc "Chỉ đội tôi làm đội trưởng" (BR-T21).
 4. Hệ thống chỉ hiển thị các đội User đang là đội trưởng.
 5. User chọn một đội để mở chi tiết đội (chức năng đã có).
@@ -181,4 +196,4 @@ graph LR
 
 ## Danh sách [cần xác nhận]
 
-Q-02, Q-03, Q-04, Q-05, Q-06, Q-07, Q-08, Q-09, Q-10, Q-11, Q-13, Q-15, Q-16 — chi tiết `Acceptance_Criteria.md` §5.
+Không còn — Q-01..Q-16 đã chốt 2026-11-17 (`Acceptance_Criteria.md` §5).

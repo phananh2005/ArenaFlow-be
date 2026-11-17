@@ -3,11 +3,11 @@
 ## 1. Definition of Done (DoD)
 
 - [ ] UC-U04, UC-U05, UC-T07, UC-T08 trong `Use_Cases.md` được implement
-- [ ] BR-U07..U17, BR-T15..T21, BC-U03, BC-U04 trong `Business_Rules.md` được tuân thủ
-- [ ] Mọi `[cần xác nhận]` ở §5 đã được chốt và phản ánh vào spec trước khi thiết kế kỹ thuật
+- [ ] BR-U07..U17, BR-T15..T21, BC-U03..BC-U05 trong `Business_Rules.md` được tuân thủ
+- [x] Mọi `[cần xác nhận]` ở §5 đã được chốt (2026-11-17) và phản ánh vào spec
 - [ ] Không có kết quả tìm nào chứa số điện thoại (kiểm cả tìm theo SĐT lẫn theo tên)
 - [ ] Unit + integration tests PASS
-- [ ] SRS SYSTEM-001 (UC-U02, UC-T02, UC-T03, AC-T02) khớp USER-003 (v1.4)
+- [ ] SRS SYSTEM-001 (UC-U02, UC-T02, UC-T03, AC-T02) khớp USER-003 (v1.12)
 - [ ] Code review PASS
 
 ## 2. Functional Acceptance Criteria
@@ -16,7 +16,15 @@
 
 **Given:** User đã đăng nhập; danh mục có các tỉnh/thành.
 **When:** User mở chọn khu vực.
-**Then:** Hiển thị đủ các tỉnh/thành trong danh mục (thứ tự theo Q-02); không có phường/xã trong danh sách này.
+**Then:** Hiển thị toàn bộ tỉnh/thành trong danh mục, sắp theo tên tiếng Việt (vd "Cần Thơ", "Đà Nẵng", "Hà Nội", "Hải Phòng", "TP. Hồ Chí Minh"), không phân trang; không có phường/xã trong danh sách này (BR-U07).
+
+---
+
+### AC-U04-06: Chưa đăng nhập
+
+**Given:** Người dùng chưa đăng nhập.
+**When:** Mở danh mục khu vực.
+**Then:** Bị từ chối như mọi chức năng cần đăng nhập (BR-U09).
 
 ---
 
@@ -24,7 +32,7 @@
 
 **Given:** Tỉnh/thành T có các phường/xã P1, P2.
 **When:** User chọn T.
-**Then:** Hiển thị P1, P2 và chỉ các phường/xã thuộc T.
+**Then:** Hiển thị toàn bộ phường/xã thuộc T (P1, P2), sắp theo tên, không phân trang; không có phường/xã của tỉnh/thành khác (BR-U07).
 
 ---
 
@@ -54,9 +62,17 @@
 
 ### AC-U05-01: Tìm theo số điện thoại chính xác
 
-**Given:** Người dùng B đăng ký bằng số `0987654321`, tài khoản đang hoạt động.
-**When:** Đội trưởng X tìm `0987654321`.
-**Then:** Kết quả có đúng một người là B; kết quả **không** có số điện thoại; thông tin hiển thị theo Q-10.
+**Given:** Người dùng B đăng ký bằng số `0987654321`, tài khoản đang hoạt động. X là đội trưởng đội A đang hoạt động.
+**When:** X tìm `0987654321` khi mời vào đội A.
+**Then:** Kết quả có đúng một người là B, chỉ gồm tên hiển thị và ảnh đại diện; **không** có số điện thoại (BR-U11).
+
+---
+
+### AC-U05-01b: Số điện thoại viết theo dạng khác
+
+**Given:** Như AC-U05-01.
+**When:** X lần lượt tìm `+84 987 654 321`, `84987654321`, `0987.654.321`, `0987-654-321`.
+**Then:** Mỗi lần ra đúng B (BR-U13). Tìm `+84 12345` → "Số điện thoại không hợp lệ".
 
 ---
 
@@ -70,9 +86,41 @@
 
 ### AC-U05-03: Tìm theo tên hiển thị
 
-**Given:** Có "Nguyễn Văn An" (đang hoạt động), "Nguyễn Văn Anh" (đã xoá tài khoản), "Trần An" (đang hoạt động).
-**When:** X tìm "An".
-**Then:** Gợi ý gồm "Nguyễn Văn An" và "Trần An" (so khớp theo Q-08; giới hạn và thứ tự theo Q-09); **không** có "Nguyễn Văn Anh"; không kết quả nào có số điện thoại.
+**Given:** Có "Nguyễn Văn An" (đang hoạt động), "Nguyễn Văn Anh" (đã xoá tài khoản), "Trần An" (đang hoạt động), "Lan Nguyễn" (đang hoạt động), "An Phạm" (đang hoạt động).
+**When:** X tìm "an".
+**Then:** Gợi ý theo thứ tự: "An Phạm" (tên bắt đầu bằng "an" xếp trước), rồi "Nguyễn Văn An", "Trần An" (A→Z); **không** có "Lan Nguyễn" ("an" nằm giữa từ "Lan" — BR-U10) và **không** có "Nguyễn Văn Anh" (BR-U12); không kết quả nào có số điện thoại (BR-U10, BR-U11).
+
+---
+
+### AC-U05-03b: Tìm theo tên không dấu
+
+**Given:** Như AC-U05-03.
+**When:** X tìm "nguyen".
+**Then:** Gợi ý có "Lan Nguyễn" và "Nguyễn Văn An" (không phân biệt dấu và hoa/thường — BR-U10).
+
+---
+
+### AC-U05-03e: Tìm nhiều từ
+
+**Given:** Như AC-U05-03.
+**When:** X tìm "Nguyen An".
+**Then:** Gợi ý chỉ có "Nguyễn Văn An" — mỗi từ nhập khớp đầu một từ trong tên; "Lan Nguyễn" không có vì "an" không khớp đầu từ nào (BR-U10).
+
+---
+
+### AC-U05-03c: Hơn 20 người khớp
+
+**Given:** Có 25 người dùng đang hoạt động có tên chứa từ bắt đầu bằng "Minh".
+**When:** X tìm "Minh".
+**Then:** Hiển thị đúng 20 gợi ý kèm nhắc "Nhập thêm để thu hẹp kết quả"; không có trang tiếp theo (BR-U10).
+
+---
+
+### AC-U05-03d: Không có chính mình và tài khoản Admin
+
+**Given:** X tên "Minh Trí"; tài khoản Admin M tên "Minh Quản trị", có số điện thoại `0900000001`.
+**When:** X tìm "Minh", rồi tìm `0900000001`, rồi tìm số điện thoại của chính X.
+**Then:** Gợi ý theo tên không có X và M; hai lần tìm theo số điện thoại đều báo "Không tìm thấy người dùng" (BR-U15).
 
 ---
 
@@ -102,9 +150,25 @@
 
 ### AC-U05-07: Người đã là thành viên / đã được mời
 
-**Given:** Y là thành viên đội A; Z có lời mời đang chờ từ A.
-**When:** X tìm ra Y hoặc Z.
-**Then:** Hiển thị theo Q-05. Nếu X vẫn gửi được lời mời cho Y/Z → bị từ chối "Người này đã là thành viên hoặc đã được mời" (quy tắc hiện hành, BR-U14).
+**Given:** X là đội trưởng đội A và đội C; Y là thành viên đội A; Z có lời mời đang chờ từ A.
+**When:** X tìm Y và Z khi mời vào A, rồi khi mời vào C.
+**Then:** Khi mời vào A: Y có nhãn "Đã là thành viên", Z có nhãn "Đã được mời", không mời được từ kết quả. Khi mời vào C: Y và Z không có nhãn, mời được (BR-U15). Lời mời gửi tới Y/Z vào A bằng cách khác vẫn bị từ chối "Người này đã là thành viên hoặc đã được mời" (BR-U14).
+
+---
+
+### AC-U05-08: Chỉ đội trưởng của đội đang hoạt động được tìm
+
+**Given:** X là đội trưởng đội A (đang hoạt động) và đội C (bị admin khoá); W là thành viên thường đội A.
+**When:** X tìm người khi mời vào A, rồi khi mời vào C; W tìm người khi mời vào A.
+**Then:** X tìm được cho A; X không tìm được cho C; W không tìm được (BR-U15).
+
+---
+
+### AC-U05-09: Tìm quá nhanh
+
+**Given:** X là đội trưởng đội A (đang hoạt động) và đội B (đang hoạt động); trong phút vừa qua X đã tìm 20 lần khi mời vào A và 10 lần khi mời vào B.
+**When:** X tìm lần thứ 31 (theo SĐT hoặc theo tên, cho A hoặc B) trong cùng phút đó.
+**Then:** Hệ thống không tìm, báo "Bạn tìm quá nhanh, vui lòng thử lại sau"; sau khi hết thời gian chờ X tìm lại được (BR-U15).
 
 ---
 
@@ -112,7 +176,15 @@
 
 **Given:** B có lời mời đang chờ từ đội A và đội C; một lời mời từ đội E đã bị B từ chối; một lời mời từ đội A gửi người khác.
 **When:** B mở "Lời mời của tôi".
-**Then:** Chỉ có lời mời từ A và C; mỗi lời mời có thông tin theo BR-T17; thứ tự/phân trang theo Q-15.
+**Then:** Tổng số lời mời đang chờ là 2; chỉ có lời mời từ A và C, lời mời mới hơn đứng trước, có phân trang; mỗi lời mời có thông tin theo BR-T17, người đại diện là đội trưởng hiện tại của đội.
+
+---
+
+### AC-T07-01b: Người đại diện là đội trưởng hiện tại
+
+**Given:** Lan (đội trưởng đội A) mời B; sau đó Lan chuyển quyền đội trưởng A cho Hùng.
+**When:** B mở "Lời mời của tôi".
+**Then:** Lời mời từ A hiển thị đội trưởng là Hùng (BR-T17).
 
 ---
 
@@ -135,8 +207,8 @@
 ### AC-T07-04: Lời mời của đội đang bị admin khoá
 
 **Given:** B có lời mời đang chờ từ đội A; Admin khoá A.
-**When:** B mở "Lời mời của tôi", rồi chấp nhận hoặc từ chối lời mời của A (nếu lời mời được hiển thị).
-**Then:** Hiển thị hay không theo Q-13. Chấp nhận/từ chối → "Đội đang tạm ngưng hoạt động"; lời mời vẫn chờ (BR-T18).
+**When:** B mở "Lời mời của tôi", rồi chấp nhận hoặc từ chối lời mời của A.
+**Then:** Lời mời của A vẫn hiển thị, kèm "Đội đang tạm ngưng — chưa thể chấp nhận/từ chối" (BR-T16). Chấp nhận/từ chối → "Đội đang tạm ngưng hoạt động"; lời mời vẫn chờ (BR-T18). Admin kích hoạt lại A → B chấp nhận/từ chối bình thường.
 
 ---
 
@@ -153,6 +225,14 @@
 **Given:** B là đội trưởng đội A (đang hoạt động), thành viên đội C (bị admin khoá), đã rời đội E, có lời mời chờ từ đội F, từng là thành viên đội G đã giải tán.
 **When:** B mở "Đội của tôi".
 **Then:** Chỉ có A (vai trò đội trưởng, trạng thái đang hoạt động) và C (vai trò thành viên, trạng thái bị khoá); mỗi đội có thông tin theo BR-T20; không có E, F, G.
+
+---
+
+### AC-T08-01b: Thứ tự đội của tôi
+
+**Given:** B là thành viên đội P (tham gia 2026-11-01) và đội Q (tham gia 2026-11-10); là đội trưởng đội R (tham gia 2026-10-01).
+**When:** B mở "Đội của tôi".
+**Then:** Thứ tự R, Q, P — đội làm đội trưởng trước, sau đó tham gia mới nhất trước; có phân trang; không có lọc theo trạng thái đội (BR-T19, BR-T20).
 
 ---
 
@@ -189,7 +269,8 @@
 ## 3. Non-Functional Acceptance Criteria
 
 - Hiệu năng: theo chuẩn của dự án (`docs/agent/non-functional-standards.md`) — thiết kế kỹ thuật chứng minh. Tìm theo tên phải phản hồi đủ nhanh để gợi ý khi đang gõ.
-- Bảo mật / riêng tư: không hiển thị số điện thoại của người khác (BC-U03); người dùng không suy ra được lời mời/đội của người khác; chống dò số điện thoại: Q-12.
+- Bảo mật / riêng tư: không hiển thị số điện thoại của người khác (BC-U03); người dùng không suy ra được lời mời/đội của người khác; chống dò số điện thoại: chỉ đội trưởng của đội đang hoạt động được tìm, tối đa 30 lần tìm mỗi phút mỗi người (BR-U15).
+- Phát hành: danh mục khu vực đủ toàn quốc trước khi phát hành cho người dùng thật (BC-U05).
 
 ## 4. Test Scenarios
 
@@ -211,88 +292,25 @@
 ### Scenario 4: Đội trưởng dọn đội trước khi xoá tài khoản
 Như AC-T08-03.
 
-## 5. Danh sách [cần xác nhận]
+## 5. Quyết định đã chốt
 
-> Mỗi câu có phương án; **khuyến nghị** là đề xuất của BA, chưa phải quyết định. Chưa chốt → không thiết kế kỹ thuật phần liên quan.
+> User chốt 2026-11-17. Không còn `[cần xác nhận]`.
 
-### Danh mục khu vực
-
-1. **Q-01 — Phạm vi dữ liệu danh mục.** Danh mục hiện có **5 tỉnh/thành và 50 phường/xã** (dữ liệu mẫu), chưa phải toàn quốc.
-   - A: USER-003 chỉ hiển thị danh mục đang có; nạp đủ danh mục toàn quốc là việc dữ liệu riêng, ghi là điều kiện trước khi phát hành cho người dùng thật.
-   - B: USER-003 gồm cả việc nạp đủ danh mục toàn quốc (theo danh mục chuẩn hiện hành).
-   - **Khuyến nghị: A** — tách việc dữ liệu khỏi chức năng xem; vẫn chặn phát hành thật nếu chưa đủ dữ liệu.
-2. **Q-02 — Thứ tự và tìm theo tên trong danh mục.**
-   - A: Tỉnh/thành và phường/xã sắp theo tên (thứ tự chữ cái tiếng Việt); không có tìm theo tên — ứng dụng tự lọc trong danh sách đang hiển thị.
-   - B: Như A, thêm tìm phường/xã theo tên trong một tỉnh/thành.
-   - C: Như A, thêm tìm phường/xã theo tên trên toàn quốc (kết quả kèm tỉnh/thành).
-   - **Khuyến nghị: A** — danh sách phường/xã của một tỉnh/thành đủ nhỏ để ứng dụng tự lọc. [Inference] dựa trên quy mô danh mục hành chính; chưa đo trên dữ liệu toàn quốc.
-3. **Q-03 — Có cần đăng nhập để xem danh mục không.**
-   - A: Chỉ người đã đăng nhập (cùng quy tắc với mọi chức năng khác).
-   - B: Ai cũng xem được, không cần đăng nhập.
-   - **Khuyến nghị: A** — danh mục chỉ dùng khi sửa hồ sơ, lúc đó User đã đăng nhập.
-
-### Tìm người dùng
-
-4. **Q-04 — Ai được tìm, trong điều kiện nào.**
-   - A: Mọi người dùng đã đăng nhập.
-   - B: Chỉ người đang là đội trưởng của ít nhất một đội đang hoạt động.
-   - C: Tìm **trong ngữ cảnh một đội cụ thể**: người tìm phải là đội trưởng của đội đó và đội phải đang hoạt động (đúng điều kiện được mời).
-   - **Khuyến nghị: C** — đúng mục đích "mời vào đội", giảm người có thể dò số điện thoại, và cho phép đánh dấu người đã trong đội (Q-05).
-5. **Q-05 — Người đã là thành viên / đang có lời mời chờ từ đội.**
-   - A: Vẫn hiện, kèm nhãn "Đã là thành viên" / "Đã được mời"; không cho mời (cần Q-04 = C).
-   - B: Loại khỏi kết quả (cần Q-04 = C).
-   - C: Hiện như mọi người; mời thì nhận lỗi hiện hành "đã là thành viên hoặc đã được mời".
-   - **Khuyến nghị: A** — đội trưởng hiểu vì sao không mời được, tránh tưởng "không tìm thấy".
-6. **Q-06 — Chuẩn hoá số điện thoại khi tìm.**
-   - A: Chỉ nhận đúng dạng 10 chữ số bắt đầu bằng 0 (như khi đăng nhập); dạng khác → báo "Số điện thoại không hợp lệ".
-   - B: Nhận cả `+84…`, `84…`, có khoảng trắng / dấu chấm / gạch ngang; quy về dạng 10 chữ số bắt đầu bằng 0 rồi so khớp chính xác.
-   - **Khuyến nghị: B** — người dùng thường dán số từ danh bạ có `+84` hoặc dấu cách.
-7. **Q-07 — Cách nhận biết tìm theo SĐT hay theo tên.**
-   - A: Một ô nhập; chuỗi chỉ gồm chữ số (và ký tự số điện thoại theo Q-06) → tìm SĐT chính xác; ngược lại → tìm theo tên.
-   - B: Hai lựa chọn riêng ("Theo số điện thoại" / "Theo tên"), người dùng chọn.
-   - **Khuyến nghị: A** — gọn cho người dùng. Hệ quả: tên hiển thị chỉ gồm chữ số chỉ tìm được nếu trùng một số điện thoại — chấp nhận được.
-8. **Q-08 — Cách so khớp tên.**
-   - A: Tên **chứa** chuỗi nhập ở bất kỳ vị trí, không phân biệt hoa/thường, **không phân biệt dấu** ("nguyen" khớp "Nguyễn").
-   - B: Như A nhưng **phân biệt dấu**.
-   - C: Tên (hoặc một từ trong tên) **bắt đầu bằng** chuỗi nhập, không phân biệt hoa/thường và dấu.
-   - **Khuyến nghị: A** — người dùng hay gõ không dấu.
-9. **Q-09 — Giới hạn số gợi ý và thứ tự.**
-   - A: Tối đa **20** gợi ý, không phân trang; tên bắt đầu bằng chuỗi nhập xếp trước, sau đó theo tên A→Z. Nhiều hơn 20 → nhắc "Nhập thêm để thu hẹp kết quả".
-   - B: Phân trang đầy đủ như các danh sách khác, sắp theo tên A→Z.
-   - **Khuyến nghị: A** — đây là gợi ý khi đang gõ, không phải danh bạ.
-10. **Q-10 — Thông tin hiển thị mỗi kết quả.**
-    - A: Tên hiển thị + ảnh đại diện (giống danh sách thành viên đội hiện có).
-    - B: Như A, thêm khu vực (tỉnh/thành) và vị trí ưa thích để phân biệt người trùng tên.
-    - **Khuyến nghị: A** — khớp quy tắc SYSTEM-001 §5.1 "User không xem hồ sơ người khác". Chọn B thì phải sửa quy tắc đó.
-11. **Q-11 — Chính người tìm và tài khoản Admin trong kết quả.**
-    - A: Loại chính người tìm; tài khoản Admin vẫn xuất hiện như người dùng khác.
-    - B: Loại cả chính người tìm và tài khoản Admin.
-    - C: Không loại ai (chính người tìm hiện theo Q-05 vì đã là thành viên).
-    - **Khuyến nghị: A** — không có lý do nghiệp vụ để chặn mời Admin vào đội; hiện chính mình chỉ gây nhiễu.
-12. **Q-12 — Giới hạn số lần tìm theo số điện thoại (chống dò danh bạ).**
-    - A: Không giới hạn riêng; dùng giới hạn chung của hệ thống (SYSTEM-001 AC §3.2).
-    - B: Giới hạn riêng cho tìm theo SĐT (vd tối đa 30 lần/giờ/người); vượt → báo "Bạn tìm quá nhiều lần, vui lòng thử lại sau".
-    - **Khuyến nghị: A cho MVP** nếu Q-04 = C (chỉ đội trưởng của đội đang hoạt động được tìm); chọn B nếu Q-04 = A.
-
-### Lời mời của tôi
-
-13. **Q-13 — Lời mời của đội đang bị admin khoá.**
-    - A: Hiện, kèm trạng thái đội "Đang tạm ngưng — chưa thể chấp nhận/từ chối".
-    - B: Ẩn cho tới khi đội được kích hoạt lại.
-    - **Khuyến nghị: A** — lời mời vẫn đang chờ; ẩn đi làm người dùng tưởng lời mời đã mất.
-14. **Q-14 — Người đại diện đội hiển thị trên lời mời.**
-    - A: Đội trưởng **hiện tại** của đội (không cần lưu thêm thông tin).
-    - B: Người **đã gửi** lời mời (phải lưu thêm "người mời"; lời mời cũ không có thông tin này).
-    - **Khuyến nghị: A** — đủ để quyết định; không đổi dữ liệu lưu trữ.
-15. **Q-15 — Thứ tự và phân trang của lời mời.**
-    - A: Mới nhất trước; có phân trang như các danh sách khác; hiển thị tổng số lời mời đang chờ.
-    - B: Mới nhất trước; trả toàn bộ, không phân trang.
-    - **Khuyến nghị: A** — lời mời không hết hạn và đến từ nhiều đội nên có thể tích luỹ.
-
-### Đội của tôi
-
-16. **Q-16 — Thứ tự, phân trang và lọc trạng thái.**
-    - Thứ tự — A: đội tôi làm đội trưởng trước, sau đó theo thời điểm tôi tham gia mới nhất trước; B: chỉ theo thời điểm tham gia mới nhất trước; C: theo tên đội A→Z.
-    - Phân trang — A: có, như các danh sách khác; B: trả toàn bộ.
-    - Lọc trạng thái — A: không có (luôn gồm đang hoạt động và bị khoá; đội đã giải tán tự nhiên không có vì không còn thành viên); B: thêm lọc "đang hoạt động" / "bị khoá".
-    - **Khuyến nghị: thứ tự A, phân trang A, lọc trạng thái A.**
+| Câu | Chủ đề | Chốt | Phản ánh ở |
+|---|---|---|---|
+| Q-01 | Phạm vi dữ liệu danh mục | USER-003 chỉ hiển thị danh mục đang có; nạp đủ toàn quốc là việc dữ liệu riêng, bắt buộc xong trước khi phát hành cho người dùng thật | BR-U08, BC-U05 |
+| Q-02 | Thứ tự, tìm theo tên trong danh mục | Sắp theo tên tiếng Việt, trả toàn bộ; không tìm theo tên — ứng dụng tự lọc | BR-U07, UC-U04 2a |
+| Q-03 | Đăng nhập để xem danh mục | Cần đăng nhập | BR-U09 |
+| Q-04 | Ai được tìm người dùng | Chỉ tìm cho một đội cụ thể: người tìm là đội trưởng của đội đó, đội đang hoạt động | BR-U15, UC-U05 |
+| Q-05 | Người đã là thành viên / đã được mời | Vẫn hiện, kèm nhãn "Đã là thành viên" / "Đã được mời", không mời được từ kết quả | BR-U15, UC-U05 4a |
+| Q-06 | Chuẩn hoá số điện thoại | Nhận `+84…`, `84…`, khoảng trắng, dấu chấm, gạch ngang; quy về 10 chữ số bắt đầu bằng 0 rồi so khớp chính xác | BR-U13, UC-U05 2b |
+| Q-07 | Nhận biết tìm SĐT hay tên | Một ô; chuỗi dạng số điện thoại → tìm SĐT, còn lại → tìm tên (tên toàn chữ số không tìm được theo tên — chấp nhận) | BR-U10 |
+| Q-08 | So khớp tên | Mỗi từ nhập khớp đầu một từ trong tên, không phân biệt hoa/thường, không phân biệt dấu (sửa 2026-11-17 khi thiết kế — bản đầu là "chứa ở bất kỳ vị trí") | BR-U10, AC-U05-03, AC-U05-03e |
+| Q-09 | Giới hạn, thứ tự gợi ý | Tối đa 20, không phân trang; tên bắt đầu bằng chuỗi nhập trước, rồi A→Z; hơn 20 → nhắc nhập thêm | BR-U10, UC-U05 3a |
+| Q-10 | Thông tin mỗi kết quả | Tên hiển thị + ảnh đại diện | BR-U11 |
+| Q-11 | Loại ai khỏi kết quả | Loại chính người tìm **và** tài khoản Admin — hệ quả: không mời được Admin vào đội qua tìm kiếm | BR-U15 |
+| Q-12 | Giới hạn số lần tìm | Tối đa 30 lần tìm mỗi phút mỗi người, tính chung SĐT và tên, mọi đội (sửa 2026-11-17 khi thiết kế — bản đầu "dùng giới hạn chung", nhưng hệ thống chưa có) | BR-U15, UC-U05 1b, AC-U05-09, §3 |
+| Q-13 | Lời mời của đội bị admin khoá | Vẫn hiện, kèm "Đội đang tạm ngưng — chưa thể chấp nhận/từ chối" | BR-T16, UC-T07 2c |
+| Q-14 | Người đại diện đội trên lời mời | Đội trưởng hiện tại | BR-T17 |
+| Q-15 | Thứ tự, phân trang lời mời | Mới nhất trước, có phân trang, kèm tổng số lời mời đang chờ | BR-T17 |
+| Q-16 | Thứ tự, phân trang, lọc "Đội của tôi" | Đội trưởng trước, rồi tham gia mới nhất trước; có phân trang; không lọc theo trạng thái đội | BR-T19, BR-T20 |
