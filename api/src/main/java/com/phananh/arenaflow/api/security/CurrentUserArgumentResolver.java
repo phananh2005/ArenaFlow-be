@@ -1,6 +1,7 @@
 package com.phananh.arenaflow.api.security;
 
 import com.phananh.arenaflow.common.exception.BusinessException;
+import com.phananh.arenaflow.application.support.security.CurrentActor;
 import com.phananh.arenaflow.common.exception.ErrorCode;
 import org.springframework.core.MethodParameter;
 import org.springframework.security.core.Authentication;
@@ -21,18 +22,24 @@ public class CurrentUserArgumentResolver implements HandlerMethodArgumentResolve
     @Override
     public boolean supportsParameter(MethodParameter parameter) {
         return parameter.hasParameterAnnotation(CurrentUser.class)
-                && UUID.class.equals(parameter.getParameterType());
+                && (UUID.class.equals(parameter.getParameterType()) || CurrentActor.class.equals(parameter.getParameterType()));
     }
 
     @Override
-    public UUID resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+    public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
                                 NativeWebRequest webRequest, WebDataBinderFactory binderFactory) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (!(authentication instanceof JwtAuthenticationToken jwtAuthentication)) {
             throw new BusinessException(ErrorCode.AUTH_001);
         }
         try {
-            return UUID.fromString(jwtAuthentication.getToken().getSubject());
+            UUID userId = UUID.fromString(jwtAuthentication.getToken().getSubject());
+            if (CurrentActor.class.equals(parameter.getParameterType())) {
+                boolean admin = jwtAuthentication.getAuthorities().stream()
+                        .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
+                return new CurrentActor(userId, admin);
+            }
+            return userId;
         } catch (IllegalArgumentException | NullPointerException exception) {
             throw new BusinessException(ErrorCode.AUTH_001);
         }

@@ -71,6 +71,17 @@ class ConcurrencyConflictRetrierTest {
     }
 
     @Test
+    void throwsCallerProvidedErrorCodeAfterThreeOptimisticLockFailures() {
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
+
+        assertThatThrownBy(() -> retrier.execute(ErrorCode.VENUE_011, () -> {
+            throw new ObjectOptimisticLockingFailureException("Venue", "venue-id");
+        }))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VENUE_011));
+    }
+
+    @Test
     void throwsTeam014AfterThreeDeadlocks() {
         ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
         AtomicInteger attempts = new AtomicInteger();

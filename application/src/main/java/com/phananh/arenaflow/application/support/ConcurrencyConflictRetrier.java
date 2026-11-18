@@ -32,6 +32,11 @@ public class ConcurrencyConflictRetrier {
      * hỏng.
      */
     public <T> T execute(Supplier<T> operation) {
+        return execute(ErrorCode.TEAM_014, operation);
+    }
+
+    /** Retries optimistic-lock/deadlock conflicts and reports the use-case-specific exhausted error code. */
+    public <T> T execute(ErrorCode exhaustedCode, Supplier<T> operation) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 return transactionTemplate.execute(status -> operation.get());
@@ -45,7 +50,7 @@ public class ConcurrencyConflictRetrier {
                         attempt == MAX_ATTEMPTS ? ", giving up" : ", retrying");
             }
         }
-        throw new BusinessException(ErrorCode.TEAM_014);
+        throw new BusinessException(exhaustedCode);
     }
 
     private static boolean isDeadlock(PessimisticLockingFailureException exception) {

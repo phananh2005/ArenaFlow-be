@@ -35,8 +35,23 @@ public class VenueReport {
     @Column(name = "reporter_id", nullable = false)
     private UUID reporterId;
 
-    @Column(name = "reason", nullable = false, columnDefinition = "TEXT")
-    private String reason;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reason", nullable = false, length = 20)
+    private Reason reason;
+
+    @Column(name = "detail", columnDefinition = "TEXT")
+    private String detail;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    @Builder.Default
+    private Status status = Status.PENDING;
+
+    @Column(name = "handled_by")
+    private UUID handledBy;
+
+    @Column(name = "handled_at")
+    private OffsetDateTime handledAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Setter(AccessLevel.NONE)
@@ -45,5 +60,13 @@ public class VenueReport {
     @PrePersist
     protected void onCreate() {
         createdAt = OffsetDateTime.now();
+    }
+
+    public enum Reason {
+        CLOSED, WRONG_INFO, OTHER
+    }
+
+    public enum Status {
+        PENDING, VERIFIED, REJECTED
     }
 }

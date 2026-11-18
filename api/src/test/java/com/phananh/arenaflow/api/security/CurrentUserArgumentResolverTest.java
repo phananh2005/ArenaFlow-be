@@ -1,9 +1,11 @@
 package com.phananh.arenaflow.api.security;
 
 import com.phananh.arenaflow.api.config.GlobalExceptionHandler;
+import com.phananh.arenaflow.application.support.security.CurrentActor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -14,6 +16,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.util.UUID;
+
+import java.util.List;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -50,6 +54,19 @@ class CurrentUserArgumentResolverTest {
     }
 
     @Test
+    void resolvesCurrentActorWithAdminAuthority() throws Exception {
+        UUID userId = UUID.randomUUID();
+        Jwt jwt = Jwt.withTokenValue("token").header("alg", "HS256").subject(userId.toString())
+                .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(60)).build();
+        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(
+                jwt, List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
+
+        mockMvc.perform(get("/test/actor"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(userId + ":true"));
+    }
+
+    @Test
     void returnsAuth001WhenNoJwtAuthentication() throws Exception {
         mockMvc.perform(get("/test/me"))
                 .andExpect(status().isUnauthorized())
@@ -61,6 +78,11 @@ class CurrentUserArgumentResolverTest {
         @GetMapping("/test/me")
         String me(@CurrentUser UUID currentUserId) {
             return currentUserId.toString();
+        }
+
+        @GetMapping("/test/actor")
+        String actor(@CurrentUser CurrentActor actor) {
+            return actor.userId() + ":" + actor.admin();
         }
     }
 }

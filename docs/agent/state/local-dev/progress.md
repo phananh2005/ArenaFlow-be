@@ -1,17 +1,29 @@
 ---
-task: Mọi màn Admin hiện tên thật + ảnh thật + cờ đã xoá của user đã xoá tài khoản
-updated: 2026-11-12
-percent: 100
+task: VENUE-001 — quản lý địa điểm sân (V5)
+created: 2026-11-18
+status: in_progress
 ---
 
-## Đang làm
-- Chờ user merge PR #59 (https://github.com/phananh2005/ArenaFlow-be/pull/59). Sau merge: tiếp REPUTATION-001 (nhánh `feature/REPUTATION-001-rating-report-dispute`).
+## Mô tả
+Triển khai VENUE-001 theo thiết kế đã duyệt, bắt đầu với migration Flyway V5 và các thành phần backend cho quản lý địa điểm sân.
+
+## Thiết kế liên quan
+- `docs/agent/business-spec/SYSTEM-001/` — UC-V01..V06, BR-V01..V11, BC-V01..V07, AC-V01..V05.
+- `docs/agent/design/VENUE-001/` — `API_Spec.md`, `Component_Class_Design.md`, `Processing_Flow.md` (v4.2).
+- `docs/agent/non-functional-standards.md` — N_DETAIL=3, N_LIST=4, N_WRITE=6; không N+1; không giữ transaction khi chờ I/O ngoài.
 
 ## Đã xong
-- Code + test (TDD) — commit `d853e9d`; tài liệu (ADR-0002, SRS SYSTEM-001 v1.7, USER-002 AC, design USER-001 v4.0 / USER-002 v3.0 / VENUE-001 v3.0) — commit `9d585c2`; Javadoc `TeamDetailView` (MINOR code-reviewer) — commit `0d4b00e`.
-- architect-reviewer: MAJOR SRS đóng; 3 MINOR đã sửa. code-reviewer toàn nhánh: 0 CRITICAL/MAJOR, 1 MINOR đã sửa.
-- Test PASS 2026-11-12: MapperTest 11 (chạy lại sau sửa Javadoc), AdminTeamServiceImplTest 9, AdminTeamControllerTest 6, TeamControllerTest 9, SecurityConfigIntegrationTest 10, TeamServiceIntegrationTest 1, NfsQueryCountTest 2, TeamDisbandRaceTest 10.
-- `git diff --check` sạch; publish-spec dry run exit 0. Push nhánh + tạo PR #59.
+- Phase 1 migration V5: test Red/Green/Refactor; `VenueManagementMigrationTest` PASS 6/6 trên `.env.dev`, Flyway schema version 5, preflight aggregate 0 nhóm report legacy trùng.
+- Phase 2: entity V5/error codes, request DTO validation, response/projection mapper, guard/current actor/repository baseline; các test unit liên quan PASS.
+- Phase 3 core endpoints hoàn tất: `POST /api/v1/venues`, `GET /api/v1/venues/{venueId}`, `GET /api/v1/venues`, `PATCH /api/v1/venues/{venueId}`. PATCH controller integration `VenueControllerTest` PASS 3/3 (2026-11-18).
+- Query-count core: `VenueNfsQueryCountTest` PASS 1/1, create=3/6, list=2/4, detail=2/3, update=3–5/6, không N+1.
+- Cloudinary upload spike: PNG signed upload 200; response signature SHA-1 đúng; nested public ID `-`/`_` hoạt động; GIF ngoài format bị từ chối 400; duplicate `overwrite=false` không overwrite. Blocker #9 đã gỡ.
+- Phase 4 signing + 2.4: `CloudinaryImageUploadSignerTest` PASS 3/3; service 2.4 test PASS; controller 2.4 integration không trả `apiSecret`.
+- Phase 4 2.5: local verify public ID/scope/uploader/response signature/clock-skew/confirm-window trước transaction; row lock, stats, primary replacement and duplicate map `VENUE_006`; service tests PASS 8/8. Controller accepts forged result as `VENUE_005`. Cloudinary-dev E2E `2.4 → direct PNG upload → 2.5` PASS trong `VenueControllerTest` 6/6 (BUILD SUCCESS 59.079s). Asset test mồ côi có thể còn do rollback; job cleanup tương lai xử lý.
+
+## Đang làm
+- Phase 4 — hoàn thiện 2.5 NFS query-count/integration race, rồi endpoint 2.6 set-primary và 2.13 delete image.
 
 ## Còn lại
-- Không (merge do user).
+- Image lifecycle 2.6, 2.13; report/Admin; MATCH-001 selection port; stale alert proof/job; cleanup job sau Cloudinary Admin API spike.
+- Final test/query-count/race tests, tài liệu DB/design nếu lệch, architect review và code review khi chuẩn bị PR.
