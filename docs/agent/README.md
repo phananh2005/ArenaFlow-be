@@ -80,7 +80,7 @@ ArenaFlow-be/
 4. **Sửa nhỏ:** thẳng `developer`.
 5. Khi implement, đọc skill `task-state-init`, procedure `developer`, rồi cập nhật `progress-tracker`.
 6. Kết thúc phiên: `/af-handoff`; tiếp tục phiên: `/af-resume`. Chuyển sang máy khác: `/af-handoff-push` trên máy đang làm → `/af-resume-pull` trên máy kia. Ảnh chụp nằm ở ref ẩn `refs/wip/<nhánh>` (xem: `git ls-remote origin 'refs/wip/*'`; xoá khi không cần: `git push origin --delete refs/wip/<nhánh>`); `.env.dev` không đi theo. Cần **Git ≥ 2.40** (áp việc dở lên đầu nhánh mới hơn dùng `git merge-tree --merge-base`; Git cũ hơn → lệnh từ chối, áp tay). Ref local `refs/wip-seen/*` (ảnh chụp máy này đã đẩy/đã lấy) và `refs/wip-skipped/*` (bản dự phòng khi `--skip`) chỉ nằm trên máy, không push.
-7. Trước khi push để tạo PR: nhánh có code (`*/src/**`, POM, hook, `docs/agent/scripts/*.cjs`, `.github/workflows/*`) → agent `code-reviewer` trên toàn nhánh so với `origin/main`; commit trên nhánh không cần review; không có code → không review (`CLAUDE.md` §8). Git pre-commit quét secret trong staged content ở mỗi commit.
+7. Code xong + test PASS → agent `code-reviewer` → rồi mới đối chiếu lệch design / cập nhật tài liệu → `architect-reviewer`. Mỗi commit có code (`*/src/**`, POM, hook, `docs/agent/scripts/*.cjs`, `.github/workflows/*`) → `code-reviewer` ngay trước commit trên phần chưa review; mọi commit đã review → trước PR không review lại; không có code → không review (`CLAUDE.md` §8). Git pre-commit quét secret trong staged content ở mỗi commit.
 8. Rà ADR khi cần bằng skill `decisions-relevance`.
 
 ## Hooks

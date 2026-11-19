@@ -47,9 +47,11 @@ Người thực thi kỹ thuật có ràng buộc rõ ràng — không phải as
 
 ### Bước 4 — Kiểm chứng & cập nhật tiến độ
 - Chạy `./mvnw test` liên quan lần cuối (kèm `-Duser.timezone=Asia/Ho_Chi_Minh`) → **dán output**, xác nhận TẤT CẢ PASS. Unit test thuần: `./mvnw -Duser.timezone=Asia/Ho_Chi_Minh -Dtest=<Test> test`, không cần `.env.dev`. Integration test: `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Duser.timezone=Asia/Ho_Chi_Minh -Dtest=<Test> test` (không in giá trị biến). Còn fail → quay lại sửa; không có `.env.dev` hoặc DB dev không kết nối được → báo blocker, không ghi PASS.
-- Mọi phase đã code xong + test PASS + bảng "Lệch thiết kế" có dòng → cập nhật design một lần theo bảng → `architect-reviewer` review phần sửa (bước tổng quan cuối của task).
+- Mọi phase đã code xong + test PASS → **`code-reviewer`** trên phần chưa review (`git diff HEAD` + file mới chưa track; nhánh còn commit code chưa review → thêm `git diff origin/main...HEAD`); còn CRITICAL/MAJOR → sửa theo TDD, test lại, review lại phần sửa.
+- Sau đó **mới** tự đối chiếu code với design (API/DB/luồng/class) + bảng "Lệch thiết kế" → cập nhật design một lần theo bảng → `architect-reviewer` review phần sửa (bước tổng quan cuối của task).
+- Đối chiếu / review design dẫn tới sửa code → test lại → `code-reviewer` phần sửa. `code-reviewer` luôn là bước cuối cùng trước commit có code.
 - Chỉ khi test xanh **và** design đã cập nhật (nếu có lệch) mới đổi `status: done`.
-- Commit trên nhánh không cần review. Trước khi push để tạo PR, nếu nhánh có code: chạy `code-reviewer` trên `git diff origin/main...HEAD` + thay đổi chưa commit + file mới chưa track; còn CRITICAL/MAJOR → sửa, commit, review lại phần sửa, sau đó mới push. Push thêm vào PR đang mở → review phần mới trước push. Không có code → không review (`CLAUDE.md` §8).
+- Mỗi commit có code (kể cả commit giữa chừng) → `code-reviewer` ngay trước commit trên phần chưa review; còn CRITICAL/MAJOR → sửa, review lại phần sửa rồi mới commit. Mọi commit đã qua review → trước push / tạo PR không review lại. Không có code → không review (`CLAUDE.md` §8).
 
 ## Ràng buộc cứng
 - **NEVER** báo "xong" / tick DoD khi test chưa chạy hoặc còn fail.
