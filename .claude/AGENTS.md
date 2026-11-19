@@ -16,14 +16,15 @@ Nhận request
 ├── Implement chức năng mới                   → kiểm tra thiết kế:
 │   ├── Chưa có thiết kế                      → solution-architect trước → duyệt → developer
 │   └── Đã có thiết kế                        → task-state-init → developer
-├── Sửa chức năng đã triển khai               → developer → sau khi code & test PASS:
+├── Sửa chức năng đã triển khai               → developer → sau khi code & test PASS → code-reviewer:
 │   ├── Kiểm tra ảnh hưởng design (API/DB/sequence/integration)
 │   │   └── CÓ ảnh hưởng                      → cập nhật design → architect-reviewer (chỉ review phần sửa)
 │   └── Kiểm tra ảnh hưởng nghiệp vụ (use case/business rule/actor)
 │       └── CÓ ảnh hưởng                      → cập nhật SRS
+│   └── Có sửa code thêm                      → test + code-reviewer phần sửa → commit
 ├── Debug / lỗi / không chạy                  → skill debug
 ├── Review thiết kế                            → procedure architect-reviewer
-├── Review code / chuẩn bị PR                 → procedure code-reviewer (chỉ khi nhánh có code)
+├── Review code / trước commit               → procedure code-reviewer (mỗi commit có code)
 ├── Rà ADR / quyết định kiến trúc              → skill decisions-relevance
 ├── Agent làm lệch quy ước repo (lặp lại)     → skill workflow-adapt
 └── Hỏi đáp / giải thích / tìm kiếm           → xử lý trực tiếp
@@ -73,7 +74,7 @@ Nhận request
 | `solution-architect` | "thiết kế [X]", "design API/luồng/class", "làm đặc tả kỹ thuật" | Tài liệu thiết kế trong `docs/agent/design/<MÃ>/` | Viết code production |
 | `architect-reviewer` | "review thiết kế", "soi design" | CRITICAL/MAJOR/MINOR cho tài liệu thiết kế | Tự sửa thiết kế |
 | `developer` | "implement/viết/tạo/build/thêm/sửa [X]" | Code + test PASS + cập nhật tài liệu (nếu có ảnh hưởng) + state cập nhật | Code khi chưa duyệt kế hoạch; code chức năng mới khi chưa có thiết kế; bỏ qua cập nhật tài liệu khi có ảnh hưởng |
-| `code-reviewer` | "review code", trước khi push để tạo PR (hoặc push thêm vào PR đang mở) khi nhánh có code (`CLAUDE.md` §8) | CRITICAL/MAJOR/MINOR có `file:line` | Tự sửa / commit |
+| `code-reviewer` | "review code"; code xong + test PASS (trước khi đối chiếu lệch design); ngay trước mỗi commit có code (`CLAUDE.md` §8) | CRITICAL/MAJOR/MINOR có `file:line` | Tự sửa / commit |
 | `debug` | "lỗi", "bug", "exception" | Root cause + fix + test | Đoán khi chưa reproduce |
 | `workflow-adapt` | Người dùng sửa cùng hành vi ≥ 2 lần; lệnh/quy tắc lệch repo | Đề xuất điều chỉnh có bằng chứng | Nới guardrail, sửa file org-owned |
 
@@ -87,7 +88,7 @@ Nhận request
 | Thiết kế kỹ thuật chức năng mới | ✗ → `solution-architect` |
 | Viết / sửa code production | ✗ → `developer` (chức năng mới phải có thiết kế trước) |
 | Review thiết kế | ✗ → `architect-reviewer` |
-| Review code trước PR | ✗ → `code-reviewer` (chỉ khi nhánh có code) |
+| Review code trước commit | ✗ → `code-reviewer` (commit có code) |
 
 ## §4 — Cách thực thi một procedure
 

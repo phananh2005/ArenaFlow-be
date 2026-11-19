@@ -67,4 +67,4 @@ node docs/agent/scripts/wip-handoff.cjs push
 - **NEVER** `--force-overwrite` khi user chưa yêu cầu rõ; **NEVER** `apply --skip` khi user chưa xác nhận ảnh chụp đó đã lỗi thời.
 - **NEVER** tự xoá `refs/wip/*` trên remote; chỉ xoá khi user yêu cầu rõ ref nào: `git push origin --delete refs/wip/<nhánh>`.
 - Quy tắc đồng bộ `main` (rebase trước commit/push) và cổng `code-reviewer` (`CLAUDE.md` §8) **không áp dụng** cho ảnh chụp:
-  không commit lên nhánh, không push nhánh, không tạo PR. Hai quy tắc đó vẫn áp dụng khi commit/push thật.
+  không commit lên nhánh, không push nhánh, không tạo PR. Hai quy tắc đó vẫn áp dụng khi commit/push thật (commit có code → `code-reviewer` ngay trước).
