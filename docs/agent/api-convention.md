@@ -118,7 +118,7 @@ Accept: application/json
     "code": "ARENA_001",
     "message": "Sân không tồn tại",
     "details": "Arena with ID 'xyz' not found",
-    "timestamp": "2026-11-01T07:00:00Z",
+    "timestamp": "2026-11-01T14:00:00",
     "path": "/api/v1/arenas/xyz"
   }
 }
@@ -371,6 +371,10 @@ Authorization: Bearer <JWT_TOKEN>
 - **CamelCase:** `arenaName`, `pricePerHour`, `userId`
 - **Boolean:** prefix `is`, `has`, `can`: `isAvailable`, `hasDiscount`, `canBook`
 - **Timestamp:** suffix `At`: `createdAt`, `updatedAt`, `deletedAt`
+- **Định dạng thời gian** (request và response — [ADR-0017](decisions/0017-vietnam-local-datetime.md), SYSTEM-002 `API_Spec.md` §1.1):
+  - `datetime`: `YYYY-MM-DDTHH:mm:ss` theo giờ Việt Nam, **không** `Z`, **không** offset (vd `"2026-11-20T19:00:00"`); response có thể có phần lẻ giây 1–6 chữ số, không có số 0 ở cuối.
+  - `date`: `YYYY-MM-DD` (vd `"1995-05-15"`).
+  - Request gửi `datetime` kèm `Z`/offset → `400 VALIDATION_ERROR`, `validationErrors[].field` = đường dẫn field.
 - **ID:** suffix `Id`: `arenaId`, `userId`, `bookingId`
 
 ---
@@ -392,11 +396,13 @@ Authorization: Bearer <JWT_TOKEN>
         "message": "Giá phải lớn hơn 0"
       }
     ],
-    "timestamp": "2026-11-01T07:00:00Z",
+    "timestamp": "2026-11-01T14:00:00",
     "path": "/api/v1/arenas"
   }
 }
 ```
+
+- Lỗi đọc JSON body (sai kiểu số / enum / UUID / ngày giờ, ngày giờ kèm offset): `field` = đường dẫn field (vd `"startsAt"`, `"timeOptions[0].startsAt"`); chỉ JSON sai cú pháp / thiếu body trả `"body"`. `message` giữ chung, không lộ chi tiết parser.
 
 ---
 
@@ -427,6 +433,7 @@ Cùng key → trả về resource đã tạo trước đó (không tạo duplica
 - [ ] HTTP method đúng ngữ nghĩa
 - [ ] Response wrap trong `data` (success) hoặc `error` (fail)
 - [ ] Field names dùng camelCase
+- [ ] Thời gian theo §10: giờ Việt Nam, không `Z`/offset; request kèm offset → `400`
 - [ ] Error có `code` + `message` + `timestamp` + `path`
 - [ ] Pagination: offset (`page`, `pageSize`, `totalPages`, `totalItems`) hoặc cursor (`before`/`after`, `limit`, `items`, `hasMore`) — chọn đúng kiểu theo §7; không phân trang chỉ khi endpoint nằm trong bảng ngoại lệ §7
 - [ ] Auth dùng `Authorization: Bearer <token>`

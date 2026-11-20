@@ -374,7 +374,7 @@ public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Excepti
   "error": {
     "code": "USER_002",
     "message": "Email đã tồn tại",
-    "timestamp": "2026-11-01T07:00:00Z"
+    "timestamp": "2026-11-01T14:00:00"
   }
 }
 ```
