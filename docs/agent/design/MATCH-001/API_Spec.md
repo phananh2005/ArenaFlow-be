@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1; mã lỗi `TEAM_*` dùng lại từ USER-001/USER-002 `API_Spec.md`, `VENUE_*` từ VENUE-001 `API_Spec.md`; ghép kèo luồng B (thương lượng), frame `PAIRING_UPDATED` và mã `MATCH_016`: MATCH-002 `API_Spec.md`; chat dùng chung (§1.6, §1.7, 2.16–2.20) — cuộc trò chuyện theo đơn ứng tuyển: MERCENARY-001 `API_Spec.md` §1.7; kênh cá nhân `/user/queue/notifications` (thông báo, tín hiệu tin nhắn mới): NOTIFICATION-001 `API_Spec.md` §1.4; [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (kênh realtime) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10) — UC-M01, M02, M03, M04, M08, M09, UC-C01, C02; BR-M01..M06, BR-M09..M18, BR-C01..C05, BR-N01, BR-N03..BR-N06 (chat giữa hai đội, danh sách tin nhắn); UC-N01, UC-N04; Business_Rules §2.1, §2.2, §3.1, §4 (BC-M01..M07), §5.2, §5.4, §7.3; AC-M01..M03, M06..M12, AC-C01, AC-N01, AC-N03, AC-N04; Scenario 1, 2 (tạo kèo), 4, 5, 6, 10, 11, 12 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.5** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -26,7 +26,7 @@ Kèo **luồng B** (`type = NEED_VENUE` — đội chưa có sân) được tạ
 - Mọi endpoint cần `Authorization: Bearer <access token>`; thiếu/sai/hết hạn → `401 AUTH_001` → FE gọi refresh token (USER-001 `POST /api/v1/auth/refresh`) rồi gửi lại request; refresh thất bại → chuyển màn hình đăng nhập. `/api/v1/admin/**` cần quyền admin → không phải admin: `403 AUTH_004`.
 - Envelope `data` / `error` / `pagination` theo `api-convention.md` §4, §7. `201` **không** kèm header `Location` — lấy id từ body.
 - ID là chuỗi UUID. Path id sai định dạng, query/body sai kiểu, sai giá trị enum, thiếu field bắt buộc, vượt độ dài → `400 VALIDATION_ERROR` kèm `validationErrors[]` (`api-convention.md` §11); FE hiện lỗi cạnh field theo `validationErrors[].field`.
-- Thời gian: chuỗi ISO-8601 kèm múi giờ (vd `"2026-11-12T11:00:00Z"`); response trả UTC.
+- Thời gian: chuỗi ISO-8601 giờ Việt Nam, **không** kèm múi giờ, ở cả request và response (vd `"2026-11-12T18:00:00"`); request kèm `Z`/offset → `400 VALIDATION_ERROR` — SYSTEM-002 `API_Spec.md` §1.1.
 - Tiền: VND, số nguyên.
 - Chuỗi: server bỏ khoảng trắng đầu/cuối; field tuỳ chọn gửi `""` được coi là không nhập (response trả `null`).
 - Danh sách: `page` ≥ 1 (mặc định 1), `pageSize` 1..100 (mặc định 20). Thứ tự cố định, ghi ở từng endpoint; không có tham số `sort`.
@@ -144,7 +144,7 @@ Gọi 2.17 trước khi `SUBSCRIBE` có thể lỡ tin gửi giữa hai bước.
   "message": { "messageId": "01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e01", "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e31",
                "senderPartyType": "TEAM", "senderPartyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02",
                "senderUserId": "01932e00-5a6b-7c7d-8e8f-9a0b1c2d3e12", "senderName": "Nam", "senderAvatarUrl": null,
-               "content": "18:00 sân Y được không?", "isRead": false, "createdAt": "2026-11-10T08:00:00Z" } }
+               "content": "18:00 sân Y được không?", "isRead": false, "createdAt": "2026-11-10T15:00:00" } }
 ```
 
 - **Không** có frame khi yêu cầu ghép kèo luồng A đổi trạng thái (chấp nhận / từ chối / rút / thay thế / hết hạn) hoặc kèo bị huỷ: FE biết qua lỗi (`CHAT_004`, `MATCH_004`) ở lần gửi kế tiếp, hoặc khi tải lại 2.19 (user chốt 2026-11-15).
@@ -193,12 +193,12 @@ Lỗi chung `400 VALIDATION_ERROR`, `401 AUTH_001` (§1.1) áp dụng cho mọi 
 | `venueId` | string (UUID) | Luồng A: có · Luồng B: **không gửi** | Địa điểm đang hoạt động (VENUE-001) | `"01933a10-4b5c-7d6e-8f70-81a2b3c4d5e1"` |
 | `venueOptionIds` | string[] (UUID) | Luồng B: có · Luồng A: **không gửi** | 1..5 địa điểm khác nhau, đều đang hoạt động; giữ đúng thứ tự gửi | xem ví dụ luồng B |
 | `format` | string (enum) | Có | `FIVE_A_SIDE` \| `SEVEN_A_SIDE` \| `ELEVEN_A_SIDE` | `"SEVEN_A_SIDE"` |
-| `startsAt` | string (thời gian) | Luồng A: có · Luồng B: **không gửi** | ≥ giờ hiện tại + 1 giờ (BR-M01) | `"2026-11-12T11:00:00Z"` |
-| `endsAt` | string (thời gian) | Luồng A: có · Luồng B: **không gửi** | > `startsAt` và ≤ `startsAt` + 12 giờ | `"2026-11-12T13:00:00Z"` |
+| `startsAt` | string (thời gian) | Luồng A: có · Luồng B: **không gửi** | ≥ giờ hiện tại + 1 giờ (BR-M01) | `"2026-11-12T18:00:00"` |
+| `endsAt` | string (thời gian) | Luồng A: có · Luồng B: **không gửi** | > `startsAt` và ≤ `startsAt` + 12 giờ | `"2026-11-12T20:00:00"` |
 | `timeOptions` | array | Luồng B: có · Luồng A: **không gửi** | 1..5 khung giờ, `startsAt` không trùng nhau | xem ví dụ luồng B |
-| `timeOptions[].startsAt` | string (thời gian) | Có | ≥ giờ hiện tại + 1 giờ | `"2026-11-12T11:00:00Z"` |
-| `timeOptions[].endsAt` | string (thời gian) | Có | > `startsAt` và ≤ `startsAt` + 12 giờ | `"2026-11-12T13:00:00Z"` |
-| `expiresAt` | string (thời gian) | Có | > giờ hiện tại. Luồng A: `startsAt` − 7 ngày ≤ `expiresAt` ≤ `startsAt` (BR-M02). Luồng B: S − 7 ngày ≤ `expiresAt` ≤ S, với S = `startsAt` sớm nhất trong `timeOptions` (BR-M03) | `"2026-11-12T05:00:00Z"` |
+| `timeOptions[].startsAt` | string (thời gian) | Có | ≥ giờ hiện tại + 1 giờ | `"2026-11-12T18:00:00"` |
+| `timeOptions[].endsAt` | string (thời gian) | Có | > `startsAt` và ≤ `startsAt` + 12 giờ | `"2026-11-12T20:00:00"` |
+| `expiresAt` | string (thời gian) | Có | > giờ hiện tại. Luồng A: `startsAt` − 7 ngày ≤ `expiresAt` ≤ `startsAt` (BR-M02). Luồng B: S − 7 ngày ≤ `expiresAt` ≤ S, với S = `startsAt` sớm nhất trong `timeOptions` (BR-M03) | `"2026-11-12T12:00:00"` |
 | `skillLevels` | string[] | Không | ≤ 3 nhãn, không trùng, thuộc 9 nhãn trình độ (§4.1); vắng hoặc `[]` = nhận mọi trình độ | `["Nhiệt tình"]` |
 | `ageNote` | string | Không | ≤ 100 ký tự | `"U23"` |
 | `matchNature` | string | Không | ≤ 200 ký tự | `"Giao hữu"` |
@@ -213,9 +213,9 @@ Ví dụ luồng A:
   "sportId": "01930000-0000-7000-8000-000000000001",
   "venueId": "01933a10-4b5c-7d6e-8f70-81a2b3c4d5e1",
   "format": "SEVEN_A_SIDE",
-  "startsAt": "2026-11-12T11:00:00Z",
-  "endsAt": "2026-11-12T13:00:00Z",
-  "expiresAt": "2026-11-12T05:00:00Z",
+  "startsAt": "2026-11-12T18:00:00",
+  "endsAt": "2026-11-12T20:00:00",
+  "expiresAt": "2026-11-12T12:00:00",
   "skillLevels": ["Nhiệt tình"],
   "ageNote": "U23",
   "matchNature": "Giao hữu"
@@ -232,10 +232,10 @@ Ví dụ luồng B:
   "venueOptionIds": ["01933a10-4b5c-7d6e-8f70-81a2b3c4d5e2", "01933a10-4b5c-7d6e-8f70-81a2b3c4d5e3"],
   "format": "SEVEN_A_SIDE",
   "timeOptions": [
-    { "startsAt": "2026-11-12T11:00:00Z", "endsAt": "2026-11-12T13:00:00Z" },
-    { "startsAt": "2026-11-12T12:00:00Z", "endsAt": "2026-11-12T14:00:00Z" }
+    { "startsAt": "2026-11-12T18:00:00", "endsAt": "2026-11-12T20:00:00" },
+    { "startsAt": "2026-11-12T19:00:00", "endsAt": "2026-11-12T21:00:00" }
   ],
-  "expiresAt": "2026-11-12T05:00:00Z",
+  "expiresAt": "2026-11-12T12:00:00",
   "skillLevels": []
 }
 ```
@@ -254,9 +254,9 @@ Ví dụ luồng B:
     "skillLevels": ["Nhiệt tình"],
     "ageNote": "U23",
     "matchNature": "Giao hữu",
-    "startsAt": "2026-11-12T11:00:00Z",
-    "endsAt": "2026-11-12T13:00:00Z",
-    "expiresAt": "2026-11-12T05:00:00Z",
+    "startsAt": "2026-11-12T18:00:00",
+    "endsAt": "2026-11-12T20:00:00",
+    "expiresAt": "2026-11-12T12:00:00",
     "authorTeam": {
       "teamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01",
       "teamName": "Team Alpha",
@@ -288,8 +288,8 @@ Ví dụ luồng B:
     "cancelledByTeamId": null,
     "cancelledAt": null,
     "cancelReason": null,
-    "createdAt": "2026-11-09T03:00:00Z",
-    "updatedAt": "2026-11-09T03:00:00Z"
+    "createdAt": "2026-11-09T10:00:00",
+    "updatedAt": "2026-11-09T10:00:00"
   }
 }
 ```
@@ -302,9 +302,9 @@ Ví dụ luồng B (chỉ các field khác luồng A; field còn lại như trê
     "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b02",
     "type": "NEED_VENUE",
     "status": "OPEN",
-    "startsAt": "2026-11-12T11:00:00Z",
-    "endsAt": "2026-11-12T13:00:00Z",
-    "expiresAt": "2026-11-12T05:00:00Z",
+    "startsAt": "2026-11-12T18:00:00",
+    "endsAt": "2026-11-12T20:00:00",
+    "expiresAt": "2026-11-12T12:00:00",
     "venue": null,
     "venueOptions": [
       { "venueId": "01933a10-4b5c-7d6e-8f70-81a2b3c4d5e2", "venueName": "Sân Y", "address": "10 Lê Lợi, Phường Bến Nghé, TP.HCM",
@@ -313,8 +313,8 @@ Ví dụ luồng B (chỉ các field khác luồng A; field còn lại như trê
         "latitude": 10.7740, "longitude": 106.7035, "venueStatus": "ACTIVE", "primaryImageUrl": null }
     ],
     "timeOptions": [
-      { "timeOptionId": "01933b70-1a2b-7c3d-8e4f-5a6b7c8d9e11", "startsAt": "2026-11-12T11:00:00Z", "endsAt": "2026-11-12T13:00:00Z" },
-      { "timeOptionId": "01933b70-1a2b-7c3d-8e4f-5a6b7c8d9e12", "startsAt": "2026-11-12T12:00:00Z", "endsAt": "2026-11-12T14:00:00Z" }
+      { "timeOptionId": "01933b70-1a2b-7c3d-8e4f-5a6b7c8d9e11", "startsAt": "2026-11-12T18:00:00", "endsAt": "2026-11-12T20:00:00" },
+      { "timeOptionId": "01933b70-1a2b-7c3d-8e4f-5a6b7c8d9e12", "startsAt": "2026-11-12T19:00:00", "endsAt": "2026-11-12T21:00:00" }
     ],
     "confirmedPairingId": null,
     "costAgreement": {
@@ -357,8 +357,8 @@ Chỉ trả kèo **đang tìm đối**: `OPEN`, chưa quá `expiresAt`, đội t
 | `sportId` | string (UUID) | Không | — | `01930000-0000-7000-8000-000000000001` |
 | `format` | string (enum) | Không | `FIVE_A_SIDE` \| `SEVEN_A_SIDE` \| `ELEVEN_A_SIDE` | `SEVEN_A_SIDE` |
 | `skillLevel` | string | Không | 1 trong 9 nhãn (§4.1). Khớp kèo có nhãn này **hoặc** kèo nhận mọi trình độ (`skillLevels = []`) | `Nhiệt tình` |
-| `startsAtFrom` | string (thời gian) | Không | Lọc `startsAt` ≥ giá trị này; ≤ `startsAtTo`. Kèo B khớp khi **có một** khung giờ thoả | `2026-11-12T00:00:00Z` |
-| `startsAtTo` | string (thời gian) | Không | Lọc `startsAt` ≤ giá trị này (kèo B: có một khung giờ thoả) | `2026-11-13T00:00:00Z` |
+| `startsAtFrom` | string (thời gian) | Không | Lọc `startsAt` ≥ giá trị này; ≤ `startsAtTo`. Kèo B khớp khi **có một** khung giờ thoả | `2026-11-12T00:00:00` |
+| `startsAtTo` | string (thời gian) | Không | Lọc `startsAt` ≤ giá trị này (kèo B: có một khung giờ thoả) | `2026-11-13T00:00:00` |
 | `lat` | number | Không | [-90, 90]; gửi cùng `lng` | `10.78` |
 | `lng` | number | Không | [-180, 180]; gửi cùng `lat` | `106.70` |
 | `radiusKm` | number | Không | 0.1..50; mặc định `10` khi có toạ độ; chỉ gửi khi có toạ độ | `5` |
@@ -382,9 +382,9 @@ Có toạ độ: khoảng cách tính tới toạ độ địa điểm của kè
       "sportName": "Bóng đá",
       "format": "SEVEN_A_SIDE",
       "skillLevels": ["Nhiệt tình"],
-      "startsAt": "2026-11-12T11:00:00Z",
-      "endsAt": "2026-11-12T13:00:00Z",
-      "expiresAt": "2026-11-12T05:00:00Z",
+      "startsAt": "2026-11-12T18:00:00",
+      "endsAt": "2026-11-12T20:00:00",
+      "expiresAt": "2026-11-12T12:00:00",
       "authorTeamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01",
       "authorTeamName": "Team Alpha",
       "authorTeamReliabilityScore": 80,
@@ -396,7 +396,7 @@ Có toạ độ: khoảng cách tính tới toạ độ địa điểm của kè
       "venueOptionCount": null,
       "timeOptionCount": null,
       "distanceKm": 1.25,
-      "createdAt": "2026-11-09T03:00:00Z"
+      "createdAt": "2026-11-09T10:00:00"
     },
     {
       "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b02",
@@ -406,9 +406,9 @@ Có toạ độ: khoảng cách tính tới toạ độ địa điểm của kè
       "sportName": "Bóng đá",
       "format": "SEVEN_A_SIDE",
       "skillLevels": [],
-      "startsAt": "2026-11-12T11:00:00Z",
-      "endsAt": "2026-11-12T13:00:00Z",
-      "expiresAt": "2026-11-12T05:00:00Z",
+      "startsAt": "2026-11-12T18:00:00",
+      "endsAt": "2026-11-12T20:00:00",
+      "expiresAt": "2026-11-12T12:00:00",
       "authorTeamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01",
       "authorTeamName": "Team Alpha",
       "authorTeamReliabilityScore": 80,
@@ -420,7 +420,7 @@ Có toạ độ: khoảng cách tính tới toạ độ địa điểm của kè
       "venueOptionCount": 2,
       "timeOptionCount": 2,
       "distanceKm": 1.4,
-      "createdAt": "2026-11-10T03:00:00Z"
+      "createdAt": "2026-11-10T10:00:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 2 }
@@ -460,9 +460,9 @@ Có toạ độ: khoảng cách tính tới toạ độ địa điểm của kè
     "skillLevels": ["Nhiệt tình"],
     "ageNote": "U23",
     "matchNature": "Giao hữu",
-    "startsAt": "2026-11-12T11:00:00Z",
-    "endsAt": "2026-11-12T13:00:00Z",
-    "expiresAt": "2026-11-12T05:00:00Z",
+    "startsAt": "2026-11-12T18:00:00",
+    "endsAt": "2026-11-12T20:00:00",
+    "expiresAt": "2026-11-12T12:00:00",
     "authorTeam": {
       "teamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01",
       "teamName": "Team Alpha",
@@ -501,8 +501,8 @@ Có toạ độ: khoảng cách tính tới toạ độ địa điểm của kè
     "cancelledByTeamId": null,
     "cancelledAt": null,
     "cancelReason": null,
-    "createdAt": "2026-11-09T03:00:00Z",
-    "updatedAt": "2026-11-10T02:15:00Z"
+    "createdAt": "2026-11-09T10:00:00",
+    "updatedAt": "2026-11-10T09:15:00"
   }
 }
 ```
@@ -559,7 +559,7 @@ Mỗi lần gửi **thay toàn bộ** thoả thuận cũ, kể cả danh sách k
     "customItems": [
       { "itemId": "01933c30-6e7f-7a80-9b1c-2d3e4f5a6b01", "itemName": "Tiền trọng tài", "amount": 200000 }
     ],
-    "updatedAt": "2026-11-10T02:15:00Z"
+    "updatedAt": "2026-11-10T09:15:00"
   }
 }
 ```
@@ -627,7 +627,7 @@ Server kiểm trạng thái kèo (`MATCH_004`, `MATCH_005`, `MATCH_015`) **trư�
     "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b01",
     "status": "CANCELLED",
     "cancelledByTeamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02",
-    "cancelledAt": "2026-11-11T09:00:00Z",
+    "cancelledAt": "2026-11-11T16:00:00",
     "cancelReason": "Thiếu người",
     "reliabilityPenalty": -5
   }
@@ -684,7 +684,7 @@ Tạo yêu cầu `PENDING` và mở **cuộc trò chuyện** giữa đội gửi
     "requesterTeamReliabilityScore": 75,
     "status": "PENDING",
     "reason": null,
-    "requestedAt": "2026-11-10T01:00:00Z",
+    "requestedAt": "2026-11-10T08:00:00",
     "respondedAt": null,
     "withdrawnAt": null,
     "startsAt": null,
@@ -744,7 +744,7 @@ Tạo yêu cầu `PENDING` và mở **cuộc trò chuyện** giữa đội gửi
       "requesterTeamReliabilityScore": 75,
       "status": "PENDING",
       "reason": null,
-      "requestedAt": "2026-11-10T01:00:00Z",
+      "requestedAt": "2026-11-10T08:00:00",
       "respondedAt": null,
       "withdrawnAt": null,
       "startsAt": null,
@@ -798,7 +798,7 @@ Kết quả: yêu cầu → `ACCEPTED`; kèo → `CONFIRMED` với đội đối
     "requestStatus": "ACCEPTED",
     "opponentTeamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02",
     "opponentTeamName": "Team Beta",
-    "respondedAt": "2026-11-10T02:00:00Z"
+    "respondedAt": "2026-11-10T09:00:00"
   }
 }
 ```
@@ -896,7 +896,7 @@ Server kiểm trạng thái kèo / yêu cầu **trước**, thiếu lý do (`MAT
     "requestId": "01933c20-5d6e-7f80-9a1b-2c3d4e5f6a01",
     "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b01",
     "status": "WITHDRAWN",
-    "withdrawnAt": "2026-11-12T08:30:00Z",
+    "withdrawnAt": "2026-11-12T15:30:00",
     "matchStatus": "CANCELLED",
     "reliabilityPenalty": -10
   }
@@ -952,9 +952,9 @@ Bấm rút hai lần: lần sau nhận `MATCH_008` (gửi lần lượt) hoặc 
       "sportName": "Bóng đá",
       "format": "SEVEN_A_SIDE",
       "skillLevels": [],
-      "startsAt": "2026-11-12T11:00:00Z",
-      "endsAt": "2026-11-12T13:00:00Z",
-      "expiresAt": "2026-11-12T05:00:00Z",
+      "startsAt": "2026-11-12T18:00:00",
+      "endsAt": "2026-11-12T20:00:00",
+      "expiresAt": "2026-11-12T12:00:00",
       "authorTeamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01",
       "authorTeamName": "Team Alpha",
       "authorTeamReliabilityScore": 80,
@@ -966,7 +966,7 @@ Bấm rút hai lần: lần sau nhận `MATCH_008` (gửi lần lượt) hoặc 
       "venueOptionCount": null,
       "timeOptionCount": null,
       "distanceKm": null,
-      "createdAt": "2026-11-09T03:00:00Z"
+      "createdAt": "2026-11-09T10:00:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -1011,10 +1011,10 @@ Bấm rút hai lần: lần sau nhận `MATCH_008` (gửi lần lượt) hoặc 
       "requesterTeamReliabilityScore": 75,
       "status": "ACCEPTED",
       "reason": null,
-      "requestedAt": "2026-11-10T01:00:00Z",
-      "respondedAt": "2026-11-10T02:00:00Z",
+      "requestedAt": "2026-11-10T08:00:00",
+      "respondedAt": "2026-11-10T09:00:00",
       "withdrawnAt": null,
-      "startsAt": "2026-11-12T11:00:00Z",
+      "startsAt": "2026-11-12T18:00:00",
       "authorTeamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01",
       "authorTeamName": "Team Alpha"
     }
@@ -1046,7 +1046,7 @@ Bấm rút hai lần: lần sau nhận `MATCH_008` (gửi lần lượt) hoặc 
 ```json
 {
   "data": [
-    { "sportId": "01930000-0000-7000-8000-000000000001", "sportName": "Bóng đá", "isActive": true, "createdAt": "2026-11-01T00:00:00Z" }
+    { "sportId": "01930000-0000-7000-8000-000000000001", "sportName": "Bóng đá", "isActive": true, "createdAt": "2026-11-01T07:00:00" }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
 }
@@ -1079,7 +1079,7 @@ Bấm rút hai lần: lần sau nhận `MATCH_008` (gửi lần lượt) hoặc 
 ```json
 {
   "data": [
-    { "sportId": "01930000-0000-7000-8000-000000000002", "sportName": "Bóng rổ", "isActive": false, "createdAt": "2026-11-01T00:00:00Z" }
+    { "sportId": "01930000-0000-7000-8000-000000000002", "sportName": "Bóng rổ", "isActive": false, "createdAt": "2026-11-01T07:00:00" }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
 }
@@ -1117,7 +1117,7 @@ Tắt bộ môn: chặn tạo kèo mới; kèo `OPEN` của bộ môn ẩn khỏ
 
 ```json
 {
-  "data": { "sportId": "01930000-0000-7000-8000-000000000001", "sportName": "Bóng đá", "isActive": false, "createdAt": "2026-11-01T00:00:00Z" }
+  "data": { "sportId": "01930000-0000-7000-8000-000000000001", "sportName": "Bóng đá", "isActive": false, "createdAt": "2026-11-01T07:00:00" }
 }
 ```
 
@@ -1162,7 +1162,7 @@ Tin được lưu rồi mới đẩy cho cả hai bên qua frame `MESSAGE_CREATE
     "senderAvatarUrl": null,
     "content": "18:00 sân Y được không?",
     "isRead": false,
-    "createdAt": "2026-11-10T08:00:00Z"
+    "createdAt": "2026-11-10T15:00:00"
   }
 }
 ```
@@ -1215,15 +1215,15 @@ Thứ tự theo thời điểm gửi `createdAt`; hai tin cùng thời điểm x
       { "messageId": "01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e03", "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e31",
         "senderPartyType": "TEAM", "senderPartyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02", "senderUserId": "01932e00-5a6b-7c7d-8e8f-9a0b1c2d3e13",
         "senderName": "Lan", "senderAvatarUrl": "https://res.cloudinary.com/demo/image/upload/lan.jpg",
-        "content": "Mình là đội trưởng mới của Beta, giữ 18:00 nhé", "isRead": false, "createdAt": "2026-11-10T09:00:00Z" },
+        "content": "Mình là đội trưởng mới của Beta, giữ 18:00 nhé", "isRead": false, "createdAt": "2026-11-10T16:00:00" },
       { "messageId": "01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e02", "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e31",
         "senderPartyType": "TEAM", "senderPartyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01", "senderUserId": "01932e00-5a6b-7c7d-8e8f-9a0b1c2d3e11",
         "senderName": "Người dùng đã xóa", "senderAvatarUrl": null,
-        "content": "OK", "isRead": true, "createdAt": "2026-11-10T08:01:00Z" },
+        "content": "OK", "isRead": true, "createdAt": "2026-11-10T15:01:00" },
       { "messageId": "01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e01", "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e31",
         "senderPartyType": "TEAM", "senderPartyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02", "senderUserId": "01932e00-5a6b-7c7d-8e8f-9a0b1c2d3e12",
         "senderName": "Nam", "senderAvatarUrl": null,
-        "content": "18:00 sân Y được không?", "isRead": true, "createdAt": "2026-11-10T08:00:00Z" }
+        "content": "18:00 sân Y được không?", "isRead": true, "createdAt": "2026-11-10T15:00:00" }
     ],
     "hasMore": false
   }
@@ -1332,7 +1332,7 @@ Gồm cả cuộc trò chuyện chỉ xem (`canSend = false`). Đội trưởng 
       "contextType": "TEAM_MATCH",
       "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b01",
       "externalMatchId": null,
-      "startsAt": "2026-11-16T11:00:00Z",
+      "startsAt": "2026-11-16T18:00:00",
       "requestId": "01933c20-5d6e-7f80-9a1b-2c3d4e5f6a01",
       "pairingId": null,
       "applicationId": null,
@@ -1343,9 +1343,9 @@ Gồm cả cuộc trò chuyện chỉ xem (`canSend = false`). Đội trưởng 
         "contentPreview": "Sân X có chỗ để xe không?",
         "senderPartyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02",
         "senderName": "Nam",
-        "createdAt": "2026-11-15T09:30:00Z"
+        "createdAt": "2026-11-15T16:30:00"
       },
-      "lastActivityAt": "2026-11-15T09:30:00Z",
+      "lastActivityAt": "2026-11-15T16:30:00",
       "hasUnread": true,
       "canSend": true
     },
@@ -1354,14 +1354,14 @@ Gồm cả cuộc trò chuyện chỉ xem (`canSend = false`). Đội trưởng 
       "contextType": "MERCENARY_APPLICATION",
       "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708",
       "externalMatchId": null,
-      "startsAt": "2026-11-14T11:00:00Z",
+      "startsAt": "2026-11-14T18:00:00",
       "requestId": null,
       "pairingId": null,
       "applicationId": "019370a1-5b6c-7d8e-9f00-1a2b3c4d5e01",
       "viewerParty": { "partyType": "TEAM", "partyId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01", "name": "Team Alpha", "avatarUrl": null },
       "otherParty": { "partyType": "USER", "partyId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10", "name": "Người dùng đã xóa", "avatarUrl": null },
       "lastMessage": null,
-      "lastActivityAt": "2026-11-13T09:00:00Z",
+      "lastActivityAt": "2026-11-13T16:00:00",
       "hasUnread": false,
       "canSend": false
     }

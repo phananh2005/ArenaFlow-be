@@ -6,8 +6,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL 18 (Neon) · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) — ngoại lệ phân trang §6 (user chốt D1, 2026-11-17) |
-| Ràng buộc dữ liệu | Schema V1–V4 + `V11__user_name_search.sql` (`Component_Class_Design.md` §6) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-17 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-18) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | Schema V1–V5 + `V12__user_name_search.sql` (`Component_Class_Design.md` §6) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-17 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -120,7 +120,7 @@ Không có thao tác ghi nên không xung đột. Dữ liệu có thể đổi g
 |---|---|---|
 | 2.1, 2.2 | `idx_administrative_unit_level`, `idx_administrative_unit_parent` (V1) | Sắp `COLLATE "vi-VN-x-icu"` trong bộ nhớ trên tập nhỏ |
 | 2.3 SĐT | `idx_user_phone_unique (phone_number) WHERE … deleted_at IS NULL` (V1) | Khớp chính xác |
-| 2.3 tên | `idx_user_name_search` GIN (V11, mới) | GIN chỉ lọc dòng khớp; sắp `starts_with` + ICU phải đọc **mọi** dòng khớp trước `LIMIT`. Đo: 0,05 ms khi ít người khớp (`an:*`, 50.002 tên); dữ liệu lệch 200.000 tên: `nguyen:*` 80.016 dòng 485 ms, `van:*` 266 ms, `an:*` 105 ms, `nguyen:* & an:*` 49 ms. Rủi ro chấp nhận cho MVP + timeout 2 giây + mốc xem lại ~50.000 user (`Component_Class_Design.md` §5.2, §9 #8). Kế hoạch với tham số bind trên bảng thật: `[cần xác nhận #2 CCD]` |
+| 2.3 tên | `idx_user_name_search` GIN (V12, mới) | GIN chỉ lọc dòng khớp; sắp `starts_with` + ICU phải đọc **mọi** dòng khớp trước `LIMIT`. Đo: 0,05 ms khi ít người khớp (`an:*`, 50.002 tên); dữ liệu lệch 200.000 tên: `nguyen:*` 80.016 dòng 485 ms, `van:*` 266 ms, `an:*` 105 ms, `nguyen:* & an:*` 49 ms. Rủi ro chấp nhận cho MVP + timeout 2 giây + mốc xem lại ~50.000 user (`Component_Class_Design.md` §5.2, §9 #8). Kế hoạch với tham số bind trên bảng thật: `[cần xác nhận #2 CCD]` |
 | 2.3 nhãn | `idx_team_member_pending_or_active (team_id, user_id)` (V2) | ≤ 1 dòng mỗi user |
 | 2.4, 2.5 | `idx_team_member_user (user_id, status)` (V1) | Sắp trên tập lời mời / đội của một người |
 

@@ -6,8 +6,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API + kênh STOMP của MATCH-001). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL ≥ 18 |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5; MATCH-001 `Component_Class_Design.md` §4.9 (event), §4.10 (scheduler), §4.14 (`ConversationService`, `ConversationContextView`), §4.15 (kênh realtime), §5.2 (`insertAll` mảng + `uuidv7()`), §7 (`@ValidChatCursor`), §8 (pool scheduling); MERCENARY-001 §4.11 (event), §5.3 (`MercenarySql.GAME_*`); REPUTATION-001 §4.7 (event); VENUE-001 §4.7 (event) · ADR-0002, ADR-0008 (+ Sửa đổi 2026-11-09), [ADR-0011](../../decisions/0011-domain-events-after-commit.md), [ADR-0012](../../decisions/0012-scheduled-jobs-claim-with-skip-locked.md), [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (+ Sửa đổi 2026-11-16), [ADR-0015](../../decisions/0015-notification-async-listener-and-user-channel.md) |
-| Ràng buộc dữ liệu | V1–V4 (code) + V5 (VENUE-001), V6 (MATCH-001), V7 (MATCH-002), V8 (REPUTATION-001), V9 (MERCENARY-001) — **chưa có trong code** + `V10__notification.sql` (§5.1). Bảng `notification` có từ V1; entity hiện có `domain/.../entity/chat/Notification`. Neon dev `misty-dew-90700890` (kiểm 2026-11-16): Flyway V4, `notification` 0 dòng, CHECK tên `notification_type_check` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-16 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-18) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | V1–V5 (code — V5 = VENUE-001) + V6 (SYSTEM-002), V7 (MATCH-001), V8 (MATCH-002), V9 (REPUTATION-001), V10 (MERCENARY-001) — **chưa có trong code** + `V11__notification.sql` (§5.1). Bảng `notification` có từ V1; entity hiện có `domain/.../entity/chat/Notification`. Neon dev `misty-dew-90700890` (kiểm 2026-11-16): Flyway V4, `notification` 0 dòng, CHECK tên `notification_type_check` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-16 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -31,7 +31,7 @@ REST /api/v1/profile/notifications ──▶ NotificationService (đọc / đán
 - **`PushSender`** (Q10): port + bản no-op; FCM sau.
 - **Job**: nhắc trước trận (§4.7) chạy trong lần chạy 5 phút của `MatchLifecycleScheduler`; xoá hạn lưu (§4.8) là scheduler hằng ngày mới.
 
-**Điều kiện tiên quyết:** code VENUE-001, MATCH-001, MATCH-002, REPUTATION-001, MERCENARY-001 (event, bảng, `ConversationService`, kênh realtime) phải có trước — listener tham chiếu event của cả năm mã, V10 cần V9 (`external_match`) `[cần xác nhận #1]`.
+**Điều kiện tiên quyết:** code VENUE-001, MATCH-001, MATCH-002, REPUTATION-001, MERCENARY-001 (event, bảng, `ConversationService`, kênh realtime) phải có trước — listener tham chiếu event của cả năm mã, V11 cần V10 (`external_match`) `[cần xác nhận #1]`.
 
 ## 2. Package Structure (delta)
 
@@ -174,7 +174,7 @@ public record NotificationDraft(UUID recipientUserId, Notification.Type type, St
 public class NotificationWriter {
     /** MANDATORY. Khử trùng (người nhận, loại, đối tượng), bỏ người nhận null, ghi một câu cho cả lô; người dùng đã xoá bị loại trong câu ghi.
         Sau commit: đẩy NOTIFICATION_CREATED cho từng dòng đã ghi và gọi PushSender. Trả số dòng đã ghi. */
-    public int write(List<NotificationDraft> drafts, OffsetDateTime now);
+    public int write(List<NotificationDraft> drafts, LocalDateTime now);
 }
 ```
 - Q: `NotificationRepository.insertAllReturning(...)` (§5.2) → `List<InsertedNotificationView>` → `userRealtimeGateway.publishAfterCommit(deliveries)` (một synchronization cho cả lô) → `pushSender` cũng chạy trong `afterCommit` (ngoài transaction — NFS §5).
@@ -231,7 +231,7 @@ public interface UserRealtimeGateway {
 public record UserFrameDelivery(UUID userId, UserFrame frame) {}
 public sealed interface UserFrame {
     record NotificationCreated(NotificationResponse notification) implements UserFrame {}
-    record ConversationActivity(UUID conversationId, UUID messageId, OffsetDateTime createdAt) implements UserFrame {}
+    record ConversationActivity(UUID conversationId, UUID messageId, LocalDateTime createdAt) implements UserFrame {}
 }
 ```
 - **Adapter `StompUserRealtimeGateway`** (`api/realtime`): `afterCommit` → `SimpMessagingTemplate.convertAndSendToUser(userId.toString(), "/queue/notifications", json)` với `{type: NOTIFICATION_CREATED | CONVERSATION_ACTIVITY, …}` (`API_Spec.md` §1.4). Lỗi gửi → log `WARN` (mã + id), không ném (đã commit). Frame dựng từ bộ nhớ, không đọc DB.
@@ -273,7 +273,7 @@ int purgeExpiredConversations();   // mỗi lô một TransactionTemplate
 int purgeExpiredNotifications();   // mỗi lô một TransactionTemplate
 int purgeOldReminders();           // một câu
 ```
-Gọi từ `RetentionScheduler` (`api/scheduler`, không logic): `@Scheduled(cron = "${arenaflow.notification.retention.cron}", zone = "Asia/Ho_Chi_Minh")` lần lượt ba tác vụ; lỗi một tác vụ log `ERROR`, tác vụ khác vẫn chạy. Cron `-` = tắt (test).
+Gọi từ `RetentionScheduler` (`api/scheduler`, không logic): `@Scheduled(cron = "${arenaflow.notification.retention.cron}", zone = AppTime.ZONE_ID)` lần lượt ba tác vụ; lỗi một tác vụ log `ERROR`, tác vụ khác vẫn chạy. Cron `-` = tắt (test).
 - **Cuộc trò chuyện** (điều kiện MATCH-001 §11, MERCENARY-001 §11): `cutoff = now − CHAT_RETENTION` (90 ngày). Xoá dòng `conversation` (tin xoá theo `ON DELETE CASCADE`) khi trận của cuộc trò chuyện: kèo `COMPLETED`/`ARCHIVED` có `match_end_time < cutoff`; `CANCELLED` có `cancelled_at < cutoff`; `EXPIRED` có `expires_at < cutoff`; trận ngoài `SCHEDULED` có `match_end_time < cutoff`; `CANCELLED` có `cancelled_at < cutoff`. Áp cho mọi loại ngữ cảnh (`TEAM_MATCH` gồm đội không được ghép, `MERCENARY_APPLICATION`). Mỗi lô: `retentionRepository.deleteExpiredConversations(cutoff, batchSize)` (SQL §5.2) → dừng khi < `batchSize` hoặc hết `max-batches-per-run`.
 - **Thông báo**: `cutoff = now − RETENTION` (30 ngày) → `deleteExpiredNotifications(cutoff, batchSize)` theo lô.
 - **Dấu nhắc**: `deleteRemindersSentBefore(now − RETENTION)` — trận đã qua lâu, dấu không còn tác dụng.
@@ -305,7 +305,7 @@ Phát qua `ApplicationEventPublisher` (thêm dependency cho `AuthServiceImpl`, `
 
 ## 5. Repository & Data Model
 
-### 5.1. Migration `V10__notification.sql`
+### 5.1. Migration `V11__notification.sql`
 
 ```sql
 -- notification: thêm loại thông báo (giữ 12 loại của V1), ràng buộc màn hình liên quan, index danh sách theo thời gian
@@ -335,7 +335,7 @@ CREATE TABLE match_reminder (
     kind VARCHAR(20) NOT NULL CHECK (kind IN ('BEFORE_START', 'AFTER_END')),
     match_id UUID REFERENCES match(id) ON DELETE RESTRICT,
     external_match_id UUID REFERENCES external_match(id) ON DELETE RESTRICT,
-    sent_at TIMESTAMPTZ NOT NULL,
+    sent_at TIMESTAMP NOT NULL,
     CONSTRAINT match_reminder_game_check CHECK ((match_id IS NULL) <> (external_match_id IS NULL))
 );
 CREATE UNIQUE INDEX idx_match_reminder_match ON match_reminder(match_id, kind) WHERE match_id IS NOT NULL;
@@ -354,8 +354,8 @@ CREATE INDEX idx_user_active_admin ON "user"(id) WHERE role = 'ADMIN' AND delete
 - **Index:** `idx_notification_recipient_time` cho 2.1 không lọc (thứ tự `(created_at DESC, id DESC)` khớp con trỏ row comparison); `idx_notification_recipient_unread` (partial) cho 2.1 `unreadOnly`, 2.2, 2.4. Thay `idx_notification_recipient (recipient_user_id, is_read, created_at DESC)` của V1 — index V1 không phục vụ được danh sách không lọc (phải trộn hai nhánh `is_read`) và thiếu `id` cho con trỏ.
 - **`match_reminder`** (thay vì cột trên `match` / `external_match`): không đụng entity `Match` / `ExternalMatch` có `@Version` (bulk `UPDATE match` phải tăng `version` — MATCH-001 §5.2 — làm thao tác người dùng đồng thời bị retry vì một cờ không nghiệp vụ); claim bằng unique index (§4.7) không khoá dòng `match`. FK `RESTRICT` (ADR-0002: kèo không bị xoá cứng). Hai khoá XOR như `mercenary_recruitment` (MERCENARY-001 §5.1); `kind`: `BEFORE_START` (nhắc 2 giờ trước — kèo và trận ngoài), `AFTER_END` (nhắc mercenary đánh giá — chỉ trận ngoài; kèo dùng `MatchArchivedEvent`).
 - `idx_user_active_admin`: số Admin nhỏ nhưng bảng `"user"` lớn và chưa có index `role`; `VenueAdminAlertEvent` của job 180 ngày có thể phát nhiều event trong một lần chạy.
-- Cuộc trò chuyện: dùng `idx_conversation_match`, `idx_conversation_external_match` (V9) và khoá chính `match` / `external_match` cho job xoá — không thêm index (§8 `Processing_Flow.md`).
-- Số hiệu V10: thiết kế đã chiếm V5–V9 (VENUE-001, MATCH-001, MATCH-002, REPUTATION-001, MERCENARY-001); Flyway không chạy out-of-order → V10 chỉ áp sau V9 `[cần xác nhận #1]`.
+- Cuộc trò chuyện: dùng `idx_conversation_match`, `idx_conversation_external_match` (V10) và khoá chính `match` / `external_match` cho job xoá — không thêm index (§8 `Processing_Flow.md`).
+- Số hiệu V11: thiết kế đã chiếm V5–V10 (VENUE-001, SYSTEM-002, MATCH-001, MATCH-002, REPUTATION-001, MERCENARY-001); Flyway không chạy out-of-order → V11 chỉ áp sau V10 `[cần xác nhận #1]`.
 
 ### 5.2. Repository
 
@@ -363,16 +363,16 @@ Native + interface projection như USER-001 §5; mảng Java bind vào `CAST(:x 
 
 **`NotificationRepository`**
 ```java
-Optional<NotificationCallerView> findCaller(UUID callerId, UUID anchorId, OffsetDateTime visibleFrom);
-List<NotificationView> findLatest(UUID callerId, OffsetDateTime visibleFrom, int limit);         // + findLatestUnread
-List<NotificationView> findBefore(UUID callerId, OffsetDateTime visibleFrom, OffsetDateTime anchorAt, UUID anchorId, int limit); // + …Unread
-List<NotificationView> findAfter(UUID callerId, OffsetDateTime visibleFrom, OffsetDateTime anchorAt, UUID anchorId, int limit);  // + …Unread
-Optional<UnreadCountView> countUnread(UUID callerId, OffsetDateTime visibleFrom);
-Optional<NotificationReadContextView> findReadContext(UUID callerId, UUID notificationId, OffsetDateTime visibleFrom);
+Optional<NotificationCallerView> findCaller(UUID callerId, UUID anchorId, LocalDateTime visibleFrom);
+List<NotificationView> findLatest(UUID callerId, LocalDateTime visibleFrom, int limit);         // + findLatestUnread
+List<NotificationView> findBefore(UUID callerId, LocalDateTime visibleFrom, LocalDateTime anchorAt, UUID anchorId, int limit); // + …Unread
+List<NotificationView> findAfter(UUID callerId, LocalDateTime visibleFrom, LocalDateTime anchorAt, UUID anchorId, int limit);  // + …Unread
+Optional<UnreadCountView> countUnread(UUID callerId, LocalDateTime visibleFrom);
+Optional<NotificationReadContextView> findReadContext(UUID callerId, UUID notificationId, LocalDateTime visibleFrom);
 @Modifying int markRead(UUID callerId, UUID notificationId);
-@Modifying int markAllRead(UUID callerId, OffsetDateTime visibleFrom);
+@Modifying int markAllRead(UUID callerId, LocalDateTime visibleFrom);
 List<InsertedNotificationView> insertAllReturning(UUID[] recipients, String[] types, String[] titles, String[] bodies,
-                                                  String[] referenceTypes, UUID[] referenceIds, OffsetDateTime now);
+                                                  String[] referenceTypes, UUID[] referenceIds, LocalDateTime now);
 ```
 - `findCaller`: `SELECT u.deleted_at IS NOT NULL AS caller_deleted, a.created_at AS anchor_created_at FROM "user" u LEFT JOIN notification a ON a.id = :anchorId AND a.recipient_user_id = u.id AND a.created_at >= :visibleFrom WHERE u.id = :callerId`.
 - Trang: `WHERE n.recipient_user_id = :callerId AND n.created_at >= :visibleFrom [AND NOT n.is_read] [AND (n.created_at, n.id) < (:anchorAt, :anchorId)] ORDER BY n.created_at DESC, n.id DESC LIMIT :limit` (`after`: `>` và `ASC`). Hai **câu cố định** theo `unreadOnly` (không `(:flag OR …)` — để planner dùng đúng index partial).
@@ -419,12 +419,12 @@ List<GameAudienceRowView> findGameAudience(UUID[] matchIds, String[] matchStatus
 - `findApplicationAudience`: đơn + tin + đội tuyển + đội trưởng `ACTIVE` + trận qua `MercenarySql.GAME_*` (giờ bắt đầu, tên sân; MERCENARY-001 §5.3) + `EXISTS rating` theo `application_id` cho `rated_by_team` (`rater_type = 'TEAM'`) / `rated_by_applicant` (`rater_type = 'INDIVIDUAL'`), `WHERE a.id = ANY(:applicationIds)`.
 - `findReportAudience`: `report r` (+ `dispute d` theo `report_id` — quan hệ 1:1, mỗi report tối đa một tranh chấp: unique `idx_dispute_report` (REPUTATION-001 §5.1), + đơn / tin khi `application_id` khác null, + trận qua `match_id` / `external_match_id` lấy giờ bắt đầu) → `UNION ALL` các dòng người nhận: `REPORTER` (đội: đội trưởng `ACTIVE`; cá nhân: `reporter_id`), `REPORTED` (tương tự), `ADMIN` (`"user"` `role = 'ADMIN' AND deleted_at IS NULL`, chỉ khi `:includeAdmins`). Mỗi dòng mang `audience`, `recipient_user_id`, tên đội hai bên, vị trí (đơn), `report_type`, `application_id`, `dispute_id`, `decision`, `game_start`.
 - `findTeamAudience`: `team` + đội trưởng `ACTIVE` theo `ANY(:teamIds)`. `findInvitationAudience`: `team_member tm JOIN team t` → `tm.status`, `tm.user_id`, `t.name`. `findActiveAdminIds`: `SELECT id FROM "user" WHERE role = 'ADMIN' AND deleted_at IS NULL` (`idx_user_active_admin`).
-- `findGameAudience`: `UNION ALL` ba nhánh — (1) đội trưởng `ACTIVE` của `author_team_id` và `confirmed_opponent_team_id` cho `match.id = ANY(:matchIds) AND status = ANY(:matchStatuses)` (mỗi dòng kèm tên đội đối thủ, sân, giờ); (2) đơn `APPROVED` của tin `match_id = ANY(:matchIds)` (cùng điều kiện trạng thái kèo); (3) đơn `APPROVED` của tin `external_match_id = ANY(:externalMatchIds)` với trận ngoài `SCHEDULED` — nhánh tách theo cột khoá trận để dùng `idx_mercenary_recruitment_match_all` / `…_external_all` (V9), không `OR`.
+- `findGameAudience`: `UNION ALL` ba nhánh — (1) đội trưởng `ACTIVE` của `author_team_id` và `confirmed_opponent_team_id` cho `match.id = ANY(:matchIds) AND status = ANY(:matchStatuses)` (mỗi dòng kèm tên đội đối thủ, sân, giờ); (2) đơn `APPROVED` của tin `match_id = ANY(:matchIds)` (cùng điều kiện trạng thái kèo); (3) đơn `APPROVED` của tin `external_match_id = ANY(:externalMatchIds)` với trận ngoài `SCHEDULED` — nhánh tách theo cột khoá trận để dùng `idx_mercenary_recruitment_match_all` / `…_external_all` (V10), không `OR`.
 
 **`MatchReminderRepository`**
 ```java
-List<ReminderGameView> claimDueStart(OffsetDateTime now, OffsetDateTime leadEnd, long leadSeconds, int limit); // leadSeconds = REMINDER_LEAD
-List<UUID> claimDueRating(OffsetDateTime now, OffsetDateTime lookbackStart, int limit);                       // trận ngoài
+List<ReminderGameView> claimDueStart(LocalDateTime now, LocalDateTime leadEnd, long leadSeconds, int limit); // leadSeconds = REMINDER_LEAD
+List<UUID> claimDueRating(LocalDateTime now, LocalDateTime lookbackStart, int limit);                       // trận ngoài
 ```
 ```sql
 -- claimDueStart
@@ -461,13 +461,13 @@ ON CONFLICT DO NOTHING
 RETURNING external_match_id
 ```
 - `ON CONFLICT DO NOTHING` không chỉ định đích → áp cho mọi unique index, gồm hai index partial `[cần xác nhận #6]`: hai instance chọn trùng một trận → chỉ một bên chèn được (bên kia chờ commit rồi bỏ dòng) → nhắc đúng một lần, không khoá `match`.
-- `match_request.responded_at` được ghi khi chấp nhận (MATCH-001 §5.2 `acceptIfPending`); `pairing.final_confirmed_at` khi hoàn tất (MATCH-002 §5.2). Unique `idx_match_request_accepted` (V6) → tối đa một dòng `mr`; pairing `CONFIRMED` tối đa một mỗi kèo.
+- `match_request.responded_at` được ghi khi chấp nhận (MATCH-001 §5.2 `acceptIfPending`); `pairing.final_confirmed_at` khi hoàn tất (MATCH-002 §5.2). Unique `idx_match_request_accepted` (V7) → tối đa một dòng `mr`; pairing `CONFIRMED` tối đa một mỗi kèo.
 
 **`RetentionRepository`**
 ```java
-@Modifying int deleteExpiredConversations(OffsetDateTime cutoff, int limit);
-@Modifying int deleteExpiredNotifications(OffsetDateTime cutoff, int limit);
-@Modifying int deleteRemindersSentBefore(OffsetDateTime cutoff);
+@Modifying int deleteExpiredConversations(LocalDateTime cutoff, int limit);
+@Modifying int deleteExpiredNotifications(LocalDateTime cutoff, int limit);
+@Modifying int deleteRemindersSentBefore(LocalDateTime cutoff);
 ```
 ```sql
 -- cuộc trò chuyện: tin nhắn xoá theo ON DELETE CASCADE
@@ -508,14 +508,14 @@ DELETE FROM notification WHERE id IN (
 ## 6. Entity
 
 `Notification` (sửa — `domain/.../entity/chat/`, giữ vị trí hiện có):
-- `type`: `String` → `@Enumerated(EnumType.STRING) Notification.Type` (35 giá trị — khớp CHECK V10); `referenceType`: `String` → `Notification.ReferenceType` (10 giá trị — khớp CHECK).
+- `type`: `String` → `@Enumerated(EnumType.STRING) Notification.Type` (35 giá trị — khớp CHECK V11); `referenceType`: `String` → `Notification.ReferenceType` (10 giá trị — khớp CHECK).
 - Entity chỉ để `ddl-auto=validate` và đọc lẻ khi cần; **mọi INSERT** qua `insertAllReturning` (id `uuidv7()`, `created_at = :now`), mọi UPDATE qua câu `@Modifying` — không ghi qua dirty checking. Không `@Version` (chỉ cột `is_read` đổi, idempotent).
 - Enum `Type` / `ReferenceType` đặt trong entity (như `Conversation.ContextType` — MATCH-001 §6) để `domain` và `application` cùng dùng.
 
 ## 7. DTO & Mapper
 
 - `NotificationListQuery(Boolean unreadOnly, UUID before, UUID after, Integer limit)` — validator con trỏ (§2); `unreadOnly` mặc định `false`; hằng `NotificationRules.DEFAULT_LIMIT = 50`, `MAX_LIMIT = 100`.
-- `NotificationResponse(UUID notificationId, Notification.Type type, String title, String body, Notification.ReferenceType referenceType, UUID referenceId, boolean isRead, OffsetDateTime createdAt)` — dùng cho 2.1 và frame `NOTIFICATION_CREATED` (`isRead = false`).
+- `NotificationResponse(UUID notificationId, Notification.Type type, String title, String body, Notification.ReferenceType referenceType, UUID referenceId, boolean isRead, LocalDateTime createdAt)` — dùng cho 2.1 và frame `NOTIFICATION_CREATED` (`isRead = false`).
 - `NotificationHistoryResponse(List<NotificationResponse> items, boolean hasMore)`; `UnreadCountResponse(long unreadCount)`.
 - `NotificationMapper` (MapStruct, `unmappedTargetPolicy = ERROR`): `toResponse(NotificationView)`, `toResponse(InsertedNotificationView)` (`isRead = false`). Không che tên (nội dung không có tên cá nhân).
 - **`NotificationRules`** (hằng một nơi): `RETENTION = 30 ngày` (BR-N02), `CHAT_RETENTION = 90 ngày` (BR-N01), `REMINDER_LEAD = 2 giờ` (Q4), `DEFAULT_LIMIT`, `MAX_LIMIT`, `ZONE = Asia/Ho_Chi_Minh` (định dạng giờ trong nội dung).
@@ -587,7 +587,7 @@ arenaflow.notification.executor.queue-capacity=1000
 
 | Tài liệu | Nội dung | Nhánh |
 |---|---|---|
-| `docs/database/schema.dbml`, `schema-design.md` (`notification`, `match_reminder`), `data-model.md` §3.5 | V10: loại thông báo, CHECK, index; bảng dấu nhắc; retention 30/90 ngày đã thực thi | `feature/NOTIFICATION-001-*` |
+| `docs/database/schema.dbml`, `schema-design.md` (`notification`, `match_reminder`), `data-model.md` §3.5 | V11: loại thông báo, CHECK, index; bảng dấu nhắc; retention 30/90 ngày đã thực thi | `feature/NOTIFICATION-001-*` |
 | `docs/agent/api-convention.md` §5 (bảng 2xx: `GET /profile/notifications`, `GET /profile/notifications/unread-count` 200 B1; `POST /profile/notifications/{id}/read`, `POST /profile/notifications/read` 204 N1), §6 (domain `NOTIFICATION`: `NOTIFICATION_001`, `NOTIFICATION_002`), §7.2 (bảng "Áp dụng": `GET /profile/notifications` cursor, mốc `notificationId`) | Coordinator | `chore/agent-framework-*` |
 | `docs/agent/convention-backend.md` §1 | `application/listener/`, `application/support/notification/`, `application/support/realtime/`, `api/notification/` | `chore/agent-framework-*` |
 | `docs/agent/CLAUDE.md` §2 | Dòng điều hướng NOTIFICATION-001 | `chore/agent-framework-*` |
@@ -612,14 +612,14 @@ arenaflow.notification.executor.queue-capacity=1000
 
 | # | Nội dung | Loại |
 |---|---|---|
-| 1 | **Thứ tự implement:** listener tham chiếu event của VENUE-001, MATCH-001, MATCH-002, REPUTATION-001, MERCENARY-001, USER-001 (event mới §4.9); V10 cần V9 (`external_match`) | **Chặn code** — implement sau năm mã kia |
+| 1 | **Thứ tự implement:** listener tham chiếu event của VENUE-001, MATCH-001, MATCH-002, REPUTATION-001, MERCENARY-001, USER-001 (event mới §4.9); V11 cần V10 (`external_match`) | **Chặn code** — implement sau năm mã kia |
 | 2 | ~~**Câu nghiệp vụ chưa chốt** (ngoài Q1–Q10): (a) báo đội trưởng khi lời mời được chấp nhận / từ chối (UC-T03); (b) báo đội trưởng cũ và mới khi chuyển quyền (UC-T04, AC-T03); (c) báo đội trưởng khi Admin tạm ngưng / kích hoạt lại đội (UC-T05); (d) nhắc mercenary đánh giá sau trận (kèo `ARCHIVED`; trận ngoài sau giờ kết thúc). Đề xuất: (a)–(c) có — SRS đã ghi, cần event mới ở USER-001 / USER-002 (không thêm truy vấn); (d) có — kèo: cùng `MatchArchivedEvent` thêm nhánh mercenary `APPROVED` vào audience; trận ngoài: thêm nhánh vào job 5 phút với dấu riêng~~ — **Đã chốt Q11, Q13 (user, 2026-11-16):** thêm cả 4 nhóm (6 loại), chuyển quyền chỉ báo đội trưởng mới — §4.3, §4.4, §4.7, §4.9, §5.1 | Đã đóng |
 | 3 | ~~**Nhắc trước trận ngoài hệ thống** (Q4 không nói rõ): bản này chỉ nhắc mercenary `APPROVED` (không nhắc đội trưởng đội khai báo); trận ngoài khai báo khi còn < 2 giờ → không nhắc (như "ghép khi còn < 2 giờ"); mercenary được duyệt sau lần nhắc → không nhắc. Đề xuất giữ~~ — **Đã chốt Q12 (user, 2026-11-16):** giữ như thiết kế | Đã đóng |
 | 4 | Bind mảng `uuid[]` / `text[]` vào native query và `INSERT … RETURNING` không `@Modifying` qua Spring Data / Hibernate 7.2 [Inference — cùng điểm mở MATCH-001 #1, MATCH-002 #4]; không bind được → `NamedParameterJdbcTemplate` trong cùng transaction (vẫn 1 câu) | Không chặn — kiểm bằng integration test đầu tiên của writer |
 | 5 | `@Async` + `@TransactionalEventListener(AFTER_COMMIT)` trên Spring Framework 7: listener chạy trên executor sau commit; lần thử rollback của retrier không giao event [Inference — theo cơ chế Spring, chưa chạy] | Không chặn — test "rollback không tạo thông báo", "commit tạo đúng một lần" |
 | 6 | `ON CONFLICT DO NOTHING` không chỉ định đích áp cho unique index **partial** (`idx_match_reminder_match`, `…_external`) [Inference — theo tài liệu PostgreSQL, chưa chạy] | Không chặn — test hai lần claim đồng thời |
 | 7 | Principal STOMP `getName()` = `userId.toString()` khớp `convertAndSendToUser`; interceptor inbound thấy destination gốc `/user/queue/notifications` trước khi chuyển thành hàng đợi theo phiên [Inference — chưa chạy] | Không chặn — kiểm cùng phase realtime (MATCH-001 #12) |
-| 8 | Tên CHECK `notification_type_check` ở môi trường ngoài Neon dev | Không chặn — kiểm trước khi chạy V10; khác → dừng, báo |
+| 8 | Tên CHECK `notification_type_check` ở môi trường ngoài Neon dev | Không chặn — kiểm trước khi chạy V11; khác → dừng, báo |
 
 ## 13. Quyết định đã chốt (user, 2026-11-16)
 

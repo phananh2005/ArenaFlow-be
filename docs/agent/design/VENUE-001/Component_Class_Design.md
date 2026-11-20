@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · Cloudinary (ký/xác minh cục bộ trong request; Admin API chỉ trong job dọn asset) |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §10 · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (§5.1); entity hiện có `domain/.../entity/venue/{Venue,VenueImage,VenueReport}` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.3** (developer · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v5.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -152,8 +152,8 @@ public interface ImageUploadSigner {
     String rootPrefix(String scopeRoot);                           // "<folder>/<scopeRoot>/" — job dọn dùng
 }
 public record UploadSignature(String uploadUrl, String cloudName, String apiKey, String publicId, long timestamp,
-                              String allowedFormats, boolean overwrite, String signature, OffsetDateTime expiresAt) {}
-public record SignedPublicId(String scopePath, Instant signedAt, String nonce, String tag) {}
+                              String allowedFormats, boolean overwrite, String signature, LocalDateTime expiresAt) {} // expiresAt: giờ VN của timestamp + TTL
+public record SignedPublicId(String scopePath, Instant signedAt, String nonce, String tag) {} // Instant/epoch nội bộ — ngoại lệ SYSTEM-002 §2.1
 ```
 
 **Định dạng `publicId`:** `<folder>/<scopePath>/<signedAt>-<nonce>-<tag>`
@@ -162,7 +162,7 @@ public record SignedPublicId(String scopePath, Instant signedAt, String nonce, S
 - `tag`: 22 ký tự đầu base64url của `HMAC-SHA256(tagKey, scopePath + "|" + signedAt + "|" + nonce + "|" + uploaderId)`; `tagKey = HMAC-SHA256(apiSecret, "arenaflow-upload-tag")` (tách miền với chữ ký Cloudinary). **Vì sao:** ràng buộc người xin chữ ký vào chính `public_id` đã ký → Cloudinary chặn đổi `public_id`, backend kiểm lại ở 2.5 bằng caller hiện tại; URL công khai chỉ chứa tag một chiều (có nonce riêng mỗi upload nên không liên kết được các ảnh cùng người, không suy ra user id); không thêm field request và không thêm secret phải quản lý. Phương án loại: tham số `context` của Cloudinary (backend không đọc lại được ở 2.5 nếu không gọi Admin API, chữ ký response không phủ `context`); user id trong `public_id` (lộ trên URL).
 - Mẫu kiểm: `^<folder>/<scopePath>/\d{10}-[A-Za-z0-9_-]{22}-[A-Za-z0-9_-]{22}$`; không `..`. `folder` và `scopePath` ghép vào regex qua `Pattern.quote(...)` (thư mục có thể chứa ký tự đặc biệt của regex, vd `.`).
 
-**Ký request** ([Authentication signatures](https://cloudinary.com/documentation/authentication_signatures)): mọi tham số gửi kèm trừ `file`, `cloud_name`, `resource_type`, `api_key`; sắp theo tên, nối `k=v` bằng `&`, nối liền `api_secret`, SHA-1 hex. Tham số ký: `allowed_formats`, `overwrite=false`, `public_id`, `timestamp`. Hợp lệ 1 giờ; `UploadSignature.expiresAt` = `timestamp` + 1h (UTC, trả client ở 2.4). Test vector bắt buộc: `timestamp=1315060510` + secret `abcd` → `a21ad0f63beb4de2e5575204b79ab90bffb02c10`. `overwrite=false`: chặn dùng lại chữ ký trong 1 giờ để ghi đè asset đã có (đã kiểm trên cloud-dev 2026-11-18: upload lặp cùng `public_id` trả lại asset cũ, không ghi đè). Chữ ký không giới hạn được dung lượng file `[cần xác nhận #19]`.
+**Ký request** ([Authentication signatures](https://cloudinary.com/documentation/authentication_signatures)): mọi tham số gửi kèm trừ `file`, `cloud_name`, `resource_type`, `api_key`; sắp theo tên, nối `k=v` bằng `&`, nối liền `api_secret`, SHA-1 hex. Tham số ký: `allowed_formats`, `overwrite=false`, `public_id`, `timestamp`. Hợp lệ 1 giờ; `UploadSignature.expiresAt` = `timestamp` + 1h đổi sang `LocalDateTime` giờ Việt Nam (`LocalDateTime.ofInstant(…, AppTime.ZONE)`, trả client ở 2.4); `timestamp` vẫn là epoch giây. Test vector bắt buộc: `timestamp=1315060510` + secret `abcd` → `a21ad0f63beb4de2e5575204b79ab90bffb02c10`. `overwrite=false`: chặn dùng lại chữ ký trong 1 giờ để ghi đè asset đã có (đã kiểm trên cloud-dev 2026-11-18: upload lặp cùng `public_id` trả lại asset cũ, không ghi đè). Chữ ký không giới hạn được dung lượng file `[cần xác nhận #19]`.
 
 **Xác minh response** ([Response signatures](https://cloudinary.com/documentation/response_signatures)): digest SHA trên `public_id`, `version`, `api_secret`; thiết kế: SHA-1 hex của `"public_id=" + publicId + "&version=" + version + apiSecret`, so bằng `MessageDigest.isEqual`. Đã kiểm trên response thật cloud-dev 2026-11-18 (`VenueControllerTest` E2E).
 
@@ -174,19 +174,19 @@ public record SignedPublicId(String scopePath, Instant signedAt, String nonce, S
 ```java
 List<SelectableVenueView> requireSelectable(Collection<UUID> venueIds); // readOnly; thiếu id → VENUE_001; có INACTIVE → VENUE_002; 1 truy vấn;
                                                                        // trả thông tin hiển thị theo thứ tự venueIds
-void markSelected(Collection<UUID> venueIds, OffsetDateTime selectedAt); // MANDATORY; 1 truy vấn bulk, reset cổng 180 ngày
+void markSelected(Collection<UUID> venueIds, LocalDateTime selectedAt); // MANDATORY; 1 truy vấn bulk, reset cổng 180 ngày
 ```
 `MANDATORY` để `last_selected_at` rollback cùng kèo / trận ngoài. v4.0 (BC-V05, user chốt 2026-11-14): MERCENARY-001 cũng gọi `markSelected` khi khai báo trận ngoài (2.28) và khi đổi sân của trận ngoài (2.31, chỉ sân mới) — `MERCENARY-001/Component_Class_Design.md` §4.15. Job cảnh báo 180 ngày (`markStaleAlerted`) **không đổi** câu: vẫn đọc `last_selected_at`, nay đã gồm trận ngoài. Thời điểm "được chọn" của kèo do MATCH-001 quyết định (luồng B: chỉ địa điểm đã chốt, lúc hoàn tất xác nhận — MATCH-002 `Component_Class_Design.md` §4.4). `requireSelectable` trả `SelectableVenueView` để kèo luồng B dựng response 2.1 (MATCH-001) không cần đọc lại địa điểm; caller không cần thông tin hiển thị thì bỏ qua giá trị trả về.
 
 ### 4.7. Domain event (`application/event/venue`)
 ```java
-public record VenueAdminAlertEvent(UUID venueId, String venueName, VenueAlertType alertType, OffsetDateTime triggeredAt) {}
+public record VenueAdminAlertEvent(UUID venueId, String venueName, VenueAlertType alertType, LocalDateTime triggeredAt) {}
 public enum VenueAlertType { STALE_180_DAYS, CLOSURE_REPORTED }
 ```
 Phát trong transaction ghi; hợp đồng listener (NOTIFICATION-001): `@TransactionalEventListener(AFTER_COMMIT)` (ADR-0003 §Cần theo dõi). VENUE-001 không có listener. **v4.2 (NOTIFICATION-001, user chốt Q8 2026-11-16):** Admin chỉ nhận thông báo theo `VenueAdminAlertEvent` (một lần mỗi đợt — BC-V05), không theo từng report → bỏ `VenueReportedEvent` (không người nghe; ADR-0011 chỉ dùng event cho thông báo / dữ liệu dẫn xuất). Payload không chứa PII ngoài id. Không có event xoá ảnh (job dọn tự đối chiếu DB). Quy ước event: [ADR-0011](../../decisions/0011-domain-events-after-commit.md).
 
 ### 4.8. VenueAlertService + scheduler (cảnh báo 180 ngày, BC-V05)
-`int alertStaleVenues()` — mỗi lô một `TransactionTemplate`. `VenueStaleAlertScheduler`: `@Scheduled(cron = "${arenaflow.venue.stale-alert.cron}", zone = "Asia/Ho_Chi_Minh")`, không logic. `SchedulingConfig`: `@EnableScheduling`. Cron `-` = tắt (dùng trong test). Tham số: §8. Luồng: `Processing_Flow.md` §3.14.
+`int alertStaleVenues()` — mỗi lô một `TransactionTemplate`. `VenueStaleAlertScheduler`: `@Scheduled(cron = "${arenaflow.venue.stale-alert.cron}", zone = AppTime.ZONE_ID)` (SYSTEM-002 §2.4), không logic. `SchedulingConfig`: `@EnableScheduling`. Cron `-` = tắt (dùng trong test). Tham số: §8. Luồng: `Processing_Flow.md` §3.14.
 
 ### 4.9. ConcurrencyConflictRetrier (sửa — dùng chung)
 ```java
@@ -227,7 +227,7 @@ public interface ImageAssetAdmin {                                     // applic
 public record AssetPage(List<String> publicIds, String nextCursor) {}
 ```
 - `CloudinaryImageAssetAdmin`: Spring `RestClient` (spring-web từ `common`), Basic Auth `apiKey:apiSecret`, base `https://api.cloudinary.com/v1_1/<cloudName>`, timeout §8. HTTP 420/429 → `AssetAdminRateLimitedException` (kèm `X-FeatureRateLimit-Reset`); lỗi khác ném nguyên (#12 đã đóng — §12). Nguồn: [Admin API overview](https://cloudinary.com/documentation/admin_api_overview.md), [Get resources](https://cloudinary.com/documentation/admin_api_resources_get_resources.md), [Delete resources](https://cloudinary.com/documentation/admin_api_resources_delete_resources_by_public_id.md).
-- `VenueImageCleanupScheduler`: `@Scheduled(cron = "${arenaflow.venue.image-cleanup.cron}", zone = "Asia/Ho_Chi_Minh")`.
+- `VenueImageCleanupScheduler`: `@Scheduled(cron = "${arenaflow.venue.image-cleanup.cron}", zone = AppTime.ZONE_ID)` (SYSTEM-002 §2.4).
 - **Mặc định TẮT** (cron `-`); chỉ bật tường minh. **Fail-fast khi khởi động** nếu job bật và: Cloudinary chưa cấu hình, `folder` trống hoặc bằng giá trị mặc định cũ `arenaflow`, hoặc `confirm-window + 1h ≥ grace` — kiểm ở `VenueImageCleanupProperties#requireSafeToEnable(CloudinaryProperties)`, gọi trong constructor `VenueImageCleanupScheduler` khi cron ≠ `-` (lỗi → `IllegalStateException`, app không khởi động). Lý do: nhiều môi trường dùng chung một cloud mà chung thư mục thì job môi trường này sẽ xoá asset môi trường khác (asset không có trong DB của nó).
 - Luồng, lý do tham số, lỗi: `Processing_Flow.md` §3.16.
 
@@ -247,7 +247,7 @@ ALTER TABLE venue DROP CONSTRAINT venue_created_by_user_id_fkey;
 ALTER TABLE venue ADD CONSTRAINT venue_created_by_user_id_fkey
     FOREIGN KEY (created_by_user_id) REFERENCES "user"(id) ON DELETE RESTRICT;
 ALTER TABLE venue ADD COLUMN version BIGINT NOT NULL DEFAULT 0;
-ALTER TABLE venue ADD COLUMN stale_alerted_at TIMESTAMPTZ;
+ALTER TABLE venue ADD COLUMN stale_alerted_at TIMESTAMPTZ;      -- V6 (SYSTEM-002) đổi mọi cột TIMESTAMPTZ sang TIMESTAMP giờ Việt Nam
 ALTER TABLE venue ADD COLUMN closure_alerted_at TIMESTAMPTZ;
 UPDATE venue SET venue_type = NULL WHERE venue_type IS NOT NULL AND venue_type NOT IN ('FIVE_A_SIDE', 'SEVEN_A_SIDE', 'ELEVEN_A_SIDE');
 ALTER TABLE venue ADD CONSTRAINT venue_type_check CHECK (venue_type IS NULL OR venue_type IN ('FIVE_A_SIDE', 'SEVEN_A_SIDE', 'ELEVEN_A_SIDE'));
@@ -290,7 +290,7 @@ CREATE INDEX idx_venue_ward ON venue(ward_id);
 - Dữ liệu cũ (chưa kiểm số dòng Neon dev — developer kiểm khi lập kế hoạch): `UPDATE` giữ migration chạy được; `venue_type` lạ → `NULL`; report trùng `(reporter_id, venue_id, 'OTHER')` sẽ làm `uq_venue_report_pending` lỗi → dừng, báo, không tự xoá.
 - `handled_by ON DELETE RESTRICT` nhất quán `team.disbanded_by`. Không ràng buộc ≤5 ảnh / unique `display_order` ở DB (tuần tự hoá bằng khoá dòng `venue`). Không index cho job 180 ngày (1 lần/ngày).
 - `venue.created_by_user_id`: V1 khai `ON DELETE SET NULL` + CHECK `venue_check` (`created_by_type = 'USER'` ⇒ `created_by_user_id IS NOT NULL`) — cùng mâu thuẫn (xoá cứng user tạo địa điểm sẽ lỗi CHECK). Đổi `ON DELETE RESTRICT`, giữ tên `venue_created_by_user_id_fkey` (Neon dev `misty-dew-90700890`, kiểm 2026-11-11).
-- `reporter_id`: V1 khai `NOT NULL` + `ON DELETE SET NULL` (mâu thuẫn — xoá cứng user sẽ lỗi NOT NULL). Đổi `ON DELETE RESTRICT`: khớp `NOT NULL` và chính sách chỉ xoá mềm user (ADR-0002); cùng chính sách cho `conversation_message.sender_user_id` ở V6 (MATCH-001 §5.1 — bảng `chat_message` của V1 bị bỏ). Giữ tên constraint V1 `venue_report_reporter_id_fkey` (Neon dev `misty-dew-90700890`, kiểm 2026-11-10). Index `idx_venue_report_reporter` của V1 giữ nguyên.
+- `reporter_id`: V1 khai `NOT NULL` + `ON DELETE SET NULL` (mâu thuẫn — xoá cứng user sẽ lỗi NOT NULL). Đổi `ON DELETE RESTRICT`: khớp `NOT NULL` và chính sách chỉ xoá mềm user (ADR-0002); cùng chính sách cho `conversation_message.sender_user_id` ở V7 (MATCH-001 §5.1 — bảng `chat_message` của V1 bị bỏ). Giữ tên constraint V1 `venue_report_reporter_id_fkey` (Neon dev `misty-dew-90700890`, kiểm 2026-11-10). Index `idx_venue_report_reporter` của V1 giữ nguyên.
 - **Xoá ảnh = hard-delete** dòng `venue_image` (lệch có chủ đích, §10).
 - `ward_id` (v4.0): nullable vì địa điểm tạo trước chưa có phường (BR-V11); không CHECK `level = 'ward'` ở DB (không CHECK chéo bảng) — service kiểm bằng `findWardWithProvince` (USER-001, `level = 'ward'`). `idx_venue_ward` cho tìm kèo mercenary không GPS (MERCENARY-001 `Component_Class_Design.md` §5.2).
 
@@ -309,10 +309,10 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
     Page<VenueSummaryView> searchNearbyAny(String status /* null = ALL */, String qPattern, double lat, double lng,
             double radiusKm, double minLat, double maxLat, double minLng, double maxLng, Pageable p);
     List<SelectableVenueView> findSelectableByIdIn(Collection<UUID> ids);  // LEFT JOIN venue_image ảnh chính
-    @Modifying int markClosureAlerted(UUID id, OffsetDateTime now);        // WHERE status='ACTIVE' AND closure_alerted_at IS NULL
+    @Modifying int markClosureAlerted(UUID id, LocalDateTime now);        // WHERE status='ACTIVE' AND closure_alerted_at IS NULL
     @Modifying int reopenClosureAlertIfNoPending(UUID id);                 // WHERE closure_alerted_at IS NOT NULL AND NOT EXISTS report CLOSED PENDING
-    @Modifying int markSelected(Collection<UUID> ids, OffsetDateTime selectedAt);
-    List<StaleVenueView> markStaleAlerted(OffsetDateTime threshold, OffsetDateTime now, int limit); // UPDATE … RETURNING
+    @Modifying int markSelected(Collection<UUID> ids, LocalDateTime selectedAt);
+    List<StaleVenueView> markStaleAlerted(LocalDateTime threshold, LocalDateTime now, int limit); // UPDATE … RETURNING
 }
 public interface VenueImageRepository extends JpaRepository<VenueImage, UUID> {
     List<VenueImage> findByVenueIdOrderByDisplayOrderAsc(UUID venueId);
@@ -328,8 +328,8 @@ public interface VenueImageRepository extends JpaRepository<VenueImage, UUID> {
 public interface VenueReportRepository extends JpaRepository<VenueReport, UUID> {
     Page<AdminVenueReportView> findAdminReports(String status /* null = ALL */, UUID venueId /* null = mọi */, Pageable p);
     Optional<AdminVenueReportView> findAdminViewById(UUID id);
-    @Modifying int resolveIfPending(UUID id, String status, UUID adminId, OffsetDateTime now);
-    @Modifying int verifyPendingClosureReports(UUID venueId, UUID adminId, OffsetDateTime now);
+    @Modifying int resolveIfPending(UUID id, String status, UUID adminId, LocalDateTime now);
+    @Modifying int verifyPendingClosureReports(UUID venueId, UUID adminId, LocalDateTime now);
 }
 ```
 
@@ -351,7 +351,7 @@ Ghi chú SQL:
 | `StaleVenueView` | `id`, `name` |
 | `AdminVenueReportView` | cột report + `venueName`, `venueStatus`, `reporterName`, `reporterDeleted`, `handledByName`, `handledByDeleted` (`false` khi chưa có người xử lý) |
 
-Thời gian trong projection là `Instant`, mapper chuyển UTC (USER-001 §5).
+Thời gian trong projection là `LocalDateTime` giờ Việt Nam, mapper gán thẳng (bỏ `MapperSupport.toUtc` — SYSTEM-002 §6.2).
 
 ## 6. Entity (`domain/entity/venue`)
 
@@ -359,7 +359,7 @@ Thời gian trong projection là `Instant`, mapper chuyển UTC (USER-001 §5).
 |---|---|
 | `Venue` | + `@Version Long version` · + `staleAlertedAt`, `closureAlertedAt` · `venueType`: `String` → `enum VenueType { FIVE_A_SIDE, SEVEN_A_SIDE, ELEVEN_A_SIDE }` (`@Enumerated(STRING)`, `length = 50`) |
 | `VenueImage` | + `publicId` (`nullable = false`, `length = 255`) |
-| `VenueReport` | `reason`: hiện là `String` với `@Column(name = "reason", nullable = false, columnDefinition = "TEXT")` → **bỏ `columnDefinition`**, đổi thành `enum Reason { CLOSED, WRONG_INFO, OTHER }` với `@Enumerated(EnumType.STRING) @Column(name = "reason", nullable = false, length = 20)` (khớp `VARCHAR(20)` sau V5) · + `detail`: `@Column(name = "detail", columnDefinition = "TEXT")` · + `status`: `enum Status { PENDING, VERIFIED, REJECTED }`, `@Enumerated(EnumType.STRING) @Column(name = "status", nullable = false, length = 20)`, `@Builder.Default PENDING` · + `handledBy` (`UUID`, `handled_by`), `handledAt` (`OffsetDateTime`, `handled_at`); sửa Javadoc lớp |
+| `VenueReport` | `reason`: hiện là `String` với `@Column(name = "reason", nullable = false, columnDefinition = "TEXT")` → **bỏ `columnDefinition`**, đổi thành `enum Reason { CLOSED, WRONG_INFO, OTHER }` với `@Enumerated(EnumType.STRING) @Column(name = "reason", nullable = false, length = 20)` (khớp `VARCHAR(20)` sau V5) · + `detail`: `@Column(name = "detail", columnDefinition = "TEXT")` · + `status`: `enum Status { PENDING, VERIFIED, REJECTED }`, `@Enumerated(EnumType.STRING) @Column(name = "status", nullable = false, length = 20)`, `@Builder.Default PENDING` · + `handledBy` (`UUID`, `handled_by`), `handledAt` (`LocalDateTime`, `handled_at`); sửa Javadoc lớp |
 
 Giữ Lombok/builder/`@PrePersist` (`convention-backend.md` §6, §6.1); `src/main` không gán `id`, `version`, `createdAt`, `updatedAt` qua builder. Kiểm bằng migration integration test (`ddl-auto=validate` sau V5): `reason`/`status` là `VARCHAR(20)`, `venue_type` `VARCHAR(50)`, `public_id` `VARCHAR(255)`.
 

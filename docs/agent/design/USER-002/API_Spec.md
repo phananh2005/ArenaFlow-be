@@ -13,7 +13,7 @@
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
 | Spec nghiệp vụ | `docs/agent/business-spec/USER-002/` (UC-T06, UC-U03 sửa, UC-T05 sửa; BR-T06..BR-T14, BC-T02, BC-T06) · `docs/agent/business-spec/SYSTEM-001/` (v1.7) — BC-U02 |
 | Phụ thuộc | [`USER-001/API_Spec.md`](../USER-001/API_Spec.md) — hợp đồng gốc của đội, lời mời, hồ sơ; file này chỉ mô tả phần USER-002 thêm/đổi |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v3.1** (solution-architect · 2026-11-17) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v4.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -21,7 +21,7 @@
 
 **Quy ước chung cho mọi endpoint của mã này:**
 - Kế thừa toàn bộ quy ước chung của USER-001 (mục "Quy ước chung cho mọi endpoint"): xác thực `Authorization: Bearer <access token>` (thiếu/sai/hết hạn → `401 AUTH_001`), ID là chuỗi UUID, envelope `data` / `error` / `pagination`, giá trị enum **UPPERCASE**, phân trang `page` (≥ 1, mặc định 1) · `pageSize` (1..100, mặc định 20).
-- Field thời điểm (`…At`) của mã này là chuỗi ISO-8601 UTC, vd `"2026-11-05T09:15:00Z"`.
+- Field thời điểm (`…At`) của mã này là chuỗi ISO-8601 giờ Việt Nam, không kèm múi giờ, vd `"2026-11-05T16:15:00"` (SYSTEM-002 `API_Spec.md` §1.1).
 - User đã xoá tài khoản (ADR-0002 sửa đổi 2026-11-12, SYSTEM-001 v1.7 BC-U02; quy tắc chung: USER-001 mục "Quy ước chung cho mọi endpoint"):
   - Endpoint thường (ngoài `/api/v1/admin/**`, kể cả khi người gọi là Admin): che tên → `"Người dùng đã xóa"`, ảnh → `null`; id vẫn giữ nguyên.
   - **Mọi endpoint `/api/v1/admin/**`:** không che — tên thật, ảnh thật (còn đường dẫn thì trả), mỗi field tên user có cờ `is…Deleted` đi kèm (`true` = đã xoá tài khoản; `false` cả khi field tên là `null`). Ở mã này: §2.4 (`displayName` + `isUserDeleted`, `avatarUrl` thật), §2.6 (`captainName` + `isCaptainDeleted`, `disbandedByName` + `isDisbandedByDeleted`).
@@ -81,9 +81,9 @@ Lỗi chung của mọi endpoint (`400 VALIDATION_ERROR`, `401 AUTH_001`, lỗi 
     "captainName": null,
     "memberCount": 0,
     "createdBy": "0193a5c0-1b2c-7d3e-8f40-5a6b7c8d9e01",
-    "createdAt": "2026-11-02T11:00:00Z",
-    "updatedAt": "2026-11-05T09:15:00Z",
-    "disbandedAt": "2026-11-05T09:15:00Z",
+    "createdAt": "2026-11-02T18:00:00",
+    "updatedAt": "2026-11-05T16:15:00",
+    "disbandedAt": "2026-11-05T16:15:00",
     "disbandedById": "0193a5c0-1b2c-7d3e-8f40-5a6b7c8d9e01",
     "disbandedByName": "Nguyễn Văn A",
     "disbandReason": "Hết người chơi"
@@ -153,7 +153,7 @@ Khi một request vi phạm nhiều điều kiện, server trả **mã đứng t
       "status": "DISBANDED",
       "captainName": null,
       "memberCount": 0,
-      "createdAt": "2026-11-02T11:00:00Z",
+      "createdAt": "2026-11-02T18:00:00",
       "disbandedByName": "Nguyễn Văn A"
     }
   ],
@@ -195,8 +195,8 @@ Chỉ gồm người **đã từng tham gia** đội (thành viên `ACTIVE` ho�
       "isUserDeleted": false,
       "role": "CAPTAIN",
       "status": "LEFT",
-      "joinedAt": "2026-11-02T11:00:00Z",
-      "leftAt": "2026-11-05T09:15:00Z"
+      "joinedAt": "2026-11-02T18:00:00",
+      "leftAt": "2026-11-05T16:15:00"
     },
     {
       "memberId": "0193a5c3-0a11-7b22-8c33-1d44e55f6602",
@@ -207,8 +207,8 @@ Chỉ gồm người **đã từng tham gia** đội (thành viên `ACTIVE` ho�
       "isUserDeleted": true,
       "role": "MEMBER",
       "status": "LEFT",
-      "joinedAt": "2026-11-03T08:00:00Z",
-      "leftAt": "2026-11-04T10:00:00Z"
+      "joinedAt": "2026-11-03T15:00:00",
+      "leftAt": "2026-11-04T17:00:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 2 }
@@ -265,7 +265,7 @@ Mã `USER_003` giữ nguyên từ USER-001, chỉ mở rộng điều kiện và
       "captainName": null,
       "isCaptainDeleted": false,
       "memberCount": 0,
-      "createdAt": "2026-11-02T11:00:00Z",
+      "createdAt": "2026-11-02T18:00:00",
       "disbandedByName": "Nguyễn Văn A",
       "isDisbandedByDeleted": true
     }
@@ -345,7 +345,7 @@ Field USER-001 giữ nguyên. Thêm:
 
 | Field | Kiểu | Ý nghĩa |
 |---|---|---|
-| `disbandedAt` | string (ISO-8601 UTC) \| null | Thời điểm giải tán; `null` nếu chưa giải tán |
+| `disbandedAt` | string (datetime — SYSTEM-002 §1.1) \| null | Thời điểm giải tán; `null` nếu chưa giải tán |
 | `disbandedById` | UUID \| null | User đã giải tán; `null` nếu chưa giải tán. Giữ nguyên kể cả khi user đó đã xoá tài khoản |
 | `disbandedByName` | string \| null | Tên người giải tán để hiển thị; `null` nếu chưa giải tán; `"Người dùng đã xóa"` nếu người đó đã xoá tài khoản (endpoint Admin: tên thật + `isDisbandedByDeleted`) |
 | `disbandReason` | string \| null | Lý do giải tán; `null` nếu chưa giải tán; đội đã giải tán luôn có giá trị (tối thiểu là lý do mặc định `"Đội trưởng giải tán đội"`) |
@@ -374,8 +374,8 @@ Field USER-001 giữ nguyên (bản Admin có thêm `inactiveReason` như USER-0
 | `avatarUrl` | string \| null | Ảnh đại diện; `null` nếu user chưa có ảnh. Admin nhận ảnh thật kể cả khi user đã xoá tài khoản |
 | `role` | enum | `CAPTAIN` \| `MEMBER` — vai trò hiện tại, hoặc vai trò lúc rời đội nếu đã `LEFT` |
 | `status` | enum | `ACTIVE` \| `LEFT` |
-| `joinedAt` | string (ISO-8601 UTC) | Thời điểm vào đội |
-| `leftAt` | string (ISO-8601 UTC) \| null | Thời điểm rời đội; `null` nếu đang `ACTIVE` |
+| `joinedAt` | string (datetime — SYSTEM-002 §1.1) | Thời điểm vào đội |
+| `leftAt` | string (datetime — SYSTEM-002 §1.1) \| null | Thời điểm rời đội; `null` nếu đang `ACTIVE` |
 
 ### 5.4. Enum
 

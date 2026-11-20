@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` · kiến trúc hiện hành theo USER-001 |
 | Ràng buộc dữ liệu | USER-001 schema V1/V2/V3; delta USER-002 dưới đây cần migration Flyway |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v3.1** (solution-architect · 2026-11-17) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-04 · v1.0 (baseline) · hiện tại **v4.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -85,7 +85,7 @@ USER-001 có `team.status` với `ACTIVE|INACTIVE`, `inactive_reason VARCHAR(500
 |---|---|---|
 | Lifecycle | Thêm `DISBANDED` vào status enum/DB CHECK constraint | Không xóa cứng; terminal |
 | Disband reason | `disband_reason VARCHAR(100) NOT NULL` cho `DISBANDED`, null trước đó | Mặc định nghiệp vụ nếu không có reason |
-| Disband time | `disbanded_at` nullable timestamp UTC | Có giá trị đúng khi `DISBANDED` |
+| Disband time | `disbanded_at` nullable `TIMESTAMP` giờ Việt Nam (SYSTEM-002) | Có giá trị đúng khi `DISBANDED` |
 | Disband actor | `disbanded_by UUID` FK tới user | Giữ tham chiếu lịch sử kể cả soft-delete |
 | Admin reason | `inactive_reason` giữ nguyên | Giải tán khi INACTIVE không ghi đè |
 
@@ -95,7 +95,7 @@ USER-001 có `team.status` với `ACTIVE|INACTIVE`, `inactive_reason VARCHAR(500
 ALTER TABLE team DROP CONSTRAINT team_status_check;
 ALTER TABLE team ADD CONSTRAINT team_status_check CHECK (status IN ('ACTIVE', 'INACTIVE', 'DISBANDED'));
 ALTER TABLE team ADD COLUMN disband_reason VARCHAR(100);
-ALTER TABLE team ADD COLUMN disbanded_at TIMESTAMPTZ;
+ALTER TABLE team ADD COLUMN disbanded_at TIMESTAMPTZ;   -- V6 (SYSTEM-002) đổi sang TIMESTAMP giờ Việt Nam
 ALTER TABLE team ADD COLUMN disbanded_by UUID REFERENCES "user"(id) ON DELETE RESTRICT;
 ALTER TABLE team ADD CONSTRAINT team_disband_consistency_check CHECK (
     (status = 'DISBANDED' AND disband_reason IS NOT NULL AND disbanded_at IS NOT NULL AND disbanded_by IS NOT NULL)

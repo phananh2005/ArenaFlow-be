@@ -79,7 +79,7 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
 - Vị trí gốc để gợi ý có thể chọn bằng GPS hiện tại, tìm kiếm địa chỉ, hoặc chọn khu vực dạng văn bản. Dữ liệu GPS/địa chỉ đã lưu được giữ; không cần làm mờ. Không lưu consent riêng trong DB; truy cập GPS dựa trên quyền hệ điều hành.
 - Nhiều đội có thể nhận cùng bài đăng và tạo pairing đồng thời. Match vẫn `OPEN` trong lúc trao đổi.
 - **Trao đổi và xác nhận:** Hai đội trưởng trao đổi qua chat để thống nhất địa điểm/giờ. MVP chỉ lưu tin nhắn chat; không có cấu trúc đề xuất riêng. Chỉ khi cả hai xác nhận (qua UI riêng, không phải tin nhắn) thì Match thành `CONFIRMED`. Pairing không chốt được thì Match vẫn `OPEN` để tiếp tục nhận đội khác.
-- **Thời gian:** Tất cả thời gian lưu theo UTC trong DB; frontend convert theo timezone thiết bị người dùng.
+- **Thời gian:** Mọi thời điểm theo **giờ Việt Nam** (UTC+7), lưu không kèm múi giờ; hiển thị nguyên giá trị, không đổi theo múi giờ thiết bị; mốc nghiệp vụ tính theo giờ Việt Nam (SRS BC-M05, SYSTEM-002 — user chốt 2026-11-21).
 - Pairing hết hạn theo `expires_at` của bài đăng.
 
 **Trạng thái Pairing:** `NEGOTIATING`, `CONFIRMED`, `EXPIRED`, `SUPERSEDED`.
@@ -279,7 +279,7 @@ Tất cả các quy tắc nghiệp vụ đã được làm rõ và xác nhận v
 - Venue: ảnh lưu bảng riêng tối đa 5, report chi tiết, không lưu tiện ích MVP
 - Chat/Notification: retention 90/30 ngày, 11 loại notification, push để sau
 - Bộ môn: admin bật/tắt, quy tắc dùng chung MVP
-- Pairing luồng B: chỉ lưu chat, UTC, `expires_at` ≤ giờ trận
+- Pairing luồng B: chỉ lưu chat, giờ Việt Nam, `expires_at` ≤ giờ trận
 - Rating/Report mercenary: đôi bên đánh giá nhau, cấu trúc `rating` table với rater/ratee type
 
 **Bước tiếp theo:** Lập mô hình bảng/thuộc tính/khóa, thiết kế migration Flyway, rà soát với `docs/agent/non-functional-standards.md`.

@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang con trỏ §7.2, định dạng lỗi, kiểu dữ liệu); quy ước chung MATCH-001 `API_Spec.md` §1.1; kết nối realtime (`/ws`, `CONNECT`, heartbeat, lỗi kết nối): MATCH-001 `API_Spec.md` §1.7; mã `USER_*`, `AUTH_*`: USER-001 `API_Spec.md`; [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (kênh realtime), [ADR-0015](../../decisions/0015-notification-async-listener-and-user-channel.md) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10) — UC-N02, UC-N03; BR-N01, BR-N02; BC-N01..BC-N03; Overview §4 (loại thông báo); Business_Rules §8.6; AC "NOTIFICATION DOMAIN", AC-N02, AC-U01, AC-T02, AC-T03, UC-T03, UC-T04, UC-T05, AC-M03..AC-M09, AC-R02, AC-R06, AC-ME03, AC-ME05, AC-ME06, AC-ME11, AC-V03 · phạm vi user chốt 2026-11-16 (Q1–Q13) — SRS SYSTEM-001 sẽ cập nhật theo phạm vi này |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-16 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-18) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-16 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -21,7 +21,7 @@ Hệ thống tự tạo **thông báo in-app** khi có sự kiện liên quan t�
 
 ### 1.1. Quy ước chung
 
-- Như MATCH-001 `API_Spec.md` §1.1: Bearer token (`401 AUTH_001` → refresh token rồi gửi lại), envelope `data` / `error`, thời gian ISO-8601 trả UTC, enum UPPERCASE, `400 VALIDATION_ERROR` kèm `validationErrors[]`.
+- Như MATCH-001 `API_Spec.md` §1.1: Bearer token (`401 AUTH_001` → refresh token rồi gửi lại), envelope `data` / `error`, thời gian ISO-8601 giờ Việt Nam không kèm múi giờ (SYSTEM-002 `API_Spec.md` §1.1), enum UPPERCASE, `400 VALIDATION_ERROR` kèm `validationErrors[]`.
 - Mọi endpoint chỉ thao tác trên **thông báo của chính người gọi**; không có tham số chọn người dùng khác. Thông báo của người khác (hoặc id không tồn tại) → `404 NOTIFICATION_001`.
 - Tài khoản đã xoá (token còn hạn) → `404 USER_001` ở mọi endpoint.
 - **Hạn lưu 30 ngày** (BR-N02): thông báo tạo quá 30 ngày không còn xuất hiện ở mọi endpoint (kể cả khi chưa đọc) và bị xoá hẳn hằng ngày.
@@ -78,11 +78,11 @@ Dùng chung kết nối STOMP của MATCH-001 `API_Spec.md` §1.7 (`/ws`, `CONNE
                     "title": "Yêu cầu ghép kèo mới",
                     "body": "Đội FC Sấm Sét muốn ghép kèo 18:00 20/11 tại Sân bóng Phú Thọ.",
                     "referenceType": "MATCH", "referenceId": "01933f10-2a3b-7c4d-8e5f-6a7b8c9d0e11",
-                    "isRead": false, "createdAt": "2026-11-16T08:00:03Z" } }
+                    "isRead": false, "createdAt": "2026-11-16T15:00:03" } }
 ```
 ```json
 { "type": "CONVERSATION_ACTIVITY", "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e31",
-  "messageId": "01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e01", "createdAt": "2026-11-16T08:05:00Z" }
+  "messageId": "01933e10-2a3b-7c4d-8e5f-6a7b8c9d0e01", "createdAt": "2026-11-16T15:05:00" }
 ```
 
 - Tin nhắn chat **không** tạo thông báo (không có trong 2.1, không tăng số chưa đọc ở 2.2). Trạng thái "chưa đọc" của chat: `hasUnread` ở MATCH-001 2.20.
@@ -138,12 +138,12 @@ Phân trang **con trỏ** (`api-convention.md` §7.2): danh sách liên tục c�
         "title": "Yêu cầu ghép kèo được chấp nhận",
         "body": "Đội FC Sấm Sét đã chấp nhận yêu cầu ghép kèo 18:00 20/11 tại Sân bóng Phú Thọ.",
         "referenceType": "MATCH", "referenceId": "01933f10-2a3b-7c4d-8e5f-6a7b8c9d0e11",
-        "isRead": false, "createdAt": "2026-11-16T08:00:03Z" },
+        "isRead": false, "createdAt": "2026-11-16T15:00:03" },
       { "notificationId": "01933fe0-1a2b-7c3d-8e4f-5a6b7c8d9e02", "type": "WELCOME",
         "title": "Chào mừng bạn đến với ArenaFlow",
         "body": "Hoàn thiện hồ sơ để bắt đầu tìm đội và tìm kèo.",
         "referenceType": "USER", "referenceId": "01932e00-5a6b-7c7d-8e8f-9a0b1c2d3e12",
-        "isRead": true, "createdAt": "2026-11-10T02:00:00Z" }
+        "isRead": true, "createdAt": "2026-11-10T09:00:00" }
     ],
     "hasMore": false } }
 ```
@@ -225,7 +225,7 @@ Không có body. Mọi thông báo chưa đọc của người gọi **tồn t�
 | `referenceType` | enum (§4.3) | Có | Loại màn hình liên quan; `null` = không mở màn hình nào |
 | `referenceId` | UUID | Có | Id đối tượng; `null` khi và chỉ khi `referenceType = null` |
 | `isRead` | boolean | Không | Đã đọc |
-| `createdAt` | string (ISO-8601, UTC) | Không | Thời điểm tạo thông báo |
+| `createdAt` | string (datetime — SYSTEM-002 §1.1) | Không | Thời điểm tạo thông báo |
 
 ### 4.2. Loại thông báo (`type`)
 

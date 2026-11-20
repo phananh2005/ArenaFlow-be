@@ -5,9 +5,9 @@
 | Mã chức năng | `MERCENARY-001` |
 | Phạm vi tầng | Backend (Spring Boot REST API + kênh STOMP của MATCH-001). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL ≥ 18 |
-| Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §7–§8 (`DeletedUserMasking` qua `MapperSupport`); VENUE-001 §4.6 (`VenueSelectionService`), §4.9 (retrier overload), §5.2 (hộp + Haversine); MATCH-001 §4.5 (`TeamGuard`), §4.8 (`ReputationService`, `TimeBandPenaltyPolicy`), §4.9 (event), §4.10 (scheduler); MATCH-001 (v2.4) §4.14 (lõi cuộc trò chuyện `ConversationService`, `ConversationAccessPolicy`), §4.15 (kênh realtime), §5.1 (bảng `conversation*` ở V6), §5.2 (`ConversationRepository.findContext`, cursor `(created_at, id)`), §7 (`ChatHistoryQuery`, `@ValidChatCursor`, `ConversationMapper`); REPUTATION-001 §4.6 (`ReputationService`, `ReportPenaltyPolicy`, `ReputationRules`), §4.8 (refresher huy hiệu), §4.10 (trạng thái report hiệu lực), §5.3 (thống kê) · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-10, 2026-11-12, 2026-11-14), ADR-0007 (+ Sửa đổi 2026-11-14), ADR-0008, ADR-0011, ADR-0012, ADR-0013, ADR-0014 (+ Sửa đổi 2026-11-13, 2026-11-15) |
-| Ràng buộc dữ liệu | V1–V4 (code) + V5 (VENUE-001, gồm `venue.ward_id` v4.0), V6 (MATCH-001), V6 (MATCH-001 — gồm bảng `conversation`, `conversation_message` từ v2.4), V8 (REPUTATION-001) — **chưa có trong code** + `V9__mercenary_recruitment_chat_reputation.sql` (§5.1 — v2.0: chỉ thêm phần riêng mercenary vào `conversation`). Entity hiện có `domain/.../entity/mercenary/{MercenaryRecruitment, MercenaryApplication}`, `rating/{Rating, Report}`, `user/User`, `venue/Venue` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v2.1** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
+| Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §7–§8 (`DeletedUserMasking` qua `MapperSupport`); VENUE-001 §4.6 (`VenueSelectionService`), §4.9 (retrier overload), §5.2 (hộp + Haversine); MATCH-001 §4.5 (`TeamGuard`), §4.8 (`ReputationService`, `TimeBandPenaltyPolicy`), §4.9 (event), §4.10 (scheduler); MATCH-001 (v2.4) §4.14 (lõi cuộc trò chuyện `ConversationService`, `ConversationAccessPolicy`), §4.15 (kênh realtime), §5.1 (bảng `conversation*` ở V7), §5.2 (`ConversationRepository.findContext`, cursor `(created_at, id)`), §7 (`ChatHistoryQuery`, `@ValidChatCursor`, `ConversationMapper`); REPUTATION-001 §4.6 (`ReputationService`, `ReportPenaltyPolicy`, `ReputationRules`), §4.8 (refresher huy hiệu), §4.10 (trạng thái report hiệu lực), §5.3 (thống kê) · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-10, 2026-11-12, 2026-11-14), ADR-0007 (+ Sửa đổi 2026-11-14), ADR-0008, ADR-0011, ADR-0012, ADR-0013, ADR-0014 (+ Sửa đổi 2026-11-13, 2026-11-15) |
+| Ràng buộc dữ liệu | V1–V5 (code — V5 = VENUE-001, gồm `venue.ward_id` v4.0) + V6 (SYSTEM-002), V7 (MATCH-001 — gồm bảng `conversation`, `conversation_message` từ v2.4), V8 (MATCH-002), V9 (REPUTATION-001) — **chưa có trong code** + `V10__mercenary_recruitment_chat_reputation.sql` (§5.1 — v2.0: chỉ thêm phần riêng mercenary vào `conversation`). Entity hiện có `domain/.../entity/mercenary/{MercenaryRecruitment, MercenaryApplication}`, `rating/{Rating, Report}`, `user/User`, `venue/Venue` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -17,10 +17,10 @@ Layered theo 4 module Maven (ADR-0006). Hợp đồng FE: `API_Spec.md`. Luồng
 - **Tin tuyển / đơn ứng tuyển đổi trạng thái bằng CAS tự viết** `UPDATE … WHERE status = … [AND quantity_* = :expected]` (ADR-0003 Sửa đổi 2026-11-14 — cùng mẫu `MatchRequest`, `Pairing`, `Report`); entity chỉ INSERT + đọc. Thứ tự khoá mọi luồng: `mercenary_recruitment` → `mercenary_application` → `"user"`/`team` (`Processing_Flow.md` §5), kể cả xoá tài khoản (ADR-0007 Sửa đổi 2026-11-14).
 - **Trạng thái hiệu lực tính trong SQL** (như kèo `OPEN` quá hạn — MATCH-001 §5.2): tin `OPEN`/`FILLED` của trận đã huỷ → `CLOSED`; của trận đã tới giờ kết thúc → `EXPIRED`; đơn `PENDING` của tin hiệu lực `CLOSED`/`EXPIRED` → `REJECTED` (§5.3). API ghi không ghi chuyển trạng thái hệ thống — từ chối theo trạng thái hiệu lực; **job** (§4.9, ADR-0012) ghi thật và phát event. Hệ quả: MATCH-001 huỷ kèo (2.5, 2.10 — đang 6/W6) **không** thêm truy vấn.
 - **Uy tín cá nhân** ghi cùng transaction qua `ReputationService` (ADR-0013), mở rộng REPUTATION-001 (§4.10): hoàn thành trận khi đội trưởng chấm sao (BR-ME15, user sửa 2026-11-14 — **không** gắn với lúc trận `COMPLETED`), trừ điểm rút lui, report cá nhân, hoàn điểm. Completion Rate, sao trung bình cá nhân tính khi đọc (§5.4). Huy hiệu cá nhân là dữ liệu dẫn xuất `"user".verified_at`, refresh sau commit + job hằng ngày (như đội).
-- **Chat theo đơn** là một loại ngữ cảnh (`MERCENARY_APPLICATION`) của **lõi cuộc trò chuyện dùng chung** do MATCH-001 (v2.4) thiết kế — bảng `conversation` + `conversation_message` (V6), `ConversationService`, endpoint `/conversations/{id}` (MATCH-001 2.19, 2.16, 2.17, 2.18 = 2.14–2.17 ở đây), topic `/topic/conversations/{id}` (ADR-0014 Sửa đổi 2026-11-13, 2026-11-15). Mã này thêm: cột ngữ cảnh mercenary (V9 — §5.1), `MercenaryApplicationConversationPolicy` + khối cột mercenary của `findContext` (§4.7), frame `APPLICATION_UPDATED` (§4.8).
+- **Chat theo đơn** là một loại ngữ cảnh (`MERCENARY_APPLICATION`) của **lõi cuộc trò chuyện dùng chung** do MATCH-001 (v2.4) thiết kế — bảng `conversation` + `conversation_message` (V7), `ConversationService`, endpoint `/conversations/{id}` (MATCH-001 2.19, 2.16, 2.17, 2.18 = 2.14–2.17 ở đây), topic `/topic/conversations/{id}` (ADR-0014 Sửa đổi 2026-11-13, 2026-11-15). Mã này thêm: cột ngữ cảnh mercenary (V10 — §5.1), `MercenaryApplicationConversationPolicy` + khối cột mercenary của `findContext` (§4.7), frame `APPLICATION_UPDATED` (§4.8).
 - **Đánh giá / report** dùng lại bảng `rating`, `report`, `dispute` (REPUTATION-001) với `rater_type`/`ratee_type` `TEAM`↔`INDIVIDUAL` và cột mới `application_id`. Luồng đội↔đội của REPUTATION-001 lọc `application_id IS NULL` (§4.12).
 
-**Điều kiện tiên quyết:** code VENUE-001, MATCH-001 (lõi chat, kênh realtime — v2.4), MATCH-002 (retrier bắt `ConcurrencyConflictException` — MATCH-002 `[cần xác nhận #5]`, `UPDATE … RETURNING` không `@Modifying` — MATCH-002 `[cần xác nhận #4]`), REPUTATION-001 (V8, `ReputationService`, refresher) phải có trước V9 `[cần xác nhận #1]`.
+**Điều kiện tiên quyết:** code VENUE-001, MATCH-001 (lõi chat, kênh realtime — v2.4), MATCH-002 (retrier bắt `ConcurrencyConflictException` — MATCH-002 `[cần xác nhận #5]`, `UPDATE … RETURNING` không `@Modifying` — MATCH-002 `[cần xác nhận #4]`), REPUTATION-001 (V9, `ReputationService`, refresher) phải có trước V10 `[cần xác nhận #1]`.
 
 ## 2. Package Structure (delta)
 
@@ -171,10 +171,10 @@ Một nguồn cho kiểm trên các `…ContextView` (không truy vấn thêm); 
 ```java
 void requireNotDeleted(boolean callerDeleted);                  // USER_001 (2.7, 2.15, 2.18, 2.20)
 void requireCaptain(String teamStatus, boolean callerCaptain, boolean allowInactive); // DISBANDED → TEAM_016; INACTIVE && !allowInactive → TEAM_015; !callerCaptain → TEAM_002
-void requireRecruitableMatch(RecruitContextView ctx, OffsetDateTime now); // MATCH_009 → MERCENARY_003 → MERCENARY_004 → MERCENARY_013
+void requireRecruitableMatch(RecruitContextView ctx, LocalDateTime now); // MATCH_009 → MERCENARY_003 → MERCENARY_004 → MERCENARY_013
 void requireActive(String effectiveRecruitmentStatus);          // CLOSED/EXPIRED → MERCENARY_007
 void requireOpen(String effectiveRecruitmentStatus);            // + FILLED → MERCENARY_006
-void requireNotStarted(OffsetDateTime gameStart, OffsetDateTime now); // now ≥ start → MERCENARY_013
+void requireNotStarted(LocalDateTime gameStart, LocalDateTime now); // now ≥ start → MERCENARY_013
 void requireEligibleApplicant(boolean memberOfGameTeams, boolean overlappingApproval); // MERCENARY_010 → MERCENARY_011
 MercenarySide resolveSide(boolean callerApplicant, boolean callerCaptain); // cả hai → MERCENARY_019; không bên nào → MERCENARY_014
 ```
@@ -287,7 +287,7 @@ Mỗi thao tác một event nghiệp vụ mỗi đối tượng (quy tắc 7). `
 | `ReportContextView`, `findTeamReports` / `countTeamReports` (2.3, 2.4), `findAdminDisputes` / `countAdminDisputes` / `findAdminDisputeDetail` / `resolveIfPending` (2.6–2.8) | Thêm `application_id IS NULL` | Giữ hình dạng response REPUTATION-001 |
 | `AdminDisputeServiceImpl.resolveDispute` (2.8) — CAS 0 dòng | `existsById` → `existsTeamDispute(id)` (`EXISTS dispute d JOIN report r … AND r.application_id IS NULL`) → `false` → `DISPUTE_001` (M5) | Id của tranh chấp mercenary trả 404, không 409 |
 | `TeamReputationSql.STATS` — sao trung bình đội | Thêm `application_id IS NULL` | BR-ME13 |
-| `TeamReputationSql.STATS` — `noshow`; `applyCompletion` — trận sạch của đội | `applyCompletion` (REPUTATION-001 §5.2 chỉ có mệnh đề đối thủ thật): **đổi** điều kiện reporter của câu `clean` thành (giữ nguyên ngoặc): `AND ((r.reporter_type = 'TEAM' AND r.reporter_id IN (m.author_team_id, m.confirmed_opponent_team_id)) OR EXISTS (SELECT 1 FROM mercenary_application a WHERE a.id = r.application_id AND a.status = 'APPROVED'))` — cột `report.application_id` có từ V9 (§5.1); cùng câu, không thêm truy vấn. Kết quả: trận sạch xét report của đối thủ thật + mercenary `APPROVED` của trận; bỏ report qua chat của ứng viên bị từ chối / đã rút; trận ngoài hệ thống không vào (`match_id` = `NULL`) (user chốt 2026-11-15, review 2026-11-15). `STATS`: **giữ** report `reported_type = 'TEAM'` của kèo từ mercenary; `noshow` giữ mọi report bùng | BR-ME14 (user chốt 2026-11-14). Report của trận ngoài có `match_id = NULL` → không vào thống kê đội |
+| `TeamReputationSql.STATS` — `noshow`; `applyCompletion` — trận sạch của đội | `applyCompletion` (REPUTATION-001 §5.2 chỉ có mệnh đề đối thủ thật): **đổi** điều kiện reporter của câu `clean` thành (giữ nguyên ngoặc): `AND ((r.reporter_type = 'TEAM' AND r.reporter_id IN (m.author_team_id, m.confirmed_opponent_team_id)) OR EXISTS (SELECT 1 FROM mercenary_application a WHERE a.id = r.application_id AND a.status = 'APPROVED'))` — cột `report.application_id` có từ V10 (§5.1); cùng câu, không thêm truy vấn. Kết quả: trận sạch xét report của đối thủ thật + mercenary `APPROVED` của trận; bỏ report qua chat của ứng viên bị từ chối / đã rút; trận ngoài hệ thống không vào (`match_id` = `NULL`) (user chốt 2026-11-15, review 2026-11-15). `STATS`: **giữ** report `reported_type = 'TEAM'` của kèo từ mercenary; `noshow` giữ mọi report bùng | BR-ME14 (user chốt 2026-11-14). Report của trận ngoài có `match_id = NULL` → không vào thống kê đội |
 | `DisputeService.createDispute` + `DisputeContextView` (2.5) | + `reportedType`, `callerIsReportedUser`; `INDIVIDUAL` → caller phải là người bị report (`REPORT_009`); không `JOIN match` bắt buộc | Mercenary tranh chấp; report trận ngoài |
 | `ReportRepository.applyDecision` | `RETURNING` thêm `reported_type` | Hoàn điểm đúng bảng |
 | `ReportDisputedEvent`, `DisputeResolvedEvent`, `TeamReportedEvent` | `reporterTeamId/reportedTeamId` → `reporterType, reporterId, reportedType, reportedId` | Bên bị report có thể là cá nhân |
@@ -309,7 +309,7 @@ Không dùng `MatchWriteOutcome` (MATCH-001 §4.7): không có nhánh commit-r�
 ### 4.14. MercenaryAccountCleanup — xoá tài khoản ứng viên (BR-ME18; sửa luồng USER-001 v4.1)
 
 ```java
-void withdrawForDeletedApplicant(UUID userId, OffsetDateTime now);   // application/support/mercenary, @Component, MANDATORY
+void withdrawForDeletedApplicant(UUID userId, LocalDateTime now);   // application/support/mercenary, @Component, MANDATORY
 ```
 - Gọi từ `ProfileServiceImpl.deleteAccount` (USER-001 §4.2) trong cùng lần thử retrier, sau bước rời đội và trước `softDelete`. Luồng, số truy vấn: `Processing_Flow.md` §3.16.
 - **Thứ tự khoá tin → đơn** (M1, ADR-0007 Sửa đổi 2026-11-14): `MercenaryRecruitmentRepository.decrementApprovedOfApplicant(userId, now)` (`UPDATE … RETURNING` → `List<ApprovedCountView(recruitmentId, n)>`) rồi `MercenaryApplicationRepository.withdrawActiveOfApplicant(userId, now)` (`UPDATE … RETURNING` → `List<WithdrawnApplicationView(id, recruitmentId, teamId, matchId, externalMatchId, wasApproved)>`); đếm `wasApproved` theo tin khác `n` → `ConcurrencyConflictException`.
@@ -333,7 +333,7 @@ Deps: `ExternalMatchRepository`, `MercenaryRecruitmentRepository`, `MercenaryApp
 
 ## 5. Repository & Data Model
 
-### 5.1. Migration `V9__mercenary_recruitment_chat_reputation.sql`
+### 5.1. Migration `V10__mercenary_recruitment_chat_reputation.sql`
 
 ```sql
 -- external_match: trận ngoài hệ thống do đội trưởng khai báo (BR-ME19)
@@ -341,16 +341,16 @@ CREATE TABLE external_match (
     id UUID PRIMARY KEY,
     team_id UUID NOT NULL REFERENCES team(id) ON DELETE RESTRICT,
     venue_id UUID NOT NULL REFERENCES venue(id) ON DELETE RESTRICT,
-    match_start_time TIMESTAMPTZ NOT NULL,
-    match_end_time TIMESTAMPTZ NOT NULL,
+    match_start_time TIMESTAMP NOT NULL,
+    match_end_time TIMESTAMP NOT NULL,
     skill_levels TEXT NOT NULL DEFAULT '[]',
     opponent_name VARCHAR(100),
     status VARCHAR(20) NOT NULL DEFAULT 'SCHEDULED' CHECK (status IN ('SCHEDULED', 'CANCELLED')),
-    cancelled_at TIMESTAMPTZ,
+    cancelled_at TIMESTAMP,
     created_by_user_id UUID NOT NULL REFERENCES "user"(id) ON DELETE RESTRICT,
     version BIGINT NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh'),
+    updated_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh'),
     CONSTRAINT external_match_time_check CHECK (match_end_time > match_start_time),
     CONSTRAINT external_match_cancel_check CHECK ((status = 'CANCELLED') = (cancelled_at IS NOT NULL))
 );
@@ -363,9 +363,9 @@ ALTER TABLE mercenary_recruitment ADD COLUMN external_match_id UUID REFERENCES e
 ALTER TABLE mercenary_recruitment ADD CONSTRAINT mercenary_recruitment_game_check
     CHECK ((match_id IS NULL) <> (external_match_id IS NULL));
 ALTER TABLE mercenary_recruitment ADD COLUMN created_by_user_id UUID NOT NULL REFERENCES "user"(id) ON DELETE RESTRICT;
-ALTER TABLE mercenary_recruitment ADD COLUMN closed_at TIMESTAMPTZ;
+ALTER TABLE mercenary_recruitment ADD COLUMN closed_at TIMESTAMP;
 -- mercenary_application: đã báo mercenary APPROVED về việc trận bị huỷ (chống báo trùng giữa 2.32 / job — N-M2)
-ALTER TABLE mercenary_application ADD COLUMN game_cancel_notified_at TIMESTAMPTZ;
+ALTER TABLE mercenary_application ADD COLUMN game_cancel_notified_at TIMESTAMP;
 CREATE INDEX idx_mercenary_application_cancel_notice ON mercenary_application(recruitment_id)
     WHERE status = 'APPROVED' AND game_cancel_notified_at IS NULL;
 ALTER TABLE mercenary_recruitment ADD CONSTRAINT mercenary_recruitment_closed_check
@@ -405,9 +405,9 @@ CREATE UNIQUE INDEX idx_report_external_unique ON report(external_match_id, repo
 CREATE INDEX idx_report_application ON report(application_id) WHERE application_id IS NOT NULL;
 
 -- user: huy hiệu cá nhân (dữ liệu dẫn xuất, chỉ ghi bằng câu refresh có điều kiện)
-ALTER TABLE "user" ADD COLUMN verified_at TIMESTAMPTZ;
+ALTER TABLE "user" ADD COLUMN verified_at TIMESTAMP;
 
--- conversation (bảng + conversation_message tạo ở V6 — MATCH-001 v2.4 §5.1): thêm ngữ cảnh đơn ứng tuyển mercenary
+-- conversation (bảng + conversation_message tạo ở V7 — MATCH-001 v2.4 §5.1): thêm ngữ cảnh đơn ứng tuyển mercenary
 ALTER TABLE conversation ADD COLUMN application_id UUID REFERENCES mercenary_application(id) ON DELETE RESTRICT;
 ALTER TABLE conversation ADD COLUMN external_match_id UUID REFERENCES external_match(id) ON DELETE RESTRICT;
 ALTER TABLE conversation DROP CONSTRAINT conversation_context_type_check;
@@ -420,16 +420,16 @@ CREATE UNIQUE INDEX idx_conversation_application ON conversation(application_id)
 CREATE INDEX idx_conversation_match ON conversation(match_id) WHERE match_id IS NOT NULL;
 CREATE INDEX idx_conversation_external_match ON conversation(external_match_id) WHERE external_match_id IS NOT NULL;
 ```
-- **Số hiệu V9:** code có V1–V4; thiết kế đã chiếm V5–V8 (VENUE-001, MATCH-001, MATCH-002, REPUTATION-001). Flyway không chạy out-of-order → V9 chỉ áp sau V5–V8 `[cần xác nhận #1]`. `venue.ward_id` (BR-V11) nằm ở V5 của VENUE-001 (v4.0), không ở V9.
+- **Số hiệu V10:** code có V1–V5 (V5 = VENUE-001); thiết kế đã chiếm V6–V9 (SYSTEM-002, MATCH-001, MATCH-002, REPUTATION-001). Flyway không chạy out-of-order → V10 chỉ áp sau V5–V9 `[cần xác nhận #1]`. `venue.ward_id` (BR-V11) nằm ở V5 của VENUE-001 (v4.0), không ở V10.
 - **Dữ liệu cũ:** chưa kiểm Neon dev cho mã này. `created_by_user_id NOT NULL` không mặc định và `mercenary_recruitment_closed_check` cần `mercenary_recruitment` 0 dòng (hoặc không có dòng `CLOSED`) — developer kiểm số dòng trên Neon dev trước khi chạy; có dữ liệu → dừng, báo, không tự sửa `[cần xác nhận #4]`. Tên index V1 (`idx_mercenary_recruitment_search`, `idx_mercenary_recruitment_match`) lấy từ `V1__initial_schema.sql`.
 - **Vị trí** giữ CHECK V1 (`'Thủ môn' | 'Hậu vệ' | 'Tiền vệ' | 'Tiền đạo'` — cùng nhãn `preferredPosition` của USER-001). Entity hiện map `@Enumerated(STRING)` với hằng `Thủ_môn`… → ghi ra `'Thủ_môn'`, vi phạm CHECK. Sửa bằng `PositionConverter` (§6), không đổi DB.
 - **Trận ngoài** (`external_match`): `team_id` là đội khai báo; `venue_id` bắt buộc (BR-ME19 chọn sân có sẵn); `skill_levels` cùng kiểu / converter với `match.skill_levels` (MATCH-001, `SkillLevelsConverter`); `version` cho sửa / huỷ bằng câu native có điều kiện `version` (`updateIfVersion`, `cancelIfScheduled` — khoá trận ngoài trước tin, N-m1). Không cột `ended`: kết thúc tính theo `match_end_time`.
-- **Khoá trận XOR** (`match_id` / `external_match_id`) ở tin, đánh giá, report, cuộc trò chuyện — CHECK `…_game_check`. Đánh giá / report của trận ngoài luôn có `application_id` (không có đánh giá đội ↔ đội ngoài hệ thống). `rating.match_id`, `report.match_id` thành nullable: REPUTATION-001 luồng đội ↔ đội luôn có `match_id` (CHECK `application_id IS NULL` ⇒ `TEAM`↔`TEAM`, và `idx_rating_unique` / `idx_report_unique` của V8 vẫn chống trùng cho kèo).
-- `conversation` (v2.0 — bảng ở V6 của MATCH-001): V9 thêm khoá ngữ cảnh mercenary là cột FK riêng (`application_id`) + CHECK, `external_match_id` (bảng `external_match` tạo ở V9 nên cột không thể ở V6); `match_id` / `external_match_id` lưu sẵn (bất biến) để tính hạn lưu 90 ngày sau khi trận kết thúc (BR-N01; job xoá thuộc NOTIFICATION-001 — `[cần xác nhận #5]`). `conversation_game_check` cũng đúng cho `TEAM_MATCH` (luôn có `match_id`). Bên A = đội tuyển (`TEAM`), bên B = ứng viên (`USER`) — `conversation_mercenary_parties_check`; `party_*_id` đa hình → không FK (như `rating.rater_id`). Tên constraint `conversation_context_type_check` lấy từ V6 (MATCH-001 §5.1). `idx_conversation_match` phục vụ job xoá cho ngữ cảnh mercenary (ngữ cảnh `TEAM_MATCH` có `idx_conversation_team_match` của V6).
-- `conversation_message`: V6 (MATCH-001 §5.1); không đổi ở V9.
-- `rating_mercenary_fields_check`: đánh giá liên quan mercenary không có tỷ số; chỉ phía đội được chọn "không đến" (BR-ME13). `rating_no_show_check` (V8) vẫn áp.
+- **Khoá trận XOR** (`match_id` / `external_match_id`) ở tin, đánh giá, report, cuộc trò chuyện — CHECK `…_game_check`. Đánh giá / report của trận ngoài luôn có `application_id` (không có đánh giá đội ↔ đội ngoài hệ thống). `rating.match_id`, `report.match_id` thành nullable: REPUTATION-001 luồng đội ↔ đội luôn có `match_id` (CHECK `application_id IS NULL` ⇒ `TEAM`↔`TEAM`, và `idx_rating_unique` / `idx_report_unique` của V9 vẫn chống trùng cho kèo).
+- `conversation` (v2.0 — bảng ở V7 của MATCH-001): V10 thêm khoá ngữ cảnh mercenary là cột FK riêng (`application_id`) + CHECK, `external_match_id` (bảng `external_match` tạo ở V10 nên cột không thể ở V7); `match_id` / `external_match_id` lưu sẵn (bất biến) để tính hạn lưu 90 ngày sau khi trận kết thúc (BR-N01; job xoá thuộc NOTIFICATION-001 — `[cần xác nhận #5]`). `conversation_game_check` cũng đúng cho `TEAM_MATCH` (luôn có `match_id`). Bên A = đội tuyển (`TEAM`), bên B = ứng viên (`USER`) — `conversation_mercenary_parties_check`; `party_*_id` đa hình → không FK (như `rating.rater_id`). Tên constraint `conversation_context_type_check` lấy từ V7 (MATCH-001 §5.1). `idx_conversation_match` phục vụ job xoá cho ngữ cảnh mercenary (ngữ cảnh `TEAM_MATCH` có `idx_conversation_team_match` của V7).
+- `conversation_message`: V7 (MATCH-001 §5.1); không đổi ở V10.
+- `rating_mercenary_fields_check`: đánh giá liên quan mercenary không có tỷ số; chỉ phía đội được chọn "không đến" (BR-ME13). `rating_no_show_check` (V9) vẫn áp.
 - FK mới `ON DELETE RESTRICT` (ADR-0002). FK `mercenary_*` của V1 (`ON DELETE CASCADE` tới `match`) giữ nguyên.
-- **Index:** `idx_mercenary_recruitment_match_position`, `idx_mercenary_recruitment_external_position` (unique, partial) chặn tin trùng vị trí (BR-ME05) và phục vụ tìm kiếm (2.3), claim của job (§4.9) qua tiền tố trận; tin của kèo đã huỷ chưa được job đóng vẫn `OPEN` trong DB nhưng không chặn ai (không tạo được tin cho kèo huỷ). `idx_mercenary_recruitment_match_all` / `…_external_all` thay `idx_mercenary_recruitment_match` (V1) cho mọi truy vấn tin theo trận (gồm tin đã đóng). Danh sách tin của đội: `idx_mercenary_recruitment_team (team_id, status)` (V1); đơn theo tin `idx_mercenary_application_recruitment` (V1); đơn theo ứng viên + kiểm trùng giờ + xoá tài khoản `idx_mercenary_application_applicant` (V1); report của đội / cá nhân `idx_report_reported_created`, `idx_report_reporter_created` (V8) + lọc `application_id`; sao cá nhân `idx_rating_ratee` (V1); trận ngoài của đội `idx_external_match_team`.
+- **Index:** `idx_mercenary_recruitment_match_position`, `idx_mercenary_recruitment_external_position` (unique, partial) chặn tin trùng vị trí (BR-ME05) và phục vụ tìm kiếm (2.3), claim của job (§4.9) qua tiền tố trận; tin của kèo đã huỷ chưa được job đóng vẫn `OPEN` trong DB nhưng không chặn ai (không tạo được tin cho kèo huỷ). `idx_mercenary_recruitment_match_all` / `…_external_all` thay `idx_mercenary_recruitment_match` (V1) cho mọi truy vấn tin theo trận (gồm tin đã đóng). Danh sách tin của đội: `idx_mercenary_recruitment_team (team_id, status)` (V1); đơn theo tin `idx_mercenary_application_recruitment` (V1); đơn theo ứng viên + kiểm trùng giờ + xoá tài khoản `idx_mercenary_application_applicant` (V1); report của đội / cá nhân `idx_report_reported_created`, `idx_report_reporter_created` (V9) + lọc `application_id`; sao cá nhân `idx_rating_ratee` (V1); trận ngoài của đội `idx_external_match_team`.
 
 ### 5.2. Repository
 
@@ -437,61 +437,61 @@ Native + interface projection như MATCH-001 §5.2; `Page` native có `countQuer
 
 ```java
 public interface MercenaryRecruitmentRepository extends JpaRepository<MercenaryRecruitment, UUID> {
-    Optional<RecruitContextView> findRecruitContext(UUID matchId, UUID teamId, UUID callerId, OffsetDateTime now);   // 2.1
+    Optional<RecruitContextView> findRecruitContext(UUID matchId, UUID teamId, UUID callerId, LocalDateTime now);   // 2.1
     List<RecruitmentRowView> insertAll(UUID matchId, UUID externalMatchId, UUID teamId, UUID createdBy,
-                                       String[] positions, int[] quantities, OffsetDateTime now);                     // 2.1, 2.28, 2.33 — INSERT … RETURNING
-    Page<RecruitmentView> findByTeam(UUID teamId, UUID matchId, String status, OffsetDateTime now, Pageable p);      // 2.2
-    Page<RecruitmentView> searchNearby(UUID callerId, String position, OffsetDateTime now, double lat, double lng, double radiusKm,
+                                       String[] positions, int[] quantities, LocalDateTime now);                     // 2.1, 2.28, 2.33 — INSERT … RETURNING
+    Page<RecruitmentView> findByTeam(UUID teamId, UUID matchId, String status, LocalDateTime now, Pageable p);      // 2.2
+    Page<RecruitmentView> searchNearby(UUID callerId, String position, LocalDateTime now, double lat, double lng, double radiusKm,
                                        double minLat, double maxLat, double minLng, double maxLng, Pageable p);        // 2.3 có GPS
-    Page<RecruitmentView> searchByProvince(UUID callerId, String position, OffsetDateTime now, UUID provinceId, UUID wardId,
+    Page<RecruitmentView> searchByProvince(UUID callerId, String position, LocalDateTime now, UUID provinceId, UUID wardId,
                                            Pageable p);                                                                // 2.3 không GPS
-    Optional<RecruitmentView> findView(UUID id, UUID callerId, OffsetDateTime now, Double lat, Double lng);            // 2.4
-    Optional<RecruitmentWriteContextView> findWriteContext(UUID id, UUID callerId, OffsetDateTime now);                // 2.5, 2.6, 2.8
-    @Modifying int updateQuantity(UUID id, int quantity, int expectedApproved, int expectedNeeded, OffsetDateTime now);
-    @Modifying int closeIfActive(UUID id, OffsetDateTime now);
-    @Modifying int incrementApproved(UUID id, int expectedApproved, int expectedNeeded, OffsetDateTime now);
-    @Modifying int decrementApproved(UUID id, OffsetDateTime now);
-    List<ApprovedCountView> decrementApprovedOfApplicant(UUID userId, OffsetDateTime now);                            // xoá tài khoản — UPDATE … RETURNING
-    List<Integer> lockByExternalMatch(UUID externalMatchId, OffsetDateTime now);                                       // 2.31 — UPDATE … RETURNING quantity_approved
-    List<UUID> closeActiveByExternalMatch(UUID externalMatchId, OffsetDateTime now);                                   // 2.32 — UPDATE … RETURNING id
-    List<DueRecruitmentView> claimDue(OffsetDateTime now, int limit);                                                  // job
-    @Modifying int markClosedOrExpired(Collection<UUID> closedIds, Collection<UUID> expiredIds, OffsetDateTime now);
+    Optional<RecruitmentView> findView(UUID id, UUID callerId, LocalDateTime now, Double lat, Double lng);            // 2.4
+    Optional<RecruitmentWriteContextView> findWriteContext(UUID id, UUID callerId, LocalDateTime now);                // 2.5, 2.6, 2.8
+    @Modifying int updateQuantity(UUID id, int quantity, int expectedApproved, int expectedNeeded, LocalDateTime now);
+    @Modifying int closeIfActive(UUID id, LocalDateTime now);
+    @Modifying int incrementApproved(UUID id, int expectedApproved, int expectedNeeded, LocalDateTime now);
+    @Modifying int decrementApproved(UUID id, LocalDateTime now);
+    List<ApprovedCountView> decrementApprovedOfApplicant(UUID userId, LocalDateTime now);                            // xoá tài khoản — UPDATE … RETURNING
+    List<Integer> lockByExternalMatch(UUID externalMatchId, LocalDateTime now);                                       // 2.31 — UPDATE … RETURNING quantity_approved
+    List<UUID> closeActiveByExternalMatch(UUID externalMatchId, LocalDateTime now);                                   // 2.32 — UPDATE … RETURNING id
+    List<DueRecruitmentView> claimDue(LocalDateTime now, int limit);                                                  // job
+    @Modifying int markClosedOrExpired(Collection<UUID> closedIds, Collection<UUID> expiredIds, LocalDateTime now);
 }
 public interface MercenaryApplicationRepository extends JpaRepository<MercenaryApplication, UUID> {
-    Optional<ApplyContextView> findApplyContext(UUID recruitmentId, UUID callerId, OffsetDateTime now);                // 2.7
-    Optional<ApplicationContextView> findContext(UUID id, UUID callerId, OffsetDateTime now);                          // 2.10–2.13
-    Page<ApplicantRowView> findApplicants(UUID recruitmentId, String status, OffsetDateTime now, Pageable p);          // 2.8
-    Page<ApplicationView> findByApplicant(UUID applicantId, String status, OffsetDateTime now, Pageable p);            // 2.9
-    @Modifying int approveIfPending(UUID id, OffsetDateTime now);
-    @Modifying int rejectIfPending(UUID id, OffsetDateTime now);
-    @Modifying int withdrawPending(UUID id, OffsetDateTime now);
-    @Modifying int withdrawApproved(UUID id, OffsetDateTime now);
-    List<UUID> rejectPendingByRecruitment(UUID recruitmentId, OffsetDateTime now);                                    // 2.6 — UPDATE … RETURNING id
-    List<RejectedApplicationView> rejectPendingByRecruitmentIds(UUID[] recruitmentIds, OffsetDateTime now);           // 2.32, job — UPDATE … RETURNING
-    List<RejectedApplicationView> rejectOrphanPending(OffsetDateTime now, int limit);                                  // job — UPDATE … RETURNING
-    List<GameCancelNoticeView> markGameCancelNotified(OffsetDateTime now, OffsetDateTime lookbackStart, int limit);                                // job — UPDATE … RETURNING
-    List<GameCancelNoticeView> markGameCancelNotifiedByExternalMatch(UUID externalMatchId, OffsetDateTime now);        // 2.32 — UPDATE … RETURNING
-    List<WithdrawnApplicationView> withdrawActiveOfApplicant(UUID userId, OffsetDateTime now);                         // xoá tài khoản — UPDATE … RETURNING
+    Optional<ApplyContextView> findApplyContext(UUID recruitmentId, UUID callerId, LocalDateTime now);                // 2.7
+    Optional<ApplicationContextView> findContext(UUID id, UUID callerId, LocalDateTime now);                          // 2.10–2.13
+    Page<ApplicantRowView> findApplicants(UUID recruitmentId, String status, LocalDateTime now, Pageable p);          // 2.8
+    Page<ApplicationView> findByApplicant(UUID applicantId, String status, LocalDateTime now, Pageable p);            // 2.9
+    @Modifying int approveIfPending(UUID id, LocalDateTime now);
+    @Modifying int rejectIfPending(UUID id, LocalDateTime now);
+    @Modifying int withdrawPending(UUID id, LocalDateTime now);
+    @Modifying int withdrawApproved(UUID id, LocalDateTime now);
+    List<UUID> rejectPendingByRecruitment(UUID recruitmentId, LocalDateTime now);                                    // 2.6 — UPDATE … RETURNING id
+    List<RejectedApplicationView> rejectPendingByRecruitmentIds(UUID[] recruitmentIds, LocalDateTime now);           // 2.32, job — UPDATE … RETURNING
+    List<RejectedApplicationView> rejectOrphanPending(LocalDateTime now, int limit);                                  // job — UPDATE … RETURNING
+    List<GameCancelNoticeView> markGameCancelNotified(LocalDateTime now, LocalDateTime lookbackStart, int limit);                                // job — UPDATE … RETURNING
+    List<GameCancelNoticeView> markGameCancelNotifiedByExternalMatch(UUID externalMatchId, LocalDateTime now);        // 2.32 — UPDATE … RETURNING
+    List<WithdrawnApplicationView> withdrawActiveOfApplicant(UUID userId, LocalDateTime now);                         // xoá tài khoản — UPDATE … RETURNING
 }
 public interface ExternalMatchRepository extends JpaRepository<ExternalMatch, UUID> {
-    Optional<ExternalMatchContextView> findContext(UUID id, UUID callerId, OffsetDateTime now);                        // 2.31, 2.32
-    Optional<RecruitContextView> findRecruitContext(UUID id, UUID callerId, OffsetDateTime now);                      // 2.33
+    Optional<ExternalMatchContextView> findContext(UUID id, UUID callerId, LocalDateTime now);                        // 2.31, 2.32
+    Optional<RecruitContextView> findRecruitContext(UUID id, UUID callerId, LocalDateTime now);                      // 2.33
     Optional<ExternalMatchView> findDetail(UUID id, UUID callerId);                                                    // 2.30
-    Page<ExternalMatchView> findByTeam(UUID teamId, String statusFilter, OffsetDateTime now, Pageable p);             // 2.29
-    @Modifying int updateIfVersion(UUID id, long expectedVersion, UUID venueId, OffsetDateTime start, OffsetDateTime end,
-                                   String skillLevels, String opponentName, OffsetDateTime now);                       // 2.31 — CAS, version + 1
-    @Modifying int cancelIfScheduled(UUID id, OffsetDateTime now);                                                     // 2.32 — CAS, version + 1
+    Page<ExternalMatchView> findByTeam(UUID teamId, String statusFilter, LocalDateTime now, Pageable p);             // 2.29
+    @Modifying int updateIfVersion(UUID id, long expectedVersion, UUID venueId, LocalDateTime start, LocalDateTime end,
+                                   String skillLevels, String opponentName, LocalDateTime now);                       // 2.31 — CAS, version + 1
+    @Modifying int cancelIfScheduled(UUID id, LocalDateTime now);                                                     // 2.32 — CAS, version + 1
 }
 // ConversationRepository, ConversationMessageRepository: MATCH-001 §5.2 (v2.0 — tái dùng; mã này thêm khối cột mercenary vào findContext, §4.7)
 // RatingRepository (sửa)
-Optional<MercenaryRatingContextView> findMercenaryRatingContext(UUID applicationId, UUID callerId, OffsetDateTime now); // 2.18, 2.19
+Optional<MercenaryRatingContextView> findMercenaryRatingContext(UUID applicationId, UUID callerId, LocalDateTime now); // 2.18, 2.19
 Page<TeamMercenaryRatingView> findMercenaryRatingsOfTeam(UUID teamId, Pageable p);                                     // 2.24
 // ReportRepository (sửa)
-Optional<MercenaryReportContextView> findMercenaryReportContext(UUID applicationId, UUID callerId, String reportType, OffsetDateTime now); // 2.20
+Optional<MercenaryReportContextView> findMercenaryReportContext(UUID applicationId, UUID callerId, String reportType, LocalDateTime now); // 2.20
 List<MercenaryReportView> findMercenaryReports(String subjectType, UUID subjectId, String direction, int limit, long offset); // 2.21, 2.22
 long countMercenaryReports(String subjectType, UUID subjectId, String direction);
 // DisputeRepository (sửa)
-Optional<UUID> resolveMercenaryIfPending(UUID id, String decision, String note, UUID adminId, OffsetDateTime now);   // UPDATE … RETURNING report_id
+Optional<UUID> resolveMercenaryIfPending(UUID id, String decision, String note, UUID adminId, LocalDateTime now);   // UPDATE … RETURNING report_id
 boolean existsMercenaryDispute(UUID id);                                                                                // M5
 boolean existsTeamDispute(UUID id);                                                                                     // M5 — REPUTATION-001 2.8
 List<AdminMercenaryDisputeView> findAdminMercenaryDisputes(String status, boolean oldestFirst, int limit, long offset);
@@ -499,11 +499,11 @@ long countAdminMercenaryDisputes(String status);
 Optional<AdminMercenaryDisputeDetailView> findAdminMercenaryDisputeDetail(UUID id);
 // UserRepository (sửa)
 Optional<ProfileAreaView> findProfileArea(UUID userId);                                                                 // ward_id, province_id, deleted
-Optional<UserReputationView> findReputation(UUID userId, OffsetDateTime now);                                          // §5.4
+Optional<UserReputationView> findReputation(UUID userId, LocalDateTime now);                                          // §5.4
 Optional<ScoreChangeView> applyMercenaryCompletion(UUID userId, UUID matchId, UUID externalMatchId, int ratingBonus, …hằng ReputationRules); // 2.18
 Optional<ScoreChangeView> applyReportPenalty(UUID id, String type, int[] tiers);                                       // như TeamRepository (REPUTATION-001)
 @Modifying int refundReportPenalty(UUID id, String type, int points);
-List<VerificationChangeView> refreshVerification(UUID[] ids, OffsetDateTime now, …ngưỡng huy hiệu);
+List<VerificationChangeView> refreshVerification(UUID[] ids, LocalDateTime now, …ngưỡng huy hiệu);
 List<UUID> findIdsForVerification(UUID afterId, int limit);
 ```
 Câu `… RETURNING` khai báo native trả projection, không `@Modifying` (MATCH-002 `[cần xác nhận #4]`).
@@ -627,7 +627,7 @@ FROM f
 | `ExternalMatchView` | cột `ExternalMatchResponse` + sân + khu vực + `hasApprovedMercenary` + `callerCaptain`, `teamStatus` |
 | `ScoreChangeView` (REPUTATION-001, sửa) | + `subjectType` |
 
-Thời gian là `Instant`, mapper chuyển UTC (USER-001 §5).
+Thời gian là `LocalDateTime` giờ Việt Nam, mapper gán thẳng (SYSTEM-002 `Component_Class_Design.md` §2).
 
 ## 6. Entity
 
@@ -635,20 +635,20 @@ Thời gian là `Instant`, mapper chuyển UTC (USER-001 §5).
 |---|---|
 | `mercenary.MercenaryRecruitment` | `position`: bỏ `@Enumerated` → `@Convert(converter = PositionConverter.class)`; `enum Position { GOALKEEPER("Thủ môn"), DEFENDER("Hậu vệ"), MIDFIELDER("Tiền vệ"), FORWARD("Tiền đạo") }` · `matchId` nullable · + `externalMatchId` · + `createdByUserId` (`nullable = false`, `updatable = false`) · + `closedAt` · `status`, `quantityNeeded`, `quantityApproved`, `closedAt` `updatable = false` (chỉ CAS native — ADR-0003 Sửa đổi 2026-11-14) · `@Builder.Default status = OPEN` |
 | `mercenary.MercenaryApplication` | `status`, `respondedAt`, `withdrawnAt` `updatable = false` (chỉ CAS native) · + `gameCancelNotifiedAt` (`insertable = false, updatable = false`) · `@Builder.Default status = PENDING` |
-| `mercenary.ExternalMatch` (mới) | Map V9; `@UuidGenerator(VERSION_7)`; `@Version Long version`; `skillLevels` (`List<String>`, `@Convert(SkillLevelsConverter)`, `@Builder.Default List.of()`); `enum Status { SCHEDULED, CANCELLED }`; mọi cột nghiệp vụ `updatable = false` — chỉ INSERT + đọc qua JPA; sửa (2.31 `updateIfVersion`) và huỷ (2.32 `cancelIfScheduled`) là câu native có điều kiện `version` / trạng thái, tự `version + 1` (N-m1 — để khoá trận ngoài trước khi khoá tin); `createdAt` `@PrePersist` |
+| `mercenary.ExternalMatch` (mới) | Map V10; `@UuidGenerator(VERSION_7)`; `@Version Long version`; `skillLevels` (`List<String>`, `@Convert(SkillLevelsConverter)`, `@Builder.Default List.of()`); `enum Status { SCHEDULED, CANCELLED }`; mọi cột nghiệp vụ `updatable = false` — chỉ INSERT + đọc qua JPA; sửa (2.31 `updateIfVersion`) và huỷ (2.32 `cancelIfScheduled`) là câu native có điều kiện `version` / trạng thái, tự `version + 1` (N-m1 — để khoá trận ngoài trước khi khoá tin); `createdAt` `@PrePersist` |
 | `chat.Conversation` (sửa — entity tạo ở MATCH-001 v2.4 §6) | + `applicationId`, `externalMatchId` (`UUID`, nullable, `updatable = false`); `ContextType` + `MERCENARY_APPLICATION` (MATCH-001 đợt 1 chỉ có `TEAM_MATCH` — MATCH-001 §1.1; thêm cùng `MercenaryApplicationConversationPolicy` vì thiếu policy cho một giá trị là lỗi khởi động) |
 | `chat.ConversationMessage` | Tái dùng MATCH-001 §6 |
 | `rating.Rating`, `rating.Report` | `matchId` nullable · + `externalMatchId`, `applicationId` (`updatable = false`) |
 | `user.User` | + `verifiedAt` (`insertable = false, updatable = false` — chỉ `refreshVerification`) |
 
-`PositionConverter` (`domain/entity/converter`, `@Converter`): enum ↔ nhãn tiếng Việt; nhãn lạ → `IllegalArgumentException`. API trả / nhận **nhãn**. Kiểm bằng migration integration test (`ddl-auto=validate` sau V9) + test ghi/đọc `Position` qua converter.
+`PositionConverter` (`domain/entity/converter`, `@Converter`): enum ↔ nhãn tiếng Việt; nhãn lạ → `IllegalArgumentException`. API trả / nhận **nhãn**. Kiểm bằng migration integration test (`ddl-auto=validate` sau V10) + test ghi/đọc `Position` qua converter.
 
 ## 7. DTO & Mapper
 
 - DTO là `record`; chuỗi `trim()`; `""` ở field tuỳ chọn → `null` (MATCH-001 §7).
 - `CreateRecruitmentsRequest(@NotNull UUID teamId, @NotEmpty @Size(max = 4) @UniquePositions List<@Valid RecruitmentPositionRequest> positions)`; `AddRecruitmentsRequest(@NotEmpty @Size(max = 4) @UniquePositions List<@Valid RecruitmentPositionRequest> positions)`; `RecruitmentPositionRequest(@NotNull @OneOf({"Thủ môn","Hậu vệ","Tiền vệ","Tiền đạo"}) String position, @NotNull @Min(1) @Max(MercenaryRules.MAX_QUANTITY) Integer quantity)`.
 - `UpdateRecruitmentRequest(@NotNull @Min(1) @Max(MAX_QUANTITY) Integer quantityNeeded)`.
-- `CreateExternalMatchRequest(@NotNull UUID venueId, @NotNull OffsetDateTime startsAt, @NotNull OffsetDateTime endsAt, @ValidSkillLevels List<String> skillLevels, @Size(max = 100) String opponentName, @NotEmpty @Size(max = 4) @UniquePositions List<@Valid RecruitmentPositionRequest> positions)` + `@ValidExternalMatchSchedule` (mức lớp: `startsAt ≥ now + MIN_LEAD_TIME`, `endsAt > startsAt`, `endsAt − startsAt ≤ MAX_DURATION` — hằng `MatchRules` của MATCH-001, user chốt 2026-11-14 (BR-ME19); lỗi gắn `startsAt` / `endsAt`). `UpdateExternalMatchRequest`: cùng field (tuỳ chọn, không `positions`); validator kiểm cặp giờ sau khi áp thay đổi ở service.
+- `CreateExternalMatchRequest(@NotNull UUID venueId, @NotNull LocalDateTime startsAt, @NotNull LocalDateTime endsAt, @ValidSkillLevels List<String> skillLevels, @Size(max = 100) String opponentName, @NotEmpty @Size(max = 4) @UniquePositions List<@Valid RecruitmentPositionRequest> positions)` + `@ValidExternalMatchSchedule` (mức lớp: `startsAt ≥ now + MIN_LEAD_TIME`, `endsAt > startsAt`, `endsAt − startsAt ≤ MAX_DURATION` — hằng `MatchRules` của MATCH-001, user chốt 2026-11-14 (BR-ME19); lỗi gắn `startsAt` / `endsAt`). `UpdateExternalMatchRequest`: cùng field (tuỳ chọn, không `positions`); validator kiểm cặp giờ sau khi áp thay đổi ở service.
 - `SearchRecruitmentsRequest(Double lat, Double lng, @DecimalMin("1") @DecimalMax("20") Double radiusKm, @OneOf(vị trí) String position, Integer page, Integer pageSize)` + `@ValidMercenarySearch`.
 - `WithdrawApplicationRequest(@NotNull @OneOf({"PENDING","APPROVED"}) String expectedStatus)`.
 - `SendConversationMessageRequest`: tái dùng MATCH-001 §7.
@@ -707,7 +707,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 
 | Tài liệu | Nội dung | Nhánh |
 |---|---|---|
-| `docs/database/schema.dbml`, `schema-design.md` (`mercenary_*`, `external_match`, `rating`, `report`, `"user"`, cột / CHECK mercenary của `conversation` — bảng do MATCH-001 V6 tạo) | V9 | `feature/MERCENARY-001-*` |
+| `docs/database/schema.dbml`, `schema-design.md` (`mercenary_*`, `external_match`, `rating`, `report`, `"user"`, cột / CHECK mercenary của `conversation` — bảng do MATCH-001 V7 tạo) | V10 | `feature/MERCENARY-001-*` |
 | `docs/database/data-model.md` §3.6, §3.7 | Bảo vệ vị trí "phường, tỉnh"; sửa / đóng tin; trận ngoài hệ thống; cấu trúc lưu đánh giá cho mercenary (đóng `[cần xác nhận]` ở §3.4 "Cách lưu đối với mercenary") | `feature/MERCENARY-001-*` |
 | `docs/agent/api-convention.md` §5 (29 endpoint của mã này vào bảng 2xx — §3; 2.14–2.17 do MATCH-001 v2.4 thêm), §6 (domain `MERCENARY`, `REPORT_009`; `CHAT_002..004` do MATCH-001 v2.4) | Coordinator | `chore/agent-framework-*` |
 | `docs/agent/convention-backend.md` §1 | `application/support/mercenary/`, `application/event/mercenary/` | `chore/agent-framework-*` |
@@ -720,10 +720,10 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 
 | # | Nội dung | Loại |
 |---|---|---|
-| 1 | **Thứ tự implement:** V9 cần V5–V8 (VENUE-001, MATCH-001, MATCH-002, REPUTATION-001) đã code — gồm lõi cuộc trò chuyện và kênh realtime của MATCH-001 v2.4 (bảng `conversation*` ở V6, `ConversationService`); MATCH-002 `[cần xác nhận #4]`, `#5` đã kiểm | **Chặn code** — implement sau bốn mã kia |
+| 1 | **Thứ tự implement:** V10 cần V5–V9 (VENUE-001, SYSTEM-002, MATCH-001, MATCH-002, REPUTATION-001) đã code — gồm lõi cuộc trò chuyện và kênh realtime của MATCH-001 v2.4 (bảng `conversation*` ở V7, `ConversationService`); MATCH-002 `[cần xác nhận #4]`, `#5` đã kiểm | **Chặn code** — implement sau bốn mã kia |
 | 2 | ~~Quy tắc chờ câu hỏi nghiệp vụ B1–B12~~ — **đã chốt** (user, 2026-11-14; §13) | Đã đóng |
 | 3 | ~~Report bùng của mercenary nhắm vào đội tác động như report đội–đội~~ — **đã chốt** B9 (BR-ME14) | Đã đóng |
-| 4 | Dữ liệu `mercenary_recruitment` trên Neon dev trước V9 (cột `NOT NULL` không mặc định) | Không chặn — kiểm khi lập kế hoạch |
+| 4 | Dữ liệu `mercenary_recruitment` trên Neon dev trước V10 (cột `NOT NULL` không mặc định) | Không chặn — kiểm khi lập kế hoạch |
 | 5 | ~~Job xoá tin nhắn theo hạn lưu cho mọi cuộc trò chuyện thuộc NOTIFICATION-001 (chưa thiết kế)~~ — **Đóng v2.1:** NOTIFICATION-001 `Component_Class_Design.md` §4.8, §5.2 (`deleteExpiredConversations` gồm nhánh trận ngoài `SCHEDULED`/`CANCELLED`) | Đã đóng |
 | 6 | ~~Hai CTE ghi `team` và `"user"` trong một câu~~ — **bỏ** (2026-11-14): mercenary không còn được cộng điểm trong câu hoàn tất trận của đội (BR-ME15 sửa) | Đã đóng |
 | 7 | ~~Rủi ro ước lượng vị trí sân~~ — **đã xử lý** bằng làm tròn 0,5 km (MINOR 15) | Đã đóng |

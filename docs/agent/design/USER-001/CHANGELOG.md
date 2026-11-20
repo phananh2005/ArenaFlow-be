@@ -1,5 +1,24 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v5.0] — 2026-11-21
+
+**Type:** MAJOR (đổi định dạng mọi giá trị thời gian của response: bỏ `Z`/offset, giá trị theo giờ Việt Nam; đổi `validationErrors[].field` của lỗi đọc body) · **Tóm tắt:** Thời gian theo giờ Việt Nam, không kèm múi giờ; lỗi body sai kiểu trả đúng tên field (SYSTEM-002).
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | `API_Spec.md` §1.1 (dòng "Thời gian"), §1.2 (`timestamp` của lỗi), §4.2 (kiểu `datetime`), mọi field `…At` của 2.5, 2.6, 2.8–2.13, 2.15–2.17, 2.19–2.21 | Đổi | Chuỗi ISO-8601 kèm offset, có field trả `Z`, có field trả `+07:00` (vd `"2026-11-02T14:00:00Z"`, `"2026-11-02T21:00:00+07:00"`) → giờ Việt Nam, **không** kèm múi giờ ở mọi field và `error.timestamp` (vd `"2026-11-02T21:00:00"`) | SRS SYSTEM-001 v1.13 BC-M05 (user chốt 2026-11-21); SYSTEM-002 `API_Spec.md` §1.1 | Đọc thời gian theo SYSTEM-002 `API_Spec.md` §1.1: hiển thị nguyên giá trị, không đổi theo múi giờ máy; khi so với giờ hiện tại coi là UTC+7. Phát hành bộ đọc nhận cả hai dạng **trước** khi BE triển khai (SYSTEM-002 §6) |
+| 2 | `API_Spec.md` §1.2 (dòng `VALIDATION_ERROR`) | Đổi | Mọi lỗi đọc JSON body trả `validationErrors[0].field = "body"` → field sai kiểu / sai định dạng trả đường dẫn field (vd 2.6 `dateOfBirth: "15/05/1995"` → `"dateOfBirth"`); chỉ JSON sai cú pháp / thiếu body còn `"body"` | SYSTEM-002 `API_Spec.md` §2 | Gắn lỗi vào ô theo `field`; giữ nhánh `"body"` cho lỗi chung |
+| 3 | Ví dụ JSON | Sửa | Giá trị `…Z` đổi sang cùng thời điểm theo giờ Việt Nam (cộng 7 giờ, bỏ `Z`); giá trị `…+07:00` bỏ phần offset | Như #1 | Không |
+| 4 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Như #1 | Không |
+| 5 | Header 3 tài liệu thiết kế USER-001 | Ghi nhận | v4.4 → v5.0 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- Không đổi endpoint, field, mã lỗi; đổi định dạng giá trị thời gian và giá trị `validationErrors[].field` của lỗi đọc body. Endpoint đang chạy: response đổi khi BE triển khai SYSTEM-002.
+- `expiresIn` (giây) và `dateOfBirth` (`YYYY-MM-DD`) không đổi; `iat`/`exp` trong token vẫn là giây Unix.
+- Cùng đợt: SYSTEM-002 `API_Spec.md` v1.0 (quy ước thời gian toàn hệ thống, thứ tự phát hành BE/FE).
+
 ## [v4.4] — 2026-11-21
 
 **Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message của USER-001) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE khi VENUE-001 mở rộng thành phần dùng chung; không ảnh hưởng FE.

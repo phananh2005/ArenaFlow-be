@@ -6,8 +6,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
-| Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003, ADR-0007 (+ Sửa đổi 2026-11-14) · v4.1: 2.7 cần V9 (MERCENARY-001) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.4** (developer · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003, ADR-0007 (+ Sửa đổi 2026-11-14) · v4.1: 2.7 cần V10 (MERCENARY-001) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v5.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan luồng
 

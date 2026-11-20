@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang offset / con trỏ, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1.1, §1.2 và MATCH-001 `API_Spec.md` §1.1; kèo, trạng thái kèo, mã `MATCH_*`: MATCH-001 `API_Spec.md`; cuộc trò chuyện (2.14–2.17 = MATCH-001 2.19, 2.16, 2.17, 2.18), kênh realtime, mã `CHAT_*`: MATCH-001 `API_Spec.md` §1.7, §4.4, §4.5, §5; report / tranh chấp / uy tín đội, mã `RATING_*`/`REPORT_*`/`DISPUTE_*`: REPUTATION-001 `API_Spec.md`; mã `TEAM_*`, `USER_*`, `AUTH_*`: USER-001/USER-002 `API_Spec.md`; hiển thị user đã xoá: ADR-0002 (Sửa đổi 2026-11-12) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10; mercenary theo v1.9, cập nhật 2026-11-14) — UC-ME01..ME09 (gồm UC-ME01 A1 trận ngoài hệ thống), UC-U03; BR-ME01..BR-ME19, BR-V11, BC-ME01..ME05; Business_Rules §2.4, §2.5, §3.1–§3.3, §5.1, §5.2, §5.5, §6, §8.2; AC-ME01..ME11; BR-R01..R10, BR-N01, BR-N03; Scenario 7 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v2.1** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -21,7 +21,7 @@ Sau khi kèo đã ghép (`CONFIRMED`), đội trưởng của **đội tạo kè
 
 ### 1.1. Quy ước chung
 
-- Như MATCH-001 `API_Spec.md` §1.1: Bearer token (`401 AUTH_001` → refresh), `/api/v1/admin/**` cần quyền Admin (`403 AUTH_004`), envelope `data` / `error` / `pagination`, `201` không kèm header `Location`, thời gian ISO-8601 trả UTC, chuỗi được bỏ khoảng trắng đầu/cuối (`""` ở field tuỳ chọn = không nhập), enum UPPERCASE, `400 VALIDATION_ERROR` kèm `validationErrors[]`.
+- Như MATCH-001 `API_Spec.md` §1.1: Bearer token (`401 AUTH_001` → refresh), `/api/v1/admin/**` cần quyền Admin (`403 AUTH_004`), envelope `data` / `error` / `pagination`, `201` không kèm header `Location`, thời gian ISO-8601 giờ Việt Nam không kèm múi giờ (SYSTEM-002 `API_Spec.md` §1.1), chuỗi được bỏ khoảng trắng đầu/cuối (`""` ở field tuỳ chọn = không nhập), enum UPPERCASE, `400 VALIDATION_ERROR` kèm `validationErrors[]`.
 - **Vị trí** (`position`) dùng **nhãn tiếng Việt** như `preferredPosition` của hồ sơ (USER-001): `Thủ môn` | `Hậu vệ` | `Tiền vệ` | `Tiền đạo`.
 - Danh sách phân trang `page` (≥ 1, mặc định 1) / `pageSize` (1..100, mặc định 20); thứ tự cố định ghi ở từng endpoint. Lịch sử chat (2.16) phân trang bằng **con trỏ** (`before` / `after`, `limit`) như MATCH-001 2.17.
 - Mọi thao tác ghi có thể trả `409 MATCH_014` "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại" khi nhiều thao tác đụng nhau liên tục → FE tải lại rồi cho người dùng bấm lại.
@@ -227,8 +227,8 @@ Tính tại thời điểm đọc (2.8, 2.23):
       "quantityApproved": 0,
       "status": "OPEN",
       "match": {
-        "startsAt": "2026-11-14T11:00:00Z",
-        "endsAt": "2026-11-14T12:30:00Z",
+        "startsAt": "2026-11-14T18:00:00",
+        "endsAt": "2026-11-14T19:30:00",
         "format": "SEVEN_A_SIDE",
         "skillLevels": ["Trung bình"],
         "area": { "wardName": "Phường Sài Gòn", "provinceName": "TP. Hồ Chí Minh" },
@@ -240,8 +240,8 @@ Tính tại thời điểm đọc (2.8, 2.23):
       "myApplication": null,
       "pendingApplicationCount": 0,
       "closedAt": null,
-      "createdAt": "2026-11-13T08:00:00Z",
-      "updatedAt": "2026-11-13T08:00:00Z"
+      "createdAt": "2026-11-13T15:00:00",
+      "updatedAt": "2026-11-13T15:00:00"
     },
     {
       "recruitmentId": "01937090-4a5b-7c6d-8e7f-0a1b2c3d4e02",
@@ -251,7 +251,7 @@ Tính tại thời điểm đọc (2.8, 2.23):
       "quantityNeeded": 1,
       "quantityApproved": 0,
       "status": "OPEN",
-      "match": { "startsAt": "2026-11-14T11:00:00Z", "endsAt": "2026-11-14T12:30:00Z", "format": "SEVEN_A_SIDE", "skillLevels": ["Trung bình"],
+      "match": { "startsAt": "2026-11-14T18:00:00", "endsAt": "2026-11-14T19:30:00", "format": "SEVEN_A_SIDE", "skillLevels": ["Trung bình"],
                  "area": { "wardName": "Phường Sài Gòn", "provinceName": "TP. Hồ Chí Minh" }, "distanceKm": null,
                  "venue": { "venueId": "01935d00-1111-7222-8333-444455556666", "name": "Sân bóng Hoa Lư", "address": "2 Đinh Tiên Hoàng, Phường Sài Gòn, TP.HCM", "latitude": 10.7883, "longitude": 106.7018 } },
       "captainName": "Nguyễn Văn A",
@@ -259,8 +259,8 @@ Tính tại thời điểm đọc (2.8, 2.23):
       "myApplication": null,
       "pendingApplicationCount": 0,
       "closedAt": null,
-      "createdAt": "2026-11-13T08:00:00Z",
-      "updatedAt": "2026-11-13T08:00:00Z"
+      "createdAt": "2026-11-13T15:00:00",
+      "updatedAt": "2026-11-13T15:00:00"
     }
   ]
 }
@@ -316,7 +316,7 @@ Tính tại thời điểm đọc (2.8, 2.23):
       "quantityNeeded": 2,
       "quantityApproved": 1,
       "status": "OPEN",
-      "match": { "startsAt": "2026-11-14T11:00:00Z", "endsAt": "2026-11-14T12:30:00Z", "format": "SEVEN_A_SIDE", "skillLevels": ["Trung bình"],
+      "match": { "startsAt": "2026-11-14T18:00:00", "endsAt": "2026-11-14T19:30:00", "format": "SEVEN_A_SIDE", "skillLevels": ["Trung bình"],
                  "area": { "wardName": "Phường Sài Gòn", "provinceName": "TP. Hồ Chí Minh" }, "distanceKm": null,
                  "venue": { "venueId": "01935d00-1111-7222-8333-444455556666", "name": "Sân bóng Hoa Lư", "address": "2 Đinh Tiên Hoàng, Phường Sài Gòn, TP.HCM", "latitude": 10.7883, "longitude": 106.7018 } },
       "captainName": "Nguyễn Văn A",
@@ -324,8 +324,8 @@ Tính tại thời điểm đọc (2.8, 2.23):
       "myApplication": null,
       "pendingApplicationCount": 3,
       "closedAt": null,
-      "createdAt": "2026-11-13T08:00:00Z",
-      "updatedAt": "2026-11-13T09:10:00Z"
+      "createdAt": "2026-11-13T15:00:00",
+      "updatedAt": "2026-11-13T16:10:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -378,15 +378,15 @@ Chỉ trả tin `OPEN` của kèo `CONFIRMED` hoặc trận ngoài hệ thống 
       "quantityNeeded": 2,
       "quantityApproved": 1,
       "status": "OPEN",
-      "match": { "startsAt": "2026-11-14T11:00:00Z", "endsAt": "2026-11-14T12:30:00Z", "format": "SEVEN_A_SIDE", "skillLevels": ["Trung bình"],
+      "match": { "startsAt": "2026-11-14T18:00:00", "endsAt": "2026-11-14T19:30:00", "format": "SEVEN_A_SIDE", "skillLevels": ["Trung bình"],
                  "area": { "wardName": "Phường Sài Gòn", "provinceName": "TP. Hồ Chí Minh" }, "distanceKm": 2.5, "venue": null },
       "captainName": null,
       "viewerRole": null,
       "myApplication": null,
       "pendingApplicationCount": null,
       "closedAt": null,
-      "createdAt": "2026-11-13T08:00:00Z",
-      "updatedAt": "2026-11-13T09:10:00Z"
+      "createdAt": "2026-11-13T15:00:00",
+      "updatedAt": "2026-11-13T16:10:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -427,7 +427,7 @@ Chỉ trả tin `OPEN` của kèo `CONFIRMED` hoặc trận ngoài hệ thống 
     "quantityNeeded": 2,
     "quantityApproved": 2,
     "status": "FILLED",
-    "match": { "startsAt": "2026-11-14T11:00:00Z", "endsAt": "2026-11-14T12:30:00Z", "format": "SEVEN_A_SIDE", "skillLevels": ["Trung bình"],
+    "match": { "startsAt": "2026-11-14T18:00:00", "endsAt": "2026-11-14T19:30:00", "format": "SEVEN_A_SIDE", "skillLevels": ["Trung bình"],
                "area": { "wardName": "Phường Sài Gòn", "provinceName": "TP. Hồ Chí Minh" }, "distanceKm": 2.5,
                "venue": { "venueId": "01935d00-1111-7222-8333-444455556666", "name": "Sân bóng Hoa Lư", "address": "2 Đinh Tiên Hoàng, Phường Sài Gòn, TP.HCM", "latitude": 10.7883, "longitude": 106.7018 } },
     "captainName": "Nguyễn Văn A",
@@ -435,8 +435,8 @@ Chỉ trả tin `OPEN` của kèo `CONFIRMED` hoặc trận ngoài hệ thống 
     "myApplication": { "applicationId": "019370a1-5b6c-7d8e-9f00-1a2b3c4d5e01", "status": "APPROVED", "conversationId": "019370a2-6c7d-7e8f-a001-2b3c4d5e6f01" },
     "pendingApplicationCount": null,
     "closedAt": null,
-    "createdAt": "2026-11-13T08:00:00Z",
-    "updatedAt": "2026-11-13T10:00:00Z"
+    "createdAt": "2026-11-13T15:00:00",
+    "updatedAt": "2026-11-13T17:00:00"
   }
 }
 ```
@@ -479,7 +479,7 @@ Kết quả (BR-ME08): bằng `quantityApproved` → `FILLED`; lớn hơn → `O
     "quantityNeeded": 4,
     "quantityApproved": 2,
     "status": "OPEN",
-    "match": { "startsAt": "2026-11-14T11:00:00Z", "endsAt": "2026-11-14T12:30:00Z", "format": "SEVEN_A_SIDE", "skillLevels": ["Trung bình"],
+    "match": { "startsAt": "2026-11-14T18:00:00", "endsAt": "2026-11-14T19:30:00", "format": "SEVEN_A_SIDE", "skillLevels": ["Trung bình"],
                "area": { "wardName": "Phường Sài Gòn", "provinceName": "TP. Hồ Chí Minh" }, "distanceKm": null,
                "venue": { "venueId": "01935d00-1111-7222-8333-444455556666", "name": "Sân bóng Hoa Lư", "address": "2 Đinh Tiên Hoàng, Phường Sài Gòn, TP.HCM", "latitude": 10.7883, "longitude": 106.7018 } },
     "captainName": "Nguyễn Văn A",
@@ -487,8 +487,8 @@ Kết quả (BR-ME08): bằng `quantityApproved` → `FILLED`; lớn hơn → `O
     "myApplication": null,
     "pendingApplicationCount": 1,
     "closedAt": null,
-    "createdAt": "2026-11-13T08:00:00Z",
-    "updatedAt": "2026-11-13T11:00:00Z"
+    "createdAt": "2026-11-13T15:00:00",
+    "updatedAt": "2026-11-13T18:00:00"
   }
 }
 ```
@@ -526,7 +526,7 @@ Kết quả (BR-ME08): bằng `quantityApproved` → `FILLED`; lớn hơn → `O
     "quantityNeeded": 4,
     "quantityApproved": 2,
     "status": "CLOSED",
-    "match": { "startsAt": "2026-11-14T11:00:00Z", "endsAt": "2026-11-14T12:30:00Z", "format": "SEVEN_A_SIDE", "skillLevels": ["Trung bình"],
+    "match": { "startsAt": "2026-11-14T18:00:00", "endsAt": "2026-11-14T19:30:00", "format": "SEVEN_A_SIDE", "skillLevels": ["Trung bình"],
                "area": { "wardName": "Phường Sài Gòn", "provinceName": "TP. Hồ Chí Minh" }, "distanceKm": null,
                "venue": { "venueId": "01935d00-1111-7222-8333-444455556666", "name": "Sân bóng Hoa Lư", "address": "2 Đinh Tiên Hoàng, Phường Sài Gòn, TP.HCM", "latitude": 10.7883, "longitude": 106.7018 } },
     "captainName": "Nguyễn Văn A",
@@ -534,9 +534,9 @@ Kết quả (BR-ME08): bằng `quantityApproved` → `FILLED`; lớn hơn → `O
     "myApplication": null,
     "pendingApplicationCount": 0,
     "rejectedApplicationCount": 1,
-    "closedAt": "2026-11-13T12:00:00Z",
-    "createdAt": "2026-11-13T08:00:00Z",
-    "updatedAt": "2026-11-13T12:00:00Z"
+    "closedAt": "2026-11-13T19:00:00",
+    "createdAt": "2026-11-13T15:00:00",
+    "updatedAt": "2026-11-13T19:00:00"
   }
 }
 ```
@@ -574,11 +574,11 @@ Không ứng tuyển được khi (BR-ME06): là thành viên đang hoạt độ
       "position": "Tiền vệ",
       "status": "OPEN",
       "team": { "teamId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c", "name": "FC Hoa Lư", "avatarUrl": null },
-      "match": { "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708", "startsAt": "2026-11-14T11:00:00Z", "endsAt": "2026-11-14T12:30:00Z", "status": "CONFIRMED",
+      "match": { "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708", "startsAt": "2026-11-14T18:00:00", "endsAt": "2026-11-14T19:30:00", "status": "CONFIRMED",
                  "area": { "wardName": "Phường Sài Gòn", "provinceName": "TP. Hồ Chí Minh" }, "venue": null },
       "captainName": null
     },
-    "appliedAt": "2026-11-13T09:00:00Z",
+    "appliedAt": "2026-11-13T16:00:00",
     "respondedAt": null,
     "withdrawnAt": null
   }
@@ -633,7 +633,7 @@ Không ứng tuyển được khi (BR-ME06): là thành viên đang hoạt độ
         "rating": { "averageRating": 4.7, "ratingCount": 3 },
         "isVerified": false
       },
-      "appliedAt": "2026-11-13T09:00:00Z",
+      "appliedAt": "2026-11-13T16:00:00",
       "respondedAt": null,
       "withdrawnAt": null
     }
@@ -682,13 +682,13 @@ Không ứng tuyển được khi (BR-ME06): là thành viên đang hoạt độ
         "position": "Tiền vệ",
         "status": "FILLED",
         "team": { "teamId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c", "name": "FC Hoa Lư", "avatarUrl": null },
-        "match": { "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708", "startsAt": "2026-11-14T11:00:00Z", "endsAt": "2026-11-14T12:30:00Z", "status": "CONFIRMED",
+        "match": { "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708", "startsAt": "2026-11-14T18:00:00", "endsAt": "2026-11-14T19:30:00", "status": "CONFIRMED",
                    "area": { "wardName": "Phường Sài Gòn", "provinceName": "TP. Hồ Chí Minh" },
                    "venue": { "venueId": "01935d00-1111-7222-8333-444455556666", "name": "Sân bóng Hoa Lư", "address": "2 Đinh Tiên Hoàng, Phường Sài Gòn, TP.HCM", "latitude": 10.7883, "longitude": 106.7018 } },
         "captainName": "Nguyễn Văn A"
       },
-      "appliedAt": "2026-11-13T09:00:00Z",
-      "respondedAt": "2026-11-13T10:00:00Z",
+      "appliedAt": "2026-11-13T16:00:00",
+      "respondedAt": "2026-11-13T17:00:00",
       "withdrawnAt": null
     }
   ],
@@ -739,7 +739,7 @@ Không ứng tuyển được khi (BR-ME06): là thành viên đang hoạt độ
   "data": {
     "applicationId": "019370a1-5b6c-7d8e-9f00-1a2b3c4d5e01",
     "status": "APPROVED",
-    "respondedAt": "2026-11-13T10:00:00Z",
+    "respondedAt": "2026-11-13T17:00:00",
     "recruitment": { "recruitmentId": "01937090-4a5b-7c6d-8e7f-0a1b2c3d4e01", "status": "FILLED", "quantityNeeded": 2, "quantityApproved": 2 }
   }
 }
@@ -817,7 +817,7 @@ Trạng thái hiện tại khác `expectedStatus` (vd FE hiện "chờ duyệt" 
     "applicationId": "019370a1-5b6c-7d8e-9f00-1a2b3c4d5e01",
     "status": "WITHDRAWN",
     "previousStatus": "APPROVED",
-    "withdrawnAt": "2026-11-14T07:00:00Z",
+    "withdrawnAt": "2026-11-14T14:00:00",
     "reliabilityPenalty": 3,
     "recruitment": { "recruitmentId": "01937090-4a5b-7c6d-8e7f-0a1b2c3d4e01", "status": "OPEN", "quantityNeeded": 2, "quantityApproved": 1 }
   }
@@ -891,7 +891,7 @@ Dùng chung endpoint chat của MATCH-001 (2.16–2.19 của mã đó); 2.15–2
 { "data": { "messageId": "019370b0-7d8e-7f90-b102-3c4d5e6f7a01", "conversationId": "019370a2-6c7d-7e8f-a001-2b3c4d5e6f01",
             "senderPartyType": "USER", "senderPartyId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10",
             "senderUserId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10", "senderName": "Trần Văn C", "senderAvatarUrl": null,
-            "content": "Mình đá tiền vệ trái được, mấy giờ có mặt?", "isRead": false, "createdAt": "2026-11-13T09:05:00Z" } }
+            "content": "Mình đá tiền vệ trái được, mấy giờ có mặt?", "isRead": false, "createdAt": "2026-11-13T16:05:00" } }
 ```
 
 Ứng viên gửi: `senderPartyType = "USER"`, `senderPartyId` = `senderUserId` = id ứng viên; tin của đội trưởng: `senderPartyType = "TEAM"`, `senderPartyId` = id đội tuyển. Hiển thị tin của bên đội: `<tên đội> · <senderName>` (vd "FC Hoa Lư · Nguyễn Văn A").
@@ -946,7 +946,7 @@ Chọn "Không đến" → sau khi gửi thành công FE gợi ý "Bạn có mu�
     "isNoShow": false,
     "score": 5,
     "comment": "Chạy nhiều, đúng giờ",
-    "createdAt": "2026-11-14T13:00:00Z"
+    "createdAt": "2026-11-14T20:00:00"
   }
 }
 ```
@@ -1038,7 +1038,7 @@ Report được chấp nhận ngay và trừ điểm bên bị report (§1.5; đ
     "reportId": "019370d0-9fa0-7b12-d304-5e6f7a8b9c01",
     "applicationId": "019370a1-5b6c-7d8e-9f00-1a2b3c4d5e01",
     "source": "SYSTEM", "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708", "externalMatchId": null,
-    "matchStartsAt": "2026-11-14T11:00:00Z",
+    "matchStartsAt": "2026-11-14T18:00:00",
     "direction": "SENT",
     "reporterSide": "TEAM",
     "team": { "teamId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c", "name": "FC Hoa Lư", "avatarUrl": null },
@@ -1046,11 +1046,11 @@ Report được chấp nhận ngay và trừ điểm bên bị report (§1.5; đ
     "reportType": "NOSHOW",
     "reason": "Duyệt rồi nhưng không đến, không báo",
     "status": "AUTO_ACCEPTED",
-    "disputeDeadlineAt": "2026-11-15T13:10:00Z",
+    "disputeDeadlineAt": "2026-11-15T20:10:00",
     "canDispute": false,
     "reliabilityPenalty": null,
     "dispute": null,
-    "createdAt": "2026-11-14T13:10:00Z"
+    "createdAt": "2026-11-14T20:10:00"
   }
 }
 ```
@@ -1096,7 +1096,7 @@ Report được chấp nhận ngay và trừ điểm bên bị report (§1.5; đ
       "reportId": "019370d0-9fa0-7b12-d304-5e6f7a8b9c02",
       "applicationId": "019370a1-5b6c-7d8e-9f00-1a2b3c4d5e01",
       "source": "SYSTEM", "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708", "externalMatchId": null,
-      "matchStartsAt": "2026-11-14T11:00:00Z",
+      "matchStartsAt": "2026-11-14T18:00:00",
       "direction": "RECEIVED",
       "reporterSide": "MERCENARY",
       "team": { "teamId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c", "name": "FC Hoa Lư", "avatarUrl": null },
@@ -1108,7 +1108,7 @@ Report được chấp nhận ngay và trừ điểm bên bị report (§1.5; đ
       "canDispute": false,
       "reliabilityPenalty": 2,
       "dispute": null,
-      "createdAt": "2026-11-14T13:30:00Z"
+      "createdAt": "2026-11-14T20:30:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -1143,7 +1143,7 @@ Report được chấp nhận ngay và trừ điểm bên bị report (§1.5; đ
       "reportId": "019370d0-9fa0-7b12-d304-5e6f7a8b9c01",
       "applicationId": "019370a1-5b6c-7d8e-9f00-1a2b3c4d5e01",
       "source": "SYSTEM", "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708", "externalMatchId": null,
-      "matchStartsAt": "2026-11-14T11:00:00Z",
+      "matchStartsAt": "2026-11-14T18:00:00",
       "direction": "RECEIVED",
       "reporterSide": "TEAM",
       "team": { "teamId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c", "name": "FC Hoa Lư", "avatarUrl": null },
@@ -1151,11 +1151,11 @@ Report được chấp nhận ngay và trừ điểm bên bị report (§1.5; đ
       "reportType": "NOSHOW",
       "reason": "Duyệt rồi nhưng không đến, không báo",
       "status": "AUTO_ACCEPTED",
-      "disputeDeadlineAt": "2026-11-15T13:10:00Z",
+      "disputeDeadlineAt": "2026-11-15T20:10:00",
       "canDispute": true,
       "reliabilityPenalty": 5,
       "dispute": null,
-      "createdAt": "2026-11-14T13:10:00Z"
+      "createdAt": "2026-11-14T20:10:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -1230,11 +1230,11 @@ Chỉ liệt kê đánh giá mà đội **đã đánh giá lại** mercenary đ�
     {
       "ratingId": "019370c0-8e9f-7a01-c203-4d5e6f7a8b02",
       "source": "SYSTEM", "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708", "externalMatchId": null,
-      "matchStartsAt": "2026-11-14T11:00:00Z",
+      "matchStartsAt": "2026-11-14T18:00:00",
       "mercenary": { "userId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10", "displayName": "Trần Văn C", "avatarUrl": null },
       "score": 4,
       "comment": "Đội chơi vui, thanh toán đúng hẹn",
-      "createdAt": "2026-11-14T13:20:00Z"
+      "createdAt": "2026-11-14T20:20:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -1267,7 +1267,7 @@ Chỉ liệt kê đánh giá mà đội **đã đánh giá lại** mercenary đ�
       "reportId": "019370d0-9fa0-7b12-d304-5e6f7a8b9c01",
       "applicationId": "019370a1-5b6c-7d8e-9f00-1a2b3c4d5e01",
       "source": "SYSTEM", "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708", "externalMatchId": null,
-      "matchStartsAt": "2026-11-14T11:00:00Z",
+      "matchStartsAt": "2026-11-14T18:00:00",
       "reporterSide": "TEAM",
       "team": { "teamId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c", "name": "FC Hoa Lư", "avatarUrl": null, "status": "ACTIVE" },
       "mercenaryId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10",
@@ -1285,8 +1285,8 @@ Chỉ liệt kê đánh giá mà đội **đã đánh giá lại** mercenary đ�
       "resolvedByName": null,
       "isResolvedByDeleted": false,
       "resolvedAt": null,
-      "reportCreatedAt": "2026-11-14T13:10:00Z",
-      "createdAt": "2026-11-14T14:00:00Z"
+      "reportCreatedAt": "2026-11-14T20:10:00",
+      "createdAt": "2026-11-14T21:00:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -1316,7 +1316,7 @@ Chỉ liệt kê đánh giá mà đội **đã đánh giá lại** mercenary đ�
     "reportId": "019370d0-9fa0-7b12-d304-5e6f7a8b9c01",
     "applicationId": "019370a1-5b6c-7d8e-9f00-1a2b3c4d5e01",
     "source": "SYSTEM", "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708", "externalMatchId": null,
-    "matchStartsAt": "2026-11-14T11:00:00Z",
+    "matchStartsAt": "2026-11-14T18:00:00",
     "reporterSide": "TEAM",
     "team": { "teamId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c", "name": "FC Hoa Lư", "avatarUrl": null, "status": "ACTIVE" },
     "mercenaryId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10",
@@ -1334,9 +1334,9 @@ Chỉ liệt kê đánh giá mà đội **đã đánh giá lại** mercenary đ�
     "resolvedByName": null,
     "isResolvedByDeleted": false,
     "resolvedAt": null,
-    "reportCreatedAt": "2026-11-14T13:10:00Z",
-    "createdAt": "2026-11-14T14:00:00Z",
-    "match": { "source": "SYSTEM", "sportName": "Bóng đá", "status": "COMPLETED", "startsAt": "2026-11-14T11:00:00Z", "endsAt": "2026-11-14T12:30:00Z", "venueName": "Sân bóng Hoa Lư", "opponentName": null },
+    "reportCreatedAt": "2026-11-14T20:10:00",
+    "createdAt": "2026-11-14T21:00:00",
+    "match": { "source": "SYSTEM", "sportName": "Bóng đá", "status": "COMPLETED", "startsAt": "2026-11-14T18:00:00", "endsAt": "2026-11-14T19:30:00", "venueName": "Sân bóng Hoa Lư", "opponentName": null },
     "position": "Tiền vệ",
     "reportReason": "Duyệt rồi nhưng không đến, không báo",
     "reliabilityPenalty": 5,
@@ -1348,7 +1348,7 @@ Chỉ liệt kê đánh giá mà đội **đã đánh giá lại** mercenary đ�
       { "ratingId": "019370c0-8e9f-7a01-c203-4d5e6f7a8b03", "applicationId": "019370a1-5b6c-7d8e-9f00-1a2b3c4d5e01",
         "source": "SYSTEM", "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708", "externalMatchId": null, "direction": "TEAM_TO_MERCENARY",
         "teamId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c", "mercenaryUserId": "01935f80-1a2b-7c3d-8e4f-5a6b7c8d9e10",
-        "isNoShow": true, "score": null, "comment": "Không thấy đến", "createdAt": "2026-11-14T13:05:00Z" }
+        "isNoShow": true, "score": null, "comment": "Không thấy đến", "createdAt": "2026-11-14T20:05:00" }
     ]
   }
 }
@@ -1390,7 +1390,7 @@ Chỉ liệt kê đánh giá mà đội **đã đánh giá lại** mercenary đ�
     "resolvedById": "01935a02-6e7f-7a1b-9c2d-5e6f7a8b9c0d",
     "resolvedByName": "Admin ArenaFlow",
     "isResolvedByDeleted": false,
-    "resolvedAt": "2026-11-14T16:00:00Z",
+    "resolvedAt": "2026-11-14T23:00:00",
     "resolutionNote": "Tin nhắn lúc 17:55 cho thấy mercenary có mặt",
     "mercenaryReliabilityScore": 82
   }
@@ -1421,8 +1421,8 @@ Chỉ liệt kê đánh giá mà đội **đã đánh giá lại** mercenary đ�
 | Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
 |---|---|---|---|---|
 | `venueId` | string (UUID) | Có | Địa điểm đang hoạt động (VENUE-001) | `"01935d00-1111-7222-8333-444455556666"` |
-| `startsAt` | string (thời gian) | Có | ≥ hiện tại + 1 giờ | `"2026-11-20T11:00:00Z"` |
-| `endsAt` | string (thời gian) | Có | Sau `startsAt`, không quá 12 giờ | `"2026-11-20T12:30:00Z"` |
+| `startsAt` | string (thời gian) | Có | ≥ hiện tại + 1 giờ | `"2026-11-20T18:00:00"` |
+| `endsAt` | string (thời gian) | Có | Sau `startsAt`, không quá 12 giờ | `"2026-11-20T19:30:00"` |
 | `skillLevels` | string[] | Không | Tối đa 3 trong 9 nhãn trình độ (như kèo — MATCH-001 2.1); rỗng / vắng = mọi trình độ | `["Trung bình"]` |
 | `opponentName` | string | Không | ≤ 100 ký tự; `""` = không nhập | `"FC Phường 5"` |
 | `positions` | array | Có | Như 2.1: 1..4 phần tử, không trùng vị trí; `quantity` 1..10 | — |
@@ -1430,8 +1430,8 @@ Chỉ liệt kê đánh giá mà đội **đã đánh giá lại** mercenary đ�
 ```json
 {
   "venueId": "01935d00-1111-7222-8333-444455556666",
-  "startsAt": "2026-11-20T11:00:00Z",
-  "endsAt": "2026-11-20T12:30:00Z",
+  "startsAt": "2026-11-20T18:00:00",
+  "endsAt": "2026-11-20T19:30:00",
   "skillLevels": ["Trung bình"],
   "opponentName": "FC Phường 5",
   "positions": [ { "position": "Thủ môn", "quantity": 1 } ]
@@ -1446,16 +1446,16 @@ Chỉ liệt kê đánh giá mà đội **đã đánh giá lại** mercenary đ�
     "externalMatchId": "019371f0-1a2b-7c3d-8e4f-5a6b7c8d9e01",
     "teamId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c",
     "status": "SCHEDULED",
-    "startsAt": "2026-11-20T11:00:00Z",
-    "endsAt": "2026-11-20T12:30:00Z",
+    "startsAt": "2026-11-20T18:00:00",
+    "endsAt": "2026-11-20T19:30:00",
     "skillLevels": ["Trung bình"],
     "opponentName": "FC Phường 5",
     "venue": { "venueId": "01935d00-1111-7222-8333-444455556666", "name": "Sân bóng Hoa Lư", "address": "2 Đinh Tiên Hoàng, Phường Sài Gòn, TP.HCM", "latitude": 10.7883, "longitude": 106.7018 },
     "area": { "wardName": "Phường Sài Gòn", "provinceName": "TP. Hồ Chí Minh" },
     "hasApprovedMercenary": false,
     "cancelledAt": null,
-    "createdAt": "2026-11-14T08:00:00Z",
-    "updatedAt": "2026-11-14T08:00:00Z",
+    "createdAt": "2026-11-14T15:00:00",
+    "updatedAt": "2026-11-14T15:00:00",
     "recruitments": [
       {
         "recruitmentId": "01937200-2b3c-7d4e-9f50-6a7b8c9d0e01",
@@ -1466,7 +1466,7 @@ Chỉ liệt kê đánh giá mà đội **đã đánh giá lại** mercenary đ�
         "quantityApproved": 0,
         "status": "OPEN",
         "match": { "source": "EXTERNAL", "externalMatchId": "019371f0-1a2b-7c3d-8e4f-5a6b7c8d9e01", "opponentName": "FC Phường 5",
-                   "startsAt": "2026-11-20T11:00:00Z", "endsAt": "2026-11-20T12:30:00Z", "format": null, "skillLevels": ["Trung bình"],
+                   "startsAt": "2026-11-20T18:00:00", "endsAt": "2026-11-20T19:30:00", "format": null, "skillLevels": ["Trung bình"],
                    "area": { "wardName": "Phường Sài Gòn", "provinceName": "TP. Hồ Chí Minh" }, "distanceKm": null,
                    "venue": { "venueId": "01935d00-1111-7222-8333-444455556666", "name": "Sân bóng Hoa Lư", "address": "2 Đinh Tiên Hoàng, Phường Sài Gòn, TP.HCM", "latitude": 10.7883, "longitude": 106.7018 } },
         "captainName": "Nguyễn Văn A",
@@ -1474,8 +1474,8 @@ Chỉ liệt kê đánh giá mà đội **đã đánh giá lại** mercenary đ�
         "myApplication": null,
         "pendingApplicationCount": 0,
         "closedAt": null,
-        "createdAt": "2026-11-14T08:00:00Z",
-        "updatedAt": "2026-11-14T08:00:00Z"
+        "createdAt": "2026-11-14T15:00:00",
+        "updatedAt": "2026-11-14T15:00:00"
       }
     ]
   }
@@ -1520,16 +1520,16 @@ Chỉ liệt kê đánh giá mà đội **đã đánh giá lại** mercenary đ�
       "externalMatchId": "019371f0-1a2b-7c3d-8e4f-5a6b7c8d9e01",
       "teamId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c",
       "status": "SCHEDULED",
-      "startsAt": "2026-11-20T11:00:00Z",
-      "endsAt": "2026-11-20T12:30:00Z",
+      "startsAt": "2026-11-20T18:00:00",
+      "endsAt": "2026-11-20T19:30:00",
       "skillLevels": ["Trung bình"],
       "opponentName": "FC Phường 5",
       "venue": { "venueId": "01935d00-1111-7222-8333-444455556666", "name": "Sân bóng Hoa Lư", "address": "2 Đinh Tiên Hoàng, Phường Sài Gòn, TP.HCM", "latitude": 10.7883, "longitude": 106.7018 },
       "area": { "wardName": "Phường Sài Gòn", "provinceName": "TP. Hồ Chí Minh" },
       "hasApprovedMercenary": true,
       "cancelledAt": null,
-      "createdAt": "2026-11-14T08:00:00Z",
-      "updatedAt": "2026-11-14T08:00:00Z"
+      "createdAt": "2026-11-14T15:00:00",
+      "updatedAt": "2026-11-14T15:00:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -1576,12 +1576,12 @@ Tin tuyển của trận ngoài: 2.2 (lọc theo đội; phần tử có `match.
 | Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
 |---|---|---|---|---|
 | `venueId` | string (UUID) | Không | Như 2.28 | `"01935d00-1111-7222-8333-444455556667"` |
-| `startsAt`, `endsAt` | string (thời gian) | Không | Như 2.28 (kiểm trên cặp giờ sau khi áp thay đổi) | `"2026-11-20T12:00:00Z"` |
+| `startsAt`, `endsAt` | string (thời gian) | Không | Như 2.28 (kiểm trên cặp giờ sau khi áp thay đổi) | `"2026-11-20T19:00:00"` |
 | `skillLevels` | string[] | Không | Như 2.28; `[]` = mọi trình độ | `[]` |
 | `opponentName` | string | Không | ≤ 100; `""` = xoá | `"FC Phường 6"` |
 
 ```json
-{ "startsAt": "2026-11-20T12:00:00Z", "endsAt": "2026-11-20T13:30:00Z" }
+{ "startsAt": "2026-11-20T19:00:00", "endsAt": "2026-11-20T20:30:00" }
 ```
 
 Gửi trùng giá trị hiện tại không tính là thay đổi. Đổi sân → sân mới được tính là "được chọn" (BC-V05); sân cũ giữ nguyên `lastSelectedAt`. Tin tuyển của trận hiển thị giờ / sân mới ngay.
@@ -1622,7 +1622,7 @@ Gửi trùng giá trị hiện tại không tính là thay đổi. Đổi sân �
 | `rejectedApplicationCount` | integer | Số đơn chờ vừa bị từ chối |
 
 ```json
-{ "data": { "externalMatchId": "019371f0-1a2b-7c3d-8e4f-5a6b7c8d9e01", "status": "CANCELLED", "cancelledAt": "2026-11-15T09:00:00Z", "closedRecruitmentCount": 1, "rejectedApplicationCount": 2 } }
+{ "data": { "externalMatchId": "019371f0-1a2b-7c3d-8e4f-5a6b7c8d9e01", "status": "CANCELLED", "cancelledAt": "2026-11-15T16:00:00", "closedRecruitmentCount": 1, "rejectedApplicationCount": 2 } }
 ```
 
 **Lỗi**

@@ -12,7 +12,7 @@
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); USER-001 `API_Spec.md` §1.1 "Quy ước chung" và §1.2 "Lỗi chung" |
 | Quyết định liên quan | [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) — ảnh lưu trên Cloudinary, FE upload thẳng lên Cloudinary bằng chữ ký backend cấp |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.9) — UC-V01..V06, BR-V01..V11, BC-V01..V07 (BC-V05 sửa 2026-11-14 — trận ngoài hệ thống), BC-U02, Business_Rules §2.6, §5.1/§5.4, AC-V01..V05 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.3** (developer · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v5.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -24,7 +24,7 @@ Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ du
 - Mọi endpoint cần `Authorization: Bearer <access token>`; không có endpoint public. Token thiếu/sai/hết hạn → `401 AUTH_001`. Endpoint `/api/v1/admin/**` mà tài khoản không phải admin → `403 AUTH_004` → ẩn chức năng quản trị.
 - Cách xử lý `401 AUTH_001` và lỗi hệ thống `SYS_*`: theo USER-001 `API_Spec.md` §1.2 "Lỗi chung".
 - **Admin** = tài khoản có role `ADMIN` trong access token. **Người tạo** = user có id bằng `createdById` của địa điểm. FE so `createdById` với id user đang đăng nhập và role để quyết định hiện nút (§3); backend vẫn kiểm lại.
-- Id là UUID dạng chuỗi. Thời gian là chuỗi ISO-8601 UTC (vd `"2026-11-09T03:00:00Z"`). Toạ độ là số thập phân.
+- Id là UUID dạng chuỗi. Thời gian là chuỗi ISO-8601 giờ Việt Nam, **không** kèm múi giờ (vd `"2026-11-09T10:00:00"`) — SYSTEM-002 `API_Spec.md` §1.1. Toạ độ là số thập phân.
 - Enum viết UPPERCASE, phân biệt hoa thường (§4.1); riêng `format` ảnh viết thường.
 - User đã xoá tài khoản (ADR-0002 sửa đổi 2026-11-12, SYSTEM-001 v1.7 BC-U02; quy tắc chung: USER-001 `API_Spec.md` §1.1):
   - Endpoint thường (ngoài `/api/v1/admin/**`, kể cả khi người gọi là Admin — vd 2.3, 2.12): che tên → `"Người dùng đã xóa"`; id giữ nguyên.
@@ -104,8 +104,8 @@ Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ du
     "createdByName": "Nguyễn Văn A",
     "lastSelectedAt": null,
     "adminVerifiedInactiveAt": null,
-    "createdAt": "2026-11-09T03:00:00Z",
-    "updatedAt": "2026-11-09T03:00:00Z",
+    "createdAt": "2026-11-09T10:00:00",
+    "updatedAt": "2026-11-09T10:00:00",
     "images": []
   }
 }
@@ -161,7 +161,7 @@ GET /api/v1/venues?lat=10.78&lng=106.70&radiusKm=3&page=1&pageSize=20
       "status": "ACTIVE",
       "primaryImageUrl": "https://res.cloudinary.com/demo-cloud/image/upload/v1794193260/arenaflow-dev/venues/01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01/1794193200-q8Zr0vKd3XyWm5TnBf7LhA-Jc4Np2Qs9Rt6Uv1Wx3Yz5a.jpg",
       "distanceKm": 1.24,
-      "lastSelectedAt": "2026-11-08T12:30:00Z"
+      "lastSelectedAt": "2026-11-08T19:30:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -205,10 +205,10 @@ GET /api/v1/venues?lat=10.78&lng=106.70&radiusKm=3&page=1&pageSize=20
     "createdByType": "USER",
     "createdById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
     "createdByName": "Nguyễn Văn A",
-    "lastSelectedAt": "2026-11-08T12:30:00Z",
+    "lastSelectedAt": "2026-11-08T19:30:00",
     "adminVerifiedInactiveAt": null,
-    "createdAt": "2026-11-09T03:00:00Z",
-    "updatedAt": "2026-11-09T03:05:00Z",
+    "createdAt": "2026-11-09T10:00:00",
+    "updatedAt": "2026-11-09T10:05:00",
     "images": [
       {
         "imageId": "01936a20-7d11-7b5c-8e2f-3a4b5c6d7e01",
@@ -217,7 +217,7 @@ GET /api/v1/venues?lat=10.78&lng=106.70&radiusKm=3&page=1&pageSize=20
         "isPrimary": true,
         "displayOrder": 1,
         "uploadedById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
-        "createdAt": "2026-11-09T03:01:00Z"
+        "createdAt": "2026-11-09T10:01:00"
       }
     ]
   }
@@ -295,7 +295,7 @@ Không tạo dữ liệu; gọi lặp an toàn (mỗi lần nhận `publicId` m�
     "allowedFormats": "jpg,jpeg,png,webp",
     "overwrite": false,
     "signature": "3f9c1e7a5b2d4c6e8f0a1b3c5d7e9f1a2b4c6d8e",
-    "expiresAt": "2026-11-09T04:00:00Z"
+    "expiresAt": "2026-11-09T11:00:00"
   }
 }
 ```
@@ -352,7 +352,7 @@ Không tạo dữ liệu; gọi lặp an toàn (mỗi lần nhận `publicId` m�
     "isPrimary": true,
     "displayOrder": 1,
     "uploadedById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
-    "createdAt": "2026-11-09T03:01:00Z"
+    "createdAt": "2026-11-09T10:01:00"
   }
 }
 ```
@@ -394,7 +394,7 @@ Không tạo dữ liệu; gọi lặp an toàn (mỗi lần nhận `publicId` m�
       "isPrimary": false,
       "displayOrder": 1,
       "uploadedById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
-      "createdAt": "2026-11-09T03:01:00Z"
+      "createdAt": "2026-11-09T10:01:00"
     },
     {
       "imageId": "01936a22-0c3e-7a9d-b1f2-4c5d6e7f8a02",
@@ -403,7 +403,7 @@ Không tạo dữ liệu; gọi lặp an toàn (mỗi lần nhận `publicId` m�
       "isPrimary": true,
       "displayOrder": 2,
       "uploadedById": "01935f77-3c2d-7e1f-8a9b-0c1d2e3f4a5b",
-      "createdAt": "2026-11-09T03:05:00Z"
+      "createdAt": "2026-11-09T10:05:00"
     }
   ]
 }
@@ -449,7 +449,7 @@ Report được lưu ở trạng thái `PENDING` và **không** đổi trạng t
     "reason": "CLOSED",
     "detail": "Sân đã đóng cửa",
     "status": "PENDING",
-    "createdAt": "2026-11-09T05:00:00Z"
+    "createdAt": "2026-11-09T12:00:00"
   }
 }
 ```
@@ -506,7 +506,7 @@ GET /api/v1/admin/venue-reports?status=PENDING&page=1&pageSize=20
       "handledByName": null,
       "isHandledByDeleted": false,
       "handledAt": null,
-      "createdAt": "2026-11-09T05:00:00Z"
+      "createdAt": "2026-11-09T12:00:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -559,8 +559,8 @@ Không đổi trạng thái địa điểm — muốn ngừng hoạt động đ�
     "handledById": "01935a02-6e7f-7a1b-9c2d-5e6f7a8b9c0d",
     "handledByName": "Admin ArenaFlow",
     "isHandledByDeleted": false,
-    "handledAt": "2026-11-09T06:00:00Z",
-    "createdAt": "2026-11-09T05:00:00Z"
+    "handledAt": "2026-11-09T13:00:00",
+    "createdAt": "2026-11-09T12:00:00"
   }
 }
 ```
@@ -605,10 +605,10 @@ Kết quả: `status` `ACTIVE` → `INACTIVE`, `adminVerifiedInactiveAt` = thờ
     "createdById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
     "createdByName": "Nguyễn Văn A",
     "isCreatedByDeleted": true,
-    "lastSelectedAt": "2026-11-08T12:30:00Z",
-    "adminVerifiedInactiveAt": "2026-11-09T06:10:00Z",
-    "createdAt": "2026-11-09T03:00:00Z",
-    "updatedAt": "2026-11-09T06:10:00Z",
+    "lastSelectedAt": "2026-11-08T19:30:00",
+    "adminVerifiedInactiveAt": "2026-11-09T13:10:00",
+    "createdAt": "2026-11-09T10:00:00",
+    "updatedAt": "2026-11-09T13:10:00",
     "images": []
   }
 }
@@ -653,10 +653,10 @@ Kết quả: `status` `INACTIVE` → `ACTIVE`, `adminVerifiedInactiveAt` = `null
     "createdById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
     "createdByName": "Nguyễn Văn A",
     "isCreatedByDeleted": false,
-    "lastSelectedAt": "2026-11-08T12:30:00Z",
+    "lastSelectedAt": "2026-11-08T19:30:00",
     "adminVerifiedInactiveAt": null,
-    "createdAt": "2026-11-09T03:00:00Z",
-    "updatedAt": "2026-11-10T02:00:00Z",
+    "createdAt": "2026-11-09T10:00:00",
+    "updatedAt": "2026-11-10T09:00:00",
     "images": []
   }
 }
@@ -717,10 +717,10 @@ Field vắng hoặc `null` → giữ nguyên; `""` cho `venueType` / `phone` / `
     "createdByType": "USER",
     "createdById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
     "createdByName": "Nguyễn Văn A",
-    "lastSelectedAt": "2026-11-08T12:30:00Z",
+    "lastSelectedAt": "2026-11-08T19:30:00",
     "adminVerifiedInactiveAt": null,
-    "createdAt": "2026-11-09T03:00:00Z",
-    "updatedAt": "2026-11-09T07:00:00Z",
+    "createdAt": "2026-11-09T10:00:00",
+    "updatedAt": "2026-11-09T14:00:00",
     "images": []
   }
 }
@@ -761,7 +761,7 @@ Xoá vĩnh viễn, không khôi phục được. Xoá ảnh chính khi còn ản
       "isPrimary": true,
       "displayOrder": 2,
       "uploadedById": "01935f77-3c2d-7e1f-8a9b-0c1d2e3f4a5b",
-      "createdAt": "2026-11-09T03:05:00Z"
+      "createdAt": "2026-11-09T10:05:00"
     }
   ]
 }
@@ -879,7 +879,7 @@ Không trả `publicId`.
 | `allowedFormats` | string | Gửi Cloudinary dưới tên `allowed_formats`, vd `"jpg,jpeg,png,webp"` |
 | `overwrite` | boolean | Luôn `false`; gửi Cloudinary đúng chuỗi `false` (chữ thường) |
 | `signature` | string | Chữ ký backend cấp; gửi Cloudinary |
-| `expiresAt` | datetime | Hạn chót upload lên Cloudinary (1 giờ sau `timestamp`) |
+| `expiresAt` | datetime | Hạn chót upload lên Cloudinary (1 giờ sau `timestamp`), giờ Việt Nam không kèm múi giờ |
 
 `timestamp` và `overwrite` giữ đúng tên tham số Cloudinary nên không theo quy ước hậu tố `…At` / tiền tố `is…` của `api-convention.md` §10; thời điểm dạng ISO là `expiresAt`.
 

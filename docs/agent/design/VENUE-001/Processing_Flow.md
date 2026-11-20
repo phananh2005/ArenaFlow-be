@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway · Cloudinary |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + `Component_Class_Design.md` §4.9 |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.3** (developer · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v5.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -173,7 +173,7 @@ Q1 `findVenue` → `VENUE_001` → `requireOwnerOrAdmin` → `VENUE_013` → `re
 Q1–Q2 `lockForImageWrite` (`VENUE_001`) → `requireOwnerOrAdmin` (`VENUE_013`) → `requireWritable` (`VENUE_002`) → Q3 `findByIdAndVenueId` → `VENUE_004` → Q4 `delete` (Hibernate flush trước Q5/Q6) → nếu là ảnh chính: Q5 `promoteFirstAsPrimary` (BR-V08; 0 dòng khi hết ảnh) → Q6 danh sách còn lại. Không gọi Cloudinary (gọi HTTP trong transaction trái NFS §5; gọi trước commit mà rollback thì mất asset trong khi dòng còn) — asset do job §3.16 dọn. `display_order` có khoảng trống, chấp nhận. Admin không phải người tạo → `adminAuditLog.afterCommit(ADMIN_DELETE_IMAGE, …)` gọi trong method `@Transactional` — log chỉ ghi khi transaction commit, không ghi nếu rollback.
 
 ### 3.14. Job cảnh báo 180 ngày
-`threshold = now − stale-days`; tối đa `max-batches-per-run` lô, mỗi lô một transaction: Q1 `markStaleAlerted(threshold, now, batch-size)` → mỗi dòng `VenueAdminAlertEvent(STALE_180_DAYS)` (vòng trong bộ nhớ) → commit; dừng khi lô **rỗng** (lô ngắn chưa chắc đã hết: dòng bị ghi đồng thời bị loại khỏi lô). Lỗi một lô → rollback, log `ERROR`, dừng; lần sau làm tiếp (cổng `stale_alerted_at` chống trùng). Log `INFO` số lượng.
+`now = LocalDateTime.now(clock)` (giờ Việt Nam — SYSTEM-002 §2.2), `threshold = now − stale-days`; tối đa `max-batches-per-run` lô, mỗi lô một transaction: Q1 `markStaleAlerted(threshold, now, batch-size)` → mỗi dòng `VenueAdminAlertEvent(STALE_180_DAYS)` (vòng trong bộ nhớ) → commit; dừng khi lô **rỗng** (lô ngắn chưa chắc đã hết: dòng bị ghi đồng thời bị loại khỏi lô). Lỗi một lô → rollback, log `ERROR`, dừng; lần sau làm tiếp (cổng `stale_alerted_at` chống trùng). Log `INFO` số lượng.
 
 `UPDATE … RETURNING` chạy được qua Spring Data (#11 đóng 2026-11-19) — không cần phương án dự phòng.
 

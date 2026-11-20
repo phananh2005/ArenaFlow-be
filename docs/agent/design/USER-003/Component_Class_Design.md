@@ -6,14 +6,14 @@
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · PostgreSQL 18 (Neon) · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/api-convention.md` · kiến trúc hiện hành theo USER-001, USER-002 |
-| Ràng buộc dữ liệu | Schema V1–V4 (code) · migration mới `V11__user_name_search.sql` (§6) — chỉ áp sau V5–V10 của VENUE-001, MATCH-001, MATCH-002, REPUTATION-001, MERCENARY-001, NOTIFICATION-001 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-17 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-18) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | Schema V1–V5 (code) · migration mới `V12__user_name_search.sql` (§6) — chỉ áp sau V5–V11 của VENUE-001, SYSTEM-002 (V6), MATCH-001, MATCH-002, REPUTATION-001, MERCENARY-001, NOTIFICATION-001 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-17 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
 Năm endpoint **chỉ đọc** (`API_Spec.md` §2), layered Controller → Service → Repository như USER-001, đặt trong module `api` → `application` → `domain` → `common` (ADR-0006). Không entity mới, không thao tác ghi, không event/thông báo. Dùng lại: `TeamGuard` (`activeTeam`, `requireCaptain`, `disbandedOr`), `PageRequestFactory`, `PageResponse.from`, `ApiResponse.of`, `MapperSupport` (`skillLevels`, `toUtc`, `maskName`), `DeletedUserMasking`, `UserRepository`, `TeamMemberRepository`, `AdministrativeUnitRepository`, `ErrorCode`/`BusinessException`, `GlobalExceptionHandler`.
 
-**Thành phần mới** (developer chạy `reuse-scan` trước khi tạo — `CLAUDE.md` §8): `AdministrativeUnitController`, `ProfileTeamController`, `AdministrativeUnitService(Impl)`, `InvitationSearchQuery` (phân loại + chuẩn hoá `q`), `InvitationSearchRateLimiter` (giới hạn 2.3 — §4.5), `RateLimitExceededException` + handler `429`, `MyTeamRoleFilter`, 5 projection, 7 DTO response, 1 mapper, 4 mã lỗi, migration V11 (hàm SQL + index).
+**Thành phần mới** (developer chạy `reuse-scan` trước khi tạo — `CLAUDE.md` §8): `AdministrativeUnitController`, `ProfileTeamController`, `AdministrativeUnitService(Impl)`, `InvitationSearchQuery` (phân loại + chuẩn hoá `q`), `InvitationSearchRateLimiter` (giới hạn 2.3 — §4.5), `RateLimitExceededException` + handler `429`, `MyTeamRoleFilter`, 5 projection, 7 DTO response, 1 mapper, 4 mã lỗi, migration V12 (hàm SQL + index).
 
 **Bảng ký tự bỏ dấu — một nguồn duy nhất là hàm SQL `user_name_fold` (§6).** BE **không** giữ bảng dấu trong Java: chuỗi tìm theo tên được chuẩn hoá bằng chính hàm đó qua một câu `SELECT user_name_fold(:q)` (§5.2). Lý do chọn (so với hằng Java khớp + test đối chiếu):
 - Không thể lệch: index, vế so khớp và vế sắp xếp đều dùng cùng một hàm; sửa bảng dấu chỉ ở một migration (kèm `REINDEX`).
@@ -50,7 +50,7 @@ common/        com.phananh.arenaflow.common.exception
 api/           com.phananh.arenaflow.api.config
 └── GlobalExceptionHandler   (+ handler RateLimitExceededException → 429 + Retry-After)
 
-api/src/main/resources/db/migration/   V11__user_name_search.sql (mới)
+api/src/main/resources/db/migration/   V12__user_name_search.sql (mới)
 ```
 
 Test cần Spring context (migration, repository, integration, đếm truy vấn) đặt ở module `api`, giữ package của lớp được kiểm (`convention-backend.md` §1).
@@ -271,10 +271,10 @@ ORDER BY CASE WHEN m.role = 'CAPTAIN' THEN 0 ELSE 1 END, m.joined_at DESC, t.id 
 | `ProvinceView` | `UUID getProvinceId()`, `String getProvinceName()` |
 | `ProvinceWardView` | `UUID getProvinceId()`, `UUID getWardId()`, `String getWardName()` |
 | `InvitationCandidateView` | `UUID getUserId()`, `String getDisplayName()`, `String getAvatarUrl()`, `String getMembershipStatus()` |
-| `MyInvitationView` | `UUID getInvitationId()`, `Instant getInvitedAt()`, `UUID getTeamId()`, `String getTeamName()`, `String getAvatarUrl()`, `String getSkillLevels()`, `String getStatus()`, `String getCaptainName()`, `Boolean getCaptainDeleted()`, `Long getMemberCount()` |
-| `MyTeamView` | như `MyInvitationView` bỏ `invitationId`/`invitedAt`, thêm `String getRole()`, `Instant getJoinedAt()` |
+| `MyInvitationView` | `UUID getInvitationId()`, `LocalDateTime getInvitedAt()`, `UUID getTeamId()`, `String getTeamName()`, `String getAvatarUrl()`, `String getSkillLevels()`, `String getStatus()`, `String getCaptainName()`, `Boolean getCaptainDeleted()`, `Long getMemberCount()` |
+| `MyTeamView` | như `MyInvitationView` bỏ `invitationId`/`invitedAt`, thêm `String getRole()`, `LocalDateTime getJoinedAt()` |
 
-## 6. Schema — migration `V11__user_name_search.sql`
+## 6. Schema — migration `V12__user_name_search.sql`
 
 Không bảng / cột mới, không cài extension. Hai hàm SQL `IMMUTABLE` + một index GIN biểu thức trên `"user".display_name`.
 
@@ -307,7 +307,7 @@ CREATE INDEX idx_user_name_search ON "user"
 - Ký tự ngoài bảng (chữ có dấu không phải tiếng Việt, vd `ë`) thành dấu cách — tên "Zoë" tìm bằng "zo" `[cần xác nhận #3]` (không chặn).
 - **Sửa bảng ký tự sau này:** migration mới `CREATE OR REPLACE FUNCTION user_name_fold …` **và** `REINDEX INDEX idx_user_name_search` trong cùng migration — index biểu thức không tự tính lại.
 - Chi phí ghi: cập nhật `display_name` (đăng ký, sửa hồ sơ) cập nhật thêm index GIN — không đổi số câu SQL của các API đó.
-- **Số hiệu V11 và thứ tự áp:** code đang có V1–V4 (DB dev: Flyway V4); thiết kế đã giữ V5 (VENUE-001), V6 (MATCH-001), V7 (MATCH-002), V8 (REPUTATION-001), V9 (MERCENARY-001), V10 (NOTIFICATION-001). Flyway không chạy out-of-order → V11 chỉ áp sau V5–V10; **code USER-003 đợi code V5–V10** (user chốt 2026-11-17). Phương án tách đợt: `[cần xác nhận #1]`.
+- **Số hiệu V12 và thứ tự áp:** code đang có V1–V5 (V5 = VENUE-001); thiết kế đã giữ V6 (SYSTEM-002), V7 (MATCH-001), V8 (MATCH-002), V9 (REPUTATION-001), V10 (MERCENARY-001), V11 (NOTIFICATION-001). Flyway không chạy out-of-order → V12 chỉ áp sau V5–V11; **code USER-003 đợi code V5–V11** (user chốt 2026-11-17). Phương án tách đợt: `[cần xác nhận #1]`.
 - Test migration: hàm tồn tại, `IMMUTABLE`; index được tạo; `user_name_fold` cho các ví dụ trên; `EXPLAIN` câu §5.2 (tham số bind) dùng `idx_user_name_search`.
 
 ## 7. DTO & Mapper
@@ -321,8 +321,8 @@ CREATE INDEX idx_user_name_search ON "user"
 | `InvitationCandidateResponse` | `UUID userId`, `String displayName`, `String avatarUrl`, `String membershipStatus` |
 | `InvitationCandidatesResponse` | `List<InvitationCandidateResponse> items`, `boolean hasMore` |
 | `MyInvitationTeamResponse` | `UUID teamId`, `String teamName`, `String avatarUrl`, `List<String> skillLevels`, `String status`, `String captainName`, `long memberCount` |
-| `MyInvitationResponse` | `UUID invitationId`, `OffsetDateTime invitedAt`, `MyInvitationTeamResponse team` |
-| `MyTeamResponse` | `UUID teamId`, `String teamName`, `String avatarUrl`, `List<String> skillLevels`, `String status`, `String captainName`, `long memberCount`, `String role`, `OffsetDateTime joinedAt` |
+| `MyInvitationResponse` | `UUID invitationId`, `LocalDateTime invitedAt`, `MyInvitationTeamResponse team` |
+| `MyTeamResponse` | `UUID teamId`, `String teamName`, `String avatarUrl`, `List<String> skillLevels`, `String status`, `String captainName`, `long memberCount`, `String role`, `LocalDateTime joinedAt` |
 
 Không request DTO mới (chỉ query param). `WardResponse` hiện có (4 field, cho hồ sơ) giữ nguyên. Không dùng tên `TeamBriefResponse`: REPUTATION-001 đã giữ tên này cùng package với shape khác (REPUTATION-001 `Component_Class_Design.md` §2).
 
@@ -330,7 +330,7 @@ Không request DTO mới (chỉ query param). `WardResponse` hiện có (4 field
 
 - `AdministrativeUnitMapper` (mới): `ProvinceView → ProvinceResponse`, `ProvinceWardView → WardSummaryResponse`.
 - `MembershipMapper`: `toCandidate(InvitationCandidateView)` (không che — người đã xoá không có trong kết quả); `toMyInvitation(MyInvitationView)` → `team` dựng qua `toMyInvitationTeam`; `captainName` qua `MapperSupport.maskName(…, captainDeleted)`; `skillLevels` qua `MapperSupport.skillLevels`; `invitedAt` qua `MapperSupport.toUtc`.
-- `TeamMapper`: `toMyTeam(MyTeamView)` — che `captainName`, `skillLevels`, `toUtc(joinedAt)` như `toSummary`.
+- `TeamMapper`: `toMyTeam(MyTeamView)` — che `captainName`, `skillLevels`, `joinedAt` gán thẳng (`LocalDateTime`, SYSTEM-002).
 
 ### 7.3. ErrorCode (mới)
 
@@ -349,7 +349,7 @@ Không thêm dependency (giới hạn 2.3 viết bằng `ConcurrentHashMap` củ
 
 ## 9. Danh sách [cần xác nhận]
 
-1. ~~`[cần xác nhận #1]`~~ **Đã chốt 2026-11-17 (user): không tách đợt** — cả USER-003 code một lần sau khi V5–V10 đã vào code (V11 đi kèm).
+1. ~~`[cần xác nhận #1]`~~ **Đã chốt 2026-11-17 (user): không tách đợt** — cả USER-003 code một lần sau khi V5–V11 đã vào code (V12 đi kèm).
 2. `[cần xác nhận #2]` Kế hoạch truy vấn §5.2 với tham số bind (generic plan), partial predicate `deleted_at IS NULL` và `LIMIT` trên bảng `"user"` thật — đo bằng `EXPLAIN` trong integration test; chưa dùng index → dừng, báo trước khi merge.
 3. `[cần xác nhận #3]` Ký tự có dấu ngoài bảng tiếng Việt (vd `ë`, `ç`) thành dấu cách (tên "Zoë" → `zo`). Chấp nhận cho MVP; mở rộng bảng = migration mới + `REINDEX`.
 4. ~~`[cần xác nhận #4]`~~ **Đã chốt 2026-11-17 (user):** mọi ký tự không phải `[a-z0-9]` là dấu cách ở **cả** tên lẫn chuỗi nhập (`ng.an` → `ng`, `an`; "Thị-Ổi" → `thi`, `oi`) — hai vế chuẩn hoá bằng cùng một hàm nên luôn đối xứng. SRS BR-U10 (a) đã ghi.
@@ -359,7 +359,7 @@ Không thêm dependency (giới hạn 2.3 viết bằng `ConcurrentHashMap` củ
 8. `[cần xác nhận #8]` **Mốc xem lại tìm theo tên** (rủi ro theo dõi, M2): khoảng 50.000 người dùng, hoặc có lỗi hết giờ của 2.3 trong log → đo lại với dữ liệu thật, chọn hướng ở ADR-0016 §Cần theo dõi.
 9. `[cần xác nhận #9]` `@QueryHints` timeout áp được lên native query và cancel request của PgJDBC đi qua được kết nối DB dev (Neon, có thể qua pooler) — kiểm bằng integration test (vd câu thử `pg_sleep(3)` với cùng hint trong repository chỉ dùng cho test → `QueryTimeoutException` sau khoảng 2 giây). Không đạt → dừng, báo trước khi merge, chọn phương án dự phòng **không tốn câu SQL nào mỗi request**: đặt `statement_timeout` ở **cấp role** — `ALTER ROLE CURRENT_USER SET statement_timeout = '5s'` (migration hoặc thao tác vận hành; `CURRENT_USER` để không ghi cứng tên role khác nhau giữa môi trường — [Unverified] cú pháp chưa chạy thử trên Neon). Setting cấp role áp vào mọi kết nối server **mới** của role, nên đúng cả khi đi qua pooler Neon (PgBouncer, `pool_mode=transaction`). Đánh đổi (phải xử lý trước khi áp):
    - **Áp cho mọi truy vấn của role**, không riêng câu tìm tên → giá trị rộng hơn (vd 5 giây); câu tìm tên mất mốc 2 giây riêng.
-   - **Flyway dùng chung datasource / role:** migration nặng (vd tạo GIN index của V11 trên bảng `"user"` lớn) có thể bị huỷ (`57014`) → migration fail, ứng dụng không khởi động. Điều kiện: migration chạy bằng role / kết nối khác, hoặc migration nặng tự `SET LOCAL statement_timeout = 0` ở đầu (chỉ có hiệu lực khi migration chạy trong transaction — mặc định của Flyway). Migration chạy **ngoài** transaction (vd `CREATE INDEX CONCURRENTLY`) → `SET LOCAL` vô tác dụng và `SET` thường qua pooler sẽ lây sang kết nối khác → chạy bằng role / kết nối trực tiếp khác (không qua host `-pooler`).
+   - **Flyway dùng chung datasource / role:** migration nặng (vd tạo GIN index của V12 trên bảng `"user"` lớn) có thể bị huỷ (`57014`) → migration fail, ứng dụng không khởi động. Điều kiện: migration chạy bằng role / kết nối khác, hoặc migration nặng tự `SET LOCAL statement_timeout = 0` ở đầu (chỉ có hiệu lực khi migration chạy trong transaction — mặc định của Flyway). Migration chạy **ngoài** transaction (vd `CREATE INDEX CONCURRENTLY`) → `SET LOCAL` vô tác dụng và `SET` thường qua pooler sẽ lây sang kết nối khác → chạy bằng role / kết nối trực tiếp khác (không qua host `-pooler`).
    - **Kết nối server đang mở giữ giá trị cũ** tới khi đóng → sau khi áp phải khởi động lại ứng dụng / chờ pool thay kết nối (ghi bước vận hành).
    - **Job định kỳ cùng role** (vd xoá chat 90 ngày, xoá thông báo 30 ngày theo lô) cũng bị giới hạn → đối chiếu thời gian mỗi lô với ngưỡng trước khi áp.
    - **Query hint 2 giây khi đã chuyển sang dự phòng:** dự phòng chỉ dùng khi lệnh huỷ của driver không qua được pooler, lúc đó hint không còn tác dụng thật → bỏ hint trên `searchCandidatesByName` (giữ lại chỉ khi kiểm lại thấy lệnh huỷ vẫn qua được); đổi test `pg_sleep` ở `Processing_Flow.md` §8 sang kiểm `statement_timeout` của role.
@@ -381,4 +381,4 @@ Không thêm dependency (giới hạn 2.3 viết bằng `ConcurrentHashMap` củ
 | `docs/agent/api-convention.md` §7 (bảng "Áp dụng") | Dòng ngoại lệ "không phân trang": 2.1, 2.2 (danh mục, trả toàn bộ), 2.3 (tối đa 20, `{items, hasMore}` — dùng hình dạng §7.2 nhưng không có con trỏ) | `chore/agent-framework-*` |
 | `docs/agent/non-functional-standards.md` §2 | Ngoại lệ "danh mục chỉ đọc có chặn trên tự nhiên / gợi ý tìm kiếm có `LIMIT` cố định" — user chốt D1 2026-11-17 | `chore/agent-framework-*` |
 | `docs/agent/CLAUDE.md` §2 | Dòng điều hướng USER-003 | `chore/agent-framework-*` |
-| `docs/database/data-model.md`, `schema.dbml`, `schema-design.md` | Hàm `user_name_fold`, `user_name_search_vector`, index `idx_user_name_search` (V11) | Sau khi code + test PASS, nhánh `feature/USER-003-*` |
+| `docs/database/data-model.md`, `schema.dbml`, `schema-design.md` | Hàm `user_name_fold`, `user_name_search_vector`, index `idx_user_name_search` (V12) | Sau khi code + test PASS, nhánh `feature/USER-003-*` |

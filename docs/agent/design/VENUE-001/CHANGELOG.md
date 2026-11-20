@@ -1,5 +1,24 @@
 # CHANGELOG — VENUE-001 Quản lý địa điểm sân
 
+## [v5.0] — 2026-11-21
+
+**Type:** MAJOR (đổi định dạng mọi giá trị thời gian của response: bỏ `Z`/offset, giá trị theo giờ Việt Nam; đổi `validationErrors[].field` của lỗi đọc body) · **Tóm tắt:** Thời gian theo giờ Việt Nam, không kèm múi giờ; lỗi body sai kiểu trả đúng tên field (SYSTEM-002).
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | `API_Spec.md` §1 (dòng "Thời gian"), §4.5 (`expiresAt` của chữ ký upload), mọi field `…At` của 2.1–2.3, 2.5–2.13 | Đổi | Chuỗi ISO-8601 UTC (vd `"2026-11-09T03:00:00Z"`) → giờ Việt Nam, **không** kèm múi giờ (vd `"2026-11-09T10:00:00"`); `expiresAt` của 2.4 là hạn upload theo giờ Việt Nam | SRS SYSTEM-001 v1.13 BC-M05 (user chốt 2026-11-21); SYSTEM-002 `API_Spec.md` §1.1 | Đọc thời gian theo SYSTEM-002 `API_Spec.md` §1.1: hiển thị nguyên giá trị, không đổi theo múi giờ máy; khi so với giờ hiện tại coi là UTC+7. Phát hành bộ đọc nhận cả hai dạng **trước** khi BE triển khai (SYSTEM-002 §6) |
+| 2 | Ví dụ JSON | Sửa | Giá trị `…Z` đổi sang cùng thời điểm theo giờ Việt Nam (cộng 7 giờ, bỏ `Z`) | Như #1 | Không |
+| 3 | Lỗi `400 VALIDATION_ERROR` khi body JSON không đọc được (mọi endpoint có body) | Đổi | `validationErrors[0].field` luôn là `"body"` → field sai kiểu / sai định dạng trả đường dẫn field (vd 2.1 `latitude` gửi chuỗi chữ thay vì số → `"latitude"`; `venueType` sai giá trị vẫn trả `"venueType"` như trước); chỉ JSON sai cú pháp / thiếu body còn `"body"` | SYSTEM-002 `API_Spec.md` §2 | Gắn lỗi vào ô theo `field`; giữ nhánh `"body"` cho lỗi chung |
+| 4 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Như #1 | Không |
+| 5 | Header 3 tài liệu thiết kế VENUE-001 | Ghi nhận | v4.3 → v5.0 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- Không đổi endpoint, field, mã lỗi; đổi định dạng giá trị thời gian và giá trị `validationErrors[].field` của lỗi đọc body. Endpoint đang chạy: response đổi khi BE triển khai SYSTEM-002.
+- `timestamp` của 2.4 (giây Unix, gửi nguyên cho Cloudinary) không đổi.
+- Cùng đợt: SYSTEM-002 `API_Spec.md` v1.0 (quy ước thời gian toàn hệ thống, thứ tự phát hành BE/FE).
+
 ## [v4.3] — 2026-11-21
 
 **Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Ghi kết quả kiểm thử upload ảnh trên Cloudinary thật vào hướng dẫn upload và §6; tìm kiếm 2.2 khớp đúng mô tả với ký tự `%`, `_`, `\`; cập nhật tài liệu nội bộ BE sau khi implement.

@@ -2,15 +2,15 @@
 
 > Thiết kế schema PostgreSQL chi tiết từ đặc tả nghiệp vụ trong `data-model.md`
 
-> Cập nhật: 2026-11-05 — bảng `team`, `team_member` đồng bộ tới V4 (USER-002); các bảng khác vẫn theo V1 (vd. `user.role`/`ward_id`, bỏ `team_tag` ở V2 chưa phản ánh)
+> Cập nhật: 2026-11-21 — kiểu mọi cột thời gian theo V6 (SYSTEM-002). 2026-11-05 — bảng `team`, `team_member` đồng bộ tới V4 (USER-002); các bảng khác vẫn theo V1 (vd. `user.role`/`ward_id`, bỏ `team_tag` ở V2 chưa phản ánh)
 
 ## Conventions
 
 - **Tên bảng:** snake_case số ít (user, team, match)
 - **Tên cột:** snake_case
 - **ID:** UUID (Hibernate generates UUID v7 từ Java, không cần DEFAULT trong DB)
-- **Timestamp:** TIMESTAMPTZ (UTC), có `created_at`, `updated_at`
-- **Soft delete:** `deleted_at` TIMESTAMPTZ NULL
+- **Timestamp:** TIMESTAMP (không múi giờ), giá trị là **giờ Việt Nam** (`Asia/Ho_Chi_Minh`) — V6 (SYSTEM-002) đổi mọi cột TIMESTAMPTZ của V1–V5 sang TIMESTAMP, giữ đúng thời điểm. DEFAULT của cột `*_at` = `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'` (không phụ thuộc TimeZone phiên); ứng dụng luôn tự truyền giá trị. Có `created_at`, `updated_at`
+- **Soft delete:** `deleted_at` TIMESTAMP NULL
 - **Enum:** VARCHAR với CHECK constraint
 - **Foreign keys:** ON DELETE RESTRICT mặc định (trừ khi có lý do rõ ràng)
 
@@ -42,9 +42,9 @@ Lưu tài khoản và hồ sơ cá nhân.
 | report_count_bad_communication | INTEGER | NOT NULL | Số lần bị report giao tiếp tệ, default 0 |
 | report_count_skill_mismatch | INTEGER | NOT NULL | Số lần bị report không đúng trình độ, default 0 |
 | clean_streak | INTEGER | NOT NULL | Số trận sạch liên tiếp, default 0 |
-| created_at | TIMESTAMPTZ | NOT NULL | Thời gian tạo |
-| updated_at | TIMESTAMPTZ | NOT NULL | Thời gian cập nhật cuối |
-| deleted_at | TIMESTAMPTZ | NULL | Thời gian soft delete |
+| created_at | TIMESTAMP | NOT NULL | Thời gian tạo |
+| updated_at | TIMESTAMP | NOT NULL | Thời gian cập nhật cuối |
+| deleted_at | TIMESTAMP | NULL | Thời gian soft delete |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -72,7 +72,7 @@ Lưu liên kết OAuth.
 | user_id | UUID | NOT NULL | FK → user |
 | provider | VARCHAR(50) | NOT NULL | google, facebook, phone |
 | provider_user_id | VARCHAR(255) | NOT NULL | ID từ provider |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -92,7 +92,7 @@ Danh mục hành chính Việt Nam (tỉnh/quận/phường).
 | name | VARCHAR(100) | NOT NULL | Tên đơn vị |
 | level | VARCHAR(20) | NOT NULL | province, district, ward |
 | parent_id | UUID | NULL | FK → administrative_unit (self-reference) |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -122,7 +122,7 @@ Danh mục hành chính Việt Nam (tỉnh/quận/phường).
 | skill_levels | TEXT | NOT NULL | JSON array nhãn, default `'[]'` (V2) |
 | inactive_reason | VARCHAR(500) | NULL | Lý do admin khoá (V2); giữ nguyên khi giải tán |
 | disband_reason | VARCHAR(100) | NULL | Lý do giải tán (V4); NOT NULL khi DISBANDED |
-| disbanded_at | TIMESTAMPTZ | NULL | Thời điểm giải tán (V4) |
+| disbanded_at | TIMESTAMP | NULL | Thời điểm giải tán (V4) |
 | disbanded_by | UUID | NULL | FK → user, người giải tán (V4) |
 | version | BIGINT | NOT NULL | Optimistic lock, default 0 (V2) |
 | reliability_score | INTEGER | NOT NULL | Điểm uy tín đội 0-100, default 80 |
@@ -134,8 +134,8 @@ Danh mục hành chính Việt Nam (tỉnh/quận/phường).
 | report_count_bad_communication | INTEGER | NOT NULL | default 0 |
 | report_count_skill_mismatch | INTEGER | NOT NULL | default 0 |
 | clean_streak | INTEGER | NOT NULL | default 0 |
-| created_at | TIMESTAMPTZ | NOT NULL | |
-| updated_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMP | NOT NULL | |
+| updated_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -162,9 +162,9 @@ Quan hệ nhiều-nhiều user-team với vai trò.
 | user_id | UUID | NOT NULL | FK → user |
 | role | VARCHAR(20) | NOT NULL | CAPTAIN, MEMBER |
 | status | VARCHAR(20) | NOT NULL | PENDING, ACTIVE, LEFT, REJECTED (V2) |
-| invited_at | TIMESTAMPTZ | NOT NULL | Thời gian mời |
-| joined_at | TIMESTAMPTZ | NULL | Thời gian chấp nhận |
-| left_at | TIMESTAMPTZ | NULL | Thời gian rời đội |
+| invited_at | TIMESTAMP | NOT NULL | Thời gian mời |
+| joined_at | TIMESTAMP | NULL | Thời gian chấp nhận |
+| left_at | TIMESTAMP | NULL | Thời gian rời đội |
 | version | BIGINT | NOT NULL | Optimistic lock, default 0 (V2) |
 
 **Indexes:**
@@ -192,7 +192,7 @@ Tags/skill levels của đội (tối đa 3 trong 9 nhãn).
 | id | UUID | NOT NULL | PK |
 | team_id | UUID | NOT NULL | FK → team |
 | tag | VARCHAR(50) | NOT NULL | Chill, Nhiệt tình, Máu lửa, ... |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -215,7 +215,7 @@ Lịch sử chuyển quyền đội trưởng.
 | team_id | UUID | NOT NULL | FK → team |
 | from_user_id | UUID | NULL | FK → user, NULL nếu là lần đầu (người tạo) |
 | to_user_id | UUID | NOT NULL | FK → user |
-| transferred_at | TIMESTAMPTZ | NOT NULL | |
+| transferred_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -249,9 +249,9 @@ Bài đăng ghép kèo (luồng A hoặc B).
 | age_note | TEXT | NULL | Ghi chú tuổi (văn bản tự do) |
 | match_nature | TEXT | NULL | Tính chất trận (văn bản tự do) |
 | venue_id | UUID | NULL | FK → venue (chỉ cho luồng A) |
-| match_start_time | TIMESTAMPTZ | NOT NULL | Giờ bắt đầu trận |
-| match_end_time | TIMESTAMPTZ | NOT NULL | Giờ kết thúc dự kiến (để ARCHIVED/notification) |
-| expires_at | TIMESTAMPTZ | NOT NULL | Thời hạn bài đăng, ≤ match_start_time |
+| match_start_time | TIMESTAMP | NOT NULL | Giờ bắt đầu trận |
+| match_end_time | TIMESTAMP | NOT NULL | Giờ kết thúc dự kiến (để ARCHIVED/notification) |
+| expires_at | TIMESTAMP | NOT NULL | Thời hạn bài đăng, ≤ match_start_time |
 | search_lat | DECIMAL(10,7) | NULL | Vĩ độ gốc cho gợi ý (luồng B) |
 | search_lng | DECIMAL(10,7) | NULL | Kinh độ gốc cho gợi ý (luồng B) |
 | search_radius_km | DECIMAL(5,2) | NULL | Bán kính tìm kiếm (default 3 km, luồng B) |
@@ -262,11 +262,11 @@ Bài đăng ghép kèo (luồng A hoặc B).
 | cost_deposit_holder | VARCHAR(100) | NULL | Ai giữ tiền cọc (luồng B, văn bản tự do) |
 | confirmed_opponent_team_id | UUID | NULL | FK → team, đội đã ghép (khi CONFIRMED) |
 | confirmed_venue_id | UUID | NULL | FK → venue, sân đã chốt (luồng B khi CONFIRMED) |
-| confirmed_match_time | TIMESTAMPTZ | NULL | Giờ trận đã chốt (luồng B khi CONFIRMED) |
+| confirmed_match_time | TIMESTAMP | NULL | Giờ trận đã chốt (luồng B khi CONFIRMED) |
 | cancelled_by_team_id | UUID | NULL | FK → team, đội hủy (khi CANCELLED) |
-| cancelled_at | TIMESTAMPTZ | NULL | Thời gian hủy |
-| created_at | TIMESTAMPTZ | NOT NULL | |
-| updated_at | TIMESTAMPTZ | NOT NULL | |
+| cancelled_at | TIMESTAMP | NULL | Thời gian hủy |
+| created_at | TIMESTAMP | NOT NULL | |
+| updated_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -302,7 +302,7 @@ Nhiều lựa chọn địa điểm cho luồng B.
 | id | UUID | NOT NULL | PK |
 | match_id | UUID | NOT NULL | FK → match |
 | venue_id | UUID | NOT NULL | FK → venue |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -320,9 +320,9 @@ Nhiều lựa chọn giờ hẹn cho luồng B.
 |---|---|---|---|
 | id | UUID | NOT NULL | PK |
 | match_id | UUID | NOT NULL | FK → match |
-| proposed_start_time | TIMESTAMPTZ | NOT NULL | Giờ bắt đầu đề xuất |
-| proposed_end_time | TIMESTAMPTZ | NOT NULL | Giờ kết thúc đề xuất |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| proposed_start_time | TIMESTAMP | NOT NULL | Giờ bắt đầu đề xuất |
+| proposed_end_time | TIMESTAMP | NOT NULL | Giờ kết thúc đề xuất |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -341,7 +341,7 @@ Các khoản tự nhập (tiền trọng tài, phí áo đấu, ...).
 | match_id | UUID | NOT NULL | FK → match |
 | item_name | VARCHAR(100) | NOT NULL | Tên khoản phí |
 | amount | BIGINT | NOT NULL | Số tiền (VND) |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -360,9 +360,9 @@ Yêu cầu bắt đối (luồng A).
 | match_id | UUID | NOT NULL | FK → match |
 | requester_team_id | UUID | NOT NULL | FK → team, đội gửi yêu cầu |
 | status | VARCHAR(20) | NOT NULL | PENDING, ACCEPTED, REJECTED, WITHDRAWN, SUPERSEDED, EXPIRED |
-| requested_at | TIMESTAMPTZ | NOT NULL | |
-| responded_at | TIMESTAMPTZ | NULL | Thời gian author phản hồi |
-| withdrawn_at | TIMESTAMPTZ | NULL | Thời gian requester rút |
+| requested_at | TIMESTAMP | NOT NULL | |
+| responded_at | TIMESTAMP | NULL | Thời gian author phản hồi |
+| withdrawn_at | TIMESTAMP | NULL | Thời gian requester rút |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -389,10 +389,10 @@ Pairing cho luồng B (nhiều đội thương lượng đồng thời).
 | match_id | UUID | NOT NULL | FK → match |
 | interested_team_id | UUID | NOT NULL | FK → team, đội nhận bài |
 | status | VARCHAR(20) | NOT NULL | NEGOTIATING, CONFIRMED, EXPIRED, SUPERSEDED |
-| author_confirmed_at | TIMESTAMPTZ | NULL | Author xác nhận |
-| interested_confirmed_at | TIMESTAMPTZ | NULL | Đội nhận xác nhận |
-| final_confirmed_at | TIMESTAMPTZ | NULL | Timestamp xác nhận cuối (để xử lý race condition) |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| author_confirmed_at | TIMESTAMP | NULL | Author xác nhận |
+| interested_confirmed_at | TIMESTAMP | NULL | Đội nhận xác nhận |
+| final_confirmed_at | TIMESTAMP | NULL | Timestamp xác nhận cuối (để xử lý race condition) |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -418,7 +418,7 @@ Danh mục bộ môn.
 | id | UUID | NOT NULL | PK |
 | name | VARCHAR(50) | NOT NULL | Tên bộ môn |
 | is_active | BOOLEAN | NOT NULL | Admin bật/tắt, default TRUE |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -449,7 +449,7 @@ INSERT INTO sport (name, is_active) VALUES ('Bóng đá', TRUE);
 | comment | TEXT | NULL | Bình luận |
 | match_score_home | INTEGER | NULL | Tỷ số (tùy chọn, chỉ lưu kỷ niệm) |
 | match_score_away | INTEGER | NULL | |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -478,8 +478,8 @@ Report hành vi xấu (4 loại).
 | report_type | VARCHAR(50) | NOT NULL | NOSHOW, BAD_PLAY, BAD_COMMUNICATION, SKILL_MISMATCH |
 | reason | TEXT | NULL | Lý do |
 | status | VARCHAR(20) | NOT NULL | PENDING, CONFIRMED, REJECTED |
-| admin_reviewed_at | TIMESTAMPTZ | NULL | Admin xem xét (chỉ cho tranh chấp bùng) |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| admin_reviewed_at | TIMESTAMP | NULL | Admin xem xét (chỉ cho tranh chấp bùng) |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -519,13 +519,13 @@ _(Tiếp tục: Venue, Mercenary, Chat & Notification)_
 | website | VARCHAR(500) | NULL | Website |
 | venue_type | VARCHAR(50) | NULL | `FIVE_A_SIDE`, `SEVEN_A_SIDE`, `ELEVEN_A_SIDE` |
 | status | VARCHAR(20) | NOT NULL | ACTIVE, INACTIVE |
-| last_selected_at | TIMESTAMPTZ | NULL | Lần chọn gần nhất (kèo, trận ngoài) — để cảnh báo 180 ngày |
-| admin_verified_inactive_at | TIMESTAMPTZ | NULL | Admin xác minh ngừng hoạt động |
+| last_selected_at | TIMESTAMP | NULL | Lần chọn gần nhất (kèo, trận ngoài) — để cảnh báo 180 ngày |
+| admin_verified_inactive_at | TIMESTAMP | NULL | Admin xác minh ngừng hoạt động |
 | version | BIGINT | NOT NULL | V5, default 0. `@Version` cho sửa địa điểm / admin; ghi ảnh khoá dòng bằng `UPDATE … version + 1` (ADR-0003 Sửa đổi 2026-11-09) |
-| stale_alerted_at | TIMESTAMPTZ | NULL | V5. Cổng cảnh báo 180 ngày: job đặt khi cảnh báo; reset khi được chọn / kích hoạt lại |
-| closure_alerted_at | TIMESTAMPTZ | NULL | V5. Cổng cảnh báo report `CLOSED`: đặt ở report `CLOSED` đầu tiên của đợt; xoá khi hết report `CLOSED` `PENDING` hoặc kích hoạt lại |
-| created_at | TIMESTAMPTZ | NOT NULL | |
-| updated_at | TIMESTAMPTZ | NOT NULL | |
+| stale_alerted_at | TIMESTAMP | NULL | V5. Cổng cảnh báo 180 ngày: job đặt khi cảnh báo; reset khi được chọn / kích hoạt lại |
+| closure_alerted_at | TIMESTAMP | NULL | V5. Cổng cảnh báo report `CLOSED`: đặt ở report `CLOSED` đầu tiên của đợt; xoá khi hết report `CLOSED` `PENDING` hoặc kích hoạt lại |
+| created_at | TIMESTAMP | NOT NULL | |
+| updated_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -559,7 +559,7 @@ _(Tiếp tục: Venue, Mercenary, Chat & Notification)_
 | is_primary | BOOLEAN | NOT NULL | Ảnh đại diện chính, default FALSE |
 | display_order | INTEGER | NOT NULL | Thứ tự hiển thị |
 | uploaded_by | UUID | NULL | FK → user |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -587,8 +587,8 @@ Report địa điểm (đã đóng cửa / sai thông tin / khác) và kết qu�
 | detail | TEXT | NULL | V5. Mô tả thêm (API giới hạn 1000 ký tự) |
 | status | VARCHAR(20) | NOT NULL | V5. `PENDING` (default), `VERIFIED`, `REJECTED` |
 | handled_by | UUID | NULL | V5. FK → user — admin chốt report |
-| handled_at | TIMESTAMPTZ | NULL | V5. Thời điểm chốt |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| handled_at | TIMESTAMP | NULL | V5. Thời điểm chốt |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -624,8 +624,8 @@ Tin tuyển mercenary.
 | quantity_needed | INTEGER | NOT NULL | Số lượng cần tuyển |
 | quantity_approved | INTEGER | NOT NULL | Số lượng đã duyệt, default 0 |
 | status | VARCHAR(20) | NOT NULL | OPEN, FILLED, EXPIRED, CLOSED |
-| created_at | TIMESTAMPTZ | NOT NULL | |
-| updated_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMP | NOT NULL | |
+| updated_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -653,9 +653,9 @@ Tin tuyển mercenary.
 | recruitment_id | UUID | NOT NULL | FK → mercenary_recruitment |
 | applicant_id | UUID | NOT NULL | FK → user |
 | status | VARCHAR(20) | NOT NULL | PENDING, APPROVED, REJECTED, WITHDRAWN |
-| applied_at | TIMESTAMPTZ | NOT NULL | |
-| responded_at | TIMESTAMPTZ | NULL | Đội trưởng phản hồi |
-| withdrawn_at | TIMESTAMPTZ | NULL | Ứng viên rút |
+| applied_at | TIMESTAMP | NOT NULL | |
+| responded_at | TIMESTAMP | NULL | Đội trưởng phản hồi |
+| withdrawn_at | TIMESTAMP | NULL | Ứng viên rút |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -686,7 +686,7 @@ Chat giữa hai đội trưởng (luồng B pairing).
 | pairing_id | UUID | NOT NULL | FK → pairing |
 | sender_user_id | UUID | NOT NULL | FK → user, đội trưởng gửi |
 | message | TEXT | NOT NULL | Nội dung tin nhắn |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
@@ -713,7 +713,7 @@ Thông báo in-app.
 | reference_type | VARCHAR(50) | NULL | MATCH, TEAM, USER, ... |
 | reference_id | UUID | NULL | ID của đối tượng liên quan |
 | is_read | BOOLEAN | NOT NULL | Đã đọc, default FALSE |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
