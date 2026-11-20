@@ -514,12 +514,16 @@ _(Tiếp tục: Venue, Mercenary, Chat & Notification)_
 | longitude | DECIMAL(10,7) | NOT NULL | Kinh độ |
 | created_by_type | VARCHAR(20) | NOT NULL | ADMIN, USER |
 | created_by_user_id | UUID | NULL | FK → user (nếu USER tạo) |
+| ward_id | UUID | NULL | FK → administrative_unit (phường/xã, V5). Bắt buộc khi thêm / sửa qua API (BR-V11); NULL chỉ cho địa điểm cũ |
 | phone | VARCHAR(20) | NULL | Số điện thoại |
 | website | VARCHAR(500) | NULL | Website |
-| venue_type | VARCHAR(50) | NULL | Sân 5, sân 7, sân 11 |
+| venue_type | VARCHAR(50) | NULL | `FIVE_A_SIDE`, `SEVEN_A_SIDE`, `ELEVEN_A_SIDE` |
 | status | VARCHAR(20) | NOT NULL | ACTIVE, INACTIVE |
-| last_selected_at | TIMESTAMPTZ | NULL | Lần chọn gần nhất (để cảnh báo 180 ngày) |
+| last_selected_at | TIMESTAMPTZ | NULL | Lần chọn gần nhất (kèo, trận ngoài) — để cảnh báo 180 ngày |
 | admin_verified_inactive_at | TIMESTAMPTZ | NULL | Admin xác minh ngừng hoạt động |
+| version | BIGINT | NOT NULL | V5, default 0. `@Version` cho sửa địa điểm / admin; ghi ảnh khoá dòng bằng `UPDATE … version + 1` (ADR-0003 Sửa đổi 2026-11-09) |
+| stale_alerted_at | TIMESTAMPTZ | NULL | V5. Cổng cảnh báo 180 ngày: job đặt khi cảnh báo; reset khi được chọn / kích hoạt lại |
+| closure_alerted_at | TIMESTAMPTZ | NULL | V5. Cổng cảnh báo report `CLOSED`: đặt ở report `CLOSED` đầu tiên của đợt; xoá khi hết report `CLOSED` `PENDING` hoặc kích hoạt lại |
 | created_at | TIMESTAMPTZ | NOT NULL | |
 | updated_at | TIMESTAMPTZ | NOT NULL | |
 
@@ -527,25 +531,31 @@ _(Tiếp tục: Venue, Mercenary, Chat & Notification)_
 - PRIMARY KEY (id)
 - INDEX (latitude, longitude, status) WHERE status = 'ACTIVE' -- tìm kiếm theo GPS
 - INDEX (status, last_selected_at) -- scheduled job cảnh báo 180 ngày
+- INDEX idx_venue_status_name (status, name, id) -- danh sách theo trạng thái, sort tên (V5)
+- INDEX idx_venue_ward (ward_id) (V5)
 - INDEX (created_by_user_id)
 
 **Foreign Keys:**
-- FOREIGN KEY (created_by_user_id) REFERENCES user(id) ON DELETE SET NULL
+- FOREIGN KEY (created_by_user_id) REFERENCES user(id) ON DELETE RESTRICT (V5 — trước là SET NULL; tài khoản bị xoá mềm nên tên người tạo vẫn tra được)
+- FOREIGN KEY (ward_id) REFERENCES administrative_unit(id) ON DELETE RESTRICT (V5)
 
 **Constraints:**
 - CHECK (created_by_type IN ('ADMIN', 'USER'))
 - CHECK (status IN ('ACTIVE', 'INACTIVE'))
 - CHECK ((created_by_type = 'USER' AND created_by_user_id IS NOT NULL) OR (created_by_type = 'ADMIN'))
+- CHECK venue_type_check (venue_type IS NULL OR venue_type IN ('FIVE_A_SIDE', 'SEVEN_A_SIDE', 'ELEVEN_A_SIDE')) (V5)
+- CHECK venue_inactive_consistency_check ((status = 'INACTIVE' AND admin_verified_inactive_at IS NOT NULL) OR (status = 'ACTIVE' AND admin_verified_inactive_at IS NULL)) (V5)
 
 ### 5.2 Bảng: venue_image
 
-Ảnh địa điểm (tối đa 5, có ảnh primary).
+Ảnh địa điểm (tối đa 5, có ảnh primary). Xoá ảnh là **hard-delete** (2.13); asset Cloudinary do job dọn xoá sau.
 
 | Cột | Kiểu | Nullable | Mô tả |
 |---|---|---|---|
 | id | UUID | NOT NULL | PK |
 | venue_id | UUID | NOT NULL | FK → venue |
 | image_url | VARCHAR(500) | NOT NULL | URL ảnh |
+| public_id | VARCHAR(255) | NOT NULL | V5. Cloudinary public ID (`<folder>/venues/<venueId>/<signedAt>-<nonce>-<tag>`); dòng cũ = `legacy/<id>` |
 | is_primary | BOOLEAN | NOT NULL | Ảnh đại diện chính, default FALSE |
 | display_order | INTEGER | NOT NULL | Thứ tự hiển thị |
 | uploaded_by | UUID | NULL | FK → user |
@@ -554,6 +564,7 @@ _(Tiếp tục: Venue, Mercenary, Chat & Notification)_
 **Indexes:**
 - PRIMARY KEY (id)
 - UNIQUE (venue_id, is_primary) WHERE is_primary = TRUE -- chỉ một ảnh primary
+- UNIQUE uq_venue_image_public_id (public_id) -- chống lưu trùng một asset (V5, `VENUE_006`)
 - INDEX (venue_id, display_order)
 
 **Foreign Keys:**
@@ -565,24 +576,36 @@ _(Tiếp tục: Venue, Mercenary, Chat & Notification)_
 
 ### 5.3 Bảng: venue_report
 
-Report địa điểm ngừng hoạt động.
+Report địa điểm (đã đóng cửa / sai thông tin / khác) và kết quả admin xác minh.
 
 | Cột | Kiểu | Nullable | Mô tả |
 |---|---|---|---|
 | id | UUID | NOT NULL | PK |
 | venue_id | UUID | NOT NULL | FK → venue |
 | reporter_id | UUID | NOT NULL | FK → user |
-| reason | TEXT | NOT NULL | Lý do báo cáo |
+| reason | VARCHAR(20) | NOT NULL | `CLOSED`, `WRONG_INFO`, `OTHER` (V5: trước là TEXT; mô tả cũ chuyển sang `detail`, `reason` = `OTHER`) |
+| detail | TEXT | NULL | V5. Mô tả thêm (API giới hạn 1000 ký tự) |
+| status | VARCHAR(20) | NOT NULL | V5. `PENDING` (default), `VERIFIED`, `REJECTED` |
+| handled_by | UUID | NULL | V5. FK → user — admin chốt report |
+| handled_at | TIMESTAMPTZ | NULL | V5. Thời điểm chốt |
 | created_at | TIMESTAMPTZ | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
 - INDEX (venue_id, created_at DESC) -- admin xem danh sách report
 - INDEX (reporter_id)
+- INDEX idx_venue_report_status_created (status, created_at DESC) -- hàng chờ admin (V5)
+- UNIQUE uq_venue_report_pending (reporter_id, venue_id, reason) WHERE status = 'PENDING' -- mỗi user tối đa 1 report chờ cho mỗi (địa điểm, lý do) (V5, `VENUE_014`)
 
 **Foreign Keys:**
 - FOREIGN KEY (venue_id) REFERENCES venue(id) ON DELETE CASCADE
-- FOREIGN KEY (reporter_id) REFERENCES user(id) ON DELETE SET NULL
+- FOREIGN KEY (reporter_id) REFERENCES user(id) ON DELETE RESTRICT (V5 — trước là SET NULL)
+- FOREIGN KEY (handled_by) REFERENCES user(id) ON DELETE RESTRICT (V5)
+
+**Constraints:**
+- CHECK venue_report_reason_check (reason IN ('CLOSED', 'WRONG_INFO', 'OTHER')) (V5)
+- CHECK venue_report_status_check (status IN ('PENDING', 'VERIFIED', 'REJECTED')) (V5)
+- CHECK venue_report_handled_consistency_check ((status = 'PENDING' AND handled_by IS NULL AND handled_at IS NULL) OR (status <> 'PENDING' AND handled_by IS NOT NULL AND handled_at IS NOT NULL)) (V5)
 
 ---
 

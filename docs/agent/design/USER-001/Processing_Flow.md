@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql` + V2/V3 (`Component_Class_Design.md` §6) · ADR-0001/0002/0003, ADR-0007 (+ Sửa đổi 2026-11-14) · v4.1: 2.7 cần V9 (MERCENARY-001) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.3** (solution-architect · 2026-11-17) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.4** (developer · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan luồng
 
@@ -159,7 +159,7 @@ Isolation: `READ_COMMITTED` (mặc định PostgreSQL). Không gọi dịch vụ
 ## 5. Concurrency & Locking (ADR-0003)
 
 - `@Version` trên `Team`, `TeamMember`. `User` không có version — cập nhật hồ sơ theo last-write-wins (chỉ chủ tài khoản sửa).
-- `ConcurrencyConflictRetrier.execute(Supplier<T>)`: bắt `ObjectOptimisticLockingFailureException`, hoặc `PessimisticLockingFailureException` có SQLState `40P01` (deadlock — ghi log `WARN` kèm SQLState và số lần thử) → thử lại ngay, không backoff, **tối đa 3 lần thử** (1 lần đầu + 2 lần retry) → hết → `BusinessException(TEAM_014)`. Lỗi nghiệp vụ (`BusinessException`) và lỗi khoá khác (NOWAIT `55P03`, lock timeout, serialization failure `40001`) không retry.
+- `ConcurrencyConflictRetrier.execute(Supplier<T>)`: bắt `ObjectOptimisticLockingFailureException`, hoặc `PessimisticLockingFailureException` có SQLState `40P01` (deadlock — ghi log `WARN` kèm SQLState và số lần thử) → thử lại ngay, không backoff, **tối đa 3 lần thử** (1 lần đầu + 2 lần retry) → hết → `BusinessException(TEAM_014)`. Lỗi nghiệp vụ (`BusinessException`) và lỗi khoá khác (NOWAIT `55P03`, lock timeout, serialization failure `40001`) không retry. **v4.4 (VENUE-001):** thêm overload `execute(ErrorCode exhaustedCode, Supplier<T>)` — cùng hành vi, mã lỗi khi hết lượt do miền gọi chọn (VENUE-001 dùng `VENUE_011`); bản không tham số uỷ quyền với `TEAM_014` nên USER-001/002 không đổi (ADR-0003 Sửa đổi 2026-11-09).
 - ~~**Tín hiệu "cập nhật thiếu dòng" của 2.7**~~ — bỏ ở USER-002: `deleteAccount` không còn `markInactiveByIds`; ~~race với chuyển quyền (R1) xử lý bằng kiểm captain lần 2~~ (v2.0). **v2.1:** race của xoá tài khoản xử lý bằng khoá bi quan có phạm vi — ngoại lệ của ADR-0003 theo ADR-0007 (USER-002 `Processing_Flow.md` §4.2).
 - Bulk update (2.7) tự `SET version = version + 1` để các transaction đang giữ bản cũ phát hiện xung đột.
 

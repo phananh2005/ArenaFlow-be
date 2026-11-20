@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway · Cloudinary |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + `Component_Class_Design.md` §4.9 |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.2** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.3** (developer · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -173,9 +173,9 @@ Q1 `findVenue` → `VENUE_001` → `requireOwnerOrAdmin` → `VENUE_013` → `re
 Q1–Q2 `lockForImageWrite` (`VENUE_001`) → `requireOwnerOrAdmin` (`VENUE_013`) → `requireWritable` (`VENUE_002`) → Q3 `findByIdAndVenueId` → `VENUE_004` → Q4 `delete` (Hibernate flush trước Q5/Q6) → nếu là ảnh chính: Q5 `promoteFirstAsPrimary` (BR-V08; 0 dòng khi hết ảnh) → Q6 danh sách còn lại. Không gọi Cloudinary (gọi HTTP trong transaction trái NFS §5; gọi trước commit mà rollback thì mất asset trong khi dòng còn) — asset do job §3.16 dọn. `display_order` có khoảng trống, chấp nhận. Admin không phải người tạo → `adminAuditLog.afterCommit(ADMIN_DELETE_IMAGE, …)` gọi trong method `@Transactional` — log chỉ ghi khi transaction commit, không ghi nếu rollback.
 
 ### 3.14. Job cảnh báo 180 ngày
-`threshold = now − stale-days`; tối đa `max-batches-per-run` lô, mỗi lô một transaction: Q1 `markStaleAlerted(threshold, now, batch-size)` → mỗi dòng `VenueAdminAlertEvent(STALE_180_DAYS)` (vòng trong bộ nhớ) → commit; dừng khi < `batch-size`. Lỗi một lô → rollback, log `ERROR`, dừng; lần sau làm tiếp (cổng `stale_alerted_at` chống trùng). Log `INFO` số lượng.
+`threshold = now − stale-days`; tối đa `max-batches-per-run` lô, mỗi lô một transaction: Q1 `markStaleAlerted(threshold, now, batch-size)` → mỗi dòng `VenueAdminAlertEvent(STALE_180_DAYS)` (vòng trong bộ nhớ) → commit; dừng khi lô **rỗng** (lô ngắn chưa chắc đã hết: dòng bị ghi đồng thời bị loại khỏi lô). Lỗi một lô → rollback, log `ERROR`, dừng; lần sau làm tiếp (cổng `stale_alerted_at` chống trùng). Log `INFO` số lượng.
 
-**Dự phòng** nếu `UPDATE … RETURNING` không chạy qua Spring Data `[cần xác nhận #11]`: S id/name cùng điều kiện + U `WHERE id IN (:ids)` lặp điều kiện. Đánh đổi: cảnh báo thừa nếu địa điểm vừa thoát điều kiện giữa hai câu. Báo lại trước khi dùng.
+`UPDATE … RETURNING` chạy được qua Spring Data (#11 đóng 2026-11-19) — không cần phương án dự phòng.
 
 ### 3.15. Port MATCH-001
 `requireSelectable`: Q1 `findSelectableByIdIn` (một câu, `LEFT JOIN` ảnh chính như `VenueSummaryView`; sắp lại theo thứ tự `venueIds` trong bộ nhớ) → thiếu → `VENUE_001`; có `INACTIVE` → `VENUE_002`; rỗng → không truy vấn. `markSelected`: Q1 bulk; tăng `version` vì Hibernate ghi **mọi cột** `Venue` khi flush — luồng admin giữ bản cũ sẽ lệch CAS và retry thay vì ghi đè `last_selected_at`. Mọi caller hiện tại truyền **một** địa điểm: kèo luồng A khi tạo (MATCH-001 2.1), kèo luồng B chỉ địa điểm của phương án đã chốt lúc ghép (MATCH-002 2.7) — mỗi lần gọi khoá một dòng `venue`, không có khoá chéo nhiều dòng. Caller sau này truyền nhiều id → phải sắp theo thứ tự cố định và kiểm thứ tự khoá trước khi dùng [Inference — PostgreSQL không bảo đảm thứ tự khoá theo danh sách `IN`].
@@ -193,7 +193,7 @@ Xoá asset trong `rootPrefix("venues")` không còn dòng `venue_image` tham chi
 
 **Đua:** ứng viên luôn cũ hơn `grace`, 2.5 chỉ nhận trong `confirm-window` (< `grace` − 1h) → không có 2.5 nào chèn `public_id` đó giữa bước 3 và 4; không cần khoá. Asset của môi trường khác: chặn bằng thư mục riêng mỗi môi trường (§9).
 
-**Lỗi:** 420/429 → dừng, log `WARN` kèm `X-FeatureRateLimit-Reset`; timeout/5xx/mạng → dừng, log `WARN`; 401/403 → log `ERROR`, dừng; lỗi DB ở bước 3 → dừng, không xoá khi chưa đối chiếu. Không retry trong cùng lần chạy.
+**Lỗi** (theo thứ tự kiểm, mọi trường hợp đều dừng lần chạy): 420/429 → log `WARN` kèm `X-FeatureRateLimit-Reset`; 401/403 → log `ERROR`; HTTP lỗi khác (4xx còn lại, 5xx) → log `WARN` kèm mã HTTP; timeout/mạng → log `WARN` kèm tên lớp nguyên nhân gốc; lỗi DB ở bước 3 → log `ERROR` kèm stack trace, không xoá khi chưa đối chiếu; lỗi bất ngờ khác → log `ERROR` kèm stack trace. **NEVER** log body response, URL request (chứa public ID), `apiSecret`. Không retry trong cùng lần chạy.
 
 ## 4. Transaction Boundary
 
@@ -280,7 +280,7 @@ Native projection + JOIN, ảnh chính bằng `LEFT JOIN … AND is_primary`, kh
 | Asset đã xoá / mồ côi còn trên Cloudinary | Tốn dung lượng; ảnh đã xoá mở được qua URL tới khi job chạy (sau `grace`) và cache CDN hết hạn (`invalidate` tắt) | Job dọn §3.16 |
 | **Giới hạn quét của job dọn** | Mỗi lần chạy tối đa `max-admin-calls-per-run` request × `page-size` asset (≈50 000 asset nếu không xoá gì), luôn bắt đầu lại từ đầu (sắp theo `public_id`) → thư viện lớn hơn thì phần cuối không bao giờ được quét | Chấp nhận cho MVP; khi gần ngưỡng → lưu cursor giữa các lần chạy hoặc tăng ngân sách |
 | Job dọn vượt 500 request/giờ | Dọn chậm | Ngân sách mỗi lần chạy; dừng khi 420 |
-| Dùng lại chữ ký upload trong 1 giờ | Ghi đè asset cùng `public_id` | Ký `overwrite=false` `[cần xác nhận #9]`; vẫn phải qua 2.5 (đúng người, đúng hạn) mới hiển thị |
+| Dùng lại chữ ký upload trong 1 giờ | Ghi đè asset cùng `public_id` | Ký `overwrite=false` (đã kiểm: không ghi đè); vẫn phải qua 2.5 (đúng người, đúng hạn) mới hiển thị |
 | Xoay vòng `api_secret` | Upload chưa xác nhận → `VENUE_005` (cả chữ ký response và tag HMAC đổi) | Đổi ngoài giờ cao điểm; client upload lại |
 | Thiếu cấu hình Cloudinary | 2.4/2.5 → `503 VENUE_012`; job không bật được | Log `WARN` khi khởi động |
 | User spam địa điểm/ảnh/report | Rác, tốn credit | Chưa có rate limit `[cần xác nhận #18]` |
@@ -290,12 +290,19 @@ Native projection + JOIN, ảnh chính bằng `LEFT JOIN … AND is_primary`, kh
 
 ## 10. Danh sách [cần xác nhận]
 
-Đánh số toàn thiết kế: 1–2 và 16–18 ở đây, 3–7 ở `API_Spec.md` §6 (kèm phần ảnh hưởng FE của #9), 8–15 ở `Component_Class_Design.md` §12.
+Đánh số toàn thiết kế: 1–2 và 16–18 ở đây, 3–7 và #19 (phần ảnh hưởng FE) ở `API_Spec.md` §6, 8–15 và 19 ở `Component_Class_Design.md` §12.
+
+**Còn mở**
 
 | # | Nội dung | Loại |
 |---|---|---|
-| 1 | ~~Report phát cả `VenueReportedEvent` (mỗi report, UC-V03 bước 6) lẫn `VenueAdminAlertEvent(CLOSURE_REPORTED)` một lần (BC-V05); NOTIFICATION-001 quyết định gộp~~ — **Đóng v4.2 (user chốt Q8, 2026-11-16):** Admin chỉ nhận thông báo theo `VenueAdminAlertEvent`; bỏ `VenueReportedEvent`. SRS UC-V03 bước 6 / AC-V03 cần sửa (NOTIFICATION-001 `Component_Class_Design.md` §11 S4) | Đã đóng |
 | 2 | Mở lại cổng "cảnh báo 1 lần": `CLOSURE_REPORTED` khi hết report `CLOSED` `PENDING` hoặc reactivate; `STALE_180_DAYS` khi được chọn lại hoặc reactivate (chuyển từ `API_Spec.md` v1.0) | Không chặn |
 | 16 | Deadlock resolve vs mark-inactive (§5): chọn cho `resolveReport` chạy qua retrier thay vì đổi thứ tự khoá | Không chặn (đã có mặc định) |
 | 17 | Trùng địa điểm: không khoá tự nhiên, spec không có quy tắc | Không chặn |
 | 18 | Rate limit cho 2.1, 2.5, 2.7 (AC §3.2 chỉ nêu endpoint public) | Không chặn |
+
+**Đã đóng**
+
+| # | Nội dung | Đóng ngày · bằng chứng |
+|---|---|---|
+| 1 | Report phát cả `VenueReportedEvent` (mỗi report) lẫn `VenueAdminAlertEvent(CLOSURE_REPORTED)` một lần; NOTIFICATION-001 quyết định gộp | 2026-11-16 · user chốt Q8: Admin chỉ nhận thông báo theo `VenueAdminAlertEvent`; bỏ `VenueReportedEvent`. SRS UC-V03 bước 6 / AC-V03 cần sửa (NOTIFICATION-001 `Component_Class_Design.md` §11 S4) |

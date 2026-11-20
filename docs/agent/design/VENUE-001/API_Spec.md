@@ -12,7 +12,7 @@
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); USER-001 `API_Spec.md` §1.1 "Quy ước chung" và §1.2 "Lỗi chung" |
 | Quyết định liên quan | [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) — ảnh lưu trên Cloudinary, FE upload thẳng lên Cloudinary bằng chữ ký backend cấp |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.9) — UC-V01..V06, BR-V01..V11, BC-V01..V07 (BC-V05 sửa 2026-11-14 — trận ngoài hệ thống), BC-U02, Business_Rules §2.6, §5.1/§5.4, AC-V01..V05 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.2** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.3** (developer · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -249,7 +249,7 @@ sequenceDiagram
     BE-->>FE: 201 ảnh đã lưu (imageUrl)
 ```
 
-**Trước khi bắt đầu:** địa điểm còn dưới 5 ảnh; người dùng được thêm ảnh (§3.1); file có định dạng `jpg`, `jpeg`, `png` hoặc `webp` (FE tự kiểm — `[cần xác nhận #9]`).
+**Trước khi bắt đầu:** địa điểm còn dưới 5 ảnh; người dùng được thêm ảnh (§3.1); file có định dạng `jpg`, `jpeg`, `png` hoặc `webp` (FE nên tự kiểm để báo lỗi sớm; Cloudinary cũng từ chối định dạng khác ở Bước 2); giới hạn dung lượng file chưa chốt — FE nên tự giới hạn `[cần xác nhận #19]`.
 
 **Bước 1 — Xin chữ ký (2.4):** nhận UploadSignature (§4.5). Mỗi chữ ký dùng cho **một** file.
 
@@ -271,7 +271,7 @@ Từ JSON Cloudinary trả về, lấy `public_id`, `version`, `format`, `signat
 
 **Bước 3 — Lưu ảnh (2.5):** gọi ngay, bằng **chính tài khoản đã xin chữ ký**, trong hạn xác nhận (hiện là 6 giờ kể từ `timestamp`). FE không tự dựng hay gửi URL ảnh; dùng `imageUrl` trong response 2.5.
 
-Cloudinary trả lỗi ở Bước 2 (không có mã lỗi ArenaFlow; vd quá `expiresAt`, chữ ký không khớp) → FE xin chữ ký mới (Bước 1) rồi upload lại. Cloudinary có chặn định dạng ngoài `allowedFormats` hay không chưa chạy thử `[cần xác nhận #9]` — FE vẫn tự kiểm định dạng trước khi upload. File đã lên Cloudinary nhưng không lưu được ở Bước 3 (bỏ ngang, quá hạn, bị từ chối) không hiện ở địa điểm; FE không cần và không thể xoá ảnh trên Cloudinary.
+Cloudinary trả lỗi ở Bước 2 (không có mã lỗi ArenaFlow; vd quá `expiresAt`, chữ ký không khớp, file ngoài `allowedFormats`) → FE xin chữ ký mới (Bước 1) rồi upload lại (với file sai định dạng: chọn file hợp lệ). **Mỗi file phải xin chữ ký mới:** dùng lại chữ ký cho file khác thì Cloudinary **không báo lỗi** mà trả lại ảnh cũ đã upload bằng chữ ký đó (không ghi đè); khi đó 2.5 trả `409 VENUE_006` (hoặc lưu ảnh cũ nếu ảnh cũ chưa được lưu) và file mới **không** được lưu. File đã lên Cloudinary nhưng không lưu được ở Bước 3 (bỏ ngang, quá hạn, bị từ chối) không hiện ở địa điểm; FE không cần và không thể xoá ảnh trên Cloudinary.
 
 ### 2.4. Xin chữ ký upload ảnh — `POST /api/v1/venues/{venueId}/image-upload-signatures`
 
@@ -944,7 +944,7 @@ Các endpoint không thuộc `/api/v1/admin/**` (2.1, 2.3, 2.12) vẫn trả Ven
 
 ## 6. Danh sách [cần xác nhận]
 
-Số thứ tự giữ theo toàn bộ thiết kế VENUE-001; các số không có ở đây là điểm nội bộ backend, không ảnh hưởng cách FE gọi API. #3–#7 đã có mặc định như mô tả ở trên (không chặn); #9 chặn code phía backend tới khi kiểm thử trên cloud thật, FE làm theo hướng dẫn ở dòng #9.
+Số thứ tự giữ theo toàn bộ thiết kế VENUE-001; các số không có ở đây là điểm nội bộ backend, không ảnh hưởng cách FE gọi API. Mọi mục dưới đây đã có mặc định như mô tả ở trên (không chặn).
 
 | # | Nội dung | Loại |
 |---|---|---|
@@ -953,4 +953,4 @@ Số thứ tự giữ theo toàn bộ thiết kế VENUE-001; các số không c
 | 5 | Giới hạn spec không nêu: `address` ≤ 500, `detail` ≤ 1000, `phone` `^0[0-9]{9,10}$` | Không chặn |
 | 6 | Admin tạo địa điểm → `createdByType = ADMIN`, `createdById` = admin đó (admin là "người tạo") | Không chặn |
 | 7 | 2.12: `""` = xoá field tuỳ chọn, `null` = giữ nguyên | Không chặn |
-| 9 | (Phần ảnh hưởng FE) Upload Cloudinary chưa chạy thử trên cloud thật: giới hạn dung lượng file; Cloudinary có chặn định dạng ngoài `allowedFormats` và chặn ghi đè (`overwrite=false`) hay không. Trước khi chốt, FE tự kiểm định dạng file trước khi upload | Chặn code phía backend (kiểm thử trên cloud dev) |
+| 19 | Giới hạn dung lượng file ảnh chưa chốt (chữ ký upload không giới hạn được dung lượng; áp giới hạn của gói Cloudinary). FE nên tự giới hạn dung lượng trước khi upload | Không chặn |

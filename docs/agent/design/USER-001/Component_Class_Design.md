@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 · v4.1: xoá tài khoản (2.7) cần bảng mercenary của V9 (MERCENARY-001 `Component_Class_Design.md` §5.1) — implement sau MERCENARY-001 phần dữ liệu |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.3** (solution-architect · 2026-11-17) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.4** (developer · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -305,9 +305,9 @@ Claims: `sub` = userId, `roles` = `["USER"]` hoặc `["ADMIN"]` (theo `security-
 
 ### 9.4. CurrentUser
 - `api/security/CurrentUser`: annotation `@Target(PARAMETER)`, `@Retention(RUNTIME)`.
-- `api/security/CurrentUserArgumentResolver` (`HandlerMethodArgumentResolver`): tham số `UUID` có `@CurrentUser` → `UUID.fromString(jwt.getSubject())`.
+- `api/security/CurrentUserArgumentResolver` (`HandlerMethodArgumentResolver`): tham số `UUID` có `@CurrentUser` → `UUID.fromString(jwt.getSubject())`. **v4.4 (VENUE-001):** tham số `CurrentActor` có `@CurrentUser` → `new CurrentActor(userId, admin)` với `admin` = authorities chứa `ROLE_ADMIN`; không truy vấn DB (VENUE-001 `Component_Class_Design.md` §4.11). Kiểu tham số khác → không hỗ trợ.
 - `api/config/WebMvcConfig` (`WebMvcConfigurer`) đăng ký resolver.
-- Controller nhận `@CurrentUser UUID currentUserId`.
+- Controller nhận `@CurrentUser UUID currentUserId`; endpoint cần biết role của người gọi (VENUE-001) nhận `@CurrentUser CurrentActor actor`.
 
 ## 10. Exception Handling
 

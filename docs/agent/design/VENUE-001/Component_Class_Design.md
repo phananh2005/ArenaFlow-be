@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · Cloudinary (ký/xác minh cục bộ trong request; Admin API chỉ trong job dọn asset) |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §10 · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (§5.1); entity hiện có `domain/.../entity/venue/{Venue,VenueImage,VenueReport}` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.2** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v4.3** (developer · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -91,15 +91,15 @@ Quy ước như USER-001 §3 (`@Validated`, `ResponseEntity<ApiResponse<…>>`, 
 ### 4.1. VenueService
 ```java
 VenueResponse createVenue(UUID callerId, CreateVenueRequest request);                     // @Transactional
-PageResponse<VenueSummaryResponse> searchVenues(SearchVenueRequest request);             // readOnly
+PageResponse<VenueSummaryResponse> listVenues(SearchVenueRequest request);               // readOnly
 VenueResponse getVenue(UUID venueId);                                                     // readOnly; dùng lại ở 2.12
 VenueReportResponse reportVenue(UUID venueId, CurrentActor actor, ReportVenueRequest r); // @Transactional
 VenueResponse updateVenue(UUID venueId, CurrentActor actor, UpdateVenueRequest r);       // retrier(VENUE_011)
 ```
 Deps: `VenueRepository`, `VenueReportRepository`, `UserRepository` (`findByIdAndDeletedAtIsNull`), `AdministrativeUnitRepository` (`findWardWithProvince` — USER-001, v4.0), `VenueImageRepository`, `VenueGuard`, `VenueMapper`, `PageRequestFactory`, `ApplicationEventPublisher`, `AdminAuditLog`.
 - `createVenue`: `findWardWithProvince(wardId)` → `USER_002` (v4.0) → chuẩn hoá (trim; `""` → `null`) → `Venue.builder()` → `save`; response từ entity + `displayName` + phường/tỉnh, không đọc lại.
-- `searchVenues`: escape `q` (`%`, `_`, `\`) rồi bọc `%…%`; chọn 1 trong 4 truy vấn theo (có toạ độ?, `status`) — §5.2.
-- `reportVenue`: `actor.admin()` → `VENUE_015` → `activeVenue` → `saveAndFlush`; constraint `uq_venue_report_pending` → `VENUE_014`.
+- `listVenues`: escape `q` (`%`, `_`, `\`) rồi bọc `%…%`; chọn 1 trong 4 truy vấn theo (có toạ độ?, `status`) — §5.2.
+- `reportVenue`: `actor.admin()` → `VENUE_015` → `activeVenue` → `saveAndFlush`; constraint `uq_venue_report_pending` → `VENUE_014` (so tên constraint qua `DataIntegrityViolations` §4.14; vi phạm khác ném lại → 500).
 - `updateVenue`: `findVenue` → `requireOwnerOrAdmin` → `requireWritable` → phường (v4.0: chưa có và không gửi → `VENUE_016`; gửi → `findWardWithProvince` → `USER_002`) → setter → `save` → `getVenue`.
 - Luồng chi tiết: `Processing_Flow.md` §3.1–§3.3, §3.7, §3.12.
 
@@ -113,7 +113,7 @@ List<VenueImageResponse> deleteImage(UUID venueId, UUID imageId, CurrentActor ac
 Deps: `VenueGuard`, `VenueImageRepository`, `ImageUploadSigner`, `VenueMapper`, `VenueImageCleanupProperties`, `TransactionTemplate`, `AdminAuditLog`.
 - Hằng `MAX_IMAGES_PER_VENUE = 5` (BR-V02); `scopePath = "venues/" + venueId`.
 - Ghi ảnh (2.5, 2.6, 2.13) mở bằng `venueGuard.lockForImageWrite` — không retrier (§4.4).
-- `addImage`: không annotate; kiểm `publicId` + chữ ký response (không DB) **trước**, rồi phần DB trong `transactionTemplate.execute` để không giữ kết nối khi tính toán; `saveAndFlush` bắt `uq_venue_image_public_id` → `VENUE_006` (NFS §4.1 ngoại lệ 1).
+- `addImage`: không annotate; kiểm `publicId` + chữ ký response (không DB) **trước**, rồi phần DB trong `transactionTemplate.execute` để không giữ kết nối khi tính toán; `saveAndFlush` bắt `uq_venue_image_public_id` → `VENUE_006` (NFS §4.1 ngoại lệ 1; so tên constraint qua `DataIntegrityViolations` §4.14, vi phạm khác ném lại → 500).
 - Luồng: `Processing_Flow.md` §3.4–§3.6, §3.13.
 
 ### 4.3. AdminVenueService
@@ -162,9 +162,9 @@ public record SignedPublicId(String scopePath, Instant signedAt, String nonce, S
 - `tag`: 22 ký tự đầu base64url của `HMAC-SHA256(tagKey, scopePath + "|" + signedAt + "|" + nonce + "|" + uploaderId)`; `tagKey = HMAC-SHA256(apiSecret, "arenaflow-upload-tag")` (tách miền với chữ ký Cloudinary). **Vì sao:** ràng buộc người xin chữ ký vào chính `public_id` đã ký → Cloudinary chặn đổi `public_id`, backend kiểm lại ở 2.5 bằng caller hiện tại; URL công khai chỉ chứa tag một chiều (có nonce riêng mỗi upload nên không liên kết được các ảnh cùng người, không suy ra user id); không thêm field request và không thêm secret phải quản lý. Phương án loại: tham số `context` của Cloudinary (backend không đọc lại được ở 2.5 nếu không gọi Admin API, chữ ký response không phủ `context`); user id trong `public_id` (lộ trên URL).
 - Mẫu kiểm: `^<folder>/<scopePath>/\d{10}-[A-Za-z0-9_-]{22}-[A-Za-z0-9_-]{22}$`; không `..`. `folder` và `scopePath` ghép vào regex qua `Pattern.quote(...)` (thư mục có thể chứa ký tự đặc biệt của regex, vd `.`).
 
-**Ký request** ([Authentication signatures](https://cloudinary.com/documentation/authentication_signatures)): mọi tham số gửi kèm trừ `file`, `cloud_name`, `resource_type`, `api_key`; sắp theo tên, nối `k=v` bằng `&`, nối liền `api_secret`, SHA-1 hex. Tham số ký: `allowed_formats`, `overwrite=false`, `public_id`, `timestamp`. Hợp lệ 1 giờ; `UploadSignature.expiresAt` = `timestamp` + 1h (UTC, trả client ở 2.4). Test vector bắt buộc: `timestamp=1315060510` + secret `abcd` → `a21ad0f63beb4de2e5575204b79ab90bffb02c10`. `overwrite=false`: chặn dùng lại chữ ký trong 1 giờ để ghi đè asset đã có `[cần xác nhận #9]`.
+**Ký request** ([Authentication signatures](https://cloudinary.com/documentation/authentication_signatures)): mọi tham số gửi kèm trừ `file`, `cloud_name`, `resource_type`, `api_key`; sắp theo tên, nối `k=v` bằng `&`, nối liền `api_secret`, SHA-1 hex. Tham số ký: `allowed_formats`, `overwrite=false`, `public_id`, `timestamp`. Hợp lệ 1 giờ; `UploadSignature.expiresAt` = `timestamp` + 1h (UTC, trả client ở 2.4). Test vector bắt buộc: `timestamp=1315060510` + secret `abcd` → `a21ad0f63beb4de2e5575204b79ab90bffb02c10`. `overwrite=false`: chặn dùng lại chữ ký trong 1 giờ để ghi đè asset đã có (đã kiểm trên cloud-dev 2026-11-18: upload lặp cùng `public_id` trả lại asset cũ, không ghi đè). Chữ ký không giới hạn được dung lượng file `[cần xác nhận #19]`.
 
-**Xác minh response** ([Response signatures](https://cloudinary.com/documentation/response_signatures)): digest SHA trên `public_id`, `version`, `api_secret`; thiết kế: SHA-1 hex của `"public_id=" + publicId + "&version=" + version + apiSecret`, so bằng `MessageDigest.isEqual`. Cách nối chuỗi chưa kiểm trên response thật `[cần xác nhận #9]`.
+**Xác minh response** ([Response signatures](https://cloudinary.com/documentation/response_signatures)): digest SHA trên `public_id`, `version`, `api_secret`; thiết kế: SHA-1 hex của `"public_id=" + publicId + "&version=" + version + apiSecret`, so bằng `MessageDigest.isEqual`. Đã kiểm trên response thật cloud-dev 2026-11-18 (`VenueControllerTest` E2E).
 
 `deliveryUrl` = `https://res.cloudinary.com/<cloudName>/image/upload/v<version>/<publicId>.<format>`. **NEVER** log `apiSecret`, `tagKey`, chuỗi cần ký, `signature`.
 
@@ -201,7 +201,7 @@ Theo USER-001 §4.6: không `@Transactional` mức class.
 
 | Method | Ranh giới |
 |---|---|
-| `searchVenues`, `getVenue`, `issueUploadSignature`, `listReports`, `requireSelectable` | `@Transactional(readOnly = true)` |
+| `listVenues`, `getVenue`, `issueUploadSignature`, `listReports`, `requireSelectable` | `@Transactional(readOnly = true)` |
 | `createVenue`, `reportVenue` | `@Transactional` |
 | `setPrimaryImage`, `deleteImage` | `@Transactional`; tuần tự hoá bằng `lockForImageWrite`, không retrier |
 | `addImage` | Không annotate; kiểm không DB trước, phần DB trong `TransactionTemplate` (khoá như trên), không retrier |
@@ -226,13 +226,16 @@ public interface ImageAssetAdmin {                                     // applic
 }
 public record AssetPage(List<String> publicIds, String nextCursor) {}
 ```
-- `CloudinaryImageAssetAdmin`: Spring `RestClient` (spring-web, có sẵn qua `common` — [Inference] kiểm scope khi implement), Basic Auth `apiKey:apiSecret`, base `https://api.cloudinary.com/v1_1/<cloudName>`, timeout §8. HTTP 420/429 → `AssetAdminRateLimitedException` (kèm `X-FeatureRateLimit-Reset`); lỗi khác ném nguyên. Nguồn: [Admin API overview](https://cloudinary.com/documentation/admin_api_overview.md), [Get resources](https://cloudinary.com/documentation/admin_api_resources_get_resources.md), [Delete resources](https://cloudinary.com/documentation/admin_api_resources_delete_resources_by_public_id.md) `[cần xác nhận #12]`.
+- `CloudinaryImageAssetAdmin`: Spring `RestClient` (spring-web từ `common`), Basic Auth `apiKey:apiSecret`, base `https://api.cloudinary.com/v1_1/<cloudName>`, timeout §8. HTTP 420/429 → `AssetAdminRateLimitedException` (kèm `X-FeatureRateLimit-Reset`); lỗi khác ném nguyên (#12 đã đóng — §12). Nguồn: [Admin API overview](https://cloudinary.com/documentation/admin_api_overview.md), [Get resources](https://cloudinary.com/documentation/admin_api_resources_get_resources.md), [Delete resources](https://cloudinary.com/documentation/admin_api_resources_delete_resources_by_public_id.md).
 - `VenueImageCleanupScheduler`: `@Scheduled(cron = "${arenaflow.venue.image-cleanup.cron}", zone = "Asia/Ho_Chi_Minh")`.
-- **Mặc định TẮT** (cron `-`); chỉ bật tường minh. **Fail-fast khi khởi động** nếu job bật và: Cloudinary chưa cấu hình, `folder` trống hoặc bằng giá trị mặc định cũ `arenaflow`, hoặc `confirm-window + 1h ≥ grace`. Lý do: nhiều môi trường dùng chung một cloud mà chung thư mục thì job môi trường này sẽ xoá asset môi trường khác (asset không có trong DB của nó).
+- **Mặc định TẮT** (cron `-`); chỉ bật tường minh. **Fail-fast khi khởi động** nếu job bật và: Cloudinary chưa cấu hình, `folder` trống hoặc bằng giá trị mặc định cũ `arenaflow`, hoặc `confirm-window + 1h ≥ grace` — kiểm ở `VenueImageCleanupProperties#requireSafeToEnable(CloudinaryProperties)`, gọi trong constructor `VenueImageCleanupScheduler` khi cron ≠ `-` (lỗi → `IllegalStateException`, app không khởi động). Lý do: nhiều môi trường dùng chung một cloud mà chung thư mục thì job môi trường này sẽ xoá asset môi trường khác (asset không có trong DB của nó).
 - Luồng, lý do tham số, lỗi: `Processing_Flow.md` §3.16.
 
 ### 4.13. Audit log thao tác Admin (`security-backend.md` §11)
-`AdminAuditLog` (`application/support`, `@Component`): `void afterCommit(String action, UUID adminId, UUID venueId, UUID reportId)` — đăng ký `TransactionSynchronizationManager.registerSynchronization(…)` và chỉ ghi `log.info("Admin action: action={}, adminId={}, venueId={}, reportId={}", …)` trong `afterCommit()`. Gọi **bên trong** transaction của thao tác (trong lambda retrier hoặc method `@Transactional`): lần thử bị rollback không ghi, lần thử commit ghi đúng một lần. Một cơ chế cho mọi audit log admin của VENUE-001 (không ghi ở tầng gọi ngoài transaction — `@Transactional` method như 2.13 không có tầng như vậy). Thiếu transaction đang hoạt động → `IllegalStateException` (lỗi lập trình). Áp cho: `MARK_INACTIVE`, `REACTIVATE`, `RESOLVE_REPORT` (+ trạng thái chốt), và 2.12/2.13 khi `actor.admin()` và không phải người tạo (`ADMIN_UPDATE_VENUE`, `ADMIN_DELETE_IMAGE`). Chỉ id, không tên/PII/body.
+`AdminAuditLog` (`application/support`, `@Component`): `void afterCommit(String action, UUID adminId, UUID venueId, UUID reportId)` — đăng ký `TransactionSynchronizationManager.registerSynchronization(…)` và chỉ ghi `log.info("Admin action: action={}, adminId={}, venueId={}, reportId={}", …)` trong `afterCommit()`. Gọi **bên trong** transaction của thao tác (trong lambda retrier hoặc method `@Transactional`): lần thử bị rollback không ghi, lần thử commit ghi đúng một lần. Một cơ chế cho mọi audit log admin của VENUE-001 (không ghi ở tầng gọi ngoài transaction — `@Transactional` method như 2.13 không có tầng như vậy). Thiếu transaction đang hoạt động → `IllegalStateException` (lỗi lập trình). Áp cho: `MARK_INACTIVE`, `REACTIVATE`, `RESOLVE_REPORT` (không ghi trạng thái chốt — tra qua `reportId`; user chốt 2026-11-19), và 2.12/2.13 khi `actor.admin()` và không phải người tạo (`ADMIN_UPDATE_VENUE`, `ADMIN_DELETE_IMAGE`). Chỉ id, không tên/PII/body.
+
+### 4.14. DataIntegrityViolations (dùng chung, `application/support`)
+Lớp tiện ích tĩnh: `constraintName(DataIntegrityViolationException)` — tên constraint từ cause Hibernate, `null` nếu không có (không đọc message SQL vì có thể chứa giá trị dòng); `violates(exception, constraint)`. Dùng ở `reportVenue`, `addImage` để chỉ đổi đúng vi phạm unique thành mã nghiệp vụ; `GlobalExceptionHandler` dùng `constraintName` để log.
 
 ## 5. Repository & Data Model
 
@@ -334,7 +337,7 @@ Ghi chú SQL:
 - **Tìm kiếm tách 4 truy vấn tường minh** để planner dùng được index: `searchByStatus` (`v.status = :status`, sort `name, id` → `idx_venue_status_name`); `searchAll` (không lọc status); `searchNearbyActive` dùng literal `v.status = 'ACTIVE'` để khớp partial index `idx_venue_location … WHERE status = 'ACTIVE'` (tham số bind không chứng minh được vị từ partial index ở generic plan); `searchNearbyAny` cho `INACTIVE|ALL` (hiếm, chủ yếu Admin, không bảo đảm index). Chung: `(:qPattern IS NULL OR v.name ILIKE :qPattern OR v.address ILIKE :qPattern)` `[cần xác nhận #8]`; `LEFT JOIN venue_image vi ON vi.venue_id = v.id AND vi.is_primary`. Nearby: hộp giới hạn (`Δlat = r/111.32`, `Δlng = r/(111.32·cos lat)`, tính ở service) + lọc `distance_km <= :radiusKm` qua subquery; Haversine R = 6371 km.
 - `lockRow`: Venue chưa nằm trong persistence context lúc gọi → `findById` sau đó nạp bản mới; entity không dirty nên không bị ghi lại lúc commit. Lock mode PostgreSQL của `UPDATE` không đổi cột khoá là `FOR NO KEY UPDATE` — tương thích với `FOR KEY SHARE` mà INSERT `venue_image`/`venue_report` lấy qua FK.
 - `promoteFirstAsPrimary`: `UPDATE venue_image SET is_primary = TRUE WHERE id = (SELECT id FROM venue_image WHERE venue_id = :venueId ORDER BY display_order, id LIMIT 1)`; Hibernate tự flush `DELETE` trước câu này (comment một dòng — NFS §4.1).
-- `markStaleAlerted`: `UPDATE venue SET stale_alerted_at = :now, version = version + 1 WHERE id IN (SELECT id FROM venue WHERE status = 'ACTIVE' AND stale_alerted_at IS NULL AND COALESCE(last_selected_at, created_at) < :threshold ORDER BY id LIMIT :limit) AND stale_alerted_at IS NULL RETURNING id, name` — khai báo không `@Modifying` `[cần xác nhận #11]`; dự phòng: `Processing_Flow.md` §3.14.
+- `markStaleAlerted`: `UPDATE venue SET stale_alerted_at = :now, version = version + 1 WHERE id IN (SELECT id FROM venue WHERE status = 'ACTIVE' AND stale_alerted_at IS NULL AND COALESCE(last_selected_at, created_at) < :threshold ORDER BY id LIMIT :limit) AND status = 'ACTIVE' AND stale_alerted_at IS NULL AND COALESCE(last_selected_at, created_at) < :threshold RETURNING id, name` — WHERE ngoài lặp **đủ** điều kiện: dòng bị ghi đồng thời (`markSelected`, mark-inactive) chỉ được PostgreSQL kiểm lại trên bản mới theo WHERE ngoài, subquery dùng lại kết quả cũ (race test commit thật `VenueStaleAlertRaceTest`); khai báo không `@Modifying` (đã kiểm: `VenueStaleAlertRepositoryTest`).
 - `markSelected`: `SET last_selected_at = GREATEST(COALESCE(last_selected_at, :t), :t), stale_alerted_at = NULL, version = version + 1 WHERE id IN (:ids)`.
 
 ### 5.3. Projection
@@ -401,6 +404,8 @@ arenaflow.venue.image-cleanup.read-timeout=30s
 | `page-size` 500, lô xoá 100 | Tối đa theo tài liệu Admin API → ít request nhất |
 | `max-admin-calls-per-run` 100 | Gói free 500 request/giờ; chừa ≥400 cho việc khác |
 
+Tắt job trong test: `api/pom.xml` (surefire `systemPropertyVariables`) đặt `arenaflow.venue.stale-alert.cron=-`; job dọn mặc định đã `-`. Không dùng `src/test/resources/application.properties` vì file đó che file của `src/main`.
+
 `.env.example`: thêm `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER` (placeholder, ghi chú "khác nhau mỗi môi trường"). **NEVER** commit giá trị thật.
 
 Không thêm Maven dependency: `MessageDigest`/`Mac`/`HexFormat`/`Base64` của JDK; scheduling trong `spring-context`; `RestClient` của spring-web. Không dùng SDK `cloudinary-*` (chỉ cần ký + 2 lời gọi Admin API).
@@ -439,15 +444,23 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 
 ## 12. Danh sách [cần xác nhận]
 
-Đánh số toàn thiết kế: 3–7 ở `API_Spec.md` §6 (kèm phần ảnh hưởng FE của #9), 8–15 ở đây, 1–2 và 16–18 ở `Processing_Flow.md` §10.
+Đánh số toàn thiết kế: 3–7 và #19 (phần ảnh hưởng FE) ở `API_Spec.md` §6, 8–15 và 19 ở đây, 1–2 và 16–18 ở `Processing_Flow.md` §10.
+
+**Còn mở**
 
 | # | Nội dung | Loại |
 |---|---|---|
 | 8 | Tìm `q` bằng `ILIKE '%…%'` không có index phù hợp; nhanh hơn cần `pg_trgm` + GIN (kiểm extension Neon) | Không chặn |
-| 9 | **Cloudinary upload chưa chạy thử:** cách nối chuỗi chữ ký response; `allowed_formats` và `overwrite=false` có được ký và có tác dụng chặn không; ký tự `-`/`_` trong `public_id`; giới hạn kích thước file (chữ ký không chặn được); hành vi khi vượt 25 credit/tháng; chế độ "dynamic folders" với `/` trong `public_id` | **Chặn code** — spike trên cloud dev trước khi viết `CloudinaryImageUploadSigner` |
-| 10 | ~~ADR riêng cho quy ước domain event (VENUE-001 đặt tiền lệ) trước MATCH-001 / NOTIFICATION-001~~ — **Đã chốt:** ADR-0011 `Accepted` (2026-11-16) | Đã đóng |
-| 11 | Spring Data chạy native `UPDATE … RETURNING` không `@Modifying` (§5.2) | **Chặn code** job 180 ngày — kiểm bằng integration test đầu tiên; có phương án dự phòng |
-| 12 | **Admin API Cloudinary** (đã tra tài liệu, chưa chạy thử): list `prefix` ≤500 + `next_cursor`; xoá ≤100 `public_ids[]` (định dạng tham số mảng khi gọi HTTP thuần), map `deleted` + `partial`; gói free 500 request/giờ, vượt → 420, header `X-FeatureRateLimit-*`; `invalidate` CDN mặc định tắt; `prefix` với "dynamic folders" | **Chặn code** job dọn — spike trên cloud dev |
 | 13 | Grace period user đã xoá: 2.4–2.7, 2.12, 2.13 chỉ dựa JWT → tối đa 1h sau xoá tài khoản vẫn ghi được (mức USER-001 `Processing_Flow.md` §9) | Không chặn |
 | 14 | Hai scheduler giả định một instance (chưa ShedLock/Redis): job 180 ngày không phát trùng event nhưng truy vấn thừa; job dọn tốn gấp đôi hạn mức Admin API (xoá lặp vô hại) | Không chặn (chốt khi triển khai nhiều instance) |
 | 15 | Role admin lấy từ JWT cho 2.4–2.7, 2.12, 2.13: đổi role trong DB có hiệu lực sau tối đa 1h | Không chặn |
+| 19 | Phần còn mở của #9: giới hạn dung lượng file (chữ ký không chặn được); hành vi khi vượt 25 credit/tháng | Không chặn |
+
+**Đã đóng**
+
+| # | Nội dung | Đóng ngày · bằng chứng |
+|---|---|---|
+| 9 | Hành vi Cloudinary upload (trước spike): nối chuỗi chữ ký response; `allowed_formats`, `overwrite=false`; ký tự `-`/`_` và `/` trong `public_id` | 2026-11-18 · spike cloud-dev: PNG signed upload 200, chữ ký response SHA-1 đúng, `public_id` phân cấp giữ `-`/`_`, GIF ngoài `allowed_formats` bị từ chối 400, `overwrite=false` không ghi đè; E2E `VenueControllerTest`. Phần còn mở chuyển sang #19 |
+| 10 | ADR riêng cho quy ước domain event (VENUE-001 đặt tiền lệ) trước MATCH-001 / NOTIFICATION-001 | 2026-11-16 · ADR-0011 `Accepted` |
+| 11 | Spring Data chạy native `UPDATE … RETURNING` không `@Modifying` (§5.2) | 2026-11-19 · chạy được, trả projection (`VenueStaleAlertRepositoryTest`); không dùng phương án dự phòng |
+| 12 | Hành vi Admin API Cloudinary (trước spike): list `prefix` + `next_cursor`; xoá ≤100 `public_ids[]`; `deleted`/`partial`; hạn mức 420/429 + `X-FeatureRateLimit-*` | 2026-11-19 · spike cloud-dev: list `{resources[], next_cursor}` (trang cuối không có `next_cursor`), header `X-FeatureRateLimit-Limit/Remaining/Reset` (free 500/giờ), delete `{deleted:{id:"deleted"\|"not_found"}, deleted_counts, partial}`, `public_ids[]` encode `%5B%5D` được chấp nhận; 2026-11-21 lô 100 `public_ids[]` độ dài thật được chấp nhận (`CloudinaryImageAssetAdminLiveTest`). 420/429 chỉ kiểm bằng response giả lập. `invalidate` CDN: không gửi (mặc định tắt — chấp nhận ảnh đã xoá còn trong cache CDN, `Processing_Flow.md` §9); `prefix` với `public_id` phân cấp: list theo `prefix` trả đúng asset (`CloudinaryImageAssetAdminLiveTest`). Không còn phần mở |

@@ -170,19 +170,25 @@ Table venue {
   latitude decimal(10,7) [not null]
   longitude decimal(10,7) [not null]
   created_by_type varchar(20) [not null, note: 'ADMIN, USER']
-  created_by_user_id uuid [ref: > user.id]
+  created_by_user_id uuid [ref: > user.id, note: 'ON DELETE RESTRICT (V5); NOT NULL khi created_by_type = USER']
+  ward_id uuid [ref: > administrative_unit.id, note: 'V5; phường/xã (BR-V11); NULL chỉ cho địa điểm cũ — service bắt buộc khi thêm/sửa']
   phone varchar(20)
   website varchar(500)
-  venue_type varchar(50)
-  status varchar(20) [not null, default: 'ACTIVE', note: 'ACTIVE, INACTIVE']
+  venue_type varchar(50) [note: 'FIVE_A_SIDE, SEVEN_A_SIDE, ELEVEN_A_SIDE (CHECK V5)']
+  status varchar(20) [not null, default: 'ACTIVE', note: 'ACTIVE, INACTIVE; CHECK: INACTIVE ⇔ admin_verified_inactive_at NOT NULL (V5)']
   last_selected_at timestamptz
   admin_verified_inactive_at timestamptz
+  version bigint [not null, default: 0, note: 'V5; @Version + khoá dòng khi ghi ảnh']
+  stale_alerted_at timestamptz [note: 'V5; cổng cảnh báo 180 ngày (reset khi được chọn / kích hoạt lại)']
+  closure_alerted_at timestamptz [note: 'V5; cổng cảnh báo report CLOSED (mở lại khi hết report CLOSED PENDING)']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
     (latitude, longitude, status) [note: 'WHERE status = ACTIVE']
     (status, last_selected_at)
+    (status, name, id) [name: 'idx_venue_status_name', note: 'V5']
+    ward_id [name: 'idx_venue_ward', note: 'V5']
     created_by_user_id
   }
 }
@@ -191,6 +197,7 @@ Table venue_image {
   id uuid [pk]
   venue_id uuid [not null, ref: > venue.id]
   image_url varchar(500) [not null]
+  public_id varchar(255) [not null, unique, note: 'V5; Cloudinary public ID (uq_venue_image_public_id); dòng cũ = legacy/<id>. Hard-delete (2.13)']
   is_primary boolean [not null, default: false]
   display_order integer [not null, note: '> 0']
   uploaded_by uuid [ref: > user.id]
@@ -205,13 +212,19 @@ Table venue_image {
 Table venue_report {
   id uuid [pk]
   venue_id uuid [not null, ref: > venue.id]
-  reporter_id uuid [not null, ref: > user.id]
-  reason text [not null]
+  reporter_id uuid [not null, ref: > user.id, note: 'ON DELETE RESTRICT (V5)']
+  reason varchar(20) [not null, note: 'CLOSED, WRONG_INFO, OTHER (V5: TEXT → VARCHAR(20), mô tả cũ chuyển sang detail)']
+  detail text [note: 'V5']
+  status varchar(20) [not null, default: 'PENDING', note: 'PENDING, VERIFIED, REJECTED (V5)']
+  handled_by uuid [ref: > user.id, note: 'V5; ON DELETE RESTRICT; CHECK: NULL ⇔ status = PENDING']
+  handled_at timestamptz [note: 'V5; CHECK: NULL ⇔ status = PENDING']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
     (venue_id, created_at)
     reporter_id
+    (status, created_at) [name: 'idx_venue_report_status_created', note: 'V5; created_at DESC']
+    (reporter_id, venue_id, reason) [unique, name: 'uq_venue_report_pending', note: 'V5; WHERE status = PENDING']
   }
 }
 
