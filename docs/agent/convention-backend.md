@@ -32,12 +32,15 @@ ArenaFlow-be/
 │       ├── mercenary/       # MercenaryGuard, MercenaryRules… — guard / quy tắc riêng của miền mercenary
 │       ├── notification/    # NotificationWriter, NotificationTexts, PushSender… — ghi / soạn / đẩy thông báo
 │       ├── realtime/        # Port kênh realtime cá nhân (UserRealtimeGateway) — không phụ thuộc spring-websocket
-│       └── security/        # JwtTokenService, JwtProperties (service gọi trực tiếp)
+│       ├── security/        # JwtTokenService, JwtProperties (service gọi trực tiếp); CurrentActor (userId + admin, nhận qua @CurrentUser)
+│       ├── storage/         # Port lưu ảnh (ImageUploadSigner, ImageAssetAdmin) + implementation Cloudinary, CloudinaryProperties
+│       └── venue/           # Properties của job miền venue (VenueAlertProperties, VenueImageCleanupProperties)
 └── api/                     # com.phananh.arenaflow (ArenaFlowApplication) + com.phananh.arenaflow.api
-    ├── <nhóm>/              # REST Controllers (@RestController) theo nhóm: auth/, profile/, team/, notification/…
-    ├── config/              # @Configuration, SecurityConfig, WebMvcConfig, GlobalExceptionHandler
+    ├── <nhóm>/              # REST Controllers (@RestController) theo nhóm: auth/, profile/, team/, venue/, notification/…
+    ├── config/              # @Configuration, SecurityConfig, WebMvcConfig, SchedulingConfig, GlobalExceptionHandler
     ├── realtime/            # WebSocket/STOMP config, interceptor, gateway adapter (kênh realtime)
-    └── security/            # Filter/handler/argument resolver của Spring Security
+    ├── scheduler/           # @Scheduled — chỉ gọi service, không logic (VenueStaleAlertScheduler…)
+    └── security/            # Filter/handler/argument resolver của Spring Security (@CurrentUser UUID | CurrentActor)
 ```
 
 Resource: `api/src/main/resources/` (`application.properties`, `db/migration/` Flyway). Module khác không có resource.
@@ -84,11 +87,18 @@ Resource: `api/src/main/resources/` (`application.properties`, `db/migration/` F
 
 ### 2.4. Comment & Javadoc
 
-- Javadoc **tiếng Việt**, giải thích **tại sao / hợp đồng**, không lặp lại code.
+- **Mọi** comment — Javadoc `/** */`, khối `/* */`, dòng `//` — viết **tiếng Việt có dấu**, cả `src/main` lẫn `src/test`. Giữ nguyên định danh kỹ thuật (tên class/method, SQL, HTTP, `{@code …}`) và marker công cụ (`allow-secret`). Chuỗi log / message exception không thuộc quy tắc này.
+- Javadoc giải thích **tại sao / hợp đồng**, không lặp lại code.
 - **Bắt buộc** cho method `public`/`protected` có hợp đồng hoặc ngữ nghĩa không hiển nhiên từ tên: service (quyền, thứ tự guard, mã lỗi, retry/transaction, số truy vấn khi đáng kể), guard, mapper có xử lý đặc biệt (che tên user đã xoá…), repository có `@Query` (native, bulk `@Modifying`, `@Lock`, projection), component hạ tầng (retrier, JWT, security handler).
 - **Bắt buộc** cho method `private` có logic không hiển nhiên (điều kiện nghiệp vụ, thứ tự kiểm, xử lý race).
 - **Bỏ qua** khi tên đã đủ nghĩa: derived query (`findByIdAndDeletedAtIsNull`), getter/setter/accessor, DTO record, projection, controller handler chỉ uỷ quyền service.
 - **NEVER** trỏ sang bất kỳ tài liệu nào trong comment: ADR (`ADR-0007`), đường dẫn/mục tài liệu thiết kế/spec (`USER-002 API_Spec §2.4`), mã neo nghiệp vụ/thiết kế (`BR-T12`, `W6`, `L4`, `race M1`). Viết mô tả tự đủ nghĩa thay thế (vd `(W6)` → "6 truy vấn") — người đọc (dev/AI) không phải mở tài liệu khác. Mã lỗi (`TEAM_014`) được dùng vì là enum trong code.
+
+### 2.5. Import
+
+- Dùng tên ngắn qua `import`; **không** viết tên đầy đủ (FQN) trong thân code, vd `com.phananh.arenaflow.domain.projection.VenueSummaryView`, `java.util.Optional` — áp cho cả `src/main` và `src/test`.
+- Ngoại lệ duy nhất: hai class trùng tên ngắn trong cùng file (vd `jakarta.validation.ConstraintViolationException` và `org.hibernate.exception.ConstraintViolationException`) → import một class, class còn lại viết FQN.
+- Không dùng wildcard import (`import java.util.*;`).
 
 ---
 
@@ -575,7 +585,8 @@ class ArenaRepositoryTest {
 
 - [ ] Đặt đúng module & package (`api/<nhóm>` controller, `application/service/impl`, `application/dto/request|response`, `domain/repository`, `domain/entity`); không import ngược tầng
 - [ ] Class naming đúng pattern
-- [ ] Javadoc tiếng Việt theo §2.4 (có cho method có hợp đồng không hiển nhiên; không cho method tự mô tả; không trỏ tài liệu/ADR)
+- [ ] Mọi comment (Javadoc, `/* */`, `//`; main + test) tiếng Việt theo §2.4; Javadoc có cho method có hợp đồng không hiển nhiên, không cho method tự mô tả; không trỏ tài liệu/ADR
+- [ ] Không viết FQN trong thân code (trừ trùng tên ngắn), không wildcard import (§2.5)
 - [ ] Controller chỉ xử lý HTTP, không có business logic
 - [ ] Service có `@Transactional`, method ghi bỏ `readOnly`
 - [ ] Entity có `@Entity`, column name snake_case, có BaseEntity; Lombok `@Getter/@Setter/@Builder`, không `@Data`
