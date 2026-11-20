@@ -35,7 +35,7 @@ application/   com.phananh.arenaflow.application
 ├── service/         VenueService, VenueImageService, AdminVenueService, VenueSelectionService,
 │   │                VenueAlertService, VenueImageCleanupService, VenueStatusFilter, VenueReportStatusFilter
 │   └── impl/        *ServiceImpl
-├── event/           VenueAdminAlertEvent, VenueAlertType (package mới) — v4.2: bỏ VenueReportedEvent
+├── event/venue/     VenueAdminAlertEvent, VenueAlertType (package mới) — v4.2: bỏ VenueReportedEvent
 ├── support/         VenueGuard, AdminAuditLog (mới), ConcurrencyConflictRetrier (sửa — §4.9)
 │   ├── security/    CurrentActor (mới)
 │   ├── storage/     ImageUploadSigner, UploadSignature, SignedPublicId, CloudinaryImageUploadSigner,
@@ -178,7 +178,7 @@ void markSelected(Collection<UUID> venueIds, OffsetDateTime selectedAt); // MAND
 ```
 `MANDATORY` để `last_selected_at` rollback cùng kèo / trận ngoài. v4.0 (BC-V05, user chốt 2026-11-14): MERCENARY-001 cũng gọi `markSelected` khi khai báo trận ngoài (2.28) và khi đổi sân của trận ngoài (2.31, chỉ sân mới) — `MERCENARY-001/Component_Class_Design.md` §4.15. Job cảnh báo 180 ngày (`markStaleAlerted`) **không đổi** câu: vẫn đọc `last_selected_at`, nay đã gồm trận ngoài. Thời điểm "được chọn" của kèo do MATCH-001 quyết định (luồng B: chỉ địa điểm đã chốt, lúc hoàn tất xác nhận — MATCH-002 `Component_Class_Design.md` §4.4). `requireSelectable` trả `SelectableVenueView` để kèo luồng B dựng response 2.1 (MATCH-001) không cần đọc lại địa điểm; caller không cần thông tin hiển thị thì bỏ qua giá trị trả về.
 
-### 4.7. Domain event (`application/event`)
+### 4.7. Domain event (`application/event/venue`)
 ```java
 public record VenueAdminAlertEvent(UUID venueId, String venueName, VenueAlertType alertType, OffsetDateTime triggeredAt) {}
 public enum VenueAlertType { STALE_180_DAYS, CLOSURE_REPORTED }
@@ -437,7 +437,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 | `docs/database/data-model.md` §3.5 (v4.0) | Địa điểm có phường/xã (BR-V11) — bắt buộc khi thêm / sửa, nullable cho địa điểm cũ | `feature/VENUE-001-*` |
 | `docs/database/data-model.md` §3.5 | Loại sân enum, quyền sửa/xoá ảnh, trạng thái + chống trùng report, hard-delete ảnh, `public_id` | `feature/VENUE-001-*` |
 | `docs/agent/api-convention.md` §5 · §6 | 13 endpoint (gồm `DELETE` trả 200 — B3) + domain `VENUE` (v4.0: + `VENUE_016`) | `chore/agent-framework-*` (qua `workflow-adapt`) |
-| `docs/agent/convention-backend.md` §1 | Package `application/event/`, `application/support/storage/`, `api/scheduler/`; `@CurrentUser CurrentActor` | `chore/agent-framework-*` |
+| `docs/agent/convention-backend.md` §1 | Package `application/support/storage/`, `api/scheduler/`; `@CurrentUser CurrentActor` (`application/event/venue/` đã khớp quy ước `event/<miền>/`) | `chore/agent-framework-*` |
 | `docs/agent/design/USER-001/Component_Class_Design.md` §9.4, `Processing_Flow.md` §5 | Resolver hỗ trợ `CurrentActor`; retrier có overload mã lỗi | `feature/VENUE-001-*` (+ `USER-001/CHANGELOG.md`) |
 | `docs/agent/decisions/0003-optimistic-locking-strategy.md` | Mục Sửa đổi 2026-11-09 (đã viết sẵn trong thay đổi thiết kế này) — kiểm lại khớp code | Cùng nhánh thiết kế |
 | `docs/agent/decisions/0009-*.md` | `Proposed` → `Accepted` — đã chốt 2026-11-16 | Đã xong |
