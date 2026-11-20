@@ -104,6 +104,16 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<!-- Scheduled jobs stay off in tests so they never touch the shared dev database on their own. -->
+					<systemPropertyVariables>
+						<arenaflow.venue.stale-alert.cron>-</arenaflow.venue.stale-alert.cron>
+					</systemPropertyVariables>
+				</configuration>
+			</plugin>
 		</plugins>
 	</build>
 </project>

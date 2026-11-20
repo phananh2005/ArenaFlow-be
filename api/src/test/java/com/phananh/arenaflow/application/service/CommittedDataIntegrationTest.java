@@ -59,8 +59,13 @@ abstract class CommittedDataIntegrationTest {
     }
 
     protected User user(String displayName) {
+        return user(displayName, User.Role.USER);
+    }
+
+    protected User user(String displayName, User.Role role) {
         User user = User.builder()
                 .displayName(displayName)
+                .role(role)
                 .build();
         User saved = userRepository.save(user);
         createdUsers.add(saved.getId());
