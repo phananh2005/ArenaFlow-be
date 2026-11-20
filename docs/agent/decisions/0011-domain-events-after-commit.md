@@ -5,8 +5,8 @@
 | **Trạng thái** | Accepted (chủ repo chốt 2026-11-16) |
 | **Ngày** | 2026-11-09 |
 | **Người quyết định** | Chủ repo (chốt "domain phát ApplicationEvent, NOTIFICATION-001 nghe", 2026-11-09) · solution-architect (đề xuất quy ước) |
-| **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) §Cần theo dõi (side effect sau commit) · [ADR-0013](0013-reputation-columns-atomic-update.md) (dữ liệu uy tín ghi cùng transaction) · `docs/agent/design/VENUE-001/Component_Class_Design.md` §4.7 · `docs/agent/design/MATCH-001/Component_Class_Design.md` §4.9 · [ADR-0014](0014-realtime-chat-stomp-websocket.md) — frame realtime chat / thương lượng **không** đi qua event của ADR này mà qua port `ChatRealtimeGateway` đăng ký `afterCommit` (cùng nguyên tắc "chỉ phát sau commit, lần thử rollback không phát"; payload cần nội dung tin nên không hợp quy tắc 2 về payload) · NOTIFICATION-001 (`docs/agent/design/NOTIFICATION-001/` — người nghe; listener `@Async` theo [ADR-0015](0015-notification-async-listener-and-user-channel.md)) · `docs/agent/design/REPUTATION-001/Component_Class_Design.md` §4.8 (`TeamVerificationRefresher` — quy tắc 8) · `docs/agent/design/MERCENARY-001/Component_Class_Design.md` §4.9, §4.11 (payload danh sách id nhỏ, event theo trận) |
-| **Sửa đổi** | 2026-11-14 — MERCENARY-001: ngoại lệ có phạm vi của quy tắc 2 (payload mang danh sách id nhỏ); event theo trận phát từ job thay vì nghe event của miền khác khi việc nghe làm tăng truy vấn của request gốc · 2026-11-16 — NOTIFICATION-001: listener thông báo chạy `@Async` theo ADR-0015; việc "đóng VENUE-001 `[cần xác nhận #10]`" ở §Cần theo dõi đã xong · 2026-11-21 — VENUE-001: event chuyển sang `application/event/venue/`, bỏ ngoại lệ vị trí ở quy tắc 1 |
+| **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) §Cần theo dõi (side effect sau commit) · [ADR-0013](0013-reputation-columns-atomic-update.md) (dữ liệu uy tín ghi cùng transaction) · `docs/agent/design/VENUE-001/Component_Class_Design.md` §4.7 · `docs/agent/design/MATCH-001/Component_Class_Design.md` §4.9 · [ADR-0014](0014-realtime-chat-stomp-websocket.md) — frame realtime chat / thương lượng **không** đi qua event của ADR này mà qua port `ChatRealtimeGateway` đăng ký `afterCommit` (cùng nguyên tắc "chỉ phát sau commit, lần thử rollback không phát"; payload cần nội dung tin nên không hợp quy tắc 2 về payload) · NOTIFICATION-001 (`docs/agent/design/NOTIFICATION-001/` — người nghe; listener `@Async` theo [ADR-0015](0015-notification-async-listener-and-user-channel.md)) · `docs/agent/design/REPUTATION-001/Component_Class_Design.md` §4.8 (`TeamVerificationRefresher` — quy tắc 8) · `docs/agent/design/MERCENARY-001/Component_Class_Design.md` §4.9, §4.11 (payload danh sách id nhỏ, event theo trận) · [ADR-0017](0017-vietnam-local-datetime.md) (thời gian giờ Việt Nam) |
+| **Sửa đổi** | 2026-11-14 — MERCENARY-001: ngoại lệ có phạm vi của quy tắc 2 (payload mang danh sách id nhỏ); event theo trận phát từ job thay vì nghe event của miền khác khi việc nghe làm tăng truy vấn của request gốc · 2026-11-16 — NOTIFICATION-001: listener thông báo chạy `@Async` theo ADR-0015; việc "đóng VENUE-001 `[cần xác nhận #10]`" ở §Cần theo dõi đã xong · 2026-11-21 — VENUE-001: event chuyển sang `application/event/venue/`, bỏ ngoại lệ vị trí ở quy tắc 1 · 2026-11-21 — SYSTEM-002: thời điểm trong payload (`occurredAt`, …) là `LocalDateTime` giờ Việt Nam theo [ADR-0017](0017-vietnam-local-datetime.md) |
 
 ## Bối cảnh (Context)
 - VENUE-001 và MATCH-001 cần báo cho người dùng (11 loại thông báo — Overview §4) và cho REPUTATION-001, nhưng NOTIFICATION-001 được thiết kế sau; module miền không nên phụ thuộc module thông báo.
@@ -67,3 +67,11 @@ Bổ sung, không thay §Quyết định 1–8.
 - `VenueAdminAlertEvent`, `VenueAlertType` chuyển từ `application/event/` sang `application/event/venue/` (PR #75, trước khi VENUE-001 merge).
 - Ngoại lệ "VENUE-001 đặt ở `application/event/` — giữ nguyên" ở quy tắc 1 không còn áp dụng: mọi miền, kể cả VENUE-001, dùng `application/event/<miền>/`.
 - Quyết định của ADR này không đổi.
+
+## Sửa đổi 2026-11-21 — SYSTEM-002: `occurredAt` theo giờ Việt Nam
+
+Bổ sung, không thay §Quyết định 1, 3–8.
+
+- Quy tắc 2 "thời điểm (`occurredAt`, UTC)" đọc là: `occurredAt` kiểu `LocalDateTime`, giờ Việt Nam, không kèm múi giờ ([ADR-0017](0017-vietnam-local-datetime.md) Quyết định 1). Áp cho mọi event, kể cả field thời điểm khác tên như `VenueAdminAlertEvent.triggeredAt` (`application/event/venue/`).
+- Nguồn giá trị: ADR-0017 Quyết định 3.
+- Các quy tắc khác của ADR này không đổi.

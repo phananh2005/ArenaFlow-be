@@ -6,7 +6,7 @@
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo | ArenaFlow-be |
 | Ràng buộc dữ liệu | `docs/agent/non-functional-standards.md` (3/4/6) — không đổi số truy vấn |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-21 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-21 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan luồng
 

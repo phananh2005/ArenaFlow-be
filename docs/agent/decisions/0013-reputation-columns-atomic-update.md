@@ -5,8 +5,8 @@
 | **Trạng thái** | Accepted (chủ repo chốt 2026-11-16) |
 | **Ngày** | 2026-11-09 |
 | **Người quyết định** | solution-architect (đề xuất) · chủ repo (chốt 2026-11-16) |
-| **Sửa đổi** | 2026-11-12 — REPUTATION-001: bỏ cột đếm trận / sao trung bình (tính khi đọc); trả điểm cũ/mới bằng `RETURNING`; `verified_at` chỉ ghi bằng câu có điều kiện |
-| **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) · Business_Rules §3.1, §7 (SYSTEM-001) · `docs/agent/design/MATCH-001/Component_Class_Design.md` §4.8, §6 · `docs/agent/design/REPUTATION-001/Component_Class_Design.md` §4.6, §5 · `docs/agent/design/MERCENARY-001/Component_Class_Design.md` §4.10, §5.2 (điểm uy tín cá nhân: hoàn thành khi được chấm sao, rút lui, report, hoàn điểm; huy hiệu cá nhân) |
+| **Sửa đổi** | 2026-11-12 — REPUTATION-001: bỏ cột đếm trận / sao trung bình (tính khi đọc); trả điểm cũ/mới bằng `RETURNING`; `verified_at` chỉ ghi bằng câu có điều kiện · 2026-11-21 — SYSTEM-002: migration REPUTATION-001 V8 → V9 ([ADR-0017](0017-vietnam-local-datetime.md)) |
+| **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) · Business_Rules §3.1, §7 (SYSTEM-001) · `docs/agent/design/MATCH-001/Component_Class_Design.md` §4.8, §6 · `docs/agent/design/REPUTATION-001/Component_Class_Design.md` §4.6, §5 · `docs/agent/design/MERCENARY-001/Component_Class_Design.md` §4.10, §5.2 (điểm uy tín cá nhân: hoàn thành khi được chấm sao, rút lui, report, hoàn điểm; huy hiệu cá nhân) · [ADR-0017](0017-vietnam-local-datetime.md) (thời gian giờ Việt Nam) |
 
 ## Bối cảnh (Context)
 - Reliability Score đội (`team.reliability_score`) và cá nhân (`"user".reliability_score`) bị cộng/trừ từ nhiều luồng: huỷ kèo / rút yêu cầu (MATCH-001), hoàn thành trận, rating, report, tranh chấp (REPUTATION-001), rút mercenary (MERCENARY-001). Điểm chặn [0, 100] (BR-R03).
@@ -51,3 +51,8 @@ Bổ sung, không thay §Quyết định 1–3. Thay vế cuối của §Quyết
 - **`team.verified_at`** (huy hiệu xác minh, dữ liệu dẫn xuất — ADR-0011 quy tắc 6): entity map `insertable = false, updatable = false`; chỉ ghi bằng câu `UPDATE … WHERE (verified_at IS NOT NULL) IS DISTINCT FROM <đủ điều kiện> RETURNING` chạy sau commit và trong job đối soát hằng ngày.
 
 **Cần theo dõi (thêm):** thống kê tính khi đọc quét mọi trận của một đội — số trận/đội lớn làm 2.9 hoặc job huy hiệu chậm (đo `EXPLAIN ANALYZE`) → cân nhắc lại cột đếm kèm cơ chế đối soát.
+
+## Sửa đổi 2026-11-21 — SYSTEM-002: số migration REPUTATION-001
+
+- Migration của REPUTATION-001 nêu ở Sửa đổi 2026-11-12 ("migration V8") đổi thành **V9**: V6 thuộc SYSTEM-002 ([ADR-0017](0017-vietnam-local-datetime.md) Quyết định 5), các mã chưa code dời +1. Số thực chốt lại khi bắt đầu code REPUTATION-001 (`docs/agent/design/REPUTATION-001/Component_Class_Design.md` §5.1).
+- Quyết định của ADR này không đổi.

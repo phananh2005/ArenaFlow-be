@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Trạng thái** | Proposed |
+| **Trạng thái** | Accepted (chủ repo chốt 2026-11-21) |
 | **Ngày** | 2026-11-21 |
 | **Người quyết định** | Chủ repo (chốt kiểu dữ liệu, giờ Việt Nam, JSON không offset, migration V6 — 2026-11-20/21; chốt ngoại lệ epoch, từ chối offset, thứ tự phát hành, số migration — 2026-11-21) · solution-architect (đề xuất cách thực hiện) |
-| **Liên quan** | SRS `docs/agent/business-spec/SYSTEM-001/` v1.13 BC-M05 · `docs/agent/design/SYSTEM-002/` · [ADR-0011](0011-domain-events-after-commit.md) (`occurredAt` UTC) · [ADR-0013](0013-reputation-columns-atomic-update.md), [ADR-0014](0014-realtime-chat-stomp-websocket.md), [ADR-0016](0016-user-name-search-fold-tsvector-gin.md) (số migration) · [ADR-0001](0001-jwt-authentication-strategy.md), [ADR-0008](0008-uuid-v7-primary-keys.md), [ADR-0009](0009-cloudinary-signed-direct-upload.md) (giá trị epoch giữ nguyên) |
+| **Liên quan** | SRS `docs/agent/business-spec/SYSTEM-001/` v1.13 BC-M05 · `docs/agent/design/SYSTEM-002/` · [ADR-0011](0011-domain-events-after-commit.md) (`occurredAt` — Sửa đổi 2026-11-21) · [ADR-0013](0013-reputation-columns-atomic-update.md), [ADR-0014](0014-realtime-chat-stomp-websocket.md), [ADR-0016](0016-user-name-search-fold-tsvector-gin.md) (số migration) · [ADR-0001](0001-jwt-authentication-strategy.md), [ADR-0008](0008-uuid-v7-primary-keys.md), [ADR-0009](0009-cloudinary-signed-direct-upload.md) (giá trị epoch giữ nguyên) |
 
 ## Bối cảnh (Context)
 - SRS cũ: "lưu UTC trong DB, frontend đổi theo múi giờ thiết bị". Code đang dùng `OffsetDateTime` + cột `TIMESTAMPTZ`; response trộn `Z` (đọc qua projection) và `+07:00` (giá trị `OffsetDateTime.now()` theo JVM).
@@ -52,6 +52,8 @@ Chúng tôi sẽ:
 - Tích hợp ngoài yêu cầu thời điểm UTC (push, thanh toán, lịch) → đổi tại biên tích hợp bằng `AppTime.ZONE`, không đổi lưu trữ.
 
 ## Sửa đổi đề xuất cho ADR khác (áp khi ADR này `Accepted` **và** PR #75 đã merge)
+
+Đã áp 2026-11-21 cùng PR chuyển ADR này sang `Accepted`: ADR-0011, ADR-0013, ADR-0014 có mục `Sửa đổi 2026-11-21 — SYSTEM-002`.
 
 | ADR | Trạng thái | Đề xuất |
 |---|---|---|
