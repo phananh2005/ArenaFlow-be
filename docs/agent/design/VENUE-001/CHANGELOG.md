@@ -1,5 +1,21 @@
 # CHANGELOG — VENUE-001 Quản lý địa điểm sân
 
+## [v4.3] — 2026-11-21
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Ghi kết quả kiểm thử upload ảnh trên Cloudinary thật vào hướng dẫn upload và §6; tìm kiếm 2.2 khớp đúng mô tả với ký tự `%`, `_`, `\`; cập nhật tài liệu nội bộ BE sau khi implement.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | §2 "Luồng thêm ảnh" (Trước khi bắt đầu; đoạn lỗi sau Bước 3) · §6 #9 → #19 | Chốt `[cần xác nhận]` | "Cloudinary có chặn định dạng ngoài `allowedFormats` hay không chưa chạy thử" → Cloudinary từ chối file ngoài `allowedFormats` (lỗi ở Bước 2); dùng lại chữ ký cho file khác thì Cloudinary không báo lỗi mà trả lại ảnh cũ, 2.5 trả `409 VENUE_006` (hoặc lưu ảnh cũ nếu ảnh cũ chưa được lưu); §6 #9 đổi số thành #19, chỉ còn giới hạn dung lượng file (Không chặn) | Đã kiểm thử trên Cloudinary thật | Tự kiểm định dạng trước khi upload để báo lỗi sớm; file sai định dạng bị từ chối ở Bước 2 → chọn file hợp lệ, xin chữ ký mới. **Mỗi file xin một chữ ký mới**, không dùng lại chữ ký cho file khác |
+| 2 | 2.2 tham số `q` | Sửa lỗi | `%`, `_`, `\` trong `q` nay được tìm đúng là ký tự thường, như mô tả "khớp một phần" | Khớp mô tả 2.2 | Không |
+| 3 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Đồng bộ với code sau khi implement | Không |
+| 4 | Header 3 tài liệu | Ghi nhận | v4.2 → v4.3 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract VENUE-001: không đổi.
+
 ## [v4.2] — 2026-11-16
 
 **Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** ADR-0009 đã `Accepted` (2026-11-16) — bỏ nhãn "Proposed" ở header API_Spec. Cập nhật tài liệu nội bộ BE theo phạm vi thông báo NOTIFICATION-001: Admin chỉ nhận thông báo theo đợt cảnh báo địa điểm, không theo từng report; không ảnh hưởng FE.

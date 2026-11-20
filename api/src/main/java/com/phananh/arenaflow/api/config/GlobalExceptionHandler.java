@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.api.config;
 
+import com.phananh.arenaflow.application.support.DataIntegrityViolations;
 import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
 import com.phananh.arenaflow.common.exception.ErrorEnvelope;
@@ -163,10 +164,7 @@ public class GlobalExceptionHandler {
 
     /** Chỉ trích xuất tên constraint để log an toàn, không log message SQL có thể chứa PII. */
     private static String constraintName(DataIntegrityViolationException exception) {
-        String name = exception.getCause() instanceof org.hibernate.exception.ConstraintViolationException violation
-                ? violation.getConstraintName()
-                : null;
-        return Objects.requireNonNullElse(name, "unknown");
+        return Objects.requireNonNullElse(DataIntegrityViolations.constraintName(exception), "unknown");
     }
 
     private ResponseEntity<ErrorEnvelope> validationResponse(HttpServletRequest request, List<ValidationError> errors) {

@@ -172,10 +172,15 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
 **Địa điểm:**
 
 - Admin và người dùng được thêm địa điểm trực tiếp; không cần admin duyệt trước. ArenaFlow cảnh báo admin một lần khi địa điểm không được chọn trong 180 ngày hoặc có báo cáo ngừng hoạt động; không nhắc định kỳ.
-- Các trường địa điểm: tên, địa chỉ, tọa độ, người tạo, created/updated, lần chọn gần nhất, trạng thái, điện thoại, website, loại sân.
-- **Ảnh:** Lưu trong bảng riêng `venue_images`. Tối đa 5 ảnh mỗi địa điểm. Các trường: `venue_id`, `image_url`, `is_primary` (ảnh đại diện chính), `display_order`, `uploaded_by`, `created_at`. Ràng buộc: mỗi venue chỉ có một ảnh `is_primary = true`.
+- Các trường địa điểm: tên, địa chỉ, tọa độ, **phường/xã** (danh mục hành chính), người tạo, created/updated, lần chọn gần nhất, trạng thái, điện thoại, website, loại sân.
+- **Phường/xã (BR-V11):** bắt buộc khi thêm địa điểm và khi sửa địa điểm chưa có phường/xã; địa điểm cũ (trước V5) được để trống cho tới lần sửa đầu tiên.
+- **Loại sân:** một trong `FIVE_A_SIDE`, `SEVEN_A_SIDE`, `ELEVEN_A_SIDE`, hoặc để trống.
+- **Lần chọn gần nhất:** cập nhật khi địa điểm được chọn cho kèo (MATCH-001) hoặc trận ngoài (MERCENARY-001); dùng cho cảnh báo 180 ngày.
+- **Ảnh:** Lưu trong bảng riêng `venue_image`. Tối đa 5 ảnh mỗi địa điểm. Các trường: `venue_id`, `image_url`, `public_id` (định danh asset Cloudinary, duy nhất), `is_primary` (ảnh đại diện chính), `display_order`, `uploaded_by`, `created_at`. Ràng buộc: mỗi venue chỉ có một ảnh `is_primary = true`; khi còn ảnh thì luôn có đúng một ảnh chính.
+- **Quyền với ảnh:** mọi user thêm ảnh / đổi ảnh chính khi địa điểm đang hoạt động; người tạo hoặc Admin xoá ảnh; khi địa điểm ngừng hoạt động chỉ Admin được thao tác. Xoá ảnh là xoá hẳn (không khôi phục); xoá ảnh chính thì ảnh đứng đầu còn lại thành ảnh chính. File ảnh trên Cloudinary không còn được tham chiếu do job dọn định kỳ xoá.
 - **Tiện ích:** Không lưu trong MVP.
-- **Report địa điểm:** Mỗi report lưu người report, lý do, thời gian. Admin thấy chi tiết từng report. Report không tự ẩn địa điểm; admin xác minh rồi đánh dấu ngừng hoạt động. Địa điểm ngừng hoạt động bị loại khỏi gợi ý mặc định, nhưng Match cũ giữ tham chiếu.
+- **Report địa điểm:** Mỗi report lưu người report, lý do (`CLOSED` đã đóng cửa, `WRONG_INFO` sai thông tin, `OTHER`), mô tả thêm, thời gian, trạng thái (`PENDING` → `VERIFIED` / `REJECTED`), admin xử lý và thời điểm xử lý. Mỗi user chỉ có tối đa một report đang chờ cho mỗi cặp (địa điểm, lý do); sau khi admin xử lý thì report lại được. Admin không gửi report (sửa hoặc đánh dấu ngừng hoạt động trực tiếp). Admin thấy chi tiết từng report. Report không tự ẩn địa điểm; admin xác minh rồi đánh dấu ngừng hoạt động — khi đó các report `CLOSED` đang chờ của địa điểm tự chuyển `VERIFIED`. Địa điểm ngừng hoạt động bị loại khỏi gợi ý mặc định, nhưng Match cũ giữ tham chiếu.
+- **Cảnh báo admin (mỗi đợt một lần):** report `CLOSED` đầu tiên của một đợt và địa điểm không được chọn 180 ngày mỗi loại chỉ cảnh báo một lần; đợt mới bắt đầu — với report `CLOSED`: khi hết report `CLOSED` đang chờ hoặc khi địa điểm được kích hoạt lại; với 180 ngày: khi địa điểm được chọn lại hoặc được kích hoạt lại.
 - Google Maps chỉ dùng hiển thị bản đồ/chỉ đường, không làm nguồn danh sách/master data sân. Availability sân không được ArenaFlow xác minh. Tích hợp Maps/API cụ thể cần chốt trước khi triển khai.
 - **Thỏa thuận chi phí:** ArenaFlow chỉ lưu thỏa thuận để hiển thị trên bảng tin; không thu/giữ tiền hay xử lý thanh toán. Hai đội thỏa thuận và thanh toán bên ngoài.
 - Các loại chi phí: tiền sân, tiền nước, hoặc cả hai.

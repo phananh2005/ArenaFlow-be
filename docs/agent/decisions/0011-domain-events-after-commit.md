@@ -6,7 +6,7 @@
 | **Ngày** | 2026-11-09 |
 | **Người quyết định** | Chủ repo (chốt "domain phát ApplicationEvent, NOTIFICATION-001 nghe", 2026-11-09) · solution-architect (đề xuất quy ước) |
 | **Liên quan** | [ADR-0003](0003-optimistic-locking-strategy.md) §Cần theo dõi (side effect sau commit) · [ADR-0013](0013-reputation-columns-atomic-update.md) (dữ liệu uy tín ghi cùng transaction) · `docs/agent/design/VENUE-001/Component_Class_Design.md` §4.7 · `docs/agent/design/MATCH-001/Component_Class_Design.md` §4.9 · [ADR-0014](0014-realtime-chat-stomp-websocket.md) — frame realtime chat / thương lượng **không** đi qua event của ADR này mà qua port `ChatRealtimeGateway` đăng ký `afterCommit` (cùng nguyên tắc "chỉ phát sau commit, lần thử rollback không phát"; payload cần nội dung tin nên không hợp quy tắc 2 về payload) · NOTIFICATION-001 (`docs/agent/design/NOTIFICATION-001/` — người nghe; listener `@Async` theo [ADR-0015](0015-notification-async-listener-and-user-channel.md)) · `docs/agent/design/REPUTATION-001/Component_Class_Design.md` §4.8 (`TeamVerificationRefresher` — quy tắc 8) · `docs/agent/design/MERCENARY-001/Component_Class_Design.md` §4.9, §4.11 (payload danh sách id nhỏ, event theo trận) |
-| **Sửa đổi** | 2026-11-14 — MERCENARY-001: ngoại lệ có phạm vi của quy tắc 2 (payload mang danh sách id nhỏ); event theo trận phát từ job thay vì nghe event của miền khác khi việc nghe làm tăng truy vấn của request gốc · 2026-11-16 — NOTIFICATION-001: listener thông báo chạy `@Async` theo ADR-0015; việc "đóng VENUE-001 `[cần xác nhận #10]`" ở §Cần theo dõi đã xong |
+| **Sửa đổi** | 2026-11-14 — MERCENARY-001: ngoại lệ có phạm vi của quy tắc 2 (payload mang danh sách id nhỏ); event theo trận phát từ job thay vì nghe event của miền khác khi việc nghe làm tăng truy vấn của request gốc · 2026-11-16 — NOTIFICATION-001: listener thông báo chạy `@Async` theo ADR-0015; việc "đóng VENUE-001 `[cần xác nhận #10]`" ở §Cần theo dõi đã xong · 2026-11-21 — VENUE-001: event chuyển sang `application/event/venue/`, bỏ ngoại lệ vị trí ở quy tắc 1 |
 
 ## Bối cảnh (Context)
 - VENUE-001 và MATCH-001 cần báo cho người dùng (11 loại thông báo — Overview §4) và cho REPUTATION-001, nhưng NOTIFICATION-001 được thiết kế sau; module miền không nên phụ thuộc module thông báo.
@@ -61,3 +61,9 @@ Bổ sung, không thay §Quyết định 1–8.
 - Listener tạo thông báo in-app (NOTIFICATION-001) vẫn nghe `@TransactionalEventListener(AFTER_COMMIT)` (quy tắc 4) nhưng chạy `@Async` trên executor riêng theo [ADR-0015](0015-notification-async-listener-and-user-channel.md). Hệ quả "Listener chạy đồng bộ trên thread của request sau commit … (NOTIFICATION-001 cân nhắc `@Async`)" không còn áp cho listener thông báo, trừ khi hàng đợi của executor đầy (`CallerRunsPolicy` — listener chạy trên luồng phát, xem ADR-0015); listener khác vẫn chạy đồng bộ trừ khi có ADR riêng.
 - Tính không bền (Hệ quả "Không bền") giữ nguyên; với listener thông báo, rủi ro mất rộng hơn một chút (hàng đợi trong bộ nhớ) — ADR-0015 Hệ quả.
 - §Cần theo dõi "Khi Accepted: VENUE-001 `[cần xác nhận #10]` đóng theo ADR này" đã xong: VENUE-001 `Component_Class_Design.md` §12 #10 đã đóng.
+
+## Sửa đổi 2026-11-21 — VENUE-001: event theo package con của miền
+
+- `VenueAdminAlertEvent`, `VenueAlertType` chuyển từ `application/event/` sang `application/event/venue/` (PR #75, trước khi VENUE-001 merge).
+- Ngoại lệ "VENUE-001 đặt ở `application/event/` — giữ nguyên" ở quy tắc 1 không còn áp dụng: mọi miền, kể cả VENUE-001, dùng `application/event/<miền>/`.
+- Quyết định của ADR này không đổi.

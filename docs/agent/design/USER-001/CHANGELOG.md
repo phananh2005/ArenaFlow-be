@@ -1,5 +1,19 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v4.4] — 2026-11-21
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message của USER-001) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE khi VENUE-001 mở rộng thành phần dùng chung; không ảnh hưởng FE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Mở rộng thành phần dùng chung cho VENUE-001 | Không |
+| 2 | Header 3 tài liệu | Ghi nhận | v4.3 → v4.4 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract USER-001: không đổi.
+
 ## [v4.3] — 2026-11-17
 
 **Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Chốt §6 #2–#4 bằng các endpoint tra cứu của USER-003 (tìm người để mời, danh mục khu vực, đội của tôi) và trỏ nguồn `userId`, `wardId`, `invitationId`; API USER-001 không đổi.

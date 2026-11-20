@@ -55,8 +55,22 @@ public class Venue {
     @Column(name = "website", length = 500)
     private String website;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "venue_type", length = 50)
-    private String venueType;
+    private VenueType venueType;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
+    @Column(name = "stale_alerted_at")
+    private OffsetDateTime staleAlertedAt;
+
+    @Column(name = "closure_alerted_at")
+    private OffsetDateTime closureAlertedAt;
+
+    @Column(name = "ward_id")
+    private UUID wardId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -94,5 +108,9 @@ public class Venue {
 
     public enum Status {
         ACTIVE, INACTIVE
+    }
+
+    public enum VenueType {
+        FIVE_A_SIDE, SEVEN_A_SIDE, ELEVEN_A_SIDE
     }
 }

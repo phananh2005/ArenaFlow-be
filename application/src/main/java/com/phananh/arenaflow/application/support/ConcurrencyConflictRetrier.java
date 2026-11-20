@@ -32,11 +32,16 @@ public class ConcurrencyConflictRetrier {
      * hỏng.
      */
     public <T> T execute(Supplier<T> operation) {
+        return execute(ErrorCode.TEAM_014, operation);
+    }
+
+    /** Thử lại khi xung đột optimistic lock/deadlock; hết lượt → ném mã lỗi riêng của use case. */
+    public <T> T execute(ErrorCode exhaustedCode, Supplier<T> operation) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 return transactionTemplate.execute(status -> operation.get());
             } catch (ObjectOptimisticLockingFailureException exception) {
-                // thử lại; hết lượt → TEAM_014 sau vòng lặp
+                // thử lại; hết lượt → exhaustedCode sau vòng lặp
             } catch (PessimisticLockingFailureException exception) {
                 if (!isDeadlock(exception)) {
                     throw exception;
@@ -45,7 +50,7 @@ public class ConcurrencyConflictRetrier {
                         attempt == MAX_ATTEMPTS ? ", giving up" : ", retrying");
             }
         }
-        throw new BusinessException(ErrorCode.TEAM_014);
+        throw new BusinessException(exhaustedCode);
     }
 
     private static boolean isDeadlock(PessimisticLockingFailureException exception) {
