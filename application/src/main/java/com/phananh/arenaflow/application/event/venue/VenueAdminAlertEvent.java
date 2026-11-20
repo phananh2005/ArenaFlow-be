@@ -1,4 +1,4 @@
-package com.phananh.arenaflow.application.event;
+package com.phananh.arenaflow.application.event.venue;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;

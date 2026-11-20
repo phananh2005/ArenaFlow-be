@@ -5,7 +5,7 @@ import com.phananh.arenaflow.application.dto.request.CreateVenueRequest;
 import com.phananh.arenaflow.application.dto.request.ReportVenueRequest;
 import com.phananh.arenaflow.application.dto.request.ResolveVenueReportRequest;
 import com.phananh.arenaflow.application.dto.request.UpdateVenueRequest;
-import com.phananh.arenaflow.application.event.VenueAdminAlertEvent;
+import com.phananh.arenaflow.application.event.venue.VenueAdminAlertEvent;
 import com.phananh.arenaflow.application.support.security.CurrentActor;
 import com.phananh.arenaflow.application.support.storage.ImageUploadSigner;
 import com.phananh.arenaflow.application.support.storage.SignedPublicId;

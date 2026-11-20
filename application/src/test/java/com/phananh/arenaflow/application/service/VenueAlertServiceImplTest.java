@@ -1,7 +1,7 @@
 package com.phananh.arenaflow.application.service;
 
-import com.phananh.arenaflow.application.event.VenueAdminAlertEvent;
-import com.phananh.arenaflow.application.event.VenueAlertType;
+import com.phananh.arenaflow.application.event.venue.VenueAdminAlertEvent;
+import com.phananh.arenaflow.application.event.venue.VenueAlertType;
 import com.phananh.arenaflow.application.service.impl.VenueAlertServiceImpl;
 import com.phananh.arenaflow.application.support.venue.VenueAlertProperties;
 import com.phananh.arenaflow.domain.projection.StaleVenueView;
