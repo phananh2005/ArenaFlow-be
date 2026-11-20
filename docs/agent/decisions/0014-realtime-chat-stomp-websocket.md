@@ -4,9 +4,9 @@
 |---|---|
 | **Trạng thái** | Accepted (chủ repo chốt 2026-11-16) |
 | **Ngày** | 2026-11-10 |
-| **Sửa đổi** | 2026-11-13 — MERCENARY-001: thêm topic cuộc trò chuyện tổng quát `/topic/conversations/{conversationId}` · 2026-11-15 — mọi chat (hai đội luồng A, B và mercenary) dùng một mô hình cuộc trò chuyện; bỏ `chat_message`, REST `/pairings/{id}/messages` và topic `/topic/pairings/{id}` · 2026-11-16 — NOTIFICATION-001: thêm destination theo người dùng `/user/queue/notifications` (thông báo mới, tín hiệu hoạt động chat) |
+| **Sửa đổi** | 2026-11-13 — MERCENARY-001: thêm topic cuộc trò chuyện tổng quát `/topic/conversations/{conversationId}` · 2026-11-15 — mọi chat (hai đội luồng A, B và mercenary) dùng một mô hình cuộc trò chuyện; bỏ `chat_message`, REST `/pairings/{id}/messages` và topic `/topic/pairings/{id}` · 2026-11-16 — NOTIFICATION-001: thêm destination theo người dùng `/user/queue/notifications` (thông báo mới, tín hiệu hoạt động chat) · 2026-11-21 — SYSTEM-002: migration V6/V7/V9 → V7/V8/V10; thời gian của chat theo giờ Việt Nam ([ADR-0017](0017-vietnam-local-datetime.md)) |
 | **Người quyết định** | Chủ repo (chốt cơ chế chat MATCH-002, 2026-11-10) · solution-architect (đề xuất cách thực hiện) |
-| **Liên quan** | `docs/agent/design/MATCH-001/` (lõi chat + kênh realtime từ 2026-11-15 — `API_Spec.md` §1.6, §1.7; `Component_Class_Design.md` §4.14, §4.15) · [ADR-0001](0001-jwt-authentication-strategy.md) (JWT) · [ADR-0011](0011-domain-events-after-commit.md) (side effect sau commit, một instance) · `docs/agent/design/MATCH-002/` (chỉ còn frame `PAIRING_UPDATED` — `API_Spec.md` §1.6, `Component_Class_Design.md` §4.6) · SRS `SYSTEM-001` UC-N01, AC-N01, Acceptance_Criteria §3.1 · `docs/agent/design/MERCENARY-001/` (chat theo đơn ứng tuyển — Component_Class_Design §4.7–§4.8; BR-ME16, UC-ME09, AC-ME10) · SRS `SYSTEM-001` v1.10 BR-N04, BR-N05 (chat hai đội luồng A và B) |
+| **Liên quan** | `docs/agent/design/MATCH-001/` (lõi chat + kênh realtime từ 2026-11-15 — `API_Spec.md` §1.6, §1.7; `Component_Class_Design.md` §4.14, §4.15) · [ADR-0001](0001-jwt-authentication-strategy.md) (JWT) · [ADR-0011](0011-domain-events-after-commit.md) (side effect sau commit, một instance) · `docs/agent/design/MATCH-002/` (chỉ còn frame `PAIRING_UPDATED` — `API_Spec.md` §1.6, `Component_Class_Design.md` §4.6) · SRS `SYSTEM-001` UC-N01, AC-N01, Acceptance_Criteria §3.1 · `docs/agent/design/MERCENARY-001/` (chat theo đơn ứng tuyển — Component_Class_Design §4.7–§4.8; BR-ME16, UC-ME09, AC-ME10) · SRS `SYSTEM-001` v1.10 BR-N04, BR-N05 (chat hai đội luồng A và B) · [ADR-0017](0017-vietnam-local-datetime.md) (thời gian giờ Việt Nam) |
 
 ## Bối cảnh (Context)
 - MATCH-002 có chat giữa hai đội trưởng của một thương lượng ghép kèo (luồng B). SRS: tin nhắn tới bên kia "real-time … (WebSocket/polling)", độ trễ < 1s; implementation note "WebSocket + SockJS (Spring Boot `.withSockJS()`)".
@@ -92,3 +92,11 @@ Chi tiết: `docs/agent/design/MATCH-001/` (Component_Class_Design §4.14, §4.1
 **Phương án loại:** topic `/topic/users/{userId}` (phải so khớp id khi `SUBSCRIBE`, dễ sai phân quyền); `SUBSCRIBE` mọi cuộc trò chuyện để biết tin mới (nhiều đăng ký, không phủ thông báo); polling định kỳ đếm chưa đọc (tải DB, trễ).
 
 **Hệ quả:** không thêm dependency; không truy vấn khi đăng ký kênh cá nhân. Rủi ro "kết nối không hết hạn theo token" như §Hệ quả: người vừa xoá tài khoản không còn được tạo thông báo mới; `CONVERSATION_ACTIVITY` gửi theo danh sách người xem được tại lúc gửi tin (đội trưởng hiện tại), không theo đăng ký cũ — chuyển quyền đội trưởng có hiệu lực ngay với kênh này. Một instance như cũ. Chi tiết: `docs/agent/design/NOTIFICATION-001/` (API_Spec §1.4, Component_Class_Design §4.5), [ADR-0015](0015-notification-async-listener-and-user-channel.md); MATCH-001 `API_Spec.md` §1.7, `Component_Class_Design.md` §4.14, §4.15 (v2.5).
+
+## Sửa đổi 2026-11-21 — SYSTEM-002: số migration, thời gian giờ Việt Nam
+
+Bổ sung, không thay §Quyết định 1–7.
+
+- **Số migration** ở Sửa đổi 2026-11-15 dời +1 vì V6 thuộc SYSTEM-002 ([ADR-0017](0017-vietnam-local-datetime.md) Quyết định 5): bảng `conversation` / `conversation_message` của MATCH-001 V6 → **V7**; bảng luồng B của MATCH-002 V7 → **V8**; cột / CHECK ngữ cảnh mercenary của MERCENARY-001 V9 → **V10**. Số thực chốt lại khi bắt đầu code từng mã.
+- **Thời gian:** cột thời gian của bảng chat là `TIMESTAMP` giờ Việt Nam (DEFAULT `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`); thời điểm trong REST và frame STOMP (vd `CONVERSATION_ACTIVITY`) là `LocalDateTime`, JSON không kèm múi giờ (ADR-0017 Quyết định 1–2, 4).
+- Cơ chế realtime của ADR này không đổi.

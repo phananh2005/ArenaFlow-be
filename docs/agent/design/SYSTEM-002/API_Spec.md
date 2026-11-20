@@ -9,9 +9,9 @@
 | Mã chức năng | `SYSTEM-002` |
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo | ArenaFlow-be |
-| Quy ước áp dụng | `api-convention.md` (envelope, định dạng lỗi, kiểu dữ liệu); [ADR-0017](../../decisions/0017-vietnam-local-datetime.md) (Proposed) |
+| Quy ước áp dụng | `api-convention.md` (envelope, định dạng lỗi, kiểu dữ liệu); [ADR-0017](../../decisions/0017-vietnam-local-datetime.md) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.13) — BC-M05 (Business_Rules §4), Overview §ràng buộc |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-21 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-21 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 

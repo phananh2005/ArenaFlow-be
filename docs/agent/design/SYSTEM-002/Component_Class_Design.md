@@ -5,10 +5,10 @@
 | Mã chức năng | `SYSTEM-002` |
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo | ArenaFlow-be — Spring Boot 4.0.9, Jackson 3 (`tools.jackson`), Hibernate 7.2, PostgreSQL 18 (Neon), Flyway |
-| Quy ước áp dụng | `convention-backend.md` (module, entity, `@PrePersist`), `api-convention.md` — **cả hai đang ghi `OffsetDateTime` / `timestamptz` / ví dụ `Z`; phải sửa theo §2 trước khi code** (§9 (a)); [ADR-0017](../../decisions/0017-vietnam-local-datetime.md) (Proposed) |
+| Quy ước áp dụng | `convention-backend.md` (module, entity, `@PrePersist`), `api-convention.md` — **cả hai đang ghi `OffsetDateTime` / `timestamptz` / ví dụ `Z`; phải sửa theo §2 trước khi code** (§9 (a)); [ADR-0017](../../decisions/0017-vietnam-local-datetime.md) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.13) — BC-M05 |
 | Ràng buộc dữ liệu | Schema V1–V5 (V5 = VENUE-001, PR #75 — đã merge `61aa100`) · migration mới `V6__vietnam_local_datetime.sql` (§7) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-21 · v1.0 (baseline) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-21 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -220,7 +220,7 @@ USER-001/002: `AdminTeamResponse`, `AdminTeamSummaryResponse`, `CaptainHistoryRe
 ### 6.5. Domain event
 
 - `VenueAdminAlertEvent.triggeredAt` (PR #75 đã chuyển event sang `application/event/venue/`): `LocalDateTime` (giờ Việt Nam).
-- Quy ước ADR-0011 quy tắc 2 (`occurredAt`, UTC) → `occurredAt` là `LocalDateTime` giờ Việt Nam — sửa đổi đề xuất ở ADR-0017; thiết kế MATCH-001… đã đổi kiểu (§9).
+- Quy ước ADR-0011 quy tắc 2 (`occurredAt`, UTC) → `occurredAt` là `LocalDateTime` giờ Việt Nam — đã áp ở ADR-0011 mục `Sửa đổi 2026-11-21 — SYSTEM-002`; thiết kế MATCH-001… đã đổi kiểu (§9).
 
 ### 6.6. Cấu hình
 
@@ -313,12 +313,12 @@ Thứ tự bắt buộc: (b) PR #75 merge, rebase, sửa §9.1 — **đã xong 2
 
 | Tài liệu | Việc | Khi nào / trạng thái (2026-11-21) |
 |---|---|---|
-| `docs/agent/decisions/0017-vietnam-local-datetime.md` | ADR mới `Proposed` | Đã tạo |
+| `docs/agent/decisions/0017-vietnam-local-datetime.md` | ADR mới `Proposed` | Đã tạo; `Accepted` 2026-11-21 (v1.1) |
 | ADR-0016 (Proposed) | V11 → V12, V5–V10 → V5–V11 | Đã sửa |
 | USER-002, USER-003, MATCH-001, MATCH-002, REPUTATION-001, MERCENARY-001, NOTIFICATION-001 (API_Spec, CCD, PF, CHANGELOG) | Kiểu/ví dụ thời gian + số migration | Đã sửa (entry CHANGELOG MAJOR mỗi mã) |
 | (a) `docs/agent/convention-backend.md` (trên `main` `2787ecc`: l.286–303 entity mẫu + quy tắc Timestamp, 367–368 DTO mẫu, 410, 431 `ErrorResponse` mẫu, **l.479 `@SQLDelete(sql = "UPDATE arenas SET deleted_at = NOW() …")` phải đổi** sang `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`), `api-convention.md` (l.121, 395 + quy tắc định dạng thời gian ở §10), `security-backend.md` (l.377), `docs/agent/README.md` (l.132), `docs/agent/CLAUDE.md` §2 (thêm dòng trỏ `docs/agent/design/SYSTEM-002/`) | Thay quy ước `OffsetDateTime`/`timestamptz`/ví dụ `Z` bằng §2 | Nhánh riêng `chore/agent-framework-vietnam-local-datetime`, **sau khi thiết kế được duyệt, trước khi code** |
 | (b) USER-001, VENUE-001, `docs/database/{schema.dbml,schema-design.md,data-model.md}` | Như các mã trên + V6 vào tài liệu DB | **Đã sửa 2026-11-21** sau khi PR #75 merge (`61aa100`) và rebase — chi tiết §9.1 |
-| ADR-0011, ADR-0013, ADR-0014 (Accepted) | Mục `Sửa đổi` theo ADR-0017 §Sửa đổi đề xuất | Áp **khi ADR-0017 `Accepted`** (PR #75 đã merge) — chưa áp |
+| ADR-0011, ADR-0013, ADR-0014 (Accepted) | Mục `Sửa đổi` theo ADR-0017 §Sửa đổi đề xuất | **Đã áp 2026-11-21** cùng PR chuyển ADR-0017 sang `Accepted` (v1.1) |
 
 ### 9.1. Đã sửa sau khi PR #75 merge (2026-11-21, đối chiếu bản trên `main` `61aa100`)
 
