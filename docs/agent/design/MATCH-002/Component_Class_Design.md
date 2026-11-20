@@ -6,21 +6,21 @@
 | Phạm vi tầng | Backend (Spring Boot REST API; frame realtime trên kênh STOMP của MATCH-001). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL ≥ 18 |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa MATCH-001 `Component_Class_Design.md` (v2.4) §4.5–§4.9, §4.12, §4.14 (lõi chat), §4.15 (kênh realtime), §5.2, §7; VENUE-001 §4.6 (port, v1.2), §4.9 (retrier overload); USER-001 §9 (JWT), §7–§8 (`DeletedUserMasking` qua `MapperSupport`) · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09, 2026-11-10), ADR-0008 (+ Sửa đổi 2026-11-09), ADR-0011, ADR-0012, ADR-0013, [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (+ Sửa đổi 2026-11-13, 2026-11-15) |
-| Ràng buộc dữ liệu | V1 + V5 (VENUE-001) + V6 (MATCH-001) + `V7__match_flow_b_pairing.sql` (§5.1). Bảng chat `conversation*` ở V6 (MATCH-001 v2.4 §5.1). Neon dev `misty-dew-90700890` kiểm 2026-11-10: Flyway V4, `server_version = 18.6`, `match`/`pairing`/`chat_message`/`match_venue_option`/`match_time_option`/`cost_custom_item` đều 0 dòng; tên CHECK V1 `match_check2` (type ↔ `venue_id`). |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v2.1** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | V1 + V5 (VENUE-001) + V6 (SYSTEM-002) + V7 (MATCH-001) + `V8__match_flow_b_pairing.sql` (§5.1). Bảng chat `conversation*` ở V7 (MATCH-001 v2.4 §5.1). Neon dev `misty-dew-90700890` kiểm 2026-11-10: Flyway V4, `server_version = 18.6`, `match`/`pairing`/`chat_message`/`match_venue_option`/`match_time_option`/`cost_custom_item` đều 0 dòng; tên CHECK V1 `match_check2` (type ↔ `venue_id`). |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
-Layered theo 4 module Maven (ADR-0006). Hợp đồng FE: `API_Spec.md`. Luồng, transaction, số truy vấn, khoá: `Processing_Flow.md`. Phần luồng B nằm trên endpoint của MATCH-001 (tạo / tìm / xem / huỷ kèo, job hết hạn) thiết kế ở MATCH-001 (v2.4); tài liệu này chứa pairing, phần riêng luồng B của chat (tạo cuộc trò chuyện khi nhận kèo, nhánh nhắn được / chỉ xem theo pairing, frame `PAIRING_UPDATED`), migration V7. Lõi chat dùng chung (bảng, service, endpoint, kênh realtime) ở MATCH-001 (v2.4) §4.14–§4.15.
+Layered theo 4 module Maven (ADR-0006). Hợp đồng FE: `API_Spec.md`. Luồng, transaction, số truy vấn, khoá: `Processing_Flow.md`. Phần luồng B nằm trên endpoint của MATCH-001 (tạo / tìm / xem / huỷ kèo, job hết hạn) thiết kế ở MATCH-001 (v2.4); tài liệu này chứa pairing, phần riêng luồng B của chat (tạo cuộc trò chuyện khi nhận kèo, nhánh nhắn được / chỉ xem theo pairing, frame `PAIRING_UPDATED`), migration V8. Lõi chat dùng chung (bảng, service, endpoint, kênh realtime) ở MATCH-001 (v2.4) §4.14–§4.15.
 
 - **Pairing** (`PairingService`): mọi đổi trạng thái là `UPDATE … WHERE` có điều kiện (CAS trên `status` / `revision`), không `@Version` trên `Pairing` — cùng mẫu `MatchRequest` của MATCH-001 (ADR-0003 Sửa đổi 2026-11-10). Ghép kèo CAS `match` bằng native `UPDATE … WHERE status = 'OPEN' AND version = :v` (`version + 1` — cùng cột `@Version` của MATCH-001, không nạp entity `Match`). Thứ tự khoá mọi luồng: `match` → `pairing` → `venue` (`Processing_Flow.md` §5). Ghi qua `ConcurrencyConflictRetrier.execute(MATCH_014, …)` + `MatchWriteOutcome` (lazy-expiry commit-rồi-báo-lỗi).
 - **Gói thương lượng** (phương án + chi phí + cọc) nằm trên `pairing`; `revision` vừa là số phiên bản gói FE gửi lên, vừa là điều kiện CAS. Ghép kèo chép chi phí/cọc và khoản tự nhập sang `match` (khoản tự nhập: một câu `INSERT … SELECT`) → kèo đã ghép đọc thoả thuận như kèo luồng A (`Processing_Flow.md` §3.7).
 - **Chat luồng B** (v2.0): dùng lõi chat của MATCH-001 §4.14 (`conversation`, `ConversationService`, `/conversations/{id}`, topic `/topic/conversations/{id}` — ADR-0014 Sửa đổi 2026-11-15). Mã này thêm: tạo cuộc trò chuyện `TEAM_MATCH` khi nhận kèo (§4.1), nhánh `NEED_VENUE` của `TeamMatchConversationPolicy` + cột / join `pairing` trong `ConversationSql` (§4.2), frame `PairingUpdated` (§4.6).
 - **Domain event** (ADR-0011): `PairingCreatedEvent`; dùng lại `MatchConfirmedEvent` (+ `pairingId`), `MatchCancelledEvent`, `MatchExpiredEvent`, `ReliabilityScoreChangedEvent` của MATCH-001 (§4.5).
 
-**Điều kiện tiên quyết:** code VENUE-001 (V5) và **đợt 1 của MATCH-001** (V6: luồng A, lõi chat, kênh realtime — v2.4) — MATCH-001 `Component_Class_Design.md` §12 `[cần xác nhận #5]`, `#12`.
+**Điều kiện tiên quyết:** code VENUE-001 (V5) và **đợt 1 của MATCH-001** (V7: luồng A, lõi chat, kênh realtime — v2.4) — MATCH-001 `Component_Class_Design.md` §12 `[cần xác nhận #5]`, `#12`.
 
-**Đợt MATCH-002** (user chốt 2026-11-15 — `[cần xác nhận #16]` đã chốt) gồm: V7 + mọi thành phần của tài liệu này **và** các nhánh luồng B nằm trong thành phần của MATCH-001 (tạo / tìm / xem / huỷ / hết hạn kèo `NEED_VENUE`, `findDetailById` join `pairing` + `cost_deposit_amount`, `MatchVenueOptionRepository`, `MatchTimeOptionRepository`, nhánh `NEED_VENUE` của policy chat, sửa entity `Match` / `CostCustomItem`) — danh sách: MATCH-001 `Component_Class_Design.md` §1.1. Khi xong: bỏ chặn `MATCH_016` của MATCH-001 2.1 cho `type = NEED_VENUE`.
+**Đợt MATCH-002** (user chốt 2026-11-15 — `[cần xác nhận #16]` đã chốt) gồm: V8 + mọi thành phần của tài liệu này **và** các nhánh luồng B nằm trong thành phần của MATCH-001 (tạo / tìm / xem / huỷ / hết hạn kèo `NEED_VENUE`, `findDetailById` join `pairing` + `cost_deposit_amount`, `MatchVenueOptionRepository`, `MatchTimeOptionRepository`, nhánh `NEED_VENUE` của policy chat, sửa entity `Match` / `CostCustomItem`) — danh sách: MATCH-001 `Component_Class_Design.md` §1.1. Khi xong: bỏ chặn `MATCH_016` của MATCH-001 2.1 cho `type = NEED_VENUE`.
 
 ## 2. Package Structure (delta)
 
@@ -154,8 +154,8 @@ Không phát event cho: chốt phương án, sửa chi phí, một bên xác nh�
 Kênh realtime (port `ChatRealtimeGateway`, cấu hình STOMP, xác thực, phân quyền đăng ký, gateway): MATCH-001 `Component_Class_Design.md` §4.15 (v2.4 — chuyển từ tài liệu này). Mã này thêm:
 ```java
 // RealtimeFrame (MATCH-001 §4.15) — thêm
-record PairingUpdated(UUID pairingId, Pairing.Status status, int revision, OffsetDateTime authorConfirmedAt,
-                      OffsetDateTime interestedConfirmedAt, OffsetDateTime confirmedAt, PairingChange change) implements RealtimeFrame {}
+record PairingUpdated(UUID pairingId, Pairing.Status status, int revision, LocalDateTime authorConfirmedAt,
+                      LocalDateTime interestedConfirmedAt, LocalDateTime confirmedAt, PairingChange change) implements RealtimeFrame {}
 public enum PairingChange { PROPOSAL, COST, CONFIRMATION }
 ```
 `PairingService` đẩy `PairingUpdated` lên `ctx.conversationId()` (cuộc trò chuyện của thương lượng) qua `realtimeGateway.publishAfterCommit`. `StompChatRealtimeGateway` tuần tự hoá `type = PAIRING_UPDATED` (`API_Spec.md` §1.6).
@@ -188,7 +188,7 @@ public enum PairingChange { PROPOSAL, COST, CONFIRMATION }
 
 ## 5. Repository & Data Model
 
-### 5.1. Migration `V7__match_flow_b_pairing.sql`
+### 5.1. Migration `V8__match_flow_b_pairing.sql`
 
 ```sql
 -- match: luồng B ghi venue_id = địa điểm đã chốt khi ghép; cọc chỉ ở luồng B; bỏ 2 cột chốt của V1 (không dùng)
@@ -225,7 +225,7 @@ DROP INDEX idx_match_time_option_match;
 
 -- pairing: gói thương lượng (phương án + chi phí + cọc), revision, updated_at
 ALTER TABLE pairing ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE pairing ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE pairing ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh');
 ALTER TABLE pairing ADD COLUMN proposed_venue_id UUID;
 ALTER TABLE pairing ADD COLUMN proposed_time_option_id UUID;
 ALTER TABLE pairing ADD COLUMN cost_type VARCHAR(50);
@@ -266,8 +266,8 @@ CREATE UNIQUE INDEX idx_cost_custom_item_pairing_order ON cost_custom_item(pairi
 - **Đổi so với `docs/database/` và thiết kế cũ:** bỏ `match.confirmed_venue_id`, `match.confirmed_match_time` (luồng B ghi thẳng `venue_id`, `match_start_time`, `match_end_time` khi ghép → mọi truy vấn MATCH-001/MERCENARY-001 đọc một nguồn); nới CHECK V1 `match_check2`; `cost_custom_item.match_id` nullable (sửa ràng buộc V1/V6 của MATCH-001); không dùng JSONB `location_option_ids`/`time_options` (Overview "Implementation notes") mà giữ bảng V1 (FK, unique, FK phương án); `search_lat/lng/radius_km` giữ cột nhưng luôn `null`.
 - `match_check1` (`expires_at <= match_start_time`) giữ: kèo B lưu `match_start_time`/`match_end_time` = khung giờ sớm nhất khi tạo → CHECK này thực thi luôn BR-M03; khi ghép đổi sang khung đã chốt (≥ khung sớm nhất ≥ `expires_at`).
 - FK phương án hai cột (`MATCH SIMPLE`): `NULL` không kiểm; có giá trị thì DB bảo đảm địa điểm/khung giờ thuộc **đúng** kèo của pairing — lớp chặn cuối sau kiểm `PAIRING_008` ở service.
-- `idx_pairing_confirmed` thay `idx_pairing_race` (V1, cùng tiền tố `match_id`): bảo đảm tối đa một pairing `CONFIRMED` mỗi kèo (tương tự `idx_match_request_accepted` của V6).
-- Backfill `display_order`: Neon dev 0 dòng (kiểm 2026-11-10). Bảng chat: V6 (MATCH-001 v2.4 §5.1) bỏ `chat_message`, tạo `conversation*` — V7 không đụng.
+- `idx_pairing_confirmed` thay `idx_pairing_race` (V1, cùng tiền tố `match_id`): bảo đảm tối đa một pairing `CONFIRMED` mỗi kèo (tương tự `idx_match_request_accepted` của V7).
+- Backfill `display_order`: Neon dev 0 dòng (kiểm 2026-11-10). Bảng chat: V7 (MATCH-001 v2.4 §5.1) bỏ `chat_message`, tạo `conversation*` — V8 không đụng.
 - `pairing` không có cột `version`: CAS bằng `status` + `revision` trong `WHERE` (§5.2).
 - Tên index theo quy ước `idx_*`; constraint đặt tên tường minh để migration sau tham chiếu được (bài học `match_check2`).
 
@@ -278,35 +278,35 @@ Native + interface projection như MATCH-001 §5.2; `Page` native có `countQuer
 ```java
 public interface PairingRepository extends JpaRepository<Pairing, UUID> {
     Optional<PairingContextView> findContext(UUID pairingId, UUID callerId);       // pairing ⋈ match ⋈ 2 team ⋈ sport ⋈ time option + venue đã chốt ⋈ conversation ⋈ user caller
-    Optional<PairingDetailView> findDetailById(UUID pairingId, UUID callerId, OffsetDateTime now); // + đội trưởng hiện tại 2 đội, cờ quyền caller, conversationId
-    Page<PairingSummaryView> findByMatch(UUID matchId, String status /* null = ALL */, OffsetDateTime now, Pageable p);
-    Page<PairingSummaryView> findByTeam(UUID teamId, String role /* null = ALL */, String status, OffsetDateTime now, Pageable p);
+    Optional<PairingDetailView> findDetailById(UUID pairingId, UUID callerId, LocalDateTime now); // + đội trưởng hiện tại 2 đội, cờ quyền caller, conversationId
+    Page<PairingSummaryView> findByMatch(UUID matchId, String status /* null = ALL */, LocalDateTime now, Pageable p);
+    Page<PairingSummaryView> findByTeam(UUID teamId, String role /* null = ALL */, String status, LocalDateTime now, Pageable p);
     Optional<ProposalCandidateView> findProposalCandidate(UUID matchId, UUID venueId, UUID timeOptionId);
-    @Modifying int updateProposal(UUID id, UUID venueId, UUID timeOptionId, int expectedRevision, OffsetDateTime now);
+    @Modifying int updateProposal(UUID id, UUID venueId, UUID timeOptionId, int expectedRevision, LocalDateTime now);
     @Modifying int updateCost(UUID id, String costType, String costSplit, Long venueAmount, Long drinksAmount,
-                              Long depositAmount, String depositHolder, int expectedRevision, OffsetDateTime now);
-    Optional<ConfirmSideResult> confirmSide(UUID id, String side, int expectedRevision, OffsetDateTime now); // UPDATE … RETURNING
-    List<UUID> finalizeConfirmation(UUID matchId, UUID pairingId, int expectedRevision, OffsetDateTime now); // UPDATE … RETURNING id
-    @Modifying int supersedeNegotiating(UUID matchId, OffsetDateTime now);            // huỷ kèo OPEN
-    @Modifying int expireNegotiatingByMatchIds(Collection<UUID> matchIds, OffsetDateTime now); // MatchExpiry, job
+                              Long depositAmount, String depositHolder, int expectedRevision, LocalDateTime now);
+    Optional<ConfirmSideResult> confirmSide(UUID id, String side, int expectedRevision, LocalDateTime now); // UPDATE … RETURNING
+    List<UUID> finalizeConfirmation(UUID matchId, UUID pairingId, int expectedRevision, LocalDateTime now); // UPDATE … RETURNING id
+    @Modifying int supersedeNegotiating(UUID matchId, LocalDateTime now);            // huỷ kèo OPEN
+    @Modifying int expireNegotiatingByMatchIds(Collection<UUID> matchIds, LocalDateTime now); // MatchExpiry, job
 }
 // MatchRepository (sửa — MATCH-001 §5.2)
 @Modifying int confirmPairing(UUID matchId, long expectedVersion, UUID opponentTeamId, UUID venueId,
-                              OffsetDateTime startTime, OffsetDateTime endTime, String costType, String costSplit,
-                              Long venueAmount, Long drinksAmount, Long depositAmount, String depositHolder, OffsetDateTime now);
+                              LocalDateTime startTime, LocalDateTime endTime, String costType, String costSplit,
+                              Long venueAmount, Long drinksAmount, Long depositAmount, String depositHolder, LocalDateTime now);
 public interface MatchVenueOptionRepository extends JpaRepository<MatchVenueOption, UUID> {
-    @Modifying int insertAll(UUID matchId, UUID[] venueIds, OffsetDateTime now);       // 1 câu unnest WITH ORDINALITY, id uuidv7()
+    @Modifying int insertAll(UUID matchId, UUID[] venueIds, LocalDateTime now);       // 1 câu unnest WITH ORDINALITY, id uuidv7()
     List<MatchOptionRowView> findOptionRows(UUID matchId);                              // UNION ALL lựa chọn địa điểm + khung giờ
 }
 public interface MatchTimeOptionRepository extends JpaRepository<MatchTimeOption, UUID> {
-    List<TimeOptionView> insertAllReturning(UUID matchId, OffsetDateTime[] starts, OffsetDateTime[] ends, OffsetDateTime now);
+    List<TimeOptionView> insertAllReturning(UUID matchId, LocalDateTime[] starts, LocalDateTime[] ends, LocalDateTime now);
                                                                                           // 1 câu INSERT … SELECT unnest … RETURNING
 }
 // CostCustomItemRepository (sửa)
 List<CostCustomItem> findByPairingIdOrderByDisplayOrderAsc(UUID pairingId);
 @Modifying int deleteByPairingIdBulk(UUID pairingId);
-@Modifying int insertAllForPairing(UUID pairingId, String[] names, Long[] amounts, OffsetDateTime now); // như insertAll, cột pairing_id
-@Modifying int copyPairingItemsToMatch(UUID pairingId, UUID matchId, OffsetDateTime now); // 2.7 hoàn tất: 1 câu INSERT … SELECT
+@Modifying int insertAllForPairing(UUID pairingId, String[] names, Long[] amounts, LocalDateTime now); // như insertAll, cột pairing_id
+@Modifying int copyPairingItemsToMatch(UUID pairingId, UUID matchId, LocalDateTime now); // 2.7 hoàn tất: 1 câu INSERT … SELECT
 ```
 
 Ghi chú SQL:
@@ -321,7 +321,7 @@ Ghi chú SQL:
 - `findByMatch`, `findByTeam`: + `conversationId` (`LEFT JOIN conversation` như `findContext`, theo `idx_conversation_team_match` — trong câu trang, không thêm câu). `findByTeam`: `role = INTERESTED` → `p.interested_team_id = :teamId` (`idx_pairing_team`); `AUTHOR` → `m.author_team_id = :teamId` (`idx_match_author_status` rồi `idx_pairing_match`); `ALL` → `OR` hai điều kiện. Lọc `status` trên biểu thức trạng thái hiệu lực.
 - `findProposalCandidate`: `SELECT v.id, v.name, v.address, v.status, t.id, t.proposed_start_time, t.proposed_end_time FROM match_venue_option o JOIN venue v ON v.id = o.venue_id JOIN match_time_option t ON t.match_id = o.match_id AND t.id = :timeOptionId WHERE o.match_id = :matchId AND o.venue_id = :venueId`. Không có dòng → `PAIRING_008`.
 - `insertAll` (lựa chọn địa điểm): `INSERT INTO match_venue_option (id, match_id, venue_id, display_order, created_at) SELECT uuidv7(), :matchId, t.venue_id, t.ord, :now FROM unnest(CAST(:venueIds AS uuid[])) WITH ORDINALITY AS t(venue_id, ord)` (ADR-0008 Sửa đổi 2026-11-09).
-- `insertAllReturning` (khung giờ): `INSERT INTO match_time_option (id, match_id, proposed_start_time, proposed_end_time, created_at) SELECT uuidv7(), :matchId, t.s, t.e, :now FROM unnest(CAST(:starts AS timestamptz[]), CAST(:ends AS timestamptz[])) AS t(s, e) RETURNING id, proposed_start_time, proposed_end_time` — native trả projection, không `@Modifying` (cùng `[cần xác nhận #11]` VENUE-001); id do DB sinh nên cần `RETURNING` để response 2.1 có `timeOptionId` mà không đọc lại. Bind mảng `UUID[]`/`OffsetDateTime[]`: `[cần xác nhận #2]`.
+- `insertAllReturning` (khung giờ): `INSERT INTO match_time_option (id, match_id, proposed_start_time, proposed_end_time, created_at) SELECT uuidv7(), :matchId, t.s, t.e, :now FROM unnest(CAST(:starts AS timestamp[]), CAST(:ends AS timestamp[])) AS t(s, e) RETURNING id, proposed_start_time, proposed_end_time` — native trả projection, không `@Modifying` (cùng `[cần xác nhận #11]` VENUE-001); id do DB sinh nên cần `RETURNING` để response 2.1 có `timeOptionId` mà không đọc lại. Bind mảng `UUID[]`/`LocalDateTime[]`: `[cần xác nhận #2]`.
 - `findOptionRows`: `SELECT 'VENUE' AS kind, o.display_order, v.id, v.name, v.address, v.latitude, v.longitude, v.status, img.url, NULL, NULL, NULL FROM match_venue_option o JOIN venue v … LEFT JOIN venue_image img (ảnh chính) WHERE o.match_id = :m UNION ALL SELECT 'TIME', NULL, …, t.id, t.proposed_start_time, t.proposed_end_time FROM match_time_option t WHERE t.match_id = :m` — mapper tách theo `kind`, sắp `display_order` / `proposed_start_time`.
 - Chat: câu ngữ cảnh / danh sách / tin nhắn ở MATCH-001 §5.2; mã này chỉ thêm cột / join `pairing` (§4.2).
 
@@ -337,7 +337,7 @@ Ghi chú SQL:
 | `TimeOptionView` | `id`, `proposedStartTime`, `proposedEndTime` |
 | `MatchOptionRowView` | `kind`, `displayOrder`, cột địa điểm (như `MatchDetailView` venue), `timeOptionId`, `startsAt`, `endsAt` |
 
-Thời gian là `Instant`, mapper chuyển UTC (USER-001 §5).
+Thời gian là `LocalDateTime` giờ Việt Nam, mapper gán thẳng (SYSTEM-002 `Component_Class_Design.md` §2).
 
 ## 6. Entity
 
@@ -349,7 +349,7 @@ Thời gian là `Instant`, mapper chuyển UTC (USER-001 §5).
 | `match.MatchTimeOption` | Giữ |
 | `match.CostCustomItem` | `matchId` `nullable = true`; + `pairingId` (`UUID`) |
 
-Giữ Lombok/builder/`@PrePersist` (`convention-backend.md` §6, §6.1); giữ `@UuidGenerator(VERSION_7)` (ADR-0008, `EntityIdGenerationTest`). Kiểm bằng migration integration test (`ddl-auto=validate` sau V7).
+Giữ Lombok/builder/`@PrePersist` (`convention-backend.md` §6, §6.1); giữ `@UuidGenerator(VERSION_7)` (ADR-0008, `EntityIdGenerationTest`). Kiểm bằng migration integration test (`ddl-auto=validate` sau V8).
 
 ## 7. DTO & Mapper
 
@@ -382,10 +382,10 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 
 | Tài liệu | Nội dung | Nhánh |
 |---|---|---|
-| `docs/database/schema.dbml`, `schema-design.md` §3.1 (bỏ `confirmed_venue_id`, `confirmed_match_time`; `cost_deposit_amount`; CHECK `match_type_venue_check`), §3.2, §3.3, §3.4 (`cost_custom_item.pairing_id`), §3.6 (cột pairing, `idx_pairing_confirmed`) | Cột/CHECK/index V7 | `feature/MATCH-002-*` |
+| `docs/database/schema.dbml`, `schema-design.md` §3.1 (bỏ `confirmed_venue_id`, `confirmed_match_time`; `cost_deposit_amount`; CHECK `match_type_venue_check`), §3.2, §3.3, §3.4 (`cost_custom_item.pairing_id`), §3.6 (cột pairing, `idx_pairing_confirmed`) | Cột/CHECK/index V8 | `feature/MATCH-002-*` |
 | `docs/database/data-model.md` §3.3 dòng 81 ("MVP chỉ lưu tin nhắn chat; không có cấu trúc đề xuất riêng") → phương án chốt trên pairing; dòng 90 ("… hoặc `CANCELLED` (nếu Match `CANCELLED`)") → `SUPERSEDED`; §3.5 dòng 181 (cọc: số tiền + người giữ, theo thương lượng) | Khớp quyết định 2026-11-10 | `feature/MATCH-002-*` |
 | `docs/agent/CLAUDE.md` §2 | Dòng điều hướng MATCH-002 | `chore/agent-framework-*` |
-| `docs/database/` (`schema-design.md`, `schema.dbml`) | FK `venue_report.reporter_id`, `venue.created_by_user_id` → `ON DELETE RESTRICT` (`conversation_message.sender_user_id`: MATCH-001 §11) | `feature/MATCH-002-*` (cùng V7) / `feature/VENUE-001-*` (V5) |
+| `docs/database/` (`schema-design.md`, `schema.dbml`) | FK `venue_report.reporter_id`, `venue.created_by_user_id` → `ON DELETE RESTRICT` (`conversation_message.sender_user_id`: MATCH-001 §11) | `feature/MATCH-002-*` (cùng V8) / `feature/VENUE-001-*` (V5) |
 | SRS `SYSTEM-001` | Bảng dưới — coordinator giao business-analyst | Theo coordinator |
 
 **SRS `SYSTEM-001` cần sửa** (không sửa trong nhánh thiết kế này; dòng của file tại thời điểm 2026-11-10):
@@ -417,10 +417,10 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 
 | # | Nội dung | Loại |
 |---|---|---|
-| 2 | Bind mảng `UUID[]`, `OffsetDateTime[]` vào native `unnest` qua Spring Data / Hibernate 7.2 [Inference — chưa chạy]; dự phòng `NamedParameterJdbcTemplate` trong cùng transaction (như MATCH-001 `[cần xác nhận #1]`) | Không chặn |
+| 2 | Bind mảng `UUID[]`, `LocalDateTime[]` vào native `unnest` qua Spring Data / Hibernate 7.2 [Inference — chưa chạy]; dự phòng `NamedParameterJdbcTemplate` trong cùng transaction (như MATCH-001 `[cần xác nhận #1]`) | Không chặn |
 | 4 | Native `UPDATE … RETURNING` / `INSERT … RETURNING` khai báo không `@Modifying`, trả projection (cùng VENUE-001 `[cần xác nhận #11]`); không chạy được → `@Modifying` + đọc lại (2.1 MATCH-001 vượt W6 → dừng, báo; 2.7 hoàn tất thêm 1 câu đọc lại kết quả `finalizeConfirmation` → 6 = W6, chạm ngưỡng; 2.7 một phía 3) | **Chặn code — bước đầu phase 1** (integration test tối thiểu cho một câu `UPDATE … RETURNING` và một `INSERT … RETURNING` không `@Modifying` trước khi viết repository). Không chạy được → dừng, hỏi user (dự phòng ở cột Nội dung chưa được duyệt áp dụng) |
 | 5 | Retrier hiện hành (`ConcurrencyConflictRetrier`) chỉ bắt `ObjectOptimisticLockingFailureException` và `PessimisticLockingFailureException` deadlock (`40P01`) — chưa bắt `ConcurrencyConflictException` mà thiết kế này ném khi CAS 0 dòng. Cần: tạo / dùng lại exception và cho retrier bắt (thay đổi thành phần dùng chung — `reuse-scan`, ADR-0003) | **Chặn code — bước đầu phase 1** (sửa retrier + test thử lại khi ném `ConcurrencyConflictException` trước mọi luồng ghi pairing). Không làm được theo cách này → dừng, hỏi user |
-| 16 | **Đã chốt — thứ tự code** (user chọn 2026-11-15, review 2026-11-15): điều kiện tiên quyết = đợt 1 của MATCH-001 (V6); đợt MATCH-002 = V7 + tài liệu này + nhánh luồng B trong thành phần MATCH-001 (MATCH-001 `Component_Class_Design.md` §1.1). **Khi đợt MATCH-002 bỏ chặn:** thêm entry `CHANGELOG.md` của MATCH-001 "2.1 nhận lại `type = NEED_VENUE`" và gỡ dòng `MATCH_016` tạm thời khỏi bảng lỗi 2.1 + câu "Luồng B mở cùng bản phát hành MATCH-002…" ở §1 + endpoint 2.1 của dòng `MATCH_016` ở §5 của MATCH-001 `API_Spec.md` | Kế hoạch implement — không chặn |
+| 16 | **Đã chốt — thứ tự code** (user chọn 2026-11-15, review 2026-11-15): điều kiện tiên quyết = đợt 1 của MATCH-001 (V7); đợt MATCH-002 = V8 + tài liệu này + nhánh luồng B trong thành phần MATCH-001 (MATCH-001 `Component_Class_Design.md` §1.1). **Khi đợt MATCH-002 bỏ chặn:** thêm entry `CHANGELOG.md` của MATCH-001 "2.1 nhận lại `type = NEED_VENUE`" và gỡ dòng `MATCH_016` tạm thời khỏi bảng lỗi 2.1 + câu "Luồng B mở cùng bản phát hành MATCH-002…" ở §1 + endpoint 2.1 của dòng `MATCH_016` ở §5 của MATCH-001 `API_Spec.md` | Kế hoạch implement — không chặn |
 
 ## 13. Quyết định đã chốt (user, 2026-11-10)
 

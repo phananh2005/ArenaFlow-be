@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1.1, §1.2 và MATCH-001 `API_Spec.md` §1.1; kèo, trạng thái kèo, mã `MATCH_*`: MATCH-001 `API_Spec.md`; cuộc trò chuyện giữa hai đội, mã `CHAT_*`: MATCH-001 `API_Spec.md` §1.6, §5; mã `TEAM_*`, `AUTH_*`: USER-001/USER-002 `API_Spec.md`; hiển thị user đã xoá ở API Admin: [ADR-0002](../../decisions/0002-soft-delete-policy.md) (Sửa đổi 2026-11-12) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10) — UC-R01..R07; BR-ME14 (report của mercenary với đội); BR-R01..R10 (BR-R07 trường hợp 3: report qua chat hai đội), BC-R01..R07; BR-N04; Business_Rules §3.1–§3.3, §6, §7, §8.2, §8.4; AC-R01..R08; Scenario 8, 9 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.3** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -21,7 +21,7 @@ Sau trận, đội trưởng **đánh giá** đối phương (1–5 sao hoặc "
 
 ### 1.1. Quy ước chung
 
-- Như MATCH-001 `API_Spec.md` §1.1: Bearer token (`401 AUTH_001` → refresh), `/api/v1/admin/**` cần quyền Admin (`403 AUTH_004`), envelope `data` / `error` / `pagination`, `201` không kèm header `Location`, thời gian ISO-8601 trả UTC, chuỗi được bỏ khoảng trắng đầu/cuối (`""` ở field tuỳ chọn = không nhập), enum UPPERCASE, `400 VALIDATION_ERROR` kèm `validationErrors[]`.
+- Như MATCH-001 `API_Spec.md` §1.1: Bearer token (`401 AUTH_001` → refresh), `/api/v1/admin/**` cần quyền Admin (`403 AUTH_004`), envelope `data` / `error` / `pagination`, `201` không kèm header `Location`, thời gian ISO-8601 giờ Việt Nam không kèm múi giờ (SYSTEM-002 `API_Spec.md` §1.1), chuỗi được bỏ khoảng trắng đầu/cuối (`""` ở field tuỳ chọn = không nhập), enum UPPERCASE, `400 VALIDATION_ERROR` kèm `validationErrors[]`.
 - Danh sách phân trang `page` (≥ 1, mặc định 1) / `pageSize` (1..100, mặc định 20); thứ tự cố định ghi ở từng endpoint.
 - Mọi thao tác ghi có thể trả `409 MATCH_014` "Dữ liệu vừa được cập nhật bởi thao tác khác, vui lòng thử lại" khi nhiều thao tác đụng nhau liên tục → FE tải lại rồi cho người dùng bấm lại.
 
@@ -160,7 +160,7 @@ Tỷ số chỉ để lưu kỷ niệm, không ảnh hưởng điểm. Mỗi đ�
     "comment": "Đá đẹp, đúng giờ",
     "raterTeamScore": 3,
     "rateeTeamScore": 2,
-    "createdAt": "2026-11-12T14:05:00Z",
+    "createdAt": "2026-11-12T21:05:00",
     "matchStatus": "COMPLETED"
   }
 }
@@ -218,7 +218,7 @@ Tỷ số chỉ để lưu kỷ niệm, không ảnh hưởng điểm. Mỗi đ�
       "comment": "Đá đẹp, đúng giờ",
       "raterTeamScore": 3,
       "rateeTeamScore": 2,
-      "createdAt": "2026-11-12T14:05:00Z"
+      "createdAt": "2026-11-12T21:05:00"
     },
     "received": null
   }
@@ -270,17 +270,17 @@ Trận chưa kết thúc / không diễn ra → `200` với `given = null`, `rec
   "data": {
     "reportId": "01936c20-2b3c-7d4e-9f50-6a7b8c9d0e01",
     "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708",
-    "matchStartsAt": "2026-11-12T11:00:00Z",
+    "matchStartsAt": "2026-11-12T18:00:00",
     "direction": "SENT",
     "counterpartTeam": { "teamId": "01935e11-dddd-7eee-8fff-1a2b3c4d5e6f", "name": "FC Sấm Sét", "avatarUrl": null },
     "reportType": "NOSHOW",
     "reason": "Đội bạn không đến, không báo trước",
     "status": "AUTO_ACCEPTED",
-    "disputeDeadlineAt": "2026-11-13T14:10:00Z",
+    "disputeDeadlineAt": "2026-11-13T21:10:00",
     "canDispute": false,
     "reliabilityPenalty": null,
     "dispute": null,
-    "createdAt": "2026-11-12T14:10:00Z"
+    "createdAt": "2026-11-12T21:10:00"
   }
 }
 ```
@@ -325,13 +325,13 @@ Trận chưa kết thúc / không diễn ra → `200` với `given = null`, `rec
     {
       "reportId": "01936c20-2b3c-7d4e-9f50-6a7b8c9d0e01",
       "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708",
-      "matchStartsAt": "2026-11-12T11:00:00Z",
+      "matchStartsAt": "2026-11-12T18:00:00",
       "direction": "RECEIVED",
       "counterpartTeam": { "teamId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c", "name": "FC Hoa Lư", "avatarUrl": "https://res.cloudinary.com/demo/image/upload/v1/teams/hoalu.jpg" },
       "reportType": "NOSHOW",
       "reason": "Đội bạn không đến, không báo trước",
       "status": "DISPUTED",
-      "disputeDeadlineAt": "2026-11-13T14:10:00Z",
+      "disputeDeadlineAt": "2026-11-13T21:10:00",
       "canDispute": false,
       "reliabilityPenalty": 5,
       "dispute": {
@@ -340,10 +340,10 @@ Trận chưa kết thúc / không diễn ra → `200` với `given = null`, `rec
         "evidence": "Đội tôi có mặt lúc 18:00, đã nhắn tin cho đội trưởng bên kia",
         "decision": null,
         "resolutionNote": null,
-        "createdAt": "2026-11-12T15:00:00Z",
+        "createdAt": "2026-11-12T22:00:00",
         "resolvedAt": null
       },
-      "createdAt": "2026-11-12T14:10:00Z"
+      "createdAt": "2026-11-12T21:10:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -398,7 +398,7 @@ Trận chưa kết thúc / không diễn ra → `200` với `given = null`, `rec
     "status": "PENDING",
     "evidence": "Đội tôi có mặt lúc 18:00, đã nhắn tin cho đội trưởng bên kia",
     "reportStatus": "DISPUTED",
-    "createdAt": "2026-11-12T15:00:00Z"
+    "createdAt": "2026-11-12T22:00:00"
   }
 }
 ```
@@ -446,7 +446,7 @@ Trận chưa kết thúc / không diễn ra → `200` với `given = null`, `rec
       "disputeId": "01936c30-3c4d-7e5f-a061-7b8c9d0e1f02",
       "reportId": "01936c20-2b3c-7d4e-9f50-6a7b8c9d0e01",
       "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708",
-      "matchStartsAt": "2026-11-12T11:00:00Z",
+      "matchStartsAt": "2026-11-12T18:00:00",
       "reporterTeam": { "teamId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c", "name": "FC Hoa Lư", "avatarUrl": null, "status": "ACTIVE" },
       "reportedTeam": { "teamId": "01935e11-dddd-7eee-8fff-1a2b3c4d5e6f", "name": "FC Sấm Sét", "avatarUrl": null, "status": "ACTIVE" },
       "reportedById": "01935f77-3c2d-7e1f-8a9b-0c1d2e3f4a5b",
@@ -461,8 +461,8 @@ Trận chưa kết thúc / không diễn ra → `200` với `given = null`, `rec
       "resolvedByName": null,
       "isResolvedByDeleted": false,
       "resolvedAt": null,
-      "reportCreatedAt": "2026-11-12T14:10:00Z",
-      "createdAt": "2026-11-12T15:00:00Z"
+      "reportCreatedAt": "2026-11-12T21:10:00",
+      "createdAt": "2026-11-12T22:00:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -495,7 +495,7 @@ Ví dụ: người gửi tranh chấp đã xoá tài khoản → tên thật + `
     "disputeId": "01936c30-3c4d-7e5f-a061-7b8c9d0e1f02",
     "reportId": "01936c20-2b3c-7d4e-9f50-6a7b8c9d0e01",
     "matchId": "01936b20-7d8e-7f90-a1b2-c3d4e5f60708",
-    "matchStartsAt": "2026-11-12T11:00:00Z",
+    "matchStartsAt": "2026-11-12T18:00:00",
     "reporterTeam": { "teamId": "01935e10-aaaa-7bbb-8ccc-0d1e2f3a4b5c", "name": "FC Hoa Lư", "avatarUrl": null, "status": "ACTIVE" },
     "reportedTeam": { "teamId": "01935e11-dddd-7eee-8fff-1a2b3c4d5e6f", "name": "FC Sấm Sét", "avatarUrl": null, "status": "ACTIVE" },
     "reportedById": "01935f77-3c2d-7e1f-8a9b-0c1d2e3f4a5b",
@@ -510,13 +510,13 @@ Ví dụ: người gửi tranh chấp đã xoá tài khoản → tên thật + `
     "resolvedByName": null,
     "isResolvedByDeleted": false,
     "resolvedAt": null,
-    "reportCreatedAt": "2026-11-12T14:10:00Z",
-    "createdAt": "2026-11-12T15:00:00Z",
+    "reportCreatedAt": "2026-11-12T21:10:00",
+    "createdAt": "2026-11-12T22:00:00",
     "match": {
       "sportName": "Bóng đá",
       "status": "COMPLETED",
-      "startsAt": "2026-11-12T11:00:00Z",
-      "endsAt": "2026-11-12T12:30:00Z",
+      "startsAt": "2026-11-12T18:00:00",
+      "endsAt": "2026-11-12T19:30:00",
       "venueName": "Sân bóng Hoa Lư"
     },
     "reportReason": "Đội bạn không đến, không báo trước",
@@ -536,7 +536,7 @@ Ví dụ: người gửi tranh chấp đã xoá tài khoản → tên thật + `
         "comment": "Chờ 30 phút không thấy đội bạn",
         "raterTeamScore": null,
         "rateeTeamScore": null,
-        "createdAt": "2026-11-12T14:05:00Z"
+        "createdAt": "2026-11-12T21:05:00"
       }
     ]
   }
@@ -584,7 +584,7 @@ Ví dụ: người gửi tranh chấp đã xoá tài khoản → tên thật + `
     "resolvedById": "01935a02-6e7f-7a1b-9c2d-5e6f7a8b9c0d",
     "resolvedByName": "Admin ArenaFlow",
     "isResolvedByDeleted": false,
-    "resolvedAt": "2026-11-12T16:00:00Z",
+    "resolvedAt": "2026-11-12T23:00:00",
     "resolutionNote": "Tin nhắn cho thấy đội bị report có mặt đúng giờ",
     "reportedTeamReliabilityScore": 80
   }
@@ -627,7 +627,7 @@ Ví dụ: người gửi tranh chấp đã xoá tài khoản → tên thật + `
       "isNewcomer": false
     },
     "rating": { "averageRating": 4.3, "ratingCount": 6 },
-    "verification": { "isVerified": true, "verifiedAt": "2026-11-10T03:00:00Z" }
+    "verification": { "isVerified": true, "verifiedAt": "2026-11-10T10:00:00" }
   }
 }
 ```
@@ -671,7 +671,7 @@ Ví dụ: kèo luồng A của Alpha, yêu cầu của Y còn `PENDING`; đội 
   "data": {
     "reportId": "01936c20-2b3c-7d4e-9f50-6a7b8c9d0e09",
     "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b01",
-    "matchStartsAt": "2026-11-16T11:00:00Z",
+    "matchStartsAt": "2026-11-16T18:00:00",
     "direction": "SENT",
     "counterpartTeam": { "teamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e05", "name": "Team Y", "avatarUrl": null },
     "reportType": "BAD_COMMUNICATION",
@@ -681,7 +681,7 @@ Ví dụ: kèo luồng A của Alpha, yêu cầu của Y còn `PENDING`; đội 
     "canDispute": false,
     "reliabilityPenalty": null,
     "dispute": null,
-    "createdAt": "2026-11-15T09:20:00Z"
+    "createdAt": "2026-11-15T16:20:00"
   }
 }
 ```

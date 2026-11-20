@@ -17,7 +17,7 @@
 ## Quyết định (Decision)
 Chúng tôi sẽ tìm theo tên bằng **khớp đầu từ** trên một `tsvector` dựng từ tên đã bỏ dấu, có index GIN biểu thức, không cài extension:
 
-1. **Một hàm SQL `IMMUTABLE` `user_name_fold(text)`** (migration V11): `normalize(NFC)` → `lower` → `translate` 67 ký tự có dấu tiếng Việt sang không dấu (gồm `đ → d`) → mọi ký tự không phải `[a-z0-9]` thành một dấu cách → `btrim`. Đây là **nguồn duy nhất** của bảng ký tự.
+1. **Một hàm SQL `IMMUTABLE` `user_name_fold(text)`** (migration V12): `normalize(NFC)` → `lower` → `translate` 67 ký tự có dấu tiếng Việt sang không dấu (gồm `đ → d`) → mọi ký tự không phải `[a-z0-9]` thành một dấu cách → `btrim`. Đây là **nguồn duy nhất** của bảng ký tự.
 2. **`user_name_search_vector(text)`** = `to_tsvector('simple', user_name_fold(text))`; index `GIN (user_name_search_vector(display_name)) WHERE deleted_at IS NULL`.
 3. **Truy vấn:** `user_name_search_vector(display_name) @@ to_tsquery('simple', :tsQuery)` với `:tsQuery = 'w1:* & w2:* …'` (mỗi từ nhập khớp **đầu một từ** trong tên). Tham số bind, không ghép chuỗi.
 4. **BE chuẩn hoá chuỗi nhập qua DB** (`SELECT user_name_fold(:q)`) rồi chỉ giữ token `^[a-z0-9]+$` trước khi dựng `tsQuery` — không giữ bản sao bảng ký tự trong Java, ký tự cú pháp tsquery không lọt vào. Tốn 1 câu SQL không đọc bảng; nhánh tên vừa bằng N_LIST = 4.
@@ -40,7 +40,7 @@ Chúng tôi sẽ tìm theo tên bằng **khớp đầu từ** trên một `tsvec
 **Tiêu cực / đánh đổi**
 - **Đổi nghiệp vụ:** "an" không còn khớp "Lan" (chỉ khớp đầu từ) — SRS Q-08 / BR-U10 đã sửa theo (user chốt 2026-11-17).
 - **Chi phí sắp xếp khi nhiều người khớp:** GIN chỉ lọc tập khớp; `starts_with` + so ICU phải tính cho **mọi** dòng khớp trước `LIMIT`. Đo trên bảng tạm 200.000 tên dữ liệu lệch (40% họ Nguyễn): `nguyen:*` 80.016 dòng 485 ms; `van:*` 266 ms; `an:*` 105 ms; `nguyen:* & an:*` 49 ms. Chấp nhận cho MVP (user chốt M2 = A, 2026-11-17), kèm giới hạn thời gian 2 giây cho câu tìm và giới hạn 30 lần/phút mỗi người (USER-003 Component_Class_Design §4.5, §5.2).
-- **Thứ tự Flyway:** hàm + index nằm ở V11; Flyway không chạy out-of-order nên V11 chỉ áp sau V5–V10 (VENUE-001 … NOTIFICATION-001) — code USER-003 đợi các mã đó.
+- **Thứ tự Flyway:** hàm + index nằm ở V12; Flyway không chạy out-of-order nên V12 chỉ áp sau V5–V11 (VENUE-001, SYSTEM-002 … NOTIFICATION-001) — code USER-003 đợi các mã đó.
 - **Sửa bảng ký tự** (vd thêm chữ có dấu ngoài tiếng Việt — hiện thành dấu cách) cần migration `CREATE OR REPLACE FUNCTION` **và** `REINDEX` index trong cùng migration.
 - Cập nhật `display_name` tốn thêm cập nhật index GIN (không đổi số câu SQL).
 

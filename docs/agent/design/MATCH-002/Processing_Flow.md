@@ -6,8 +6,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API; frame trên kênh STOMP của MATCH-001). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL ≥ 18 · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush) · ADR-0003 (+ Sửa đổi 2026-11-09, 2026-11-10), ADR-0011, ADR-0012, ADR-0014 (+ Sửa đổi 2026-11-15) · MATCH-001 `Processing_Flow.md` (v2.4) §1 (lazy check), §4, §5 |
-| Ràng buộc dữ liệu | V1 + V5 + V6 + `V7__match_flow_b_pairing.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v2.1** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | V1 + V5 + V7 + `V8__match_flow_b_pairing.sql` (`Component_Class_Design.md` §5.1) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -178,11 +178,11 @@ Như MATCH-001 §6. Bổ sung: `DataIntegrityViolationException` của `idx_pair
 | `pairing` | `(match_id, status)` | 2.2, `finalizeConfirmation`, `supersedeNegotiating`, `expireNegotiatingByMatchIds` | V1 |
 | `pairing` | `(interested_team_id, status)` | 2.3 `INTERESTED` | V1 |
 | `pairing` | unique `(match_id, interested_team_id) WHERE status NOT IN ('EXPIRED','SUPERSEDED')` | 2.1 chống trùng | V1 |
-| `pairing` | unique `(match_id) WHERE status = 'CONFIRMED'` | Bất biến một `CONFIRMED` | V7 (thay `idx_pairing_race`) |
+| `pairing` | unique `(match_id) WHERE status = 'CONFIRMED'` | Bất biến một `CONFIRMED` | V8 (thay `idx_pairing_race`) |
 | `match` | `(author_team_id, status)` | 2.3 `AUTHOR` | V1 |
-| `match_venue_option` | unique `(match_id, venue_id)`, `(match_id, display_order)`; `(venue_id)` | Phương án, MATCH-001 2.3 / 2.2 gần tôi | V7 |
-| `match_time_option` | unique `(match_id, id)`, `(match_id, proposed_start_time)` | Phương án, MATCH-001 2.2 lọc giờ | V7 |
-| `cost_custom_item` | unique `(pairing_id, display_order)` | 2.4, 2.6, 2.7 (đọc khoản để chép) | V7 |
+| `match_venue_option` | unique `(match_id, venue_id)`, `(match_id, display_order)`; `(venue_id)` | Phương án, MATCH-001 2.3 / 2.2 gần tôi | V8 |
+| `match_time_option` | unique `(match_id, id)`, `(match_id, proposed_start_time)` | Phương án, MATCH-001 2.2 lọc giờ | V8 |
+| `cost_custom_item` | unique `(pairing_id, display_order)` | 2.4, 2.6, 2.7 (đọc khoản để chép) | V8 |
 | `team_member` | `(team_id, role, status)` | 2.4 đội trưởng hiện tại hai đội (`role = 'CAPTAIN' AND status = 'ACTIVE'`) | V1 (`idx_team_member_team_role`) |
 | `"user"` | khoá chính | 2.4 tên đội trưởng | V1 |
 

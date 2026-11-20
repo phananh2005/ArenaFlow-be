@@ -6,8 +6,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API + kênh STOMP của MATCH-001). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL ≥ 18 · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0011, ADR-0012, ADR-0014, ADR-0015 |
-| Ràng buộc dữ liệu | V1–V9 + `V10__notification.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-16 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-18) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | V1–V10 + `V11__notification.sql` (`Component_Class_Design.md` §5.1) |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-16 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -186,20 +186,20 @@ Thứ tự khoá: job xoá khoá `conversation` → `conversation_message` (casc
 
 | Bảng | Index | Dùng cho | Nguồn |
 |---|---|---|---|
-| `notification` | `(recipient_user_id, created_at DESC, id DESC)` | 2.1 không lọc (con trỏ row comparison), mốc con trỏ | V10 |
-| `notification` | `(recipient_user_id, created_at DESC, id DESC) WHERE NOT is_read` | 2.1 `unreadOnly`, 2.2, 2.4 | V10 (thay `idx_notification_recipient` V1) |
+| `notification` | `(recipient_user_id, created_at DESC, id DESC)` | 2.1 không lọc (con trỏ row comparison), mốc con trỏ | V11 |
+| `notification` | `(recipient_user_id, created_at DESC, id DESC) WHERE NOT is_read` | 2.1 `unreadOnly`, 2.2, 2.4 | V11 (thay `idx_notification_recipient` V1) |
 | `notification` | `(created_at)` | Job xoá 30 ngày | V1 |
-| `match_reminder` | unique `(match_id, kind)` / `(external_match_id, kind)` partial; `(sent_at)` | Chống nhắc trùng, `NOT EXISTS` khi claim; xoá dấu cũ | V10 |
-| `match` | `(match_start_time) WHERE status = 'CONFIRMED'` | Claim nhắc: kèo đã ghép bắt đầu trong 2 giờ | V10 |
-| `external_match` | `(match_start_time) WHERE status = 'SCHEDULED'` | Claim nhắc trận ngoài | V10 |
-| `external_match` | `(match_end_time) WHERE status = 'SCHEDULED'` | Claim nhắc mercenary đánh giá trận ngoài | V10 |
-| `"user"` | `(id) WHERE role = 'ADMIN' AND deleted_at IS NULL` | Danh sách Admin (cảnh báo địa điểm, tranh chấp) | V10 |
-| `match_request` | unique `(match_id) WHERE status = 'ACCEPTED'`; `(match_id, status)` | Thời điểm ghép khi claim; audience yêu cầu `SUPERSEDED` / `EXPIRED` | V6, V1 |
+| `match_reminder` | unique `(match_id, kind)` / `(external_match_id, kind)` partial; `(sent_at)` | Chống nhắc trùng, `NOT EXISTS` khi claim; xoá dấu cũ | V11 |
+| `match` | `(match_start_time) WHERE status = 'CONFIRMED'` | Claim nhắc: kèo đã ghép bắt đầu trong 2 giờ | V11 |
+| `external_match` | `(match_start_time) WHERE status = 'SCHEDULED'` | Claim nhắc trận ngoài | V11 |
+| `external_match` | `(match_end_time) WHERE status = 'SCHEDULED'` | Claim nhắc mercenary đánh giá trận ngoài | V11 |
+| `"user"` | `(id) WHERE role = 'ADMIN' AND deleted_at IS NULL` | Danh sách Admin (cảnh báo địa điểm, tranh chấp) | V11 |
+| `match_request` | unique `(match_id) WHERE status = 'ACCEPTED'`; `(match_id, status)` | Thời điểm ghép khi claim; audience yêu cầu `SUPERSEDED` / `EXPIRED` | V7, V1 |
 | `pairing` | `(match_id, final_confirmed_at) WHERE status = 'CONFIRMED'`; `(match_id, status)` | Thời điểm ghép; audience thương lượng `SUPERSEDED` / `EXPIRED` | V1 |
 | `team_member` | `(team_id, role, status)` | Đội trưởng `ACTIVE` của đội | V1 |
-| `mercenary_recruitment` | `(match_id)`, `(external_match_id)` partial | Mercenary `APPROVED` của trận (nhắc) | V9 |
-| `conversation` | `(match_id)`, `(external_match_id)` partial; PK | Job xoá: join trận theo khoá ngoại | V9 |
-| `rating` | unique `(match_id, …)` / `(application_id, rater_type)` | `hasRated`, `ratedBy*` | V8, V9 |
+| `mercenary_recruitment` | `(match_id)`, `(external_match_id)` partial | Mercenary `APPROVED` của trận (nhắc) | V10 |
+| `conversation` | `(match_id)`, `(external_match_id)` partial; PK | Job xoá: join trận theo khoá ngoại | V10 |
+| `rating` | unique `(match_id, …)` / `(application_id, rater_type)` | `hasRated`, `ratedBy*` | V9, V10 |
 
 - Mọi audience là một câu cố định, số dòng ≤ số người nhận của một event (đội trưởng hai đội, đội bị thay thế / hết hạn của một kèo, đơn của một tin / một trận, Admin) — không vòng lặp truy vấn.
 - Ghi gom lô một câu bất kể số người nhận (`unnest`).

@@ -6,8 +6,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §10; VENUE-001 `Component_Class_Design.md` §4.6 (port), §4.7 (event), §4.9 (retrier overload), §4.13 (audit) · ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0011](../../decisions/0011-domain-events-after-commit.md), [ADR-0012](../../decisions/0012-scheduled-jobs-claim-with-skip-locked.md), [ADR-0013](../../decisions/0013-reputation-columns-atomic-update.md) |
-| Ràng buộc dữ liệu | PostgreSQL ≥ 18 (`uuidv7()` — §5.2) · V1 + V5 (VENUE-001) + `V6__match_flow_a_lifecycle.sql` (§5.1 — v2.4: gồm bỏ `chat_message`, tạo `conversation` + `conversation_message`, index `team.disbanded_by`) · đợt MATCH-002 (nhánh luồng B — `Component_Class_Design.md` §1.1): + `V7__match_flow_b_pairing.sql` (MATCH-002 `Component_Class_Design.md` §5.1); entity hiện có `domain/.../entity/match/{Match, MatchRequest, CostCustomItem, Sport}`, `team/Team`, `user/User` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v2.5** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | PostgreSQL ≥ 18 (`uuidv7()` — §5.2) · V1 + V5 (VENUE-001) + V6 (SYSTEM-002 — cột thời gian `TIMESTAMP` giờ Việt Nam) + `V7__match_flow_a_lifecycle.sql` (§5.1 — v2.4: gồm bỏ `chat_message`, tạo `conversation` + `conversation_message`, index `team.disbanded_by`) · đợt MATCH-002 (nhánh luồng B — `Component_Class_Design.md` §1.1): + `V8__match_flow_b_pairing.sql` (MATCH-002 `Component_Class_Design.md` §5.1); entity hiện có `domain/.../entity/match/{Match, MatchRequest, CostCustomItem, Sport}`, `team/Team`, `user/User` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -18,18 +18,18 @@ Layered theo 4 module Maven (ADR-0006) như USER-001. Hợp đồng: `API_Spec.m
 - **Domain event** `ApplicationEvent` cho thông báo (NOTIFICATION-001) và dữ liệu dẫn xuất tính lại được; không dùng để ghi dữ liệu nghiệp vụ (§4.9, ADR-0011).
 - **Scheduled job** hết hạn + `ARCHIVED` claim lô bằng `FOR NO KEY UPDATE SKIP LOCKED` (§4.10, ADR-0012).
 - **Bộ môn**: đọc + Admin bật/tắt (§4.4).
-- **Chat dùng chung** (v2.4, §4.14–§4.15): bảng `conversation` + `conversation_message` (V6 — §5.1), `ConversationService`, `ConversationAccessPolicy` (+ `TeamMatchConversationPolicy` luồng A), endpoint 2.16–2.20, kênh realtime STOMP topic `/topic/conversations/{id}` (ADR-0014). Mọi chat của hệ thống dùng chung: chat hai đội luồng A (tạo ở 2.6), luồng B (MATCH-002 thêm nhánh + tạo ở MATCH-002 2.1), chat theo đơn ứng tuyển (MERCENARY-001). `chat_message` (V1) bị bỏ.
-- **Kèo luồng B** (v2.0): tạo / tìm / xem / huỷ / hết hạn kèo `NEED_VENUE` ở các thành phần trên (nhánh theo `Match.Type`) — **code ở đợt MATCH-002**, sau V7 (§1.1). Pairing, chat, xác nhận, chi phí + cọc luồng B, migration V7 và repository lựa chọn (`MatchVenueOptionRepository`, `MatchTimeOptionRepository`, `PairingRepository`): MATCH-002 `Component_Class_Design.md`.
+- **Chat dùng chung** (v2.4, §4.14–§4.15): bảng `conversation` + `conversation_message` (V7 — §5.1), `ConversationService`, `ConversationAccessPolicy` (+ `TeamMatchConversationPolicy` luồng A), endpoint 2.16–2.20, kênh realtime STOMP topic `/topic/conversations/{id}` (ADR-0014). Mọi chat của hệ thống dùng chung: chat hai đội luồng A (tạo ở 2.6), luồng B (MATCH-002 thêm nhánh + tạo ở MATCH-002 2.1), chat theo đơn ứng tuyển (MERCENARY-001). `chat_message` (V1) bị bỏ.
+- **Kèo luồng B** (v2.0): tạo / tìm / xem / huỷ / hết hạn kèo `NEED_VENUE` ở các thành phần trên (nhánh theo `Match.Type`) — **code ở đợt MATCH-002**, sau V8 (§1.1). Pairing, chat, xác nhận, chi phí + cọc luồng B, migration V8 và repository lựa chọn (`MatchVenueOptionRepository`, `MatchTimeOptionRepository`, `PairingRepository`): MATCH-002 `Component_Class_Design.md`.
 
 **Điều kiện tiên quyết (VENUE-001 code):** `VenueSelectionService`, overload `ConcurrencyConflictRetrier.execute(ErrorCode, Supplier)`, `AdminAuditLog`, `SchedulingConfig`, package `application/event/`, mã `VENUE_001/002`, migration `V5__venue_management.sql` — thiết kế ở VENUE-001, chưa có trong code `[cần xác nhận #5]`.
 
-**Thứ tự code (v2.4, user chốt 2026-11-15 — §1.1):** đợt 1 = MATCH-001 phần luồng A + lõi chat (bảng, service, endpoint 2.16–2.20) + kênh realtime, migration V6 — **không** phụ thuộc MATCH-002; xong đợt 1 là chat luồng A chạy đủ. Các nhánh luồng B nằm trong thành phần của mã này (bảng §1.1) dùng bảng / cột của V7 nên code ở **đợt MATCH-002**, sau V7. MATCH-002 / MERCENARY-001 dựa vào lõi chat (thêm nhánh / ngữ cảnh). Kênh realtime cần thêm dependency `spring-boot-starter-websocket` và cấu hình `/ws` (§8, §9) — `[cần xác nhận #12]` chặn phase realtime.
+**Thứ tự code (v2.4, user chốt 2026-11-15 — §1.1):** đợt 1 = MATCH-001 phần luồng A + lõi chat (bảng, service, endpoint 2.16–2.20) + kênh realtime, migration V7 — **không** phụ thuộc MATCH-002; xong đợt 1 là chat luồng A chạy đủ. Các nhánh luồng B nằm trong thành phần của mã này (bảng §1.1) dùng bảng / cột của V8 nên code ở **đợt MATCH-002**, sau V8. MATCH-002 / MERCENARY-001 dựa vào lõi chat (thêm nhánh / ngữ cảnh). Kênh realtime cần thêm dependency `spring-boot-starter-websocket` và cấu hình `/ws` (§8, §9) — `[cần xác nhận #12]` chặn phase realtime.
 
 ### 1.1. Hai đợt code (user chốt 2026-11-15 — `[cần xác nhận #19]` đã chốt)
 
-Đợt 1 không đụng bảng / cột luồng B: `pairing`, `match_venue_option`, `match_time_option` (V1, V7 sửa), `cost_deposit_amount`, `display_order` của lựa chọn (V7). Vì 2.1 chặn tạo kèo `NEED_VENUE`, trong đợt 1 **không** có kèo luồng B nào → các nhánh luồng B của 2.2, 2.3, 2.5, 2.11, job, lazy expiry không bao giờ chạy; field luồng B trong response luôn ở giá trị của kèo A (`venueOptions = []`, `timeOptions = []`, `venueOptionCount = null`, `timeOptionCount = null`, `depositAmount = null`).
+Đợt 1 không đụng bảng / cột luồng B: `pairing`, `match_venue_option`, `match_time_option` (V1, V8 sửa), `cost_deposit_amount`, `display_order` của lựa chọn (V8). Vì 2.1 chặn tạo kèo `NEED_VENUE`, trong đợt 1 **không** có kèo luồng B nào → các nhánh luồng B của 2.2, 2.3, 2.5, 2.11, job, lazy expiry không bao giờ chạy; field luồng B trong response luôn ở giá trị của kèo A (`venueOptions = []`, `timeOptions = []`, `venueOptionCount = null`, `timeOptionCount = null`, `depositAmount = null`).
 
-| Thành phần (mã này) | Đợt 1 — MATCH-001 (V6) | Đợt MATCH-002 (sau V7) |
+| Thành phần (mã này) | Đợt 1 — MATCH-001 (V7) | Đợt MATCH-002 (sau V8) |
 |---|---|---|
 | `CreateMatchRequest`, `@ValidMatchSchedule` (§7) | Khai báo đủ field (`type`, `venueOptionIds`, `timeOptions`); validator chỉ kiểm nhánh A, bỏ qua khi `type = NEED_VENUE` | Thêm nhánh B của validator |
 | `MatchService.createMatch` (§4.1, 2.1) | `type = NEED_VENUE` → `422 MATCH_016` **trước truy vấn đầu tiên** (0 truy vấn) | Nhánh `NEED_VENUE` (§4.1; `Processing_Flow.md` §3.1) + `MatchVenueOptionRepository`, `MatchTimeOptionRepository`; bỏ chặn |
@@ -37,7 +37,7 @@ Layered theo 4 module Maven (ADR-0006) như USER-001. Hợp đồng: `API_Spec.m
 | `getMatch` / `findDetailById` (2.3; §5.2) | Chỉ `LEFT JOIN venue`; không `findOptionRows` | `LEFT JOIN pairing` (`confirmedPairingId`), cột `cost_deposit_amount`, `findOptionRows` |
 | `cancelMatch` `OPEN` (2.5) | Chỉ kèo A | Nhánh kèo B: bỏ `MATCH_010`, `PairingRepository.supersedeNegotiating` |
 | `MatchExpiry` (§4.6), job hết hạn (§4.3; `claimDueForExpiry`) | Chỉ `expirePendingByMatchIds` | `type` trong claim + `PairingRepository.expireNegotiatingByMatchIds` |
-| Entity `Match`, `CostCustomItem` | Theo V6 | Sửa theo V7 (MATCH-002 `Component_Class_Design.md` §6) |
+| Entity `Match`, `CostCustomItem` | Theo V7 | Sửa theo V8 (MATCH-002 `Component_Class_Design.md` §6) |
 | `TeamMatchConversationPolicy`, `ConversationSql` (§4.14, §5.2) | Nhánh luồng A | Nhánh `NEED_VENUE` + cột / join `pairing` (MATCH-002 `Component_Class_Design.md` §4.2) |
 | `ErrorCode.MATCH_016` | **Thêm ở đợt 1** (2.1, 2.4, 2.6, 2.7 dùng) | — |
 | Event `MatchConfirmedEvent.pairingId`, `MatchCancelledEvent` | Khai báo field; `pairingId` luôn `null` | MATCH-002 điền |
@@ -45,14 +45,14 @@ Layered theo 4 module Maven (ADR-0006) như USER-001. Hợp đồng: `API_Spec.m
 | Projection `MatchDetailView` (`costDepositAmount`, `confirmedPairingId`), `MatchSummaryView` (`venueOptionCount`, `timeOptionCount`) (§5.3) | Giữ shape; SQL đợt 1 trả `NULL` cho các cột này (vd `CAST(NULL AS bigint) AS cost_deposit_amount`) | SQL đọc cột / subquery thật |
 | Test kèo B (`Processing_Flow.md` §3.1 "Kèo B", §3.5, §3.13, §5) | Test đợt 1: 2.1 `NEED_VENUE` → `MATCH_016`, không ghi gì | Chạy ở đợt MATCH-002 |
 
-**Phần của lõi chat do MERCENARY-001 thêm (sau V9)** — đợt 1 không đụng bảng / cột của V9 (`mercenary_application`, `external_match`, `conversation.application_id`, `conversation.external_match_id`, `report.application_id`):
+**Phần của lõi chat do MERCENARY-001 thêm (sau V10)** — đợt 1 không đụng bảng / cột của V10 (`mercenary_application`, `external_match`, `conversation.application_id`, `conversation.external_match_id`, `report.application_id`):
 
-| Thành phần (mã này) | Đợt 1 — MATCH-001 (V6) | MERCENARY-001 thêm (V9 — MERCENARY-001 `Component_Class_Design.md` §4.7) |
+| Thành phần (mã này) | Đợt 1 — MATCH-001 (V7) | MERCENARY-001 thêm (V10 — MERCENARY-001 `Component_Class_Design.md` §4.7) |
 |---|---|---|
 | `ConversationRepository.findContext` / `ConversationSql` (§5.2) | Cột chung + khối `TEAM_MATCH` | Khối cột `MERCENARY_APPLICATION` (join `mercenary_application`, `external_match`) |
-| `findMine` (2.20, §5.2) | Giờ bắt đầu = `match.match_start_time`; tên / ảnh hai bên theo `TEAM`; nhánh `party_b_type = 'USER'` của `mine` giữ (chạy được ở V6, chưa trả dòng nào) | Giờ bắt đầu `external_match.match_start_time` (theo `c.external_match_id`); tên / ảnh bên `USER` (ứng viên) |
+| `findMine` (2.20, §5.2) | Giờ bắt đầu = `match.match_start_time`; tên / ảnh hai bên theo `TEAM`; nhánh `party_b_type = 'USER'` của `mine` giữ (chạy được ở V7, chưa trả dòng nào) | Giờ bắt đầu `external_match.match_start_time` (theo `c.external_match_id`); tên / ảnh bên `USER` (ứng viên) |
 | `ConversationAccessPolicy` (§4.14), kiểm quyền `SUBSCRIBE` (§4.15) | `TeamMatchConversationPolicy` (map policy theo `contextType` đủ cho mọi giá trị enum của đợt 1) | `MercenaryApplicationConversationPolicy` (cùng lúc thêm giá trị enum) |
-| Entity `Conversation` (§6) | `ContextType { TEAM_MATCH }` (khớp CHECK của V6; thiếu policy cho một giá trị → lỗi khởi động, §4.14) | Giá trị `MERCENARY_APPLICATION`, `applicationId`, `externalMatchId`; V9 nới CHECK |
+| Entity `Conversation` (§6) | `ContextType { TEAM_MATCH }` (khớp CHECK của V7; thiếu policy cho một giá trị → lỗi khởi động, §4.14) | Giá trị `MERCENARY_APPLICATION`, `applicationId`, `externalMatchId`; V10 nới CHECK |
 | `ConversationContextView`, `ConversationMapper` (§5.3, §7) | Cột / khối `TEAM_MATCH`; field mercenary = `null` | Cột / khối `MERCENARY_APPLICATION` (MERCENARY-001 §5.5, §4.7) |
 
 ## 2. Package Structure (delta)
@@ -106,10 +106,10 @@ api/           com.phananh.arenaflow.api
 ├── chat/            ConversationController, ProfileConversationController (mới — v2.4)
 ├── realtime/        WebSocketConfig, StompAuthChannelInterceptor, StompChatRealtimeGateway, WebSocketProperties (mới — v2.4)
 ├── scheduler/       MatchLifecycleScheduler (mới)
-└── config/          ClockConfig (mới — bean java.time.Clock); SecurityConfig (sửa — §9, v2.4)
+└── config/          ClockConfig (có từ SYSTEM-002 — dùng lại); SecurityConfig (sửa — §9, v2.4)
 ```
 
-Thành phần dùng chung mới/sửa (`TeamGuard` method mới, `ReputationService`, `TimeBandPenaltyPolicy`, `MatchWriteOutcome`, `AdminAuditLog` overload, `ClockConfig`, `ValidMatchSearch` vs `ValidGeoQuery` của VENUE-001) → developer MUST chạy `reuse-scan` trước khi tạo.
+Thành phần dùng chung mới/sửa (`TeamGuard` method mới, `ReputationService`, `TimeBandPenaltyPolicy`, `MatchWriteOutcome`, `AdminAuditLog` overload, `ValidMatchSearch` vs `ValidGeoQuery` của VENUE-001) → developer MUST chạy `reuse-scan` trước khi tạo.
 
 ## 3. Controller Layer
 
@@ -204,7 +204,7 @@ SportResponse updateSport(UUID sportId, UUID adminId, UpdateSportRequest r);    
 **`MatchGuard`** (`@Component`) — một nguồn cho mã `MATCH_001/003/004/005`:
 ```java
 Match findMatch(UUID matchId);                        // findById; không có → MATCH_001 (không khoá)
-boolean isExpiryDue(Match.Status s, OffsetDateTime expiresAt, OffsetDateTime now); // OPEN && expiresAt ≤ now → nhánh lazy
+boolean isExpiryDue(Match.Status s, LocalDateTime expiresAt, LocalDateTime now); // OPEN && expiresAt ≤ now → nhánh lazy
 void requireNotExpired(Match.Status s);               // EXPIRED (DB) → MATCH_004 — gọi ngay sau nhánh lazy ở mọi endpoint ghi
 void requireOpen(Match m);                            // EXPIRED → MATCH_004; CONFIRMED → MATCH_003; khác OPEN → MATCH_005
 ```
@@ -219,7 +219,7 @@ void requireCaptainAllowInactive(UUID teamId, UUID userId); // TEAM_001 → TEAM
 
 ### 4.6. MatchExpiry (`application/support`, `@Component`) — lazy check + job dùng chung
 ```java
-boolean expireIfDue(UUID matchId, UUID authorTeamId, Match.Type type, OffsetDateTime now); // MANDATORY; true nếu chính lời gọi này chuyển EXPIRED
+boolean expireIfDue(UUID matchId, UUID authorTeamId, Match.Type type, LocalDateTime now); // MANDATORY; true nếu chính lời gọi này chuyển EXPIRED
 ```
 Q1 `MatchRepository.expireIfDue(id, now)` (`WHERE status = 'OPEN' AND expires_at <= :now`, `version + 1`) → 1 dòng: Q2 `HAS_VENUE` → `MatchRequestRepository.expirePendingByMatchIds([id], now)`; `NEED_VENUE` (đợt MATCH-002, §1.1) → `PairingRepository.expireNegotiatingByMatchIds([id], now)` → phát `MatchExpiredEvent`. 0 dòng → `false` (job/request khác đã làm). Job dùng biến thể lô (§4.3) cùng hai câu bulk.
 
@@ -244,12 +244,12 @@ public enum ReliabilityReason { MATCH_CANCELLED_AFTER_CONFIRMED, MATCH_REQUEST_W
 
 public record TimeBandPenaltyPolicy(int atLeast24h, int from4hTo24h, int under4h) {   // application/support/reputation
     public static final TimeBandPenaltyPolicy MATCH_CANCELLATION = new TimeBandPenaltyPolicy(-2, -5, -10);
-    public int penaltyFor(OffsetDateTime matchStart, OffsetDateTime at);  // Δ ≥ 24h / 4h ≤ Δ < 24h / Δ < 4h
+    public int penaltyFor(LocalDateTime matchStart, LocalDateTime at);  // Δ ≥ 24h / 4h ≤ Δ < 24h / Δ < 4h
 }
 ```
 - `delta == 0 && !breaksCleanStreak` → không truy vấn. Còn lại: Q1 `TeamRepository.adjustReliability` / `UserRepository.adjustReliability` (§5.2); 0 dòng → `IllegalStateException` (id phải tồn tại — lỗi lập trình) → phát `ReliabilityScoreChangedEvent`.
 - **Không đọc lại** điểm mới (event chỉ mang `delta`); REPUTATION-001 cần điểm mới thì thêm biến thể đọc.
-- **Mở rộng (v2.2):** REPUTATION-001 `Component_Class_Design.md` §4.6 thêm `applyMatchCompletion`, `applyReportPenalty`, `refundReportPenalty` và giá trị `ReliabilityReason`; MERCENARY-001 thêm hằng `TimeBandPenaltyPolicy` (vd rút mercenary `-1/-3/-5`). MATCH-001 chỉ ghi `reliability_score` và — khi huỷ kèo đã ghép — `clean_streak = 0` của đội huỷ (`breaksCleanStreak = true`, user chốt Q3 2026-11-12: huỷ `CONFIRMED` / rút `ACCEPTED` cắt chuỗi trận sạch). Không còn cột `total_matches_*` (REPUTATION-001 V8 xoá — Completion Rate tính khi đọc).
+- **Mở rộng (v2.2):** REPUTATION-001 `Component_Class_Design.md` §4.6 thêm `applyMatchCompletion`, `applyReportPenalty`, `refundReportPenalty` và giá trị `ReliabilityReason`; MERCENARY-001 thêm hằng `TimeBandPenaltyPolicy` (vd rút mercenary `-1/-3/-5`). MATCH-001 chỉ ghi `reliability_score` và — khi huỷ kèo đã ghép — `clean_streak = 0` của đội huỷ (`breaksCleanStreak = true`, user chốt Q3 2026-11-12: huỷ `CONFIRMED` / rút `ACCEPTED` cắt chuỗi trận sạch). Không còn cột `total_matches_*` (REPUTATION-001 V9 xoá — Completion Rate tính khi đọc).
 - MATCH-001 chỉ gọi `adjustTeamReliability`; `adjustUserReliability` có test riêng.
 - **Lưu ý cho REPUTATION-001:** BR-M18 cho phép một người làm đội trưởng hai đội tự ghép kèo với nhau → có thể dùng để cày cộng điểm hoàn thành trận / Completion Rate. MATCH-001 không trừ điểm trong trường hợp này; REPUTATION-001 chặn đánh giá/report khi người gọi là đội trưởng cả hai đội (Q12) → trận đó không thể `COMPLETED` (REPUTATION-001 `Component_Class_Design.md` §9).
 
@@ -273,7 +273,7 @@ Payload chỉ id + thời điểm + enum, không PII; người nhận tự tra �
 **Phạm vi event (ADR-0011):** event không bền → chỉ dùng cho thông báo và dữ liệu dẫn xuất tính lại được. Dữ liệu nghiệp vụ (cộng/trừ điểm, bộ đếm hoàn thành, chuỗi trận sạch) MUST ghi trong cùng transaction qua `ReputationService` (ADR-0013); REPUTATION-001 không nghe `MatchArchivedEvent` để ghi bộ đếm.
 
 ### 4.10. Scheduler (ADR-0012)
-`MatchLifecycleScheduler` (`api/scheduler`, không logic): `@Scheduled(cron = "${arenaflow.match.lifecycle.cron}", zone = "Asia/Ho_Chi_Minh")` gọi `expireDueMatches()` rồi `archiveFinishedMatches()`, rồi `MercenaryLifecycleJobService.closeDueRecruitments()`, `rejectOrphanPending()` và `notifyCancelledGames()` (v2.3 — thiết kế ở MERCENARY-001 `Component_Class_Design.md` §4.9), rồi `NotificationJobService.sendDueStartReminders()` và `sendDueRatingReminders()` (v2.5 — nhắc trước trận 2 giờ; nhắc mercenary đánh giá trận ngoài — NOTIFICATION-001 `Component_Class_Design.md` §4.7); lỗi một phần log `ERROR`, phần kia vẫn chạy. Cron `-` = tắt (test). Dùng `SchedulingConfig` của VENUE-001.
+`MatchLifecycleScheduler` (`api/scheduler`, không logic): `@Scheduled(cron = "${arenaflow.match.lifecycle.cron}", zone = AppTime.ZONE_ID)` gọi `expireDueMatches()` rồi `archiveFinishedMatches()`, rồi `MercenaryLifecycleJobService.closeDueRecruitments()`, `rejectOrphanPending()` và `notifyCancelledGames()` (v2.3 — thiết kế ở MERCENARY-001 `Component_Class_Design.md` §4.9), rồi `NotificationJobService.sendDueStartReminders()` và `sendDueRatingReminders()` (v2.5 — nhắc trước trận 2 giờ; nhắc mercenary đánh giá trận ngoài — NOTIFICATION-001 `Component_Class_Design.md` §4.7); lỗi một phần log `ERROR`, phần kia vẫn chạy. Cron `-` = tắt (test). Dùng `SchedulingConfig` của VENUE-001.
 
 ### 4.11. AdminAuditLog (sửa — VENUE-001 §4.13)
 Thêm overload trung tính `void afterCommit(String action, UUID adminId, String targetType, UUID targetId)` (cùng cơ chế `TransactionSynchronization.afterCommit`); bản VENUE-001 giữ nguyên `[cần xác nhận #4]`. MATCH-001 dùng cho 2.15.
@@ -294,7 +294,7 @@ Chat (v2.4): `getConversation`, `history`, `requireSubscribable`, `listMyConvers
 
 ### 4.13. MatchCancellation (`application/support`, `@Component`) — một đường huỷ kèo đã ghép
 ```java
-CancellationResult cancelConfirmed(Match match, UUID cancellingTeamId, String reason, OffsetDateTime now); // MANDATORY
+CancellationResult cancelConfirmed(Match match, UUID cancellingTeamId, String reason, LocalDateTime now); // MANDATORY
 public record CancellationResult(int reliabilityPenalty) {}
 ```
 Dùng bởi 2.5 (`CONFIRMED`) và 2.10 (`ACCEPTED`): setter `status = CANCELLED`, `cancelledByTeamId`, `cancelledAt`, `cancelReason` → nếu đội huỷ là đội đã ghép **và** kèo `HAS_VENUE`: `MatchRequestRepository.withdrawAccepted` (phải = 1 dòng, khác → `IllegalStateException`); kèo `NEED_VENUE` không có yêu cầu, pairing đã chốt giữ `CONFIRMED` → `penalty = MATCH_CANCELLATION.penaltyFor(matchStartTime, now)` → `reputationService.adjustTeamReliability(cancellingTeamId, new ReliabilityChange(penalty, …, breaksCleanStreak = true))` (v2.2 — cắt chuỗi trận sạch, cùng câu `UPDATE`) → `MatchCancelledEvent` (một event duy nhất cho thao tác, §4.9). Gọi `MatchGuard`/kiểm `MATCH_011`, `MATCH_012` **trước** (caller).
@@ -316,7 +316,7 @@ PageResponse<ConversationSummaryResponse> listMyConversations(UUID callerId, int
 ```java
 public interface ConversationAccessPolicy {                       // application/support/chat; một bean mỗi loại ngữ cảnh
     Conversation.ContextType contextType();
-    ConversationAccess resolve(ConversationContextView ctx, UUID callerId, OffsetDateTime now);
+    ConversationAccess resolve(ConversationContextView ctx, UUID callerId, LocalDateTime now);
 }
 public record ConversationAccess(Conversation.Party viewerParty /* null = không tham gia */, boolean canSend,
                                  boolean expiryDue /* TEAM_MATCH: gửi tin phải chuyển kèo EXPIRED (BR-M17) */,
@@ -371,7 +371,7 @@ public sealed interface RealtimeFrame {
 
 ## 5. Repository & Data Model
 
-### 5.1. Migration `V6__match_flow_a_lifecycle.sql`
+### 5.1. Migration `V7__match_flow_a_lifecycle.sql`
 
 ```sql
 -- match: khoá lạc quan, trình độ mong muốn, lý do huỷ, enum định dạng / chi phí
@@ -409,7 +409,7 @@ CREATE UNIQUE INDEX idx_cost_custom_item_order ON cost_custom_item(match_id, dis
 -- chat (v2.4): bỏ chat_message theo pairing của V1; mọi chat dùng cuộc trò chuyện tổng quát (ADR-0014 Sửa đổi 2026-11-15)
 DROP TABLE chat_message;
 
--- conversation: loại ngữ cảnh + trận (tính hạn lưu) + hai bên (TEAM | USER). V6 chỉ có TEAM_MATCH; V9 (MERCENARY-001) thêm MERCENARY_APPLICATION
+-- conversation: loại ngữ cảnh + trận (tính hạn lưu) + hai bên (TEAM | USER). V7 chỉ có TEAM_MATCH; V10 (MERCENARY-001) thêm MERCENARY_APPLICATION
 CREATE TABLE conversation (
     id UUID PRIMARY KEY,
     context_type VARCHAR(30) NOT NULL,
@@ -418,7 +418,7 @@ CREATE TABLE conversation (
     party_a_id UUID NOT NULL,
     party_b_type VARCHAR(10) NOT NULL CHECK (party_b_type IN ('TEAM', 'USER')),
     party_b_id UUID NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh'),
     CONSTRAINT conversation_context_type_check CHECK (context_type IN ('TEAM_MATCH')),
     CONSTRAINT conversation_team_match_check CHECK (context_type <> 'TEAM_MATCH'
         OR (match_id IS NOT NULL AND party_a_type = 'TEAM' AND party_b_type = 'TEAM')),
@@ -438,23 +438,23 @@ CREATE TABLE conversation_message (
     sender_user_id UUID NOT NULL REFERENCES "user"(id) ON DELETE RESTRICT,
     message TEXT NOT NULL CHECK (char_length(message) BETWEEN 1 AND 1000),
     is_read BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')
 );
 CREATE INDEX idx_conversation_message_time ON conversation_message(conversation_id, created_at, id);
 CREATE INDEX idx_conversation_message_unread ON conversation_message(conversation_id, sender_party) WHERE NOT is_read;
 ```
 - Chỉ delta cần: `@Version` (Overview "Implementation notes"), trình độ mong muốn (Data_Model_Conceptual §2.3 — V1 thiếu), lý do huỷ / từ chối / rút (§2.3), `format` `VARCHAR(10)` không chứa `ELEVEN_A_SIDE` (13 ký tự), ràng buộc enum/số tiền, unique "1 ACCEPTED" (V1 chỉ có unique theo đội), `display_order` (thứ tự khoản tự nhập; unique `(match_id, display_order)` thay index `(match_id)` của V1 vì có cùng tiền tố). Tên index theo quy ước `idx_*` của V1/V2/V4.
 - `skill_levels` cùng kiểu/converter với `team.skill_levels` (USER-001 §6, `SkillLevelsConverter`).
-- Không đổi `cost_deposit_holder`, `match_venue_option`/`match_time_option`/`pairing` ở V6. V7 (MATCH-002 §5.1) sửa tiếp: `cost_custom_item.match_id` nullable + `pairing_id` (XOR), `match` bỏ `confirmed_venue_id`/`confirmed_match_time`, nới CHECK `match_check2`, thêm `cost_deposit_amount`.
-- Dữ liệu cũ: đã kiểm Neon dev `misty-dew-90700890` ngày 2026-11-09 — `match`, `match_request`, `cost_custom_item` đều 0 dòng; Flyway ở V4; tên constraint/index V6 không trùng với constraint đang có. Môi trường khác có dữ liệu: dòng có `format`/`cost_*` ngoài enum, hoặc `HAS_VENUE` thiếu `format`, hoặc nhiều `ACCEPTED` cùng kèo làm V6 lỗi → dừng, báo, không tự sửa dữ liệu.
+- Không đổi `cost_deposit_holder`, `match_venue_option`/`match_time_option`/`pairing` ở V7. V8 (MATCH-002 §5.1) sửa tiếp: `cost_custom_item.match_id` nullable + `pairing_id` (XOR), `match` bỏ `confirmed_venue_id`/`confirmed_match_time`, nới CHECK `match_check2`, thêm `cost_deposit_amount`.
+- Dữ liệu cũ: đã kiểm Neon dev `misty-dew-90700890` ngày 2026-11-09 — `match`, `match_request`, `cost_custom_item` đều 0 dòng; Flyway ở V4; tên constraint/index V7 không trùng với constraint đang có. Môi trường khác có dữ liệu: dòng có `format`/`cost_*` ngoài enum, hoặc `HAS_VENUE` thiếu `format`, hoặc nhiều `ACCEPTED` cùng kèo làm V7 lỗi → dừng, báo, không tự sửa dữ liệu.
 - Index: `idx_match_open_start` cho 2.2 khi không lọc môn (partial khớp literal `'OPEN'`); `idx_match_opponent_status` cho 2.11 vai trò đối thủ. Job dùng `idx_match_expiry (status, expires_at)`, `idx_match_archived (status, match_end_time)` (V1).
 
 - **Chat (v2.4):**
   - `conversation_message.sender_user_id` `NOT NULL` + `ON DELETE RESTRICT`: khớp chính sách chỉ xoá mềm user (ADR-0002); tin giữ người gửi để hiện "Người dùng đã xóa". Không index `sender_user_id`: RESTRICT chỉ kiểm khi `DELETE` user, không xảy ra. Cùng chính sách cho `venue_report.reporter_id` và `venue.created_by_user_id` ở V5 (VENUE-001 §5.1).
-  - **`conversation`** (v2.4 — chuyển từ MERCENARY-001 V9, qua MATCH-002 V7, về V6 để MATCH-001 dùng độc lập): `party_*_id` đa hình (`team` / `"user"`) → không FK (như `rating.rater_id`). `TEAM_MATCH`: bên A = đội tạo kèo, bên B = đội tham gia (đội gửi yêu cầu luồng A / đội nhận kèo luồng B); không cột khoá yêu cầu / pairing — một cuộc trò chuyện luồng A sống qua nhiều yêu cầu của cùng đội (gửi lại — BR-N04), trạng thái "nhắn được / chỉ xem" suy ra khi đọc (§4.14), không lưu. `idx_conversation_team_match` (unique, partial) thực thi BC-N04 (mỗi (kèo, đội tham gia) tối đa một) và phục vụ tra cuộc trò chuyện theo (kèo, đội) ở 2.6/2.7/2.20, MATCH-002 2.1–2.4 + job xoá theo tiền tố `match_id`. `match_id` `ON DELETE RESTRICT` (ADR-0002); nullable vì V9 thêm ngữ cảnh mercenary của trận ngoài hệ thống. V9 (MERCENARY-001 §5.1) mở rộng `conversation_context_type_check`, thêm `application_id`, `external_match_id` và CHECK của ngữ cảnh mercenary.
-  - 2.20 (user chốt 2026-11-15): `idx_conversation_party_a`, `idx_conversation_party_b` tìm cuộc trò chuyện theo bên (đội / người dùng — id UUID không trùng giữa hai loại, loại bên lọc trong câu); `idx_team_disbanded_by` (partial) tìm đội người gọi đã giải tán — cột `team.disbanded_by` của V4 chưa có index; đặt ở V6 vì chỉ 2.20 dùng. Danh sách đội người gọi làm đội trưởng dùng `idx_team_member_user (user_id, status)` của V1.
+  - **`conversation`** (v2.4 — chuyển từ MERCENARY-001 V10, qua MATCH-002 V8, về V7 để MATCH-001 dùng độc lập): `party_*_id` đa hình (`team` / `"user"`) → không FK (như `rating.rater_id`). `TEAM_MATCH`: bên A = đội tạo kèo, bên B = đội tham gia (đội gửi yêu cầu luồng A / đội nhận kèo luồng B); không cột khoá yêu cầu / pairing — một cuộc trò chuyện luồng A sống qua nhiều yêu cầu của cùng đội (gửi lại — BR-N04), trạng thái "nhắn được / chỉ xem" suy ra khi đọc (§4.14), không lưu. `idx_conversation_team_match` (unique, partial) thực thi BC-N04 (mỗi (kèo, đội tham gia) tối đa một) và phục vụ tra cuộc trò chuyện theo (kèo, đội) ở 2.6/2.7/2.20, MATCH-002 2.1–2.4 + job xoá theo tiền tố `match_id`. `match_id` `ON DELETE RESTRICT` (ADR-0002); nullable vì V10 thêm ngữ cảnh mercenary của trận ngoài hệ thống. V10 (MERCENARY-001 §5.1) mở rộng `conversation_context_type_check`, thêm `application_id`, `external_match_id` và CHECK của ngữ cảnh mercenary.
+  - 2.20 (user chốt 2026-11-15): `idx_conversation_party_a`, `idx_conversation_party_b` tìm cuộc trò chuyện theo bên (đội / người dùng — id UUID không trùng giữa hai loại, loại bên lọc trong câu); `idx_team_disbanded_by` (partial) tìm đội người gọi đã giải tán — cột `team.disbanded_by` của V4 chưa có index; đặt ở V7 vì chỉ 2.20 dùng. Danh sách đội người gọi làm đội trưởng dùng `idx_team_member_user (user_id, status)` của V1.
   - `conversation_message`: bên gửi là `A`/`B` (không cột đội gửi — tên đội lấy từ bên tương ứng của `conversation`); `ON DELETE CASCADE` từ `conversation` để job xoá hạn lưu (NOTIFICATION-001) chỉ xoá dòng `conversation`. `idx_conversation_message_time` cho cursor (row comparison), `idx_conversation_message_unread` cho đánh dấu đã đọc.
-  - Bỏ bảng `chat_message` (V1, gắn `pairing`) xoá dữ liệu chat cũ: developer đếm `SELECT count(*) FROM chat_message` trên Neon dev và mọi môi trường đích trước khi chạy V6 — khác 0 → dừng, báo, không tự chuyển dữ liệu `[cần xác nhận #16]`. (`chat_message.sender_user_id` của V1 khai `NOT NULL` + `ON DELETE SET NULL` — mâu thuẫn — bị bỏ cùng bảng.)
+  - Bỏ bảng `chat_message` (V1, gắn `pairing`) xoá dữ liệu chat cũ: developer đếm `SELECT count(*) FROM chat_message` trên Neon dev và mọi môi trường đích trước khi chạy V7 — khác 0 → dừng, báo, không tự chuyển dữ liệu `[cần xác nhận #16]`. (`chat_message.sender_user_id` của V1 khai `NOT NULL` + `ON DELETE SET NULL` — mâu thuẫn — bị bỏ cùng bảng.)
 
 ### 5.2. Repository
 
@@ -462,22 +462,22 @@ Native + interface projection như USER-001 §5; `Page` native có `countQuery`;
 
 ```java
 public interface MatchRepository extends JpaRepository<Match, UUID> {
-    Optional<MatchDetailView> findDetailById(UUID id, OffsetDateTime now);   // JOIN sport, team tác giả, LEFT JOIN team đối thủ,
+    Optional<MatchDetailView> findDetailById(UUID id, LocalDateTime now);   // JOIN sport, team tác giả, LEFT JOIN team đối thủ,
                                                                             // venue, LEFT JOIN venue_image ảnh chính
     Page<MatchSummaryView> searchOpen(String type /* null = cả hai */, UUID sportId, String format, String skillLevel,
-            OffsetDateTime startsAtFrom, OffsetDateTime startsAtTo, OffsetDateTime now, Pageable p);
-    Page<MatchSummaryView> searchOpenNearby(String type, UUID sportId, String format, String skillLevel, OffsetDateTime startsAtFrom,
-            OffsetDateTime startsAtTo, OffsetDateTime now, double lat, double lng, double radiusKm,
+            LocalDateTime startsAtFrom, LocalDateTime startsAtTo, LocalDateTime now, Pageable p);
+    Page<MatchSummaryView> searchOpenNearby(String type, UUID sportId, String format, String skillLevel, LocalDateTime startsAtFrom,
+            LocalDateTime startsAtTo, LocalDateTime now, double lat, double lng, double radiusKm,
             double minLat, double maxLat, double minLng, double maxLng, Pageable p);
     Page<MatchSummaryView> findTeamMatches(UUID teamId, String role /* null = ALL */, String status /* null = ALL */,
-            OffsetDateTime now, Pageable p);
+            LocalDateTime now, Pageable p);
     Optional<MatchAuthorAccessView> findAuthorAccess(UUID matchId, UUID userId); // authorTeamId, trạng thái đội tác giả, caller là captain ACTIVE
     MatchAvailabilityView findAvailability(UUID matchId, UUID teamId);        // trạng thái đội tác giả + bộ môn đang bật + cuộc trò chuyện TEAM_MATCH của (kèo, teamId) nếu có (2.6, MATCH-002 2.1)
-    @Modifying int expireIfDue(UUID id, OffsetDateTime now);
-    List<DueMatchView> claimDueForExpiry(OffsetDateTime now, int limit);         // FOR NO KEY UPDATE SKIP LOCKED
-    List<DueMatchView> claimDueForArchive(OffsetDateTime now, int limit);        // FOR NO KEY UPDATE SKIP LOCKED
-    @Modifying int markExpired(Collection<UUID> ids, OffsetDateTime now);
-    @Modifying int markArchived(Collection<UUID> ids, OffsetDateTime now);
+    @Modifying int expireIfDue(UUID id, LocalDateTime now);
+    List<DueMatchView> claimDueForExpiry(LocalDateTime now, int limit);         // FOR NO KEY UPDATE SKIP LOCKED
+    List<DueMatchView> claimDueForArchive(LocalDateTime now, int limit);        // FOR NO KEY UPDATE SKIP LOCKED
+    @Modifying int markExpired(Collection<UUID> ids, LocalDateTime now);
+    @Modifying int markArchived(Collection<UUID> ids, LocalDateTime now);
 }
 public interface MatchRepositoryCustom {                                   // fragment; MatchRepository extends nó
     void forceIncrementVersion(Match match);   // MatchRepositoryImpl: entityManager.lock(match, OPTIMISTIC_FORCE_INCREMENT) — version tăng lúc commit
@@ -485,34 +485,34 @@ public interface MatchRepositoryCustom {                                   // fr
 public interface MatchRequestRepository extends JpaRepository<MatchRequest, UUID> {
     Optional<MatchRequestContextView> findContextById(UUID requestId);   // request + match + đội gửi (status, tên, điểm) + sport.is_active
     boolean existsByMatchIdAndStatus(UUID matchId, MatchRequest.Status status);
-    Page<MatchRequestView> findByMatch(UUID matchId, boolean pendingOnly, OffsetDateTime now, Pageable p);
-    Page<MatchRequestView> findByRequesterTeam(UUID teamId, String status /* null = ALL */, OffsetDateTime now, Pageable p);
-    @Modifying int acceptIfPending(UUID id, OffsetDateTime now);
-    @Modifying int rejectIfPending(UUID id, String reason, OffsetDateTime now);
-    @Modifying int withdrawIfPending(UUID id, String reason, OffsetDateTime now);
-    @Modifying int withdrawAccepted(UUID matchId, UUID requesterTeamId, String reason, OffsetDateTime now);
-    @Modifying int supersedePending(UUID matchId, OffsetDateTime now);
+    Page<MatchRequestView> findByMatch(UUID matchId, boolean pendingOnly, LocalDateTime now, Pageable p);
+    Page<MatchRequestView> findByRequesterTeam(UUID teamId, String status /* null = ALL */, LocalDateTime now, Pageable p);
+    @Modifying int acceptIfPending(UUID id, LocalDateTime now);
+    @Modifying int rejectIfPending(UUID id, String reason, LocalDateTime now);
+    @Modifying int withdrawIfPending(UUID id, String reason, LocalDateTime now);
+    @Modifying int withdrawAccepted(UUID matchId, UUID requesterTeamId, String reason, LocalDateTime now);
+    @Modifying int supersedePending(UUID matchId, LocalDateTime now);
     @Modifying int expirePendingByMatchIds(Collection<UUID> matchIds);
 }
 public interface CostCustomItemRepository extends JpaRepository<CostCustomItem, UUID> {
     List<CostCustomItem> findByMatchIdOrderByDisplayOrderAsc(UUID matchId);
     @Modifying int deleteByMatchIdBulk(UUID matchId);                     // DELETE … WHERE match_id = :matchId
-    @Modifying int insertAll(UUID matchId, String[] names, Long[] amounts, OffsetDateTime now); // 1 câu unnest, id do PostgreSQL uuidv7() sinh
+    @Modifying int insertAll(UUID matchId, String[] names, Long[] amounts, LocalDateTime now); // 1 câu unnest, id do PostgreSQL uuidv7() sinh
 }
 public interface SportRepository extends JpaRepository<Sport, UUID> {
     Page<Sport> findByIsActiveOrderByNameAscIdAsc(boolean isActive, Pageable p);
     Page<Sport> findAllByOrderByNameAscIdAsc(Pageable p);
 }
 public interface ConversationRepository extends JpaRepository<Conversation, UUID> {
-    Optional<ConversationContextView> findContext(UUID id, UUID callerId, OffsetDateTime now); // một câu, mọi loại ngữ cảnh
-    List<ConversationListRowView> findMine(UUID callerId, OffsetDateTime now, int limit, long offset); // 2.20 — trang
+    Optional<ConversationContextView> findContext(UUID id, UUID callerId, LocalDateTime now); // một câu, mọi loại ngữ cảnh
+    List<ConversationListRowView> findMine(UUID callerId, LocalDateTime now, int limit, long offset); // 2.20 — trang
     MineCountView countMine(UUID callerId);                                                         // 2.20 — tổng + cờ người gọi đã xoá
 }
 public interface ConversationMessageRepository extends JpaRepository<ConversationMessage, UUID> {
     Optional<ChatCursorView> findCursor(UUID conversationId, UUID messageId);           // created_at, id
     List<ConversationMessageView> findLatest(UUID conversationId, int limit);
-    List<ConversationMessageView> findBefore(UUID conversationId, OffsetDateTime createdAt, UUID id, int limit);
-    List<ConversationMessageView> findAfter(UUID conversationId, OffsetDateTime createdAt, UUID id, int limit);
+    List<ConversationMessageView> findBefore(UUID conversationId, LocalDateTime createdAt, UUID id, int limit);
+    List<ConversationMessageView> findAfter(UUID conversationId, LocalDateTime createdAt, UUID id, int limit);
     @Modifying int markOtherPartyRead(UUID conversationId, String readerParty);
 }
 // TeamRepository (sửa)
@@ -530,9 +530,9 @@ Ghi chú SQL:
 - `adjustReliability(id, delta, breaksCleanStreak)` (v2.2 thêm tham số): `UPDATE team SET reliability_score = LEAST(100, GREATEST(0, reliability_score + :delta)), clean_streak = CASE WHEN :breaksCleanStreak THEN 0 ELSE clean_streak END WHERE id = :id` — **không** tăng `version` (cột `updatable = false`, ADR-0013); `user` tương tự.
 - `findCaptainContext`: `SELECT t.status, t.name, t.avatar_url, t.reliability_score, EXISTS (SELECT 1 FROM team_member m WHERE m.team_id = t.id AND m.user_id = :userId AND m.role = 'CAPTAIN' AND m.status = 'ACTIVE') AS captain, u.display_name AS user_display_name, (u.deleted_at IS NOT NULL) AS user_deleted FROM team t LEFT JOIN "user" u ON u.id = :userId WHERE t.id = :teamId` (tên/ảnh/điểm cho response dựng từ dữ liệu đã nạp: tạo kèo B, MATCH-002 2.1; `user_*` = tên đội trưởng hiện tại khi `captain = true` — `captainName` của MATCH-002 2.1).
 - `findAvailability`: thêm `LEFT JOIN team_member cm ON cm.team_id = m.author_team_id AND cm.role = 'CAPTAIN' AND cm.status = 'ACTIVE' LEFT JOIN "user" cu ON cu.id = cm.user_id` → `authorCaptainName`, `authorCaptainDeleted` (MATCH-002 2.1); v2.4: `LEFT JOIN conversation cv ON cv.context_type = 'TEAM_MATCH' AND cv.match_id = m.id AND cv.party_b_id = :teamId` → `existingConversationId` (`idx_conversation_team_match`); cùng câu.
-- `findByMatch`, `findByRequesterTeam` (2.7, 2.12): v2.4 thêm `LEFT JOIN conversation cv ON cv.context_type = 'TEAM_MATCH' AND cv.match_id = r.match_id AND cv.party_b_id = r.requester_team_id` → `conversationId` (trong câu trang; câu count không join). Yêu cầu tạo trước V6 không tồn tại (Neon dev 0 dòng `match_request` — kiểm 2026-11-09) → luôn có cuộc trò chuyện.
+- `findByMatch`, `findByRequesterTeam` (2.7, 2.12): v2.4 thêm `LEFT JOIN conversation cv ON cv.context_type = 'TEAM_MATCH' AND cv.match_id = r.match_id AND cv.party_b_id = r.requester_team_id` → `conversationId` (trong câu trang; câu count không join). Yêu cầu tạo trước V7 không tồn tại (Neon dev 0 dòng `match_request` — kiểm 2026-11-09) → luôn có cuộc trò chuyện.
 - `claimDueForExpiry` (đợt MATCH-002, §1.1; đợt 1 chỉ kèo A → `expirePendingByMatchIds`) trả thêm `type`; lô tách id theo loại → `expirePendingByMatchIds` (kèo A) và `PairingRepository.expireNegotiatingByMatchIds` (kèo B), bỏ câu khi danh sách rỗng.
-- `findDetailById` (đợt 1: chỉ `LEFT JOIN venue`; phần pairing + `cost_deposit_amount` của V7 thêm ở đợt MATCH-002, §1.1): `LEFT JOIN venue` (kèo B chưa ghép không có `venue_id`), `LEFT JOIN pairing p ON p.match_id = m.id AND p.status = 'CONFIRMED'` → `confirmedPairingId`; thêm `cost_deposit_amount`, `cost_deposit_holder`.
+- `findDetailById` (đợt 1: chỉ `LEFT JOIN venue`; phần pairing + `cost_deposit_amount` của V8 thêm ở đợt MATCH-002, §1.1): `LEFT JOIN venue` (kèo B chưa ghép không có `venue_id`), `LEFT JOIN pairing p ON p.match_id = m.id AND p.status = 'CONFIRMED'` → `confirmedPairingId`; thêm `cost_deposit_amount`, `cost_deposit_holder`.
 - Tìm kèo: `m.status = 'OPEN'` (literal) `AND m.expires_at > :now AND (:type IS NULL OR m.type = :type)` + `JOIN team t ON t.id = m.author_team_id AND t.status = 'ACTIVE'` + `JOIN sport s ON s.id = m.sport_id AND s.is_active` + `LEFT JOIN venue v ON v.id = m.venue_id` (kèo B chưa ghép: `null`); khoảng giờ: kèo A so `m.match_start_time`, kèo B `EXISTS (SELECT 1 FROM match_time_option t WHERE t.match_id = m.id AND t.proposed_start_time BETWEEN …)`; `venueOptionCount`/`timeOptionCount`: subquery `count(*)` theo `match_id` (chỉ kèo B); nearby kèo B: `LATERAL (SELECT min(Haversine) FROM match_venue_option o JOIN venue v2 … WHERE o.match_id = m.id AND v2 trong hộp)` → khoảng cách tới lựa chọn gần nhất, lọc `≤ radiusKm` (vẫn 1 câu trang + 1 câu count); `skillLevel`: `(:skillLevel IS NULL OR m.skill_levels = '[]' OR jsonb_exists(m.skill_levels::jsonb, :skillLevel))` (không dùng toán tử `?` — xung đột placeholder JDBC). Nearby: hộp + Haversine trên `venue.latitude/longitude` như VENUE-001 §5.2.
 - `findTeamMatches`: `(m.author_team_id = :teamId OR m.confirmed_opponent_team_id = :teamId)` theo `role`; lọc `status` trên biểu thức trạng thái hiệu lực.
 - `insertAll` (user chốt 2026-11-09 — một câu bất kể số khoản, không bật JDBC batch toàn ứng dụng): `INSERT INTO cost_custom_item (id, match_id, item_name, amount, display_order, created_at) SELECT uuidv7(), :matchId, t.name, t.amount, t.ord, :now FROM unnest(CAST(:names AS text[]), CAST(:amounts AS bigint[])) WITH ORDINALITY AS t(name, amount, ord)`. Id do hàm built-in `uuidv7()` của **PostgreSQL ≥ 18** sinh (cùng định dạng v7 với entity — ADR-0008 Sửa đổi 2026-11-09); `ord` = 1..n theo thứ tự mảng = thứ tự request. Neon dev đã kiểm 2026-11-09: `server_version = 18.6`, có `uuidv7` `[cần xác nhận #11]` cho môi trường khác. Chạy sau `deleteByMatchIdBulk` (Hibernate tự flush `UPDATE match` trước câu native đầu tiên). Id do DB sinh → response đọc lại `findByMatchIdOrderByDisplayOrderAsc` (1 câu). Danh sách rỗng → không gọi insert lẫn bước đọc `[cần xác nhận #1]`.
@@ -565,7 +565,7 @@ Ghi chú SQL chat (v2.4):
   WHERE c.id = :id
   ```
   Yêu cầu **gần nhất** của đội (luồng A): đội chỉ có một yêu cầu đang hiệu lực mỗi kèo (`idx_match_request_active`), yêu cầu cũ chỉ có thể `WITHDRAWN`/`EXPIRED` → yêu cầu gần nhất là yêu cầu quyết định (BR-N04 gửi lại); LATERAL theo `idx_match_request_match (match_id, status)` + lọc đội (số yêu cầu của một đội cho một kèo rất nhỏ). Trạng thái hiển thị `request_status` tính bằng `CASE` trạng thái hiệu lực như §5.2 (yêu cầu `PENDING` + kèo quá hạn → `EXPIRED`); policy dùng trạng thái DB + `expires_at` (§4.14). `COALESCE` vì đội đã giải tán không có đội trưởng. `team.status`, `team.disbanded_by` (V4 — USER-002) đọc trên dòng `team` đã join (người đã giải tán chỉ xem — user chốt 2026-11-15): thêm cột, **không** thêm câu. Join theo khoá chính / index, không đổi số câu.
-- Tin nhắn — cursor theo **`(created_at, id)`**, không theo `id` riêng: id là UUID v7 (`ConversationMessage` `@UuidGenerator(VERSION_7)`) chỉ tăng chặt trong một JVM, gần đúng ở mức mili-giây giữa instance/đồng hồ (ADR-0008 Hệ quả: "cần thứ tự thời gian → dùng cột `*_at`"). `findBefore`: `WHERE conversation_id = :c AND (created_at, id) < (:createdAt, :id) ORDER BY created_at DESC, id DESC LIMIT :limit`; `findAfter`: `> … ORDER BY created_at ASC, id ASC`; `findLatest`: `ORDER BY created_at DESC, id DESC`. `idx_conversation_message_time` phục vụ cả ba (row comparison). Cả ba `JOIN "user" su ON su.id = cm.sender_user_id` → `senderName`, `senderAvatarUrl`, `senderDeleted` — join theo khoá chính trong cùng câu, không N+1; `JOIN` (không `LEFT`) vì FK `RESTRICT` + `NOT NULL`. `created_at` gán ở `@PrePersist` (`OffsetDateTime.now()`).
+- Tin nhắn — cursor theo **`(created_at, id)`**, không theo `id` riêng: id là UUID v7 (`ConversationMessage` `@UuidGenerator(VERSION_7)`) chỉ tăng chặt trong một JVM, gần đúng ở mức mili-giây giữa instance/đồng hồ (ADR-0008 Hệ quả: "cần thứ tự thời gian → dùng cột `*_at`"). `findBefore`: `WHERE conversation_id = :c AND (created_at, id) < (:createdAt, :id) ORDER BY created_at DESC, id DESC LIMIT :limit`; `findAfter`: `> … ORDER BY created_at ASC, id ASC`; `findLatest`: `ORDER BY created_at DESC, id DESC`. `idx_conversation_message_time` phục vụ cả ba (row comparison). Cả ba `JOIN "user" su ON su.id = cm.sender_user_id` → `senderName`, `senderAvatarUrl`, `senderDeleted` — join theo khoá chính trong cùng câu, không N+1; `JOIN` (không `LEFT`) vì FK `RESTRICT` + `NOT NULL`. `created_at` gán ở `@PrePersist` (`AppTime.now()` — SYSTEM-002).
 - **`findMine` / `countMine` (2.20):**
   ```sql
   WITH my_teams AS (                         -- đội người gọi là đội trưởng ACTIVE, hoặc đã giải tán (chỉ xem)
@@ -618,7 +618,7 @@ Ghi chú SQL chat (v2.4):
 | `ChatCursorView` | `createdAt`, `id` |
 | `MineCountView` (2.20) | `total`, `callerDeleted` |
 
-Thời gian là `Instant`, mapper chuyển UTC (USER-001 §5).
+Thời gian là `LocalDateTime` giờ Việt Nam, mapper gán thẳng (SYSTEM-002 `Component_Class_Design.md` §2).
 
 ## 6. Entity
 
@@ -630,11 +630,11 @@ Thời gian là `Instant`, mapper chuyển UTC (USER-001 §5).
 | `match.CostCustomItem` | + `displayOrder` (`Integer`, `display_order`, `nullable = false`) — ghi bằng câu native `insertAll` (id do DB sinh), entity dùng để đọc; giữ `@UuidGenerator(VERSION_7)` trên `id` (ADR-0008, `EntityIdGenerationTest`) |
 | `match.Sport` | Giữ |
 | `match.Match`, `match.CostCustomItem` (v2.0) | Thay đổi cho luồng B: MATCH-002 `Component_Class_Design.md` §6 |
-| `chat.ChatMessage` | **Xoá** (bảng `chat_message` bị bỏ ở V6) |
+| `chat.ChatMessage` | **Xoá** (bảng `chat_message` bị bỏ ở V7) |
 | `chat.Conversation` (mới) | `id` (`@UuidGenerator(VERSION_7)`), `contextType` (`enum ContextType { TEAM_MATCH }` ở đợt 1; MERCENARY-001 thêm `MERCENARY_APPLICATION` — §1.1; `@Enumerated(STRING)`), `matchId` (`UUID`, nullable), `partyAType`, `partyBType` (`enum PartyType { TEAM, USER }`), `partyAId`, `partyBId` (`UUID`), `createdAt` (`@PrePersist`); `enum Party { A, B }`. Chỉ INSERT (builder) + đọc. MERCENARY-001 thêm `applicationId`, `externalMatchId` (§6 của mã đó) |
 | `chat.ConversationMessage` (mới) | `id` (v7), `conversationId`, `senderParty` (`Conversation.Party`, `@Enumerated(STRING)`), `senderUserId`, `message` (`TEXT`), `isRead` (`boolean`, `@Builder.Default false`), `createdAt` (`@PrePersist`) |
 
-Giữ Lombok/builder/`@PrePersist` (`convention-backend.md` §6, §6.1); `src/main` không gán `id`, `version`, `createdAt`, `updatedAt` qua builder. Kiểm bằng migration integration test (`ddl-auto=validate` sau V6).
+Giữ Lombok/builder/`@PrePersist` (`convention-backend.md` §6, §6.1); `src/main` không gán `id`, `version`, `createdAt`, `updatedAt` qua builder. Kiểm bằng migration integration test (`ddl-auto=validate` sau V7).
 
 ## 7. DTO & Mapper
 
@@ -671,7 +671,7 @@ spring.task.scheduling.pool.size=5
 | `spring.task.scheduling.pool.size` 5 (chung toàn ứng dụng; v2.2: 3 → 4; v2.5: 4 → 5 — thêm `RetentionScheduler` của NOTIFICATION-001) | Mặc định Spring Boot là 1 luồng cho mọi `@Scheduled` → job dọn asset VENUE-001 (gọi HTTP Cloudinary, có thể chạy lâu) chặn job vòng đời kèo 5 phút. Hiện có 5 job định kỳ: vòng đời kèo (MATCH-001), cảnh báo 180 ngày và dọn asset (VENUE-001), đối soát huy hiệu (REPUTATION-001), xoá hạn lưu (NOTIFICATION-001) → mỗi job một luồng, không job nào chờ job khác. Thêm job định kỳ mới → tăng giá trị này `[cần xác nhận #10]` |
 | `batch-size` 200 × `max-batches-per-run` 50 | ≤ 10 000 kèo/lần chạy cho mỗi loại (AC §3.1 "≤10000"); lô nhỏ để transaction ngắn, không chặn API |
 
-`ClockConfig`: `@Bean Clock clock() { return Clock.systemUTC(); }` — test thay bằng `Clock.fixed` cho biên khung trừ điểm / hết hạn. Không thêm Maven dependency.
+`ClockConfig`: tạo ở SYSTEM-002 (`Component_Class_Design.md` §2.2 — `Clock` zone `Asia/Ho_Chi_Minh`, tick 1 µs); mã này dùng lại, không tạo lần hai. Test thay bằng `Clock.fixed(…, AppTime.ZONE)` cho biên khung trừ điểm / hết hạn. Không thêm Maven dependency.
 
 **Kênh realtime (v2.4 — chuyển từ MATCH-002):**
 
@@ -719,7 +719,7 @@ Chat và kênh realtime (v2.4):
 | UC-M09 1a2 "lazy check cập nhật ngay" | API đọc chỉ tính trạng thái hiệu lực, không ghi | Ghi trong 2.3 vượt N_DETAIL (2 đọc + 2 ghi); kết quả quan sát được như spec | (user chốt 2026-11-09) |
 | `non-functional-standards.md` §3: không đọc lại dữ liệu đã nạp | 2.1 đọc `MatchDetailView` sau INSERT | Response cần tên đội/sân/môn (join); dùng chung mapper với 2.3 (tiền lệ USER-001 `PATCH /profile`, VENUE-001 2.10–2.12) | Ghi nhận trong thiết kế |
 | `convention-backend.md` §9: `@Transactional(readOnly)` mức class | Transaction theo method; ghi qua retrier | Kế thừa USER-001 §4.6 | Đã có tiền lệ |
-| `convention-backend.md` §6.1: field do JPA quản lý không gán từ `src/main` (nêu cho builder) | 2.4 gán `Match.updatedAt` bằng setter | Khi chỉ đổi khoản tự nhập, entity không dirty → không có `UPDATE match` (mất CAS với chấp nhận) và `@PreUpdate` không chạy. Setter chỉ để entity dirty → Hibernate chạy `UPDATE match` CAS (tăng `version`, kích `@PreUpdate`) kể cả khi chỉ đổi khoản tự nhập; giá trị gán bị `@PreUpdate` ghi đè bằng `OffsetDateTime.now()`, nhất quán các entity khác (user chốt không đổi, 2026-11-09) | Ghi nhận trong thiết kế |
+| `convention-backend.md` §6.1: field do JPA quản lý không gán từ `src/main` (nêu cho builder) | 2.4 gán `Match.updatedAt` bằng setter | Khi chỉ đổi khoản tự nhập, entity không dirty → không có `UPDATE match` (mất CAS với chấp nhận) và `@PreUpdate` không chạy. Setter chỉ để entity dirty → Hibernate chạy `UPDATE match` CAS (tăng `version`, kích `@PreUpdate`) kể cả khi chỉ đổi khoản tự nhập; giá trị gán bị `@PreUpdate` ghi đè bằng `AppTime.now()`, nhất quán các entity khác (user chốt không đổi, 2026-11-09) | Ghi nhận trong thiết kế |
 | Entity ghi qua dirty checking | `reliability_score` của `Team`/`User` `updatable = false`, chỉ `UPDATE` nguyên tử | Tránh mất cập nhật khi entity `Team`/`User` (không version ở `User`) ghi lại mọi cột | ADR-0013 |
 | `api-convention.md` §7: mặc định `page`/`pageSize` | 2.17 cursor `before`/`after`/`limit`, `{items, hasMore}` (v2.4, chuyển từ MATCH-002) | Danh sách chat thêm tin liên tục → offset trôi; user chốt 2026-11-10 | Đã có `api-convention.md` §7.2 |
 | ADR-0011 quy tắc 3: side effect qua event | Frame realtime qua port `ChatRealtimeGateway` `afterCommit`, không qua event | Frame cần nội dung tin (event không mang dữ liệu người dùng) | ADR-0014 |
@@ -730,7 +730,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 
 | Tài liệu | Nội dung | Nhánh |
 |---|---|---|
-| `docs/database/schema.dbml`, `schema-design.md` §3.1, §3.4, §3.5 và quy ước ID (dòng 11) | Cột/CHECK/index V6; bỏ `CUSTOM` ở `cost_type`; dòng "tối đa 1 ACCEPTED (application layer)" → unique index; quy ước ID "Hibernate generates UUID v7 từ Java, không cần DEFAULT trong DB" thêm ngoại lệ: id `cost_custom_item` do `uuidv7()` của PostgreSQL ≥ 18 sinh trong câu INSERT gom lô (ADR-0008 Sửa đổi 2026-11-09) | `feature/MATCH-001-*` |
+| `docs/database/schema.dbml`, `schema-design.md` §3.1, §3.4, §3.5 và quy ước ID (dòng 11) | Cột/CHECK/index V7; bỏ `CUSTOM` ở `cost_type`; dòng "tối đa 1 ACCEPTED (application layer)" → unique index; quy ước ID "Hibernate generates UUID v7 từ Java, không cần DEFAULT trong DB" thêm ngoại lệ: id `cost_custom_item` do `uuidv7()` của PostgreSQL ≥ 18 sinh trong câu INSERT gom lô (ADR-0008 Sửa đổi 2026-11-09) | `feature/MATCH-001-*` |
 | `docs/database/data-model.md` §3.3 | Lý do huỷ/từ chối/rút; thoả thuận chi phí chỉ khi `OPEN`; rút `ACCEPTED` ⇒ huỷ kèo | `feature/MATCH-001-*` |
 | `docs/agent/api-convention.md` §5, §6 | 15 endpoint vào bảng 2xx (tiêu chí ở §3); domain `MATCH`, `SPORT` (đã soát `ErrorCode` hiện hành 2026-11-09: chưa có `MATCH_*`, `SPORT_*`; mã `VENUE_*` theo VENUE-001) | `chore/agent-framework-*` (qua `workflow-adapt`) |
 | `docs/agent/convention-backend.md` §1 | `application/event/<miền>/`, `application/support/<miền>/`, `api/config/ClockConfig` | `chore/agent-framework-*` |
@@ -754,16 +754,16 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 |---|---|---|
 | 1 | `insertAll`: bind mảng Java (`String[]`, `Long[]`) vào native query qua Spring Data / Hibernate 7.2 [Inference — chưa chạy]; không bind được → chạy đúng câu đó bằng `NamedParameterJdbcTemplate` trong cùng transaction (vẫn 1 câu). Lưu ý dự phòng: `JdbcTemplate` không kích auto-flush của Hibernate → phải gọi **sau** một câu native JPA (ở đây `deleteByMatchIdBulk`) để `UPDATE match` đã flush | Không chặn — kiểm bằng integration test đầu tiên của 2.4 |
 | 2 | `reliability_score` `updatable = false`: entity `Team`/`User` đang nằm trong persistence context giữ giá trị cũ sau `adjustReliability` cùng transaction (MATCH-001 không đọc lại) | Không chặn |
-| 3 | ~~Bộ đếm `total_matches_confirmed/completed`, `clean_streak`, `report_count_*` thuộc REPUTATION-001; huỷ `CONFIRMED` có cắt chuỗi trận sạch không~~ — **Đóng v2.2 (2026-11-12):** user chốt Q3 — huỷ `CONFIRMED` / rút `ACCEPTED` cắt chuỗi trận sạch của đội huỷ (§4.8, §4.13); `total_matches_*` bị xoá (Q5, REPUTATION-001 V8); bộ đếm report do REPUTATION-001 ghi | Đã đóng |
+| 3 | ~~Bộ đếm `total_matches_confirmed/completed`, `clean_streak`, `report_count_*` thuộc REPUTATION-001; huỷ `CONFIRMED` có cắt chuỗi trận sạch không~~ — **Đóng v2.2 (2026-11-12):** user chốt Q3 — huỷ `CONFIRMED` / rút `ACCEPTED` cắt chuỗi trận sạch của đội huỷ (§4.8, §4.13); `total_matches_*` bị xoá (Q5, REPUTATION-001 V9); bộ đếm report do REPUTATION-001 ghi | Đã đóng |
 | 4 | Overload `AdminAuditLog.afterCommit(action, adminId, targetType, targetId)` sửa thiết kế VENUE-001 §4.13 (CHANGELOG MINOR) | Không chặn |
-| 5 | **Thứ tự implement:** MATCH-001 cần code VENUE-001 (`VenueSelectionService`, retrier overload, `AdminAuditLog`, `SchedulingConfig`, `application/event/`, `VENUE_001/002`) **và migration V5**. DB dev đang ở Flyway V4; Flyway không chạy out-of-order → nếu phase 0 của MATCH-001 tự dựng phần VENUE-001 thì phải gồm `V5__venue_management.sql`, hoặc đổi số migration (MATCH-001 thành V5 và VENUE-001 lùi sang V6 — phải sửa thiết kế VENUE-001). Lựa chọn còn lại: implement VENUE-001 trước | **Chặn code** — user chọn thứ tự |
+| 5 | **Thứ tự implement:** MATCH-001 cần code VENUE-001 (`VenueSelectionService`, retrier overload, `AdminAuditLog`, `SchedulingConfig`, `application/event/`, `VENUE_001/002`) **và migration V5**. DB dev đang ở Flyway V4; Flyway không chạy out-of-order → nếu phase 0 của MATCH-001 tự dựng phần VENUE-001 thì phải gồm `V5__venue_management.sql`, hoặc đổi số migration (MATCH-001 thành V5 và VENUE-001 lùi sang V7 — phải sửa thiết kế VENUE-001). Lựa chọn còn lại: implement VENUE-001 trước | **Chặn code** — user chọn thứ tự |
 | 10 | `spring.task.scheduling.pool.size` còn hiệu lực với Spring Boot 4.0.9 (không bật virtual threads) [Inference — tên thuộc tính theo Spring Boot 3, chưa kiểm trên 4.0.9]; kiểm bằng log tên luồng `scheduling-1..4` khi chạy | Không chặn |
-| 11 | Phiên bản PostgreSQL production (và môi trường khác ngoài Neon dev) chưa kiểm; `uuidv7()` cần ≥ 18 — thấp hơn thì V6 vẫn chạy nhưng 2.4 lỗi khi có khoản tự nhập | Không chặn — kiểm trước khi deploy |
+| 11 | Phiên bản PostgreSQL production (và môi trường khác ngoài Neon dev) chưa kiểm; `uuidv7()` cần ≥ 18 — thấp hơn thì V7 vẫn chạy nhưng 2.4 lỗi khi có khoản tự nhập | Không chặn — kiểm trước khi deploy |
 | 12 | (v2.4 — chuyển từ MATCH-002 #1) [Unverified] Spring Framework 7 / Boot 4.0.9 còn SockJS phía server và artifact `spring-boot-starter-websocket`: chưa kiểm (không có trong cache Maven local). Không còn SockJS → bỏ `.withSockJS()`, giữ WebSocket thuần (ADR-0014) | **Chặn code — bước đầu phase realtime** (thêm dependency, kiểm `.withSockJS()` và `setSelectorHeaderName(null)` trên Boot 4.0.9). Không đạt → dừng, hỏi user |
 | 13 | (v2.4 — chuyển từ MATCH-002 #3) Domain FE cho `WS_ALLOWED_ORIGIN_PATTERNS` | Không chặn — cấu hình môi trường |
-| 16 | (v2.4 — chuyển từ MATCH-002 #11) V6 bỏ bảng `chat_message` (V1): Neon dev 0 dòng ngày 2026-11-10, chưa kiểm lại; môi trường khác chưa kiểm | **Chặn chạy V6** — developer đếm dòng trước khi chạy; khác 0 → dừng, báo user |
+| 16 | (v2.4 — chuyển từ MATCH-002 #11) V7 bỏ bảng `chat_message` (V1): Neon dev 0 dòng ngày 2026-11-10, chưa kiểm lại; môi trường khác chưa kiểm | **Chặn chạy V7** — developer đếm dòng trước khi chạy; khác 0 → dừng, báo user |
 | 18 | Không có frame khi yêu cầu ghép kèo luồng A đổi trạng thái / kèo bị huỷ (`API_Spec.md` §1.7, §6) | Đã đóng — user chốt 2026-11-15: giữ không có frame |
-| 19 | **Đã chốt — thứ tự code** (user chọn 2026-11-15, review 2026-11-15): đợt 1 = MATCH-001 luồng A + lõi chat + kênh realtime (V6); mọi nhánh luồng B trong thành phần của mã này code ở đợt MATCH-002 sau V7 (bảng §1.1); trong lúc chờ, 2.1 trả `422 MATCH_016` cho `type = NEED_VENUE` | Kế hoạch implement — không chặn |
+| 19 | **Đã chốt — thứ tự code** (user chọn 2026-11-15, review 2026-11-15): đợt 1 = MATCH-001 luồng A + lõi chat + kênh realtime (V7); mọi nhánh luồng B trong thành phần của mã này code ở đợt MATCH-002 sau V8 (bảng §1.1); trong lúc chờ, 2.1 trả `422 MATCH_016` cho `type = NEED_VENUE` | Kế hoạch implement — không chặn |
 
 ## 13. Quyết định đã chốt (user, 2026-11-09 và 2026-11-10)
 

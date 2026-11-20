@@ -1,5 +1,22 @@
 # CHANGELOG — MATCH-001 Kèo (luồng A, luồng B) & vòng đời kèo
 
+## [v3.0] — 2026-11-21
+
+**Type:** MAJOR (đổi định dạng mọi giá trị thời gian: bỏ `Z`/offset, giá trị theo giờ Việt Nam) · **Tóm tắt:** Thời gian theo giờ Việt Nam, không kèm múi giờ (SYSTEM-002).
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | `API_Spec.md` §1.1 (dòng "Thời gian"), mọi field thời gian của request (`startsAt`, `endsAt`, `expiresAt`, `timeOptions[]`, lọc `startsAtFrom`/`startsAtTo`), response và frame realtime | Đổi | Chuỗi ISO-8601 kèm múi giờ, response trả UTC (vd `"2026-11-12T11:00:00Z"`) → giờ Việt Nam, **không** kèm múi giờ, ở cả request và response (vd `"2026-11-12T18:00:00"`); request kèm `Z`/offset → `400 VALIDATION_ERROR` | SRS SYSTEM-001 v1.13 BC-M05 (user chốt 2026-11-21); SYSTEM-002 `API_Spec.md` §1.1 | Đọc và gửi thời gian theo SYSTEM-002 `API_Spec.md` §1.1: hiển thị nguyên giá trị, không đổi theo múi giờ máy; khi so với giờ hiện tại coi là UTC+7 |
+| 2 | Ví dụ JSON | Sửa | Giá trị `…Z` đổi sang cùng thời điểm theo giờ Việt Nam (cộng 7 giờ, bỏ `Z`); Ví dụ lọc `startsAtFrom`/`startsAtTo` đổi thành nửa đêm giờ Việt Nam (`2026-11-12T00:00:00`) | Như #1 | Không |
+| 3 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Như #1 | Không |
+| 4 | Header 3 tài liệu thiết kế MATCH-001 | Ghi nhận | v2.5 → v3.0 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- Không đổi endpoint, field, mã lỗi; chỉ đổi định dạng giá trị thời gian.
+- Cùng đợt: SYSTEM-002 `API_Spec.md` v1.0 (quy ước thời gian toàn hệ thống, thứ tự phát hành BE/FE).
+
 ## [v2.5] — 2026-11-16
 
 **Type:** MINOR (thêm destination đăng ký trên kết nối realtime; không đổi endpoint, field, mã thành công, mã lỗi, frame của topic cuộc trò chuyện) · **Tóm tắt:** Kết nối realtime có thêm kênh cá nhân `/user/queue/notifications` (thông báo in-app mới, tín hiệu "có tin nhắn mới") cho NOTIFICATION-001; gửi tin (2.16) phát thêm tín hiệu tới người xem được cuộc trò chuyện.

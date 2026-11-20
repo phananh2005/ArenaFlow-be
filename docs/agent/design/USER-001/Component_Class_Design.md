@@ -6,8 +6,8 @@
 | Phạm vi tầng | Backend (Spring Boot REST API) |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
-| Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 · v4.1: xoá tài khoản (2.7) cần bảng mercenary của V9 (MERCENARY-001 `Component_Class_Design.md` §5.1) — implement sau MERCENARY-001 phần dữ liệu |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.4** (developer · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 · v4.1: xoá tài khoản (2.7) cần bảng mercenary của V10 (MERCENARY-001 `Component_Class_Design.md` §5.1) — implement sau MERCENARY-001 phần dữ liệu |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v5.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -179,7 +179,7 @@ Truy vấn danh sách/chi tiết có join dùng `@Query(nativeQuery = true)` tr�
 public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByIdAndDeletedAtIsNull(UUID id);
     Optional<ProfileView> findProfileViewById(UUID id);                 // @Query native, join ward + province
-    @Modifying int softDelete(UUID id, OffsetDateTime now);             // WHERE deleted_at IS NULL
+    @Modifying int softDelete(UUID id, LocalDateTime now);             // WHERE deleted_at IS NULL
 }
 public interface OAuthAccountRepository extends JpaRepository<OAuthAccount, UUID> {
     default Optional<UserAuthView> findAuthView(OAuthAccount.Provider provider, String providerUserId) {
@@ -206,7 +206,7 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
     Optional<MemberView> findMemberViewById(UUID memberId);             // native, join user (response 2.13)
     @Lock(PESSIMISTIC_WRITE)
     List<TeamMember> findByUserIdAndStatusInOrderByIdAsc(UUID userId, Collection<TeamMember.Status> statuses); // 2.7 khoá
-    @Modifying int leaveAndRejectAllOpen(UUID userId, OffsetDateTime now); // 2.7: MEMBER ACTIVE → LEFT, PENDING → REJECTED, version + 1
+    @Modifying int leaveAndRejectAllOpen(UUID userId, LocalDateTime now); // 2.7: MEMBER ACTIVE → LEFT, PENDING → REJECTED, version + 1
 }
 public interface TeamCaptainHistoryRepository extends JpaRepository<TeamCaptainHistory, UUID> {
     Page<CaptainHistoryView> findHistory(UUID teamId, Pageable pageable);
@@ -219,7 +219,7 @@ public interface TeamCaptainHistoryRepository extends JpaRepository<TeamCaptainH
 
 | Dữ liệu | Kiểu trong projection | Chuyển ở mapper (§8) |
 |---|---|---|
-| Thời gian (`timestamptz`) | `Instant` — Spring Data không chuyển native `timestamptz` sang `OffsetDateTime` cho projection | `Instant` → `OffsetDateTime` UTC |
+| Thời gian (`TIMESTAMP`, giờ Việt Nam) | `LocalDateTime` (SYSTEM-002 `Component_Class_Design.md` §5.2) | Gán thẳng (không chuyển múi giờ) |
 | `skill_levels` (cột TEXT) | `String` (JSON thô) | JSON → `List<String>` bằng `SkillLevelsConverter` |
 | User đã xoá | Cờ `Boolean *Deleted` (`captainDeleted`, `disbandedByDeleted`, `userDeleted`, `fromUserDeleted`, `toUserDeleted`; `UserAuthView.deleted`) — `false` khi LEFT JOIN không có user | Endpoint thường: che tên/avatar bằng `DeletedUserMasking`. Endpoint Admin: không che, ánh xạ cờ sang `is…Deleted` của response |
 
@@ -246,7 +246,7 @@ public interface TeamCaptainHistoryRepository extends JpaRepository<TeamCaptainH
 - `preferredPosition` dùng cùng tập giá trị với cột `mercenary_recruitment.position` (BR-U06) — đổi tập giá trị thì đổi cả hai.
 - `SkillLevel`: hằng danh sách 9 nhãn (nguồn duy nhất cho validator).
 - **Enum mapping:** `provider` lưu DB lowercase (`google`, `facebook`, `phone`) → API UPPERCASE (`GOOGLE`, `FACEBOOK`, `PHONE`) — chuyển trong `ProfileMapper` (§8).
-- Thời gian trả ra: `OffsetDateTime` ISO-8601 — cột DB là `TIMESTAMPTZ`. Response dựng từ projection: `Instant` → UTC (`Z`) qua mapper (§5). **Lệch (chưa sửa code):** giá trị lấy thẳng từ `OffsetDateTime.now()` mang offset của timezone JVM — `createdAt`/`updatedAt` của 2.8 (`Team` `@PrePersist`), `invitedAt` của 2.12 (`TeamMember` `@PrePersist`), `transferredAt` của 2.15 (`TeamServiceImpl#transferCaptain`), `error.timestamp` (`ErrorResponse.from`). [Inference] JVM chạy `Asia/Ho_Chi_Minh` → ra `+07:00` (chưa kiểm ở runtime). Hợp đồng ngoài chỉ hứa "ISO-8601 kèm offset" (`API_Spec.md` §1.1). Tech-debt: §12.
+- Thời gian trả ra: `LocalDateTime` giờ Việt Nam, ISO-8601 không offset — cột DB là `TIMESTAMP` (SYSTEM-002). Projection và entity đều trả `LocalDateTime`, mapper gán thẳng; "bây giờ" lấy từ `Clock` bean (service) hoặc `AppTime.now()` (`@PrePersist`/`@PreUpdate`, `ErrorResponse.from`) — SYSTEM-002 `Component_Class_Design.md` §2.2. Không còn trộn `Z` / `+07:00` giữa response đọc từ projection và giá trị vừa ghi.
 - `DeletedUserMasking`: hàm thuần áp quy tắc tên user đã xoá cho endpoint thường (`API_Spec.md` §1.1) — chỉ che ở response, DB giữ nguyên hồ sơ (`"user".deleted_at IS NOT NULL` → cờ `*Deleted`). **Chỉ dùng trong mapper** (qua `MapperSupport`), dựa vào cờ `*Deleted` của projection — SQL không che tên, để logic che tên có một nguồn. Method mapper cho endpoint Admin (`toAdminResponse`, `toAdminSummary`, USER-002 `toMemberHistory`) không gọi `maskName`/`maskAvatar`; ánh xạ cờ bằng `@Mapping(target = "is…Deleted", source = "…Deleted")`.
 - `AdminTeamResponse` (record): field như `TeamResponse` + `boolean isCaptainDeleted` (sau `captainName`) + `boolean isDisbandedByDeleted` (sau `disbandedByName`). `AdminTeamSummaryResponse`: field `TeamSummaryResponse` + `inactiveReason` + `boolean isCaptainDeleted` (sau `captainName`) + `boolean isDisbandedByDeleted` (cuối). Không kế thừa/bọc `TeamResponse` — record tách riêng để endpoint thường giữ nguyên hợp đồng.
 
@@ -263,7 +263,6 @@ Cấu hình chung: `@Mapper(componentModel = "spring", uses = MapperSupport.clas
 **`MapperSupport`** (`final class`, method `static`) — một nguồn chuyển đổi cho 3 mapper:
 
 ```java
-static OffsetDateTime toUtc(Instant instant);              // null-safe, ZoneOffset.UTC
 static List<String> skillLevels(String json);              // qua SkillLevelsConverter
 static String maskName(String displayName, Boolean deleted);   // qua DeletedUserMasking
 static String maskAvatar(String avatarUrl, Boolean deleted);   // qua DeletedUserMasking
@@ -320,7 +319,7 @@ Claims: `sub` = userId, `roles` = `["USER"]` hoặc `["ADMIN"]` (theo `security-
 |---|---|---|
 | `BusinessException` | status + mã theo `ErrorCode` | `WARN` (mã lỗi + URI) |
 | `MethodArgumentNotValidException`, `ConstraintViolationException`, `HandlerMethodValidationException` | 400 `VALIDATION_ERROR`; `field` = tên field body / tên tham số client gửi (`ConstraintViolationException`: chỉ lấy node cuối của property path, bỏ tiền tố tên method — `listTeams.page` → `page`). Controller hiện có `@Validated` ở class → lỗi tham số đi qua `ConstraintViolationException`; nhánh `HandlerMethodValidationException` là lớp phòng hờ khi bỏ `@Validated` | — |
-| `HttpMessageNotReadableException` (JSON sai cú pháp) | 400 `VALIDATION_ERROR` | — |
+| `HttpMessageNotReadableException` (JSON sai cú pháp, field sai kiểu/định dạng) | 400 `VALIDATION_ERROR`; `field` = đường dẫn field từ lỗi Jackson, không xác định được → `"body"` (SYSTEM-002 `Component_Class_Design.md` §6.1) | — |
 | `MethodArgumentTypeMismatchException` (UUID path sai, enum `status` sai) | 400 `VALIDATION_ERROR` | — |
 | `MissingServletRequestParameterException` | 400 `VALIDATION_ERROR`, `field` = tên tham số | — |
 | `DataIntegrityViolationException` trên unique index lời mời | 409 `TEAM_003` — **lớp phòng hờ**: hiện không luồng nào chạy tới (`inviteMember` tự bắt lỗi trùng và ném `TEAM_003`); giữ để luồng ghi `team_member` sau này không rơi vào 500 (user chọn giữ 2026-11-04) | `WARN` |
@@ -362,5 +361,5 @@ Log `WARN` chỉ ghi mã lỗi/status + URI; log `ERROR` kèm exception (stack t
 - **Base package & ID type:** Repo dùng `com.phananh.arenaflow` (đổi từ `com.phananh.ArenaFlow` ở v1.2, ADR-0006) + UUID; `convention-backend.md` đã cập nhật qua `workflow-adapt` (2026-11-02, xem `decisions-log.md`).
 - **TTL access token:** `security-backend.md` đã cập nhật từ 24h → 1h (theo ADR-0001).
 - **Enum `provider`:** DB lưu lowercase, API trả UPPERCASE — chuyển trong `ProfileMapper` (§8).
-- **Tech-debt — chuẩn hoá thời gian về UTC:** các giá trị `OffsetDateTime.now()` ở §7 nên trả `Z` như response đọc từ projection. Làm ở task bugfix riêng (đổi giá trị trả ra → kiểm ảnh hưởng FE, ghi CHANGELOG).
+- ~~**Tech-debt — chuẩn hoá thời gian về UTC**~~ — đóng bởi SYSTEM-002 (v5.0): mọi thời điểm là giờ Việt Nam không offset.
 - **ID UUID v7 (ADR-0008):** entity dùng `@UuidGenerator(style = VERSION_7)`; id tạo trước ADR-0008 giữ dạng v1. Hợp đồng ngoài chỉ hứa "UUID, không suy thứ tự từ id" (`API_Spec.md` §1.1).

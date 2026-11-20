@@ -6,21 +6,21 @@
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · PostgreSQL ≥ 18 |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §5, §10; VENUE-001 `Component_Class_Design.md` §4.9 (retrier overload), §4.13 (audit); MATCH-001 `Component_Class_Design.md` §4.5 (`TeamGuard`), §4.8 (`ReputationService` — sửa ở đây §4.6), §4.9 (event), §4.10 (scheduler), §4.11 (`AdminAuditLog.afterCommit(action, adminId, targetType, targetId)`), §8 (pool) · ADR-0002 (Sửa đổi 2026-11-12), ADR-0003 (Sửa đổi 2026-11-12), ADR-0008, ADR-0011, ADR-0012, ADR-0013 (Sửa đổi 2026-11-12) |
-| Ràng buộc dữ liệu | V1–V4 (code) + V5 (VENUE-001), V6 (MATCH-001), V7 (MATCH-002) — **chưa có trong code** + `V8__reputation_rating_report_dispute.sql` (§5.1). v1.2 (2.10) đọc `conversation`, `conversation_message` của V6 (MATCH-001 v2.4 §5.1) — không đổi V8. Entity hiện có `domain/.../entity/rating/{Rating, Report}`, `team/Team`, `user/User` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v1.3** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
+| Ràng buộc dữ liệu | V1–V5 (code — V5 = VENUE-001) + V6 (SYSTEM-002), V7 (MATCH-001), V8 (MATCH-002) — **chưa có trong code** + `V9__reputation_rating_report_dispute.sql` (§5.1). v1.2 (2.10) đọc `conversation`, `conversation_message` của V7 (MATCH-001 v2.4 §5.1) — không đổi V9. Entity hiện có `domain/.../entity/rating/{Rating, Report}`, `team/Team`, `user/User` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
 Layered theo 4 module Maven (ADR-0006) như USER-001. Hợp đồng: `API_Spec.md`. Luồng, transaction, số truy vấn, khoá: `Processing_Flow.md`.
 
 - **Ghi uy tín cùng transaction** với thao tác gây ra, chỉ qua `ReputationService` (ADR-0013): mở rộng lõi MATCH-001 bằng 3 method (§4.6), mỗi method **một** câu `UPDATE team` nguyên tử (điểm, chuỗi trận sạch, bộ đếm report). Không listener nào ghi điểm/bộ đếm (ADR-0011 quy tắc 6).
-- **Completion Rate, sao trung bình tính khi đọc** (Q5, ADR-0013 Sửa đổi 2026-11-12) từ `match`, `report`, `rating` — một đoạn SQL dùng chung (§5.3) cho 2.9 và huy hiệu. V8 xoá `total_matches_*`, `average_rating` của `team` và `"user"`.
+- **Completion Rate, sao trung bình tính khi đọc** (Q5, ADR-0013 Sửa đổi 2026-11-12) từ `match`, `report`, `rating` — một đoạn SQL dùng chung (§5.3) cho 2.9 và huy hiệu. V9 xoá `total_matches_*`, `average_rating` của `team` và `"user"`.
 - **Huy hiệu xác minh là dữ liệu dẫn xuất** (Q6-B): cột `team.verified_at`, chỉ ghi bằng một câu `UPDATE … RETURNING` có điều kiện (§4.8), chạy **sau commit** (đăng ký `afterCommit` từ service của mã này) + job đối soát hằng ngày cho mọi thay đổi khác (huỷ kèo, đổi đội trưởng, số điện thoại).
 - **Report / tranh chấp đổi trạng thái bằng CAS tự viết** `UPDATE … WHERE status = …` (ADR-0003 Sửa đổi 2026-11-12); entity chỉ INSERT + đọc.
 - **Trận `ARCHIVED → COMPLETED`** bằng câu có điều kiện trên `match` (`WHERE status = 'ARCHIVED'`, `version + 1`) — cùng mẫu `expireIfDue` của MATCH-001; 0 dòng = đội kia đã hoàn tất trước, không phải xung đột.
 - Phạm vi chỉ **đội** (rater/ratee/reporter/reported type `TEAM`). Cá nhân (`INDIVIDUAL`) — MERCENARY-001 dùng lại bảng, `ReputationService` và mẫu này.
 
-**Điều kiện tiên quyết:** code MATCH-001 (`ReputationService`, `TeamGuard.requireActiveCaptain`, `MatchCancellation`, `ClockConfig`, `SchedulingConfig`, `MATCH_001/009/014`), MATCH-002 (MATCH-002 `[cần xác nhận #4]` `UPDATE … RETURNING` không `@Modifying`; MATCH-002 `[cần xác nhận #5]` retrier bắt `ConcurrencyConflictException` — 2.5 cần khi CAS 0 dòng, `Processing_Flow.md` §3.5), VENUE-001 (`AdminAuditLog`, retrier overload) và migration V5–V7 phải có trước V8 `[cần xác nhận #8]`.
+**Điều kiện tiên quyết:** code MATCH-001 (`ReputationService`, `TeamGuard.requireActiveCaptain`, `MatchCancellation`, `ClockConfig`, `SchedulingConfig`, `MATCH_001/009/014`), MATCH-002 (MATCH-002 `[cần xác nhận #4]` `UPDATE … RETURNING` không `@Modifying`; MATCH-002 `[cần xác nhận #5]` retrier bắt `ConcurrencyConflictException` — 2.5 cần khi CAS 0 dòng, `Processing_Flow.md` §3.5), VENUE-001 (`AdminAuditLog`, retrier overload) và migration V5–V8 phải có trước V9 `[cần xác nhận #8]`.
 
 ## 2. Package Structure (delta)
 
@@ -190,7 +190,7 @@ void refreshNow(Collection<UUID> teamIds);          // TransactionTemplate REQUI
 - **Không** dùng `@TransactionalEventListener` cho event của chính REPUTATION-001 (ADR-0011 quy tắc 5 — miền phát không nghe event của mình). **Không nghe `MatchCancelledEvent`** (user chốt A1, 2026-11-12): giữ MATCH-001 2.10 rút yêu cầu `ACCEPTED` ở 6/W6; đội bị trừ điểm do huỷ / rút được cập nhật huy hiệu ở job hằng ngày (trễ tối đa ~1 ngày).
 - **Không tự cập nhật ngay** khi huỷ kèo đã ghép / rút yêu cầu đã chấp nhận (MATCH-001), đổi đội trưởng (USER-001 transfer), đổi số điện thoại, xoá tài khoản: chờ job hằng ngày (Q6-B, A1) — ngoại lệ "thu hồi ngay" đã ghi ở SRS `Business_Rules.md` §8.2 (v1.8).
 
-**`TeamVerificationJobService.reconcileAll()`** (+ `TeamVerificationScheduler` ở `api/scheduler`, `@Scheduled(cron = "${arenaflow.reputation.verification.cron}", zone = "Asia/Ho_Chi_Minh")`): lặp lô theo khoá `id` tăng dần: `TeamRepository.findIdsForVerification(afterId, batchSize)` → `refreshVerification(ids, now)` → event; mỗi lô một `TransactionTemplate`. Không theo mẫu claim của ADR-0012 vì không chuyển trạng thái theo hàng đợi: câu refresh tự có điều kiện "trạng thái đổi" → hai instance chạy trùng không phát event trùng (bên sau thấy dòng đã đổi).
+**`TeamVerificationJobService.reconcileAll()`** (+ `TeamVerificationScheduler` ở `api/scheduler`, `@Scheduled(cron = "${arenaflow.reputation.verification.cron}", zone = AppTime.ZONE_ID)`): lặp lô theo khoá `id` tăng dần: `TeamRepository.findIdsForVerification(afterId, batchSize)` → `refreshVerification(ids, now)` → event; mỗi lô một `TransactionTemplate`. Không theo mẫu claim của ADR-0012 vì không chuyển trạng thái theo hàng đợi: câu refresh tự có điều kiện "trạng thái đổi" → hai instance chạy trùng không phát event trùng (bên sau thấy dòng đã đổi).
 
 ### 4.9. Guard trận cho đánh giá / report
 
@@ -211,7 +211,7 @@ Không thêm component: `RatingServiceImpl` / `ReportServiceImpl` đọc một `
 
 ## 5. Repository & Data Model
 
-### 5.1. Migration `V8__reputation_rating_report_dispute.sql`
+### 5.1. Migration `V9__reputation_rating_report_dispute.sql`
 
 ```sql
 -- rating: sao nguyên 1..5 (Q14), "không đến" (Q1), tỷ số theo góc nhìn đội đánh giá, người gửi, FK trận
@@ -243,7 +243,7 @@ ALTER TABLE report ALTER COLUMN reason SET NOT NULL;
 ALTER TABLE report ADD CONSTRAINT report_reason_length_check CHECK (char_length(reason) BETWEEN 1 AND 1000);
 ALTER TABLE report ADD COLUMN reliability_penalty INTEGER NOT NULL DEFAULT 0 CHECK (reliability_penalty >= 0);
 ALTER TABLE report ADD COLUMN created_by_user_id UUID NOT NULL REFERENCES "user"(id) ON DELETE RESTRICT;
-ALTER TABLE report ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE report ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh');
 ALTER TABLE report ADD CONSTRAINT report_match_fk FOREIGN KEY (match_id) REFERENCES match(id) ON DELETE RESTRICT;
 ALTER TABLE report ADD CONSTRAINT report_not_self_check CHECK (NOT (reporter_type = reported_type AND reporter_id = reported_id));
 DROP INDEX idx_report_match;
@@ -263,9 +263,9 @@ CREATE TABLE dispute (
     decision VARCHAR(20) CHECK (decision IN ('CONFIRMED', 'REJECTED')),
     resolution_note VARCHAR(500) CHECK (resolution_note IS NULL OR char_length(resolution_note) BETWEEN 1 AND 500),
     resolved_by_user_id UUID REFERENCES "user"(id) ON DELETE RESTRICT,
-    resolved_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh'),
+    updated_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh'),
     CONSTRAINT dispute_resolution_check CHECK (
         (status = 'PENDING' AND decision IS NULL AND resolution_note IS NULL AND resolved_by_user_id IS NULL AND resolved_at IS NULL)
         OR (status = 'RESOLVED' AND decision IS NOT NULL AND resolution_note IS NOT NULL AND resolved_by_user_id IS NOT NULL AND resolved_at IS NOT NULL))
@@ -276,11 +276,11 @@ CREATE INDEX idx_dispute_status_created ON dispute(status, created_at, id);
 -- team / user: Completion Rate, sao trung bình tính khi đọc (Q5); huy hiệu dẫn xuất (Q6)
 ALTER TABLE team DROP COLUMN total_matches_completed, DROP COLUMN total_matches_confirmed, DROP COLUMN average_rating;
 ALTER TABLE "user" DROP COLUMN total_matches_completed, DROP COLUMN total_matches_confirmed, DROP COLUMN average_rating;
-ALTER TABLE team ADD COLUMN verified_at TIMESTAMPTZ;
+ALTER TABLE team ADD COLUMN verified_at TIMESTAMP;
 ```
-- **Dữ liệu cũ:** đã kiểm Neon dev `misty-dew-90700890` (branch mặc định) ngày 2026-11-12 — `rating`, `report`, `match` 0 dòng; không đội nào có `total_matches_*`/`average_rating`/`clean_streak` khác mặc định; Flyway ở **V4**. Tên constraint V1 (`rating_score_check`, `rating_match_score_*_check`, `report_status_check`) và `user_check` (`total_matches_completed <= total_matches_confirmed` — tự xoá theo `DROP COLUMN`) đã đối chiếu `pg_constraint` cùng ngày. Môi trường khác có dữ liệu: `NOT NULL` cột mới không mặc định (`created_by_user_id`) làm V8 lỗi → dừng, báo, không tự sửa dữ liệu.
-- **Số hiệu V8:** code có V1–V4; thiết kế đã chiếm V5 (VENUE-001), V6 (MATCH-001), V7 (MATCH-002). Flyway không chạy out-of-order → V8 chỉ áp sau V5–V7 `[cần xác nhận #8]`.
-- Index: `idx_report_unique` (chống trùng + tra report theo trận — tiền tố `match_id` thay `idx_report_match`); `idx_report_*_created` cho 2.4 (lọc + sắp xếp); `idx_dispute_status_created` cho 2.6 (đọc xuôi `PENDING`, đọc ngược `RESOLVED`); `idx_rating_unique` (V1, tiền tố `match_id`) cho 2.2/2.7; `idx_rating_ratee` (V1) cho sao trung bình; Completion Rate dùng `idx_match_author_status` (V1) + `idx_match_opponent_status` (V6). `idx_report_status` bỏ vì không còn truy vấn lọc theo trạng thái report.
+- **Dữ liệu cũ:** đã kiểm Neon dev `misty-dew-90700890` (branch mặc định) ngày 2026-11-12 — `rating`, `report`, `match` 0 dòng; không đội nào có `total_matches_*`/`average_rating`/`clean_streak` khác mặc định; Flyway ở **V4**. Tên constraint V1 (`rating_score_check`, `rating_match_score_*_check`, `report_status_check`) và `user_check` (`total_matches_completed <= total_matches_confirmed` — tự xoá theo `DROP COLUMN`) đã đối chiếu `pg_constraint` cùng ngày. Môi trường khác có dữ liệu: `NOT NULL` cột mới không mặc định (`created_by_user_id`) làm V9 lỗi → dừng, báo, không tự sửa dữ liệu.
+- **Số hiệu V9:** code có V1–V5 (V5 = VENUE-001); thiết kế đã chiếm V6 (SYSTEM-002), V7 (MATCH-001), V8 (MATCH-002). Flyway không chạy out-of-order → V9 chỉ áp sau V5–V8 `[cần xác nhận #8]`.
+- Index: `idx_report_unique` (chống trùng + tra report theo trận — tiền tố `match_id` thay `idx_report_match`); `idx_report_*_created` cho 2.4 (lọc + sắp xếp); `idx_dispute_status_created` cho 2.6 (đọc xuôi `PENDING`, đọc ngược `RESOLVED`); `idx_rating_unique` (V1, tiền tố `match_id`) cho 2.2/2.7; `idx_rating_ratee` (V1) cho sao trung bình; Completion Rate dùng `idx_match_author_status` (V1) + `idx_match_opponent_status` (V7). `idx_report_status` bỏ vì không còn truy vấn lọc theo trạng thái report.
 - FK `rating.match_id`, `report.match_id` (V1 thiếu) — `ON DELETE RESTRICT` (ADR-0002). `rater_id`/`reported_id` đa hình (TEAM/USER) → không FK.
 
 ### 5.2. Repository
@@ -294,12 +294,12 @@ List<Rating> findByMatchIdAndRaterTypeOrderByCreatedAtAsc(UUID matchId, Rating.R
 List<TeamReportView> findTeamReports(UUID teamId, String direction, int limit, long offset);  // native
 long countTeamReports(UUID teamId, String direction);
 Optional<DisputeContextView> findDisputeContext(UUID reportId, UUID callerId);
-@Modifying int markDisputed(UUID reportId, OffsetDateTime now, OffsetDateTime createdAfter);
-Optional<ReportDecisionView> applyDecision(UUID reportId, String decision, OffsetDateTime now); // UPDATE … RETURNING
+@Modifying int markDisputed(UUID reportId, LocalDateTime now, LocalDateTime createdAfter);
+Optional<ReportDecisionView> applyDecision(UUID reportId, String decision, LocalDateTime now); // UPDATE … RETURNING
 Optional<ChatReportContextView> findChatReportContext(UUID conversationId, UUID callerId);      // v1.2 — 2.10
 
 // DisputeRepository extends JpaRepository<Dispute, UUID>
-Optional<UUID> resolveIfPending(UUID id, String decision, String note, UUID adminId, OffsetDateTime now); // UPDATE … RETURNING report_id
+Optional<UUID> resolveIfPending(UUID id, String decision, String note, UUID adminId, LocalDateTime now); // UPDATE … RETURNING report_id
 List<AdminDisputeView> findAdminDisputes(String status, boolean oldestFirst, int limit, long offset);
 long countAdminDisputes(String status);
 Optional<AdminDisputeDetailView> findAdminDisputeDetail(UUID id);
@@ -307,15 +307,15 @@ Optional<AdminDisputeDetailView> findAdminDisputeDetail(UUID id);
 // MatchRepository (sửa)
 Optional<RatingContextView> findRatingContext(UUID matchId, UUID callerId);
 Optional<ReportContextView> findReportContext(UUID matchId, UUID callerId, String reportType);
-@Modifying int completeIfArchived(UUID matchId, OffsetDateTime now);
+@Modifying int completeIfArchived(UUID matchId, LocalDateTime now);
 
 // TeamRepository (sửa)
 @Modifying int adjustReliability(UUID id, int delta, boolean breaksCleanStreak);          // MATCH-001 — thêm tham số
 List<ScoreChangeView> applyCompletion(UUID matchId, UUID[] ids, boolean[] completes, int[] bonuses, …hằng ReputationRules);
 Optional<ScoreChangeView> applyReportPenalty(UUID id, String type, int[] tiers);
 @Modifying int refundReportPenalty(UUID id, String type, int points);
-Optional<TeamReputationView> findReputation(UUID teamId, OffsetDateTime now);
-List<VerificationChangeView> refreshVerification(UUID[] ids, OffsetDateTime now, …ngưỡng huy hiệu);
+Optional<TeamReputationView> findReputation(UUID teamId, LocalDateTime now);
+List<VerificationChangeView> refreshVerification(UUID[] ids, LocalDateTime now, …ngưỡng huy hiệu);
 List<UUID> findIdsForVerification(UUID afterId, int limit);
 ```
 Câu `… RETURNING` khai báo native trả projection, không `@Modifying` (MATCH-002 `[cần xác nhận #4]`).
@@ -345,7 +345,7 @@ Ghi chú SQL:
   FROM calc c WHERE t.id = c.id
   RETURNING t.id, c.old_score, t.reliability_score AS new_score
   ```
-  v1.2 (user chốt 2026-11-15): trận "sạch" chỉ xét report của **đội đối phương thật** (`reporter_id` là đội tạo kèo / đội đã ghép, khác chính đội — `report_not_self_check`); report của **mercenary đã được duyệt của trận** được MERCENARY-001 thêm vào câu này khi code (`OR EXISTS mercenary_application … status = 'APPROVED'` theo `report.application_id` — cột có từ V9; MERCENARY-001 `Component_Class_Design.md` §4.12, review 2026-11-15) — V8 chưa có report từ mercenary nên mã này không cần mệnh đề đó; report "giao tiếp tệ" qua chat (2.10) của đội không được ghép bỏ qua (đã đưa chuỗi về 0 lúc gửi bằng `applyReportPenalty`). `JOIN match` (khoá chính) trong `EXISTS` — cùng câu, không thêm truy vấn. `ORDER BY t.id FOR NO KEY UPDATE` khoá hai đội theo thứ tự id cố định (chống deadlock giữa hai trận cùng cặp đội); `old_score` đọc sau khi khoá → điểm trước thay đổi `[cần xác nhận #6]`.
+  v1.2 (user chốt 2026-11-15): trận "sạch" chỉ xét report của **đội đối phương thật** (`reporter_id` là đội tạo kèo / đội đã ghép, khác chính đội — `report_not_self_check`); report của **mercenary đã được duyệt của trận** được MERCENARY-001 thêm vào câu này khi code (`OR EXISTS mercenary_application … status = 'APPROVED'` theo `report.application_id` — cột có từ V10; MERCENARY-001 `Component_Class_Design.md` §4.12, review 2026-11-15) — V9 chưa có report từ mercenary nên mã này không cần mệnh đề đó; report "giao tiếp tệ" qua chat (2.10) của đội không được ghép bỏ qua (đã đưa chuỗi về 0 lúc gửi bằng `applyReportPenalty`). `JOIN match` (khoá chính) trong `EXISTS` — cùng câu, không thêm truy vấn. `ORDER BY t.id FOR NO KEY UPDATE` khoá hai đội theo thứ tự id cố định (chống deadlock giữa hai trận cùng cặp đội); `old_score` đọc sau khi khoá → điểm trước thay đổi `[cần xác nhận #6]`.
 - `applyReportPenalty`: `WITH locked AS (SELECT id, reliability_score AS old_score FROM team WHERE id = :id FOR NO KEY UPDATE) UPDATE team t SET report_count_<loại> = report_count_<loại> + 1` (4 cột viết bằng `CASE WHEN :type = '…' THEN … + 1 ELSE … END`, **không** nối chuỗi tên cột), `clean_streak = 0`, `reliability_score = GREATEST(0, t.reliability_score - (CAST(:tiers AS int[]))[LEAST(<bộ đếm loại đó> + 1, 4)]) FROM locked l WHERE t.id = l.id RETURNING l.old_score, t.reliability_score AS new_score`.
 - `refundReportPenalty`: `SET reliability_score = LEAST(100, reliability_score + :points), report_count_<loại> = GREATEST(0, report_count_<loại> - 1)` (CASE theo `:type`). `GREATEST(0, …)` vì bộ đếm có thể đã về 0 do mốc chuỗi.
 - `findChatReportContext` (v1.2): một câu = `ConversationSql.CONTEXT_COLUMNS` / `CONTEXT_JOINS` của MATCH-001 §5.2 (mọi loại ngữ cảnh, gồm cột người gọi, đội trưởng / người đã giải tán, trạng thái đội) + `EXISTS (SELECT 1 FROM conversation_message cm WHERE cm.conversation_id = c.id) AS has_messages` + `EXISTS (report BAD_COMMUNICATION chiều A → B của kèo) AS a_reported_b`, `EXISTS (… B → A) AS b_reported_a` (tiền tố `idx_report_unique`). Tên / ảnh đội bị report cho `counterpartTeam` có trong cột ngữ cảnh — không đọc lại. Policy dùng chung với chat nên quy tắc "ai là bên nào" một nơi.
@@ -411,11 +411,11 @@ RETURNING t.id, (t.verified_at IS NOT NULL) AS verified
 |---|---|
 | `rating.Rating` | `score`: `BigDecimal` → `Integer` (nullable, `SMALLINT`) · + `isNoShow` (`boolean`, `is_no_show`, `@Builder.Default false`) · `matchScoreHome/Away` → `raterTeamScore`, `rateeTeamScore` · + `createdByUserId` (`UUID`, `nullable = false`) · mọi cột `updatable = false` (đánh giá không sửa) |
 | `rating.Report` | `Status` → `{AUTO_ACCEPTED, DISPUTED, CONFIRMED, REJECTED}`, `@Builder.Default AUTO_ACCEPTED`, `status` `updatable = false` (chỉ đổi bằng CAS native — ADR-0003 Sửa đổi 2026-11-12) · bỏ `adminReviewedAt` · `reason` `nullable = false` · + `reliabilityPenalty` (`Integer`, `@Builder.Default 0`; ghi một lần bằng dirty checking trong 2.3) · + `createdByUserId` · + `updatedAt` (`@PrePersist`/`@PreUpdate`, `@Setter(NONE)`) |
-| `rating.Dispute` (mới) | Map V8; `@UuidGenerator(VERSION_7)` (ADR-0008); `status` (`enum {PENDING, RESOLVED}`), `decision` (`enum {CONFIRMED, REJECTED}`), `resolutionNote`, `resolvedByUserId`, `resolvedAt` đều `updatable = false` (chỉ `resolveIfPending`); `createdAt`/`updatedAt` như `Report` |
+| `rating.Dispute` (mới) | Map V9; `@UuidGenerator(VERSION_7)` (ADR-0008); `status` (`enum {PENDING, RESOLVED}`), `decision` (`enum {CONFIRMED, REJECTED}`), `resolutionNote`, `resolvedByUserId`, `resolvedAt` đều `updatable = false` (chỉ `resolveIfPending`); `createdAt`/`updatedAt` như `Report` |
 | `team.Team` | Bỏ `totalMatchesCompleted`, `totalMatchesConfirmed`, `averageRating` · `cleanStreak`, `reportCount*` thêm `updatable = false` (ADR-0013 §4) · + `verifiedAt` (`insertable = false, updatable = false` — chỉ `refreshVerification`) |
 | `user.User` | Bỏ `totalMatchesCompleted`, `totalMatchesConfirmed`, `averageRating` · `cleanStreak`, `reportCount*` thêm `updatable = false` |
 
-Kiểm bằng migration integration test (`ddl-auto=validate` sau V8) + test entity: sửa `Team`/`User` qua dirty checking không ghi đè `clean_streak`, `report_count_*`, `verified_at`.
+Kiểm bằng migration integration test (`ddl-auto=validate` sau V9) + test entity: sửa `Team`/`User` qua dirty checking không ghi đè `clean_streak`, `report_count_*`, `verified_at`.
 
 ## 7. DTO & Mapper
 
@@ -423,7 +423,7 @@ Kiểm bằng migration integration test (`ddl-auto=validate` sau V8) + test ent
 - `CreateRatingRequest(Boolean isNoShow, Integer score, @Size(max = 500) String comment, @Min(0) @Max(999) Integer raterTeamScore, @Min(0) @Max(999) Integer rateeTeamScore)` + `@ValidRating` (mức lớp): `isNoShow` vắng → `false`; `!isNoShow` → `score` 1..5 bắt buộc; `isNoShow` → `score`, hai tỷ số phải `null`; hai tỷ số cùng có hoặc cùng vắng. Lỗi gắn property node theo tên field (`score`, `raterTeamScore`…) như `@ValidMatchSchedule`.
 - `CreateReportRequest(@NotNull @OneOf({"NOSHOW","BAD_PLAY","BAD_COMMUNICATION","SKILL_MISMATCH"}) String reportType, @NotBlank @Size(max = 1000) String reason)`.
 - `CreateDisputeRequest(@NotBlank @Size(max = 1000) String evidence)`; `ResolveDisputeRequest(@NotNull @OneOf({"CONFIRMED","REJECTED"}) String decision, @NotBlank @Size(max = 500) String note)`.
-- `ReputationMapper` (`componentModel = "spring"`, `uses MapperSupport`, `unmappedTargetPolicy = ERROR`): `toRating(Rating|MatchRatingRowView)`, `toCreated(Rating, Match.Status)`, `toReport(TeamReportView, ReportDirection, OffsetDateTime now)` (status hiệu lực §4.10), `toCreatedReport(Report, ReportContextView…)`, `toDisputeCreated(Dispute)`, `toAdminDispute(AdminDisputeView)`, `toAdminDetail(AdminDisputeDetailView, List<Rating>)`, `toReputation(TeamReputationView)`. Tên user Admin không qua `DeletedUserMasking`.
+- `ReputationMapper` (`componentModel = "spring"`, `uses MapperSupport`, `unmappedTargetPolicy = ERROR`): `toRating(Rating|MatchRatingRowView)`, `toCreated(Rating, Match.Status)`, `toReport(TeamReportView, ReportDirection, LocalDateTime now)` (status hiệu lực §4.10), `toCreatedReport(Report, ReportContextView…)`, `toDisputeCreated(Dispute)`, `toAdminDispute(AdminDisputeView)`, `toAdminDetail(AdminDisputeDetailView, List<Rating>)`, `toReputation(TeamReputationView)`. Tên user Admin không qua `DeletedUserMasking`.
 - `averageRating`, `completionRate`: `BigDecimal.setScale(…, HALF_UP)` ở mapper.
 
 ## 8. Cấu hình & Dependencies
@@ -464,7 +464,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 
 | Tài liệu | Nội dung | Nhánh |
 |---|---|---|
-| `docs/database/schema.dbml`, `schema-design.md` (`rating`, `report`, `team`, `user`) | V8: cột/CHECK/index/FK mới, bảng `dispute`, bỏ `total_matches_*`, `average_rating`, `admin_reviewed_at` | `feature/REPUTATION-001-*` |
+| `docs/database/schema.dbml`, `schema-design.md` (`rating`, `report`, `team`, `user`) | V9: cột/CHECK/index/FK mới, bảng `dispute`, bỏ `total_matches_*`, `average_rating`, `admin_reviewed_at` | `feature/REPUTATION-001-*` |
 | `docs/agent/api-convention.md` §5, §6 | 9 endpoint vào bảng 2xx (§3) + v1.2 `POST /conversations/{id}/reports` 201 B2; domain `RATING`, `REPORT` (gồm `REPORT_009`..`REPORT_011`), `DISPUTE` | `chore/agent-framework-*` |
 | `docs/agent/convention-backend.md` §1 | `support/reputation/` | `chore/agent-framework-*` |
 | `docs/agent/CLAUDE.md` §2 | Dòng điều hướng REPUTATION-001 | `chore/agent-framework-*` |
@@ -479,7 +479,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 | 5 | Native `UPDATE … RETURNING` không `@Modifying` trả projection — cùng MATCH-002 `[cần xác nhận #4]` (chặn code bước đầu phase 1 của MATCH-002). Không chạy được → `@Modifying` + đọc lại: 2.1 hoàn tất 5 → 6 (= W6), 2.8 `REJECTED` 6 → 7 (**vượt** W6 → dừng, hỏi user) | **Chặn code** nếu MATCH-002 chưa kiểm |
 | 6 | CTE `… FOR NO KEY UPDATE` + `UPDATE … FROM` trả `old_score` là điểm sau khi chờ khoá (không phải snapshot đầu câu) [Inference — chưa chạy] | Không chặn — integration test đầu tiên của `applyReportPenalty` với hai giao dịch đồng thời |
 | 7 | Bind mảng `uuid[]`/`boolean[]`/`int[]` vào native query (cùng MATCH-001 `[cần xác nhận #1]`, MATCH-002 `[cần xác nhận #2]`) | Không chặn |
-| 8 | **Thứ tự implement:** V8 cần V5–V7 (VENUE-001, MATCH-001, MATCH-002) đã code — MATCH-001 `[cần xác nhận #5]` | **Chặn code** — implement sau ba mã kia |
+| 8 | **Thứ tự implement:** V9 cần V5–V8 (VENUE-001, SYSTEM-002, MATCH-001, MATCH-002) đã code — MATCH-001 `[cần xác nhận #5]` | **Chặn code** — implement sau ba mã kia |
 | 9 | Mở transaction mới (`REQUIRES_NEW`) trong `afterCommit` (Spring: tài nguyên transaction cũ còn bind lúc `afterCommit`) [Inference — theo Javadoc `TransactionSynchronization`] | Không chặn — test tích hợp refresher |
 | 10 | Kiểm `spring.task.scheduling.pool.size` 4 đủ (MATCH-001 `[cần xác nhận #10]`) | Không chặn |
 | 11 | ~~Thông báo "rating nhận" (Business_Rules §8.6) mâu thuẫn BC-R04~~ — **Đóng v1.3 (user chốt Q3, 2026-11-16):** "nhận đánh giá" chỉ gửi khi người nhận đã đánh giá trước; nhắc đánh giá gửi lúc `ARCHIVED`; `ARCHIVED → COMPLETED` không báo (NOTIFICATION-001 `Component_Class_Design.md` §4.3). Payload `MatchRatedEvent` không đổi | Đã đóng |
@@ -509,5 +509,5 @@ Thiết kế chi tiết ở MERCENARY-001 `Component_Class_Design.md` §4.10, §
 | §4.8 huy hiệu | `TeamVerificationRefresher` → `VerificationRefresher` (gom id đội + cá nhân, tối đa 1 câu mỗi loại); `TeamVerificationJobService` / `TeamVerificationScheduler` → `VerificationJobService` / `VerificationScheduler` (thêm vòng cá nhân) |
 | §5.2, §5.3 truy vấn đội ↔ đội | `findRatingContext` (`authorRated`/`opponentRated`), `findMatchRatingRows`, `findByMatchIdAndRaterType…`, `findReportContext`, `findTeamReports`/`countTeamReports`, `findAdminDisputes`/`countAdminDisputes`/`findAdminDisputeDetail`, `resolveIfPending`, sao trung bình trong `TeamReputationSql.STATS`: thêm `application_id IS NULL`. `noshow` của STATS **giữ** mọi report bùng nhắm vào đội của kèo; trận sạch trong `applyCompletion` xét report của đối thủ thật + mercenary (v1.2, user chốt 2026-11-15) (kể cả từ mercenary — BR-ME14, user chốt 2026-11-14); report trận ngoài hệ thống có `match_id = NULL` nên không vào STATS |
 | §5.2 `applyDecision` | `RETURNING` thêm `reported_type` |
-| Migration | Cột `application_id`, `external_match_id` của `rating`/`report` (`match_id` thành nullable — luồng đội ↔ đội luôn có, CHECK của V9), `"user".verified_at`: V9 (MERCENARY-001 §5.1); V8 không đổi |
+| Migration | Cột `application_id`, `external_match_id` của `rating`/`report` (`match_id` thành nullable — luồng đội ↔ đội luôn có, CHECK của V10), `"user".verified_at`: V10 (MERCENARY-001 §5.1); V9 không đổi |
 | §4.3 `findDisputeContext` | Không `JOIN match` bắt buộc (report trận ngoài có `match_id = NULL`) |

@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, định dạng lỗi, kiểu dữ liệu); quy ước chung và lỗi chung USER-001 `API_Spec.md` §1.1, §1.2; kèo, trạng thái kèo, yêu cầu ghép kèo luồng A, thoả thuận chi phí, mã `MATCH_*`/`SPORT_*`: MATCH-001 `API_Spec.md`; mã `TEAM_*`: USER-001/USER-002 `API_Spec.md`; mã `VENUE_002`: VENUE-001 `API_Spec.md`; chat dùng chung (cuộc trò chuyện, endpoint, kênh realtime, mã `CHAT_*`): MATCH-001 `API_Spec.md` §1.6, §1.7, 2.16–2.20; report "giao tiếp tệ" qua chat: REPUTATION-001 `API_Spec.md` 2.10; [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (kênh realtime) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10) — UC-M05, M06, M07, M09, UC-N01, UC-C01, C02 (luồng B); UC-M03, M04 (mở chat luồng A); BR-M07, BR-M08, BR-M13..BR-M15, BR-M17..BR-M21, BR-C01..C05, BR-N01, BR-N03..BR-N05, BC-N04; Business_Rules §2.3; AC-M04, AC-M05, AC-C01, AC-N01, AC-N03; Scenario 2, 3, 12 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v2.1** (solution-architect · 2026-11-16) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -29,7 +29,7 @@ Trong một thương lượng, hai đội trưởng:
 
 ### 1.1. Quy ước chung
 
-- Theo USER-001 `API_Spec.md` §1.1, §1.2 (xác thực Bearer, envelope, `400 VALIDATION_ERROR`, `401 AUTH_001` → refresh token, `SYS_*`) và MATCH-001 `API_Spec.md` §1.1 (thời gian ISO-8601 trả UTC, tiền VND số nguyên, chuỗi được bỏ khoảng trắng đầu/cuối, `""` ở field tuỳ chọn = không nhập, enum UPPERCASE).
+- Theo USER-001 `API_Spec.md` §1.1, §1.2 (xác thực Bearer, envelope, `400 VALIDATION_ERROR`, `401 AUTH_001` → refresh token, `SYS_*`) và MATCH-001 `API_Spec.md` §1.1 (thời gian ISO-8601 giờ Việt Nam không kèm múi giờ — SYSTEM-002 `API_Spec.md` §1.1, tiền VND số nguyên, chuỗi được bỏ khoảng trắng đầu/cuối, `""` ở field tuỳ chọn = không nhập, enum UPPERCASE).
 - Danh sách thương lượng (2.2, 2.3) phân trang `page` / `pageSize` như MATCH-001.
 - `201` không kèm header `Location` — lấy id từ body.
 
@@ -98,7 +98,7 @@ Kênh realtime (kết nối, đăng ký, lỗi, bù tin sau khi kết nối lạ
 
 ```json
 { "type": "PAIRING_UPDATED", "pairingId": "01933d40-7e8f-7a90-8b1c-2d3e4f5a6b01", "status": "NEGOTIATING",
-  "revision": 3, "authorConfirmedAt": "2026-11-10T08:10:00Z", "interestedConfirmedAt": null, "confirmedAt": null,
+  "revision": 3, "authorConfirmedAt": "2026-11-10T15:10:00", "interestedConfirmedAt": null, "confirmedAt": null,
   "change": "CONFIRMATION" }
 ```
 
@@ -157,7 +157,7 @@ Tạo thương lượng `NEGOTIATING`, `revision = 0`, chưa có phương án / 
     "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e31",
     "status": "NEGOTIATING",
     "revision": 0,
-    "matchExpiresAt": "2026-11-12T05:00:00Z",
+    "matchExpiresAt": "2026-11-12T12:00:00",
     "authorTeam": { "teamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01", "teamName": "Team Alpha", "avatarUrl": null, "reliabilityScore": 80, "captainName": "Minh" },
     "interestedTeam": { "teamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02", "teamName": "Team Beta", "avatarUrl": null, "reliabilityScore": 75, "captainName": "Nam" },
     "proposal": null,
@@ -168,8 +168,8 @@ Tạo thương lượng `NEGOTIATING`, `revision = 0`, chưa có phương án / 
       "costType": null, "costSplit": null, "venueAmount": null, "drinksAmount": null,
       "depositAmount": null, "depositHolder": null, "customItems": []
     },
-    "createdAt": "2026-11-10T07:55:00Z",
-    "updatedAt": "2026-11-10T07:55:00Z"
+    "createdAt": "2026-11-10T14:55:00",
+    "updatedAt": "2026-11-10T14:55:00"
   }
 }
 ```
@@ -228,12 +228,12 @@ Tạo thương lượng `NEGOTIATING`, `revision = 0`, chưa có phương án / 
       "proposalVenueId": "01933a10-4b5c-7d6e-8f70-81a2b3c4d5e2",
       "proposalTimeOptionId": "01933b70-1a2b-7c3d-8e4f-5a6b7c8d9e11",
       "authorConfirmedAt": null,
-      "interestedConfirmedAt": "2026-11-10T08:05:00Z",
+      "interestedConfirmedAt": "2026-11-10T15:05:00",
       "confirmedAt": null,
-      "matchStartsAt": "2026-11-12T11:00:00Z",
-      "matchExpiresAt": "2026-11-12T05:00:00Z",
-      "createdAt": "2026-11-10T07:55:00Z",
-      "updatedAt": "2026-11-10T08:05:00Z"
+      "matchStartsAt": "2026-11-12T18:00:00",
+      "matchExpiresAt": "2026-11-12T12:00:00",
+      "createdAt": "2026-11-10T14:55:00",
+      "updatedAt": "2026-11-10T15:05:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
@@ -286,13 +286,13 @@ Tạo thương lượng `NEGOTIATING`, `revision = 0`, chưa có phương án / 
       "interestedTeamReliabilityScore": 75,
       "proposalVenueId": "01933a10-4b5c-7d6e-8f70-81a2b3c4d5e2",
       "proposalTimeOptionId": "01933b70-1a2b-7c3d-8e4f-5a6b7c8d9e11",
-      "authorConfirmedAt": "2026-11-10T08:10:00Z",
-      "interestedConfirmedAt": "2026-11-10T08:06:00Z",
-      "confirmedAt": "2026-11-10T08:10:00Z",
-      "matchStartsAt": "2026-11-12T11:00:00Z",
-      "matchExpiresAt": "2026-11-12T05:00:00Z",
-      "createdAt": "2026-11-10T07:55:00Z",
-      "updatedAt": "2026-11-10T08:10:00Z"
+      "authorConfirmedAt": "2026-11-10T15:10:00",
+      "interestedConfirmedAt": "2026-11-10T15:06:00",
+      "confirmedAt": "2026-11-10T15:10:00",
+      "matchStartsAt": "2026-11-12T18:00:00",
+      "matchExpiresAt": "2026-11-12T12:00:00",
+      "createdAt": "2026-11-10T14:55:00",
+      "updatedAt": "2026-11-10T15:10:00"
     },
     {
       "pairingId": "01933d40-7e8f-7a90-8b1c-2d3e4f5a6b07",
@@ -310,10 +310,10 @@ Tạo thương lượng `NEGOTIATING`, `revision = 0`, chưa có phương án / 
       "authorConfirmedAt": null,
       "interestedConfirmedAt": null,
       "confirmedAt": null,
-      "matchStartsAt": "2026-11-15T12:00:00Z",
-      "matchExpiresAt": "2026-11-15T06:00:00Z",
-      "createdAt": "2026-11-10T07:40:00Z",
-      "updatedAt": "2026-11-10T07:40:00Z"
+      "matchStartsAt": "2026-11-15T19:00:00",
+      "matchExpiresAt": "2026-11-15T13:00:00",
+      "createdAt": "2026-11-10T14:40:00",
+      "updatedAt": "2026-11-10T14:40:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 2 }
@@ -348,7 +348,7 @@ Phía của đội mình: so `teamId` với `authorTeamId` (kèo của đội m�
     "conversationId": "01933d41-1a2b-7c3d-8e4f-5a6b7c8d9e31",
     "status": "NEGOTIATING",
     "revision": 2,
-    "matchExpiresAt": "2026-11-12T05:00:00Z",
+    "matchExpiresAt": "2026-11-12T12:00:00",
     "authorTeam": { "teamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01", "teamName": "Team Alpha", "avatarUrl": null, "reliabilityScore": 80, "captainName": "Minh" },
     "interestedTeam": { "teamId": "01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e02", "teamName": "Team Beta", "avatarUrl": null, "reliabilityScore": 75, "captainName": "Lan" },
     "proposal": {
@@ -357,19 +357,19 @@ Phía của đội mình: so `teamId` với `authorTeamId` (kèo của đội m�
       "address": "10 Lê Lợi, Phường Bến Nghé, TP.HCM",
       "venueStatus": "ACTIVE",
       "timeOptionId": "01933b70-1a2b-7c3d-8e4f-5a6b7c8d9e11",
-      "startsAt": "2026-11-12T11:00:00Z",
-      "endsAt": "2026-11-12T13:00:00Z"
+      "startsAt": "2026-11-12T18:00:00",
+      "endsAt": "2026-11-12T20:00:00"
     },
     "authorConfirmedAt": null,
-    "interestedConfirmedAt": "2026-11-10T08:05:00Z",
+    "interestedConfirmedAt": "2026-11-10T15:05:00",
     "confirmedAt": null,
     "costAgreement": {
       "costType": "VENUE_ONLY", "costSplit": "FIFTY_FIFTY", "venueAmount": 600000, "drinksAmount": null,
       "depositAmount": 200000, "depositHolder": "Đội chủ nhà",
       "customItems": [ { "itemId": "01933d50-1a2b-7c3d-8e4f-5a6b7c8d9e21", "itemName": "Tiền trọng tài", "amount": 200000 } ]
     },
-    "createdAt": "2026-11-10T07:55:00Z",
-    "updatedAt": "2026-11-10T08:05:00Z"
+    "createdAt": "2026-11-10T14:55:00",
+    "updatedAt": "2026-11-10T15:05:00"
   }
 }
 ```
@@ -425,11 +425,11 @@ Thay phương án cũ. Kiểm theo thứ tự: `revision` (khác giá trị hi�
       "venueId": "01933a10-4b5c-7d6e-8f70-81a2b3c4d5e2", "venueName": "Sân Y",
       "address": "10 Lê Lợi, Phường Bến Nghé, TP.HCM", "venueStatus": "ACTIVE",
       "timeOptionId": "01933b70-1a2b-7c3d-8e4f-5a6b7c8d9e11",
-      "startsAt": "2026-11-12T11:00:00Z", "endsAt": "2026-11-12T13:00:00Z"
+      "startsAt": "2026-11-12T18:00:00", "endsAt": "2026-11-12T20:00:00"
     },
     "authorConfirmedAt": null,
     "interestedConfirmedAt": null,
-    "updatedAt": "2026-11-10T08:02:00Z"
+    "updatedAt": "2026-11-10T15:02:00"
   }
 }
 ```
@@ -505,7 +505,7 @@ Mỗi lần gửi **thay toàn bộ** thoả thuận cũ (kể cả khoản tự
     },
     "authorConfirmedAt": null,
     "interestedConfirmedAt": null,
-    "updatedAt": "2026-11-10T08:04:00Z"
+    "updatedAt": "2026-11-10T15:04:00"
   }
 }
 ```
@@ -563,9 +563,9 @@ Ghi xác nhận của phía `teamId` cho gói ở `revision` gửi lên. Phía c
     "pairingId": "01933d40-7e8f-7a90-8b1c-2d3e4f5a6b01",
     "status": "CONFIRMED",
     "revision": 3,
-    "authorConfirmedAt": "2026-11-10T08:10:00Z",
-    "interestedConfirmedAt": "2026-11-10T08:06:00Z",
-    "confirmedAt": "2026-11-10T08:10:00Z",
+    "authorConfirmedAt": "2026-11-10T15:10:00",
+    "interestedConfirmedAt": "2026-11-10T15:06:00",
+    "confirmedAt": "2026-11-10T15:10:00",
     "matchId": "01933b6e-8f10-7a2c-9d41-2f6c1a7e5b02",
     "matchStatus": "CONFIRMED"
   }

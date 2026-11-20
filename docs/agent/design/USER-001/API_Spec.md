@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.9) — UC-U01..U03, UC-T01..T05, BR-U01..U06, BR-T01..T06, BR-ME18 (xoá tài khoản rút đơn mercenary — v4.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v4.4** (developer · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v5.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -26,7 +26,7 @@
 - **Base path** `/api/v1`, JSON, field camelCase. Thành công: body bọc trong `data`; danh sách thêm `pagination` (`api-convention.md` §4, §7).
 - **Xác thực:** header `Authorization: Bearer <accessToken>` cho mọi endpoint trừ `/api/v1/auth/*`. Access token hết hạn sau `expiresIn` giây (3600). Nhóm `/api/v1/auth/*` **bỏ qua** header `Authorization`: gửi kèm token sai/hết hạn không gây 401 — FE giữ interceptor gắn token cho mọi request được, kể cả `/auth/refresh`.
 - **ID:** UUID dạng chuỗi (UUID v7 — ADR-0008; id tạo trước đó có thể là phiên bản khác). Không suy thứ tự thời gian từ id — dùng `createdAt`.
-- **Thời gian:** chuỗi ISO-8601 kèm offset (vd `2026-11-02T14:00:00Z` hoặc `2026-11-02T21:00:00+07:00` — cùng một thời điểm). Hiện một số field có thể trả offset khác `Z` (vd `createdAt`/`updatedAt` ở 2.8, `invitedAt` ở 2.12, `transferredAt` ở 2.15, `timestamp` của lỗi); FE luôn đọc offset trong chuỗi, không giả định `Z`. Ngày sinh: `YYYY-MM-DD`.
+- **Thời gian:** chuỗi ISO-8601 theo giờ Việt Nam, **không** kèm múi giờ (vd `2026-11-02T21:00:00`; có thể kèm phần lẻ giây) ở mọi field và `timestamp` của lỗi — SYSTEM-002 `API_Spec.md` §1.1. Hiển thị nguyên giá trị, không đổi theo múi giờ máy. Ngày sinh: `YYYY-MM-DD`.
 - **Field `null`:** response luôn có đủ field; field không có giá trị trả `null` (không bị lược bỏ).
 - **Enum:** giá trị viết HOA (`ACTIVE`, `GOOGLE`…), trừ nhãn tiếng Việt (`preferredPosition`, `skillLevels`). Danh sách đầy đủ: §4.1.
 - **Chuỗi:** giới hạn độ dài tính trên chuỗi FE gửi. BE cắt khoảng trắng đầu/cuối trước khi lưu ở `displayName`, `teamName`, `reason` (tạm ngưng đội).
@@ -47,7 +47,7 @@ Envelope lỗi (`api-convention.md` §4.4, §11). `details` thường là `null`
     "code": "VALIDATION_ERROR",
     "message": "Dữ liệu không hợp lệ",
     "details": null,
-    "timestamp": "2026-11-10T14:00:00+07:00",
+    "timestamp": "2026-11-10T14:00:00",
     "path": "/api/v1/auth/send-otp",
     "validationErrors": [ { "field": "phone", "message": "…" } ]
   }
@@ -58,7 +58,7 @@ Envelope lỗi (`api-convention.md` §4.4, §11). `details` thường là `null`
 
 | HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
-| 400 | `VALIDATION_ERROR` | Sai định dạng/độ dài/enum, thiếu field bắt buộc, JSON sai cú pháp, thiếu body, id trên path không phải UUID, query param sai (`field` = tên tham số, vd `page`) | Hiện lỗi tại ô theo `field`; không gửi lại nguyên request |
+| 400 | `VALIDATION_ERROR` | Sai định dạng/độ dài/enum, thiếu field bắt buộc, JSON sai cú pháp, thiếu body, id trên path không phải UUID, query param sai (`field` = tên tham số, vd `page`). Field trong body sai kiểu / sai định dạng (vd `dateOfBirth` không phải `YYYY-MM-DD`) → `field` = đường dẫn field đó (vd `dateOfBirth`); JSON sai cú pháp / thiếu body → `field = "body"` (SYSTEM-002 `API_Spec.md` §2) | Hiện lỗi tại ô theo `field`; không gửi lại nguyên request |
 | 401 | `AUTH_001` | Thiếu access token, token sai, hết hạn, hoặc dùng refresh token thay access token (endpoint không thuộc `/auth/*`) | Gọi `POST /auth/refresh` (2.4) rồi thử lại **một** lần; refresh lỗi → về màn đăng nhập |
 | 403 | `AUTH_004` | Gọi `/api/v1/admin/*` khi tài khoản không phải `ADMIN` | Ẩn chức năng Admin với `role = USER` |
 | 404 | `SYS_001` | URL không khớp endpoint nào (đã đăng nhập) | Lỗi lập trình FE — kiểm tra path |
@@ -266,8 +266,8 @@ Refresh token **không** bị thu hồi sau khi dùng: dùng lại được tớ
       "provinceId": "0192f000-aaaa-7000-8000-000000000001",
       "provinceName": "TP. Hồ Chí Minh"
     },
-    "createdAt": "2026-11-01T10:00:00Z",
-    "updatedAt": "2026-11-02T10:00:00Z"
+    "createdAt": "2026-11-01T17:00:00",
+    "updatedAt": "2026-11-02T17:00:00"
   }
 }
 ```
@@ -373,8 +373,8 @@ Không chống gửi trùng: tên đội được trùng nên gửi 2 lần tạ
     "captainName": "Nguyễn Văn A",
     "memberCount": 1,
     "createdBy": "0193a1b2-c3d4-7e5f-8a6b-1c2d3e4f5a01",
-    "createdAt": "2026-11-02T18:00:00+07:00",
-    "updatedAt": "2026-11-02T18:00:00+07:00",
+    "createdAt": "2026-11-02T18:00:00",
+    "updatedAt": "2026-11-02T18:00:00",
     "disbandedAt": null,
     "disbandedById": null,
     "disbandedByName": null,
@@ -418,8 +418,8 @@ Không chống gửi trùng: tên đội được trùng nên gửi 2 lần tạ
     "captainName": "Nguyễn Văn A",
     "memberCount": 5,
     "createdBy": "0193a1b2-c3d4-7e5f-8a6b-1c2d3e4f5a01",
-    "createdAt": "2026-11-02T11:00:00Z",
-    "updatedAt": "2026-11-05T09:00:00Z",
+    "createdAt": "2026-11-02T18:00:00",
+    "updatedAt": "2026-11-05T16:00:00",
     "disbandedAt": null,
     "disbandedById": null,
     "disbandedByName": null,
@@ -468,7 +468,7 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
       "status": "ACTIVE",
       "captainName": "Nguyễn Văn A",
       "memberCount": 5,
-      "createdAt": "2026-11-02T11:00:00Z",
+      "createdAt": "2026-11-02T18:00:00",
       "disbandedByName": null
     }
   ],
@@ -541,7 +541,7 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
     "teamName": "Team Alpha",
     "userId": "0193a1b2-c3d4-7e5f-8a6b-1c2d3e4f5b02",
     "status": "PENDING",
-    "invitedAt": "2026-11-02T19:30:00+07:00"
+    "invitedAt": "2026-11-02T19:30:00"
   }
 }
 ```
@@ -585,7 +585,7 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
     "avatarUrl": null,
     "role": "MEMBER",
     "status": "ACTIVE",
-    "joinedAt": "2026-11-02T13:00:00Z"
+    "joinedAt": "2026-11-02T20:00:00"
   }
 }
 ```
@@ -645,7 +645,7 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
     "fromUserId": "0193a1b2-c3d4-7e5f-8a6b-1c2d3e4f5a01",
     "toUserId": "0193a1b2-c3d4-7e5f-8a6b-1c2d3e4f5b02",
     "reason": "Bận công tác dài ngày",
-    "transferredAt": "2026-11-02T21:00:00+07:00"
+    "transferredAt": "2026-11-02T21:00:00"
   }
 }
 ```
@@ -686,7 +686,7 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
       "toUserId": "0193a1b2-c3d4-7e5f-8a6b-1c2d3e4f5b02",
       "toUserName": "Trần Văn B",
       "reason": "Bận công tác dài ngày",
-      "transferredAt": "2026-11-02T14:00:00Z"
+      "transferredAt": "2026-11-02T21:00:00"
     },
     {
       "historyId": "0193a1e0-3333-7abc-9def-0123456789e0",
@@ -696,7 +696,7 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
       "toUserId": "0193a1b2-c3d4-7e5f-8a6b-1c2d3e4f5a01",
       "toUserName": "Nguyễn Văn A",
       "reason": null,
-      "transferredAt": "2026-11-02T11:00:00Z"
+      "transferredAt": "2026-11-02T18:00:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 2 }
@@ -733,7 +733,7 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
       "avatarUrl": "https://cdn.example.com/avatar/a.png",
       "role": "CAPTAIN",
       "status": "ACTIVE",
-      "joinedAt": "2026-11-02T11:00:00Z"
+      "joinedAt": "2026-11-02T18:00:00"
     },
     {
       "memberId": "0193a1d0-2222-7abc-9def-0123456789cd",
@@ -743,7 +743,7 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
       "avatarUrl": null,
       "role": "MEMBER",
       "status": "ACTIVE",
-      "joinedAt": "2026-11-02T13:00:00Z"
+      "joinedAt": "2026-11-02T20:00:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 2 }
@@ -815,8 +815,8 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
     "isCaptainDeleted": false,
     "memberCount": 5,
     "createdBy": "0193a1b2-c3d4-7e5f-8a6b-1c2d3e4f5a01",
-    "createdAt": "2026-11-02T11:00:00Z",
-    "updatedAt": "2026-11-05T09:00:00Z",
+    "createdAt": "2026-11-02T18:00:00",
+    "updatedAt": "2026-11-05T16:00:00",
     "disbandedAt": null,
     "disbandedById": null,
     "disbandedByName": null,
@@ -892,7 +892,7 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
       "captainName": "Nguyễn Văn A",
       "isCaptainDeleted": false,
       "memberCount": 5,
-      "createdAt": "2026-11-02T11:00:00Z",
+      "createdAt": "2026-11-02T18:00:00",
       "disbandedByName": null,
       "isDisbandedByDeleted": false
     },
@@ -906,7 +906,7 @@ GET /api/v1/teams?status=ACTIVE&page=1&pageSize=20
       "captainName": null,
       "isCaptainDeleted": false,
       "memberCount": 0,
-      "createdAt": "2026-11-01T08:00:00Z",
+      "createdAt": "2026-11-01T15:00:00",
       "disbandedByName": "Trần Văn C",
       "isDisbandedByDeleted": true
     }
@@ -975,7 +975,7 @@ Lời mời và tư cách thành viên là cùng một đối tượng: `invitat
 
 ### 4.2. Đối tượng response
 
-Kiểu `datetime` = chuỗi ISO-8601 kèm offset (§1.1). "Null?" = có thể là `null`.
+Kiểu `datetime` = chuỗi ISO-8601 giờ Việt Nam, không kèm múi giờ (§1.1). "Null?" = có thể là `null`.
 
 **`AuthResponse`** (2.1, 2.3, 2.4)
 

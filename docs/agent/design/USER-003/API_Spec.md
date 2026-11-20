@@ -13,7 +13,7 @@
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
 | Spec nghiệp vụ | `docs/agent/business-spec/USER-003/` (v1.0 — UC-U04, UC-U05, UC-T07, UC-T08; BR-U07..U17, BR-T15..T21) · `docs/agent/business-spec/SYSTEM-001/` (v1.12) |
 | Phụ thuộc | [`USER-001/API_Spec.md`](../USER-001/API_Spec.md) — hồ sơ, đội, mời / chấp nhận / từ chối lời mời; [`USER-002/API_Spec.md`](../USER-002/API_Spec.md) — giải tán đội, điều kiện xoá tài khoản |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-17 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-18) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-17 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -21,7 +21,7 @@ Bốn chức năng **chỉ xem** giúp hoàn thành các luồng đã có: chọ
 
 ### 1.1. Quy ước chung
 
-- Như USER-001 `API_Spec.md` §1.1: base path `/api/v1`, header `Authorization: Bearer <accessToken>` cho **mọi** endpoint ở đây (kể cả danh mục khu vực), id là UUID dạng chuỗi, thời gian ISO-8601 kèm offset, field không có giá trị trả `null`, enum viết HOA, thứ tự lỗi 401 trước 400.
+- Như USER-001 `API_Spec.md` §1.1: base path `/api/v1`, header `Authorization: Bearer <accessToken>` cho **mọi** endpoint ở đây (kể cả danh mục khu vực), id là UUID dạng chuỗi, thời gian ISO-8601 giờ Việt Nam không kèm múi giờ (SYSTEM-002 `API_Spec.md` §1.1), field không có giá trị trả `null`, enum viết HOA, thứ tự lỗi 401 trước 400.
 - **Phân trang:** 2.4, 2.5 phân trang offset như USER-001 §1.1 (`page` ≥ 1 mặc định 1, `pageSize` 1..100 mặc định 20, trang vượt quá → `data: []`; `pagination.totalItems` = tổng số phần tử).
 - **Không phân trang (ngoại lệ có chặn trên):**
   - 2.1, 2.2 trả **toàn bộ** danh mục trong một lần: danh mục chỉ đọc, số tỉnh/thành và số phường/xã của một tỉnh/thành có giới hạn tự nhiên; ứng dụng tự lọc khi người dùng gõ (BR-U07). `data` là mảng, **không** có `pagination`.
@@ -222,7 +222,7 @@ GET /api/v1/teams/0193a1c0-1111-7abc-9def-0123456789ab/invitation-candidates?q=a
   "data": [
     {
       "invitationId": "0193a1d0-2222-7abc-9def-0123456789cd",
-      "invitedAt": "2026-11-17T12:30:00Z",
+      "invitedAt": "2026-11-17T19:30:00",
       "team": {
         "teamId": "0193a1c0-1111-7abc-9def-0123456789ab",
         "teamName": "Team Alpha",
@@ -285,7 +285,7 @@ GET /api/v1/profile/teams?role=CAPTAIN&page=1&pageSize=20
       "captainName": "Nguyễn Văn A",
       "memberCount": 5,
       "role": "CAPTAIN",
-      "joinedAt": "2026-10-01T03:00:00Z"
+      "joinedAt": "2026-10-01T10:00:00"
     },
     {
       "teamId": "0193a1c0-3333-7abc-9def-0123456789ef",
@@ -296,7 +296,7 @@ GET /api/v1/profile/teams?role=CAPTAIN&page=1&pageSize=20
       "captainName": "Trần Văn C",
       "memberCount": 8,
       "role": "MEMBER",
-      "joinedAt": "2026-11-10T12:00:00Z"
+      "joinedAt": "2026-11-10T19:00:00"
     }
   ],
   "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 2 }
@@ -349,7 +349,7 @@ Thao tác được phép theo `role` × `status`: bảng USER-001 `API_Spec.md` 
 
 ### 4.2. Đối tượng response
 
-Kiểu `datetime` = chuỗi ISO-8601 kèm offset. "Null?" = có thể là `null`.
+Kiểu `datetime` = chuỗi ISO-8601 giờ Việt Nam, không kèm múi giờ (SYSTEM-002 `API_Spec.md` §1.1). "Null?" = có thể là `null`.
 
 **`ProvinceItem`** (2.1)
 

@@ -415,7 +415,7 @@ Không tính: Match CONFIRMED chưa đá, EXPIRED, CANCELLED khi còn OPEN, CANC
 | BC-M02 | Hủy Match OPEN: phải từ chối mọi Match_Request PENDING trước khi Match có thể chuyển CANCELLED |
 | BC-M03 | Tối đa 1 Match_Request ACCEPTED mỗi Match (ràng buộc dữ liệu: unique constraint hoặc check) |
 | BC-M04 | Khi Match chuyển CONFIRMED: mọi Pairing đang NEGOTIATING khác và mọi Match_Request PENDING tự chuyển SUPERSEDED. Khi Match bị hủy lúc OPEN (luồng B): mọi Pairing đang NEGOTIATING tự chuyển **SUPERSEDED**; đội tạo kèo không phải đóng Pairing trước khi hủy. **Làm rõ 2026-11-09:** Match_Request không có trạng thái CANCELLED; luồng A không còn request PENDING khi Match bị hủy (OPEN phải từ chối hết trước — BR-M05; CONFIRMED đã không còn request PENDING). **Sửa 2026-11-10:** Pairing không có trạng thái CANCELLED |
-| BC-M05 | Thời gian lưu theo UTC trong DB; frontend convert theo timezone thiết bị |
+| BC-M05 | **Giờ Việt Nam (UTC+7) cho mọi thời điểm** (sửa 2026-11-21, user chốt — thay "lưu UTC, frontend đổi theo múi giờ thiết bị"): mọi thời điểm trong hệ thống ghi và hiển thị theo giờ Việt Nam, không kèm múi giờ. (1) Hiển thị **nguyên giá trị**, không đổi theo múi giờ của thiết bị — vd kèo 19:00 ngày 20/11 hiển thị 19:00 trên mọi máy, kể cả máy đặt múi giờ khác. (2) Ngày thuần (ngày sinh) là ngày lịch, không có giờ. (3) Mốc thời gian nghiệp vụ (hết hạn bài đăng, 24 giờ, 180 ngày, nhắc trước trận, xóa chat sau 90 ngày, ẩn thông báo sau 30 ngày…) tính theo giờ Việt Nam. (4) Dữ liệu đã có giữ đúng thời điểm, chỉ đổi cách ghi sang giờ Việt Nam — vd 12:00 UTC thành 19:00 |
 | BC-M06 | Pairing hết hạn theo `expires_at` của bài đăng |
 | BC-M07 | Match_Request hết hạn theo `expires_at` của bài đăng; không có timeout riêng |
 | **REPUTATION** | |
