@@ -283,14 +283,14 @@ public abstract class BaseEntity {
     
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
-    private OffsetDateTime createdAt;
+    private LocalDateTime createdAt;
     
     @LastModifiedDate
     @Column(name = "updated_at")
-    private OffsetDateTime updatedAt;
+    private LocalDateTime updatedAt;
     
     @Column(name = "deleted_at")
-    private OffsetDateTime deletedAt;
+    private LocalDateTime deletedAt;
 }
 ```
 
@@ -300,7 +300,7 @@ public abstract class BaseEntity {
 - **NEVER** `@Data`, `@EqualsAndHashCode`, `@ToString` trên entity (equals/hashCode theo field sai với entity JPA; toString có thể kích hoạt lazy load)
 - Column name = **snake_case**: `arena_name`, `price_per_hour`
 - Enum dùng `@Enumerated(EnumType.STRING)`
-- Timestamp: `OffsetDateTime` (cột `timestamptz`), có `createdAt`, `updatedAt`, `deletedAt` — **không** `LocalDateTime` (không mang múi giờ, giá trị phụ thuộc timezone JVM). JVM build/test/chạy với `-Duser.timezone=Asia/Ho_Chi_Minh` (`docs/agent/README.md`)
+- Timestamp: `LocalDateTime` giờ Việt Nam (cột `TIMESTAMP`), có `createdAt`, `updatedAt`, `deletedAt` — quy tắc đầy đủ ở §6.2
 - Relationship: `@OneToMany`, `@ManyToOne`, `mappedBy`, `cascade`
 
 ### 6.1. Tạo entity bằng builder
@@ -330,6 +330,36 @@ captain.setUserId(userId);
 - Builder chỉ gom việc gán field; quy tắc nghiệp vụ (vd `joinedAt = invitedAt` cho captain) vẫn nằm ở service/guard, có comment lý do tại chỗ.
 
 ---
+
+### 6.2. Thời gian (ngày giờ)
+
+Mọi thời điểm là **giờ Việt Nam, không kèm múi giờ** ([ADR-0017](decisions/0017-vietnam-local-datetime.md); chi tiết: `docs/agent/design/SYSTEM-002/Component_Class_Design.md` §2).
+
+| Loại giá trị | Java | DB | JSON |
+|---|---|---|---|
+| Thời điểm nghiệp vụ / audit (`…At`, giờ trận, hạn) | `LocalDateTime` | `TIMESTAMP` | `"2026-11-20T19:00:00[.ffffff]"` |
+| Ngày lịch (ngày sinh) | `LocalDate` | `DATE` | `"1995-05-15"` |
+| Khoảng thời gian (TTL, ngưỡng cấu hình) | `Duration` / số giây | — | integer |
+| Đồng hồ đơn điệu (rate limit trong bộ nhớ) | `System.nanoTime()` | — | — |
+
+- **NEVER** dùng `OffsetDateTime`, `ZonedDateTime`, `Instant`, `java.util.Date`, `java.sql.Timestamp` cho giá trị lưu DB hoặc trả JSON (entity, projection, tham số repository, DTO, domain event, frame realtime, `ErrorResponse`).
+  - **Ngoại lệ epoch** (không lưu DB, không trả JSON dạng datetime) giữ `Instant`/epoch nội bộ: claim JWT `iat`/`exp`; tham số ký Cloudinary `timestamp`/`signedAt` và phép so tuổi asset (`clock.instant()`); bit thời gian của UUID v7.
+- **"Bây giờ":**
+
+  | Nơi | Lấy bằng |
+  |---|---|
+  | Service, job, component có DI | Inject `Clock` (bean ở `api/config/ClockConfig`, zone `Asia/Ho_Chi_Minh`, độ phân giải micro giây) → `LocalDateTime.now(clock)`; `clock.instant()` chỉ cho ngoại lệ epoch |
+  | Entity `@PrePersist`/`@PreUpdate`, record factory, `GlobalExceptionHandler`, `ConstraintValidator` | `AppTime.now()` / `AppTime.today()` (`common/time/AppTime`) |
+  | Test | `Clock.fixed(instant, AppTime.ZONE)` |
+
+  - **NEVER** `LocalDateTime.now()` / `LocalDate.now()` không tham số trong `src/main`; **NEVER** `Clock.systemUTC()` (mốc lệch 7 giờ).
+  - JVM vẫn chạy `-Duser.timezone=Asia/Ho_Chi_Minh` (log, phiên JDBC — `docs/agent/README.md`) nhưng code không phụ thuộc vào nó.
+- **SQL:** **NEVER** dùng `now()`, `CURRENT_TIMESTAMP`, `LOCALTIMESTAMP`, `CURRENT_DATE` trần để ghi hoặc so sánh cột thời gian (đổi theo TimeZone của phiên; Neon mặc định `GMT`).
+  - Native query: Java truyền `:now`.
+  - DEFAULT / migration / `@SQLDelete`: `(now() AT TIME ZONE 'Asia/Ho_Chi_Minh')`.
+  - Không đặt `ALTER DATABASE … SET timezone`, không đặt `hibernate.jdbc.time_zone`.
+- **Job:** mọi `@Scheduled(cron = …)` khai `zone = AppTime.ZONE_ID`; `fixedDelay`/`fixedRate` không cần zone. Mốc nghiệp vụ = cộng/trừ trên `LocalDateTime.now(clock)` (`minusDays(180)`, `plusHours(2)`…).
+- **JSON:** không cấu hình định dạng ghi — `LocalDateTime` ghi ISO-8601 không offset, phần lẻ giây 1–6 chữ số. Request body kèm `Z`/offset → `400 VALIDATION_ERROR`; lỗi đọc JSON body trả `field` = đường dẫn field (vd `startsAt`, `timeOptions[0].startsAt`), chỉ JSON sai cú pháp / thiếu body trả `"body"`. Query param `LocalDateTime`: `@DateTimeFormat(iso = ISO.DATE_TIME)` và từ chối chuỗi có offset.
 
 ## 7. DTO
 
@@ -364,8 +394,8 @@ public record ArenaResponse(
         ArenaType arenaType,
         BigDecimal pricePerHour,
         ArenaStatus status,
-        OffsetDateTime createdAt,
-        OffsetDateTime updatedAt) {
+        LocalDateTime createdAt,
+        LocalDateTime updatedAt) {
 }
 ```
 
@@ -407,7 +437,7 @@ public class GlobalExceptionHandler {
             .code("ARENA_001")
             .message("Sân không tồn tại")
             .details(ex.getMessage())
-            .timestamp(OffsetDateTime.now())
+            .timestamp(AppTime.now())
             .path(((ServletWebRequest) request).getRequest().getRequestURI())
             .build();
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
@@ -428,7 +458,7 @@ public class GlobalExceptionHandler {
             .code("VALIDATION_ERROR")
             .message("Dữ liệu không hợp lệ")
             .validationErrors(validationErrors)
-            .timestamp(OffsetDateTime.now())
+            .timestamp(AppTime.now())
             .path(((ServletWebRequest) request).getRequest().getRequestURI())
             .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
@@ -476,7 +506,7 @@ public TeamResponse updateTeam(UUID teamId, UUID userId, UpdateTeamRequest reque
 
 ```java
 // Entity
-@SQLDelete(sql = "UPDATE arenas SET deleted_at = NOW() WHERE id = ?")
+@SQLDelete(sql = "UPDATE arenas SET deleted_at = (now() AT TIME ZONE 'Asia/Ho_Chi_Minh') WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
 public class Arena extends BaseEntity {
     // ...
@@ -594,4 +624,5 @@ class ArenaRepositoryTest {
 - [ ] DTO là `record`, không expose entity, có validation
 - [ ] Exception có custom exception + global handler
 - [ ] Soft delete dùng `deletedAt`
+- [ ] Thời gian theo §6.2: `LocalDateTime`/`LocalDate` ↔ `TIMESTAMP`/`DATE` giờ Việt Nam; "bây giờ" qua `Clock` bean / `AppTime`, không `LocalDateTime.now()` / `LocalDate.now()` không tham số, không `now()` trần trong SQL; `@Scheduled(cron)` có `zone = AppTime.ZONE_ID`
 - [ ] Logging dùng `@Slf4j`, không log sensitive data
