@@ -40,6 +40,8 @@ Review **diff** theo 5 chiều bắt buộc. Output là phát hiện có mức �
 ### 4. Style
 - [ ] Đặt tên, cấu trúc, kích thước, đóng gói đúng convention Java / Spring Boot.
 - [ ] Comment giải thích "tại sao", không lặp lại code.
+- [ ] Javadoc tiếng Việt theo `convention-backend.md` §2.4: class/interface/enum/record và **mọi method** mới hoặc sửa trong `src/main` (kể cả `private`, controller, repository; miễn Lombok, accessor record); class test mới/sửa có Javadoc class. Thiếu → **MINOR** (mỗi file một dòng).
+- [ ] Khoá mới/sửa trong `application*.properties`, `.env.example` có comment tiếng Việt theo `convention-backend.md` §2.6; secret trong comment → **CRITICAL**.
 
 ### 5. Reuse & Duplication
 - [ ] Thay đổi tạo thành phần dùng chung mới → có **Reuse Report** trong `current-task.md`? Thiếu → **MAJOR**.

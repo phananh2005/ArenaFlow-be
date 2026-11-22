@@ -89,9 +89,14 @@ Resource: `api/src/main/resources/` (`application.properties`, `db/migration/` F
 
 - **Mọi** comment — Javadoc `/** */`, khối `/* */`, dòng `//` — viết **tiếng Việt có dấu**, cả `src/main` lẫn `src/test`. Giữ nguyên định danh kỹ thuật (tên class/method, SQL, HTTP, `{@code …}`) và marker công cụ (`allow-secret`). Chuỗi log / message exception không thuộc quy tắc này.
 - Javadoc giải thích **tại sao / hợp đồng**, không lặp lại code.
-- **Bắt buộc** cho method `public`/`protected` có hợp đồng hoặc ngữ nghĩa không hiển nhiên từ tên: service (quyền, thứ tự guard, mã lỗi, retry/transaction, số truy vấn khi đáng kể), guard, mapper có xử lý đặc biệt (che tên user đã xoá…), repository có `@Query` (native, bulk `@Modifying`, `@Lock`, projection), component hạ tầng (retrier, JWT, security handler).
-- **Bắt buộc** cho method `private` có logic không hiển nhiên (điều kiện nghiệp vụ, thứ tự kiểm, xử lý race).
-- **Bỏ qua** khi tên đã đủ nghĩa: derived query (`findByIdAndDeletedAtIsNull`), getter/setter/accessor, DTO record, projection, controller handler chỉ uỷ quyền service.
+- **Bắt buộc Javadoc trong `src/main`** để người đọc nắm được code mà không phải dò thân hàm:
+  - **Mọi kiểu**: class, interface, enum, record, annotation — 1 câu nói vai trò (vd "Nghiệp vụ Admin trên địa điểm").
+  - **Mọi method**, kể cả `private`, controller handler, method repository (cả derived query), method của interface service, compact constructor có xử lý (gán mặc định, trim).
+  - Method có hợp đồng không hiển nhiên ghi thêm: quyền, thứ tự kiểm và mã lỗi, retry/transaction, số truy vấn khi đáng kể, xử lý race; method hiển nhiên chỉ cần 1 câu.
+  - Record: mô tả field bằng `@param` trong Javadoc của record (không viết Javadoc cho từng accessor).
+- **Miễn**: getter/setter/constructor do Lombok sinh (không có code để gắn Javadoc), accessor tự sinh của record, hằng enum tự đủ nghĩa (`ACTIVE`, `INACTIVE`).
+- **`src/test`**: bắt buộc Javadoc ở **class test** (test kiểm cái gì); method test không bắt buộc — tên method mô tả hành vi.
+- **Phạm vi áp dụng**: code **mới hoặc bị sửa** (class/method được thêm hoặc đổi trong diff) phải đạt; class cũ được chạm tới thì thêm Javadoc class nếu thiếu. Code cũ chưa đạt được bổ sung trên nhánh `refactor/javadoc-backfill` sau khi các nhánh đang code song song đã merge.
 - **NEVER** trỏ sang bất kỳ tài liệu nào trong comment: ADR (`ADR-0007`), đường dẫn/mục tài liệu thiết kế/spec (`USER-002 API_Spec §2.4`), mã neo nghiệp vụ/thiết kế (`BR-T12`, `W6`, `L4`, `race M1`). Viết mô tả tự đủ nghĩa thay thế (vd `(W6)` → "6 truy vấn") — người đọc (dev/AI) không phải mở tài liệu khác. Mã lỗi (`TEAM_014`) được dùng vì là enum trong code.
 
 ### 2.5. Import
@@ -99,6 +104,18 @@ Resource: `api/src/main/resources/` (`application.properties`, `db/migration/` F
 - Dùng tên ngắn qua `import`; **không** viết tên đầy đủ (FQN) trong thân code, vd `com.phananh.arenaflow.domain.projection.VenueSummaryView`, `java.util.Optional` — áp cho cả `src/main` và `src/test`.
 - Ngoại lệ duy nhất: hai class trùng tên ngắn trong cùng file (vd `jakarta.validation.ConstraintViolationException` và `org.hibernate.exception.ConstraintViolationException`) → import một class, class còn lại viết FQN.
 - Không dùng wildcard import (`import java.util.*;`).
+
+### 2.6. Comment trong file cấu hình
+
+Áp cho `application*.properties`, `.env.example`, `.env.dev` (và mọi file `.env*` khác).
+
+- **Mọi khoá** có comment `#` tiếng Việt ngay phía trên; nhiều khoá cùng nhóm (vd `spring.datasource.*`) dùng chung một comment đầu nhóm, khoá nào có ý nghĩa riêng thì thêm dòng riêng.
+- Comment nói: **mục đích**; **đơn vị / định dạng** (giây, phút, cron 6 trường, URL…); **giá trị mặc định / khi nào bắt buộc**; với biến môi trường: **lấy ở đâu** (vd "Neon → Connection details", "Cloudinary Dashboard → API Keys").
+- **NEVER** ghi giá trị secret (mật khẩu, khoá, token, connection string thật) trong comment. Ví dụ giá trị chỉ dùng chuỗi giả (`<mật-khẩu>`).
+- `.env.dev` không vào Git: agent chỉ thêm / sửa **dòng comment**, không đọc ra hay in giá trị biến (theo `CLAUDE.md` §8).
+- Thêm khoá mới vào `application*.properties` → thêm khoá tương ứng (nếu đọc từ biến môi trường) vào `.env.example`, cả hai kèm comment.
+- Không trỏ tài liệu trong comment (giống §2.4).
+- **Phạm vi áp dụng**: khoá mới hoặc bị sửa phải đạt ngay. Comment còn thiếu của `application.properties` và `.env.example` hiện có được bổ sung trên nhánh `refactor/javadoc-backfill`, cùng đợt backfill Javadoc.
 
 ---
 
@@ -615,7 +632,8 @@ class ArenaRepositoryTest {
 
 - [ ] Đặt đúng module & package (`api/<nhóm>` controller, `application/service/impl`, `application/dto/request|response`, `domain/repository`, `domain/entity`); không import ngược tầng
 - [ ] Class naming đúng pattern
-- [ ] Mọi comment (Javadoc, `/* */`, `//`; main + test) tiếng Việt theo §2.4; Javadoc có cho method có hợp đồng không hiển nhiên, không cho method tự mô tả; không trỏ tài liệu/ADR
+- [ ] Mọi comment (Javadoc, `/* */`, `//`; main + test) tiếng Việt theo §2.4; class/method mới hoặc sửa trong `src/main` có Javadoc (miễn Lombok, accessor record), class test mới/sửa có Javadoc class; không trỏ tài liệu/ADR
+- [ ] Khoá mới/sửa trong `application*.properties`, `.env.example`, `.env.dev` có comment tiếng Việt theo §2.6; không có secret trong comment
 - [ ] Không viết FQN trong thân code (trừ trùng tên ngắn), không wildcard import (§2.5)
 - [ ] Controller chỉ xử lý HTTP, không có business logic
 - [ ] Service có `@Transactional`, method ghi bỏ `readOnly`
