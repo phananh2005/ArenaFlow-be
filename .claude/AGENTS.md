@@ -17,11 +17,13 @@ Nhận request
 │   ├── Chưa có thiết kế                      → solution-architect trước → duyệt → developer
 │   └── Đã có thiết kế                        → task-state-init → developer
 ├── Sửa chức năng đã triển khai               → developer → sau khi code & test PASS → code-reviewer:
-│   ├── Kiểm tra ảnh hưởng design (API/DB/sequence/integration)
-│   │   └── CÓ ảnh hưởng                      → cập nhật design → architect-reviewer (chỉ review phần sửa)
-│   └── Kiểm tra ảnh hưởng nghiệp vụ (use case/business rule/actor)
-│       └── CÓ ảnh hưởng                      → cập nhật SRS
-│   └── Có sửa code thêm                      → test + code-reviewer phần sửa → commit
+│   ├── 1. CÓ ảnh hưởng design (API/DB/sequence/integration)
+│   │   └── vòng lặp design                   → cập nhật design → architect-reviewer (chỉ review phần sửa)
+│   │                                           → có sửa code → test + code-reviewer phần sửa
+│   │                                           → lặp tới khi không còn finding được chọn sửa
+│   ├── 2. Sau vòng lặp: CÓ ảnh hưởng nghiệp vụ (use case/business rule/actor)
+│   │   └── cập nhật SRS                      (NEVER cập nhật SRS khi vòng lặp design chưa xong)
+│   └── 3. SRS kéo theo sửa design/code       → quay lại 1; xong → commit
 ├── Debug / lỗi / không chạy                  → skill debug
 ├── Review thiết kế                            → procedure architect-reviewer
 ├── Review code / trước commit               → procedure code-reviewer (mỗi commit có code)
