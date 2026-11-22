@@ -59,6 +59,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/** Kiểm nghiệp vụ địa điểm của người dùng: thêm, tìm, sửa (quyền điện thoại/website, thứ tự guard) và report. */
 class VenueServiceImplTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
@@ -118,6 +119,49 @@ class VenueServiceImplTest {
     }
 
     @Test
+    void regularUserCreatingVenueWithPhoneOrWebsiteGetsVenue017BeforeWardLookup() {
+        User user = User.builder().id(callerId).displayName("Creator").role(User.Role.USER).build();
+        when(userRepository.findByIdAndDeletedAtIsNull(callerId)).thenReturn(Optional.of(user));
+
+        assertError(() -> service.createVenue(callerId, request("0901234567", null)), ErrorCode.VENUE_017);
+        assertError(() -> service.createVenue(callerId, request(null, "https://san.vn")), ErrorCode.VENUE_017);
+        assertError(() -> service.createVenue(callerId, request("", null)), ErrorCode.VENUE_017);
+        assertError(() -> service.createVenue(callerId, request(null, "")), ErrorCode.VENUE_017);
+
+        verifyNoInteractions(unitRepository);
+        verify(venueRepository, never()).save(any(Venue.class));
+    }
+
+    @Test
+    void regularUserCreatesVenueWithoutContactFields() {
+        User user = User.builder().id(callerId).displayName("Creator").role(User.Role.USER).build();
+        when(userRepository.findByIdAndDeletedAtIsNull(callerId)).thenReturn(Optional.of(user));
+        when(unitRepository.findWardWithProvince(wardId)).thenReturn(Optional.of(ward()));
+
+        service.createVenue(callerId, request(null, null));
+
+        ArgumentCaptor<Venue> captured = ArgumentCaptor.forClass(Venue.class);
+        verify(venueRepository).save(captured.capture());
+        assertThat(captured.getValue().getPhone()).isNull();
+        assertThat(captured.getValue().getWebsite()).isNull();
+        assertThat(captured.getValue().getCreatedByType()).isEqualTo(Venue.CreatedByType.USER);
+    }
+
+    @Test
+    void adminCreatesVenueWithPhoneAndWebsite() {
+        User admin = User.builder().id(callerId).displayName("Admin").role(User.Role.ADMIN).build();
+        when(userRepository.findByIdAndDeletedAtIsNull(callerId)).thenReturn(Optional.of(admin));
+        when(unitRepository.findWardWithProvince(wardId)).thenReturn(Optional.of(ward()));
+
+        service.createVenue(callerId, request("0901234567", "https://san.vn"));
+
+        ArgumentCaptor<Venue> captured = ArgumentCaptor.forClass(Venue.class);
+        verify(venueRepository).save(captured.capture());
+        assertThat(captured.getValue().getPhone()).isEqualTo("0901234567");
+        assertThat(captured.getValue().getWebsite()).isEqualTo("https://san.vn");
+    }
+
+    @Test
     void createVenueReturnsUser001BeforeWardLookupForDeletedCaller() {
         when(userRepository.findByIdAndDeletedAtIsNull(callerId)).thenReturn(Optional.empty());
 
@@ -134,39 +178,67 @@ class VenueServiceImplTest {
     }
 
     @Test
-    void listVenuesSelectsIndexAwareQueryAndMapsPaginatedSummary() {
+    void listVenuesReturnsOnlyActiveVenuesUsingIndexAwareQuery() {
         VenueSummaryView summary = projections.createProjection(VenueSummaryView.class, Map.of(
                 "venueId", venueId, "venueName", "Hoa Lư", "address", "Address",
                 "latitude", BigDecimal.ONE, "longitude", BigDecimal.ONE, "status", "ACTIVE"));
         when(venueRepository.searchByStatus(eq("ACTIVE"), eq("%hoa%"), any()))
                 .thenReturn(new PageImpl<>(List.of(summary), PageRequest.of(1, 1), 3));
-        when(venueRepository.searchAll(eq(null), any()))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
         when(venueRepository.searchNearbyActive(eq(null), anyDouble(), anyDouble(), anyDouble(), anyDouble(),
                 anyDouble(), anyDouble(), anyDouble(), any()))
                 .thenReturn(new PageImpl<>(List.of(summary), PageRequest.of(0, 20), 1));
-        when(venueRepository.searchNearbyAny(eq("INACTIVE"), eq(null), anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                anyDouble(), anyDouble(), anyDouble(), any()))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
-        var byStatus = service.listVenues(new SearchVenueRequest(" hoa ", null, null, null, null, 2, 1));
-        var all = service.listVenues(new SearchVenueRequest(null, VenueStatusFilter.ALL, null, null, null, null, null));
-        var nearbyActive = service.listVenues(new SearchVenueRequest(null, null,
+        var byKeyword = service.listVenues(new SearchVenueRequest(" hoa ", null, null, null, null, 2, 1));
+        var nearby = service.listVenues(new SearchVenueRequest(null, VenueStatusFilter.ACTIVE,
                 new BigDecimal("10.78"), new BigDecimal("106.70"), null, null, null));
-        var nearbyInactive = service.listVenues(new SearchVenueRequest(null, VenueStatusFilter.INACTIVE,
-                new BigDecimal("10.78"), new BigDecimal("106.70"), new BigDecimal("3"), null, null));
 
-        assertThat(byStatus.data()).extracting(row -> row.venueName()).containsExactly("Hoa Lư");
-        assertThat(byStatus.pagination().totalItems()).isEqualTo(3);
-        assertThat(all.data()).isEmpty();
-        assertThat(nearbyActive.data()).hasSize(1);
-        assertThat(nearbyInactive.data()).isEmpty();
+        assertThat(byKeyword.data()).extracting(row -> row.venueName()).containsExactly("Hoa Lư");
+        assertThat(byKeyword.pagination().totalItems()).isEqualTo(3);
+        assertThat(nearby.data()).hasSize(1);
         verify(venueRepository).searchByStatus(eq("ACTIVE"), eq("%hoa%"), any());
-        verify(venueRepository).searchAll(eq(null), any());
         verify(venueRepository).searchNearbyActive(eq(null), eq(10.78d), eq(106.70d), eq(5d), anyDouble(),
                 anyDouble(), anyDouble(), anyDouble(), any());
-        verify(venueRepository).searchNearbyAny(eq("INACTIVE"), eq(null), eq(10.78d), eq(106.70d), eq(3d),
-                anyDouble(), anyDouble(), anyDouble(), anyDouble(), any());
+        verify(venueRepository, never()).searchAll(any(), any());
+    }
+
+    @Test
+    void listVenuesRejectsNonActiveStatusBeforeAnyQuery() {
+        assertError(() -> service.listVenues(new SearchVenueRequest(null, VenueStatusFilter.ALL,
+                null, null, null, null, null)), ErrorCode.VENUE_018);
+        assertError(() -> service.listVenues(new SearchVenueRequest(null, VenueStatusFilter.INACTIVE,
+                null, null, null, null, null)), ErrorCode.VENUE_018);
+        assertError(() -> service.listVenues(new SearchVenueRequest(null, VenueStatusFilter.INACTIVE,
+                new BigDecimal("10.78"), new BigDecimal("106.70"), new BigDecimal("3"), null, null)), ErrorCode.VENUE_018);
+
+        verifyNoInteractions(venueRepository);
+    }
+
+    @Test
+    void regularUserUpdatingPhoneOrWebsiteGetsVenue017BeforeAnyQuery() {
+        CurrentActor owner = new CurrentActor(callerId, false);
+
+        assertError(() -> service.updateVenue(venueId, owner, contactUpdate("0901234567", null)), ErrorCode.VENUE_017);
+        assertError(() -> service.updateVenue(venueId, owner, contactUpdate(null, "https://san.vn")), ErrorCode.VENUE_017);
+        assertError(() -> service.updateVenue(venueId, owner, contactUpdate("", null)), ErrorCode.VENUE_017);
+        assertError(() -> service.updateVenue(venueId, owner, contactUpdate(null, "")), ErrorCode.VENUE_017);
+
+        verifyNoInteractions(venueRepository, retrier);
+    }
+
+    @Test
+    void adminSetsOrClearsPhoneAndWebsite() {
+        Venue venue = Venue.builder().id(venueId).wardId(wardId).createdByUserId(UUID.randomUUID())
+                .status(Venue.Status.ACTIVE).phone("0123456789").website("https://old.test").build();
+        stubUpdatableVenue(venue);
+        CurrentActor admin = new CurrentActor(callerId, true);
+
+        service.updateVenue(venueId, admin, contactUpdate("0901234567", "https://san.vn"));
+        assertThat(venue.getPhone()).isEqualTo("0901234567");
+        assertThat(venue.getWebsite()).isEqualTo("https://san.vn");
+
+        service.updateVenue(venueId, admin, contactUpdate("", ""));
+        assertThat(venue.getPhone()).isNull();
+        assertThat(venue.getWebsite()).isNull();
     }
 
     @Test
@@ -186,7 +258,7 @@ class VenueServiceImplTest {
 
         VenueResponse response = service.updateVenue(venueId, new CurrentActor(callerId, false),
                 new UpdateVenueRequest(" New ", " New address ", BigDecimal.TEN, BigDecimal.valueOf(20),
-                        replacementWard.getWardId(), "", "", ""));
+                        replacementWard.getWardId(), "", null, null));
 
         assertThat(venue.getName()).isEqualTo("New");
         assertThat(venue.getAddress()).isEqualTo("New address");
@@ -194,8 +266,9 @@ class VenueServiceImplTest {
         assertThat(venue.getLongitude()).isEqualByComparingTo("20");
         assertThat(venue.getWardId()).isEqualTo(replacementWard.getWardId());
         assertThat(venue.getVenueType()).isNull();
-        assertThat(venue.getPhone()).isNull();
-        assertThat(venue.getWebsite()).isNull();
+        // Owner không gửi điện thoại/website → giữ nguyên giá trị Admin đã nhập.
+        assertThat(venue.getPhone()).isEqualTo("0123456789");
+        assertThat(venue.getWebsite()).isEqualTo("https://old.test");
         verify(venueRepository).save(venue);
         verify(retrier).execute(eq(ErrorCode.VENUE_011), any());
         assertThat(response.venueName()).isEqualTo("New");
@@ -368,8 +441,12 @@ class VenueServiceImplTest {
     }
 
     private void stubUpdatableVenue(UUID creatorId) {
-        when(venueRepository.findById(venueId)).thenReturn(Optional.of(Venue.builder().id(venueId).wardId(wardId)
-                .createdByUserId(creatorId).status(Venue.Status.ACTIVE).build()));
+        stubUpdatableVenue(Venue.builder().id(venueId).wardId(wardId)
+                .createdByUserId(creatorId).status(Venue.Status.ACTIVE).build());
+    }
+
+    private void stubUpdatableVenue(Venue venue) {
+        when(venueRepository.findById(venueId)).thenReturn(Optional.of(venue));
         when(venueRepository.findDetailById(venueId)).thenReturn(Optional.of(projections.createProjection(
                 VenueDetailView.class, Map.of("venueId", venueId, "venueName", "Venue", "address", "Address",
                         "latitude", BigDecimal.ONE, "longitude", BigDecimal.ONE, "status", "ACTIVE",
@@ -390,9 +467,22 @@ class VenueServiceImplTest {
         });
     }
 
+    private static UpdateVenueRequest contactUpdate(String phone, String website) {
+        return new UpdateVenueRequest(null, null, null, null, null, null, phone, website);
+    }
+
     private CreateVenueRequest request() {
+        return request(null, null);
+    }
+
+    private CreateVenueRequest request(String phone, String website) {
         return new CreateVenueRequest("Venue", "Address", BigDecimal.ONE, BigDecimal.ONE, wardId,
-                null, null, null);
+                null, phone, website);
+    }
+
+    private WardView ward() {
+        return projections.createProjection(WardView.class, Map.of(
+                "wardId", wardId, "wardName", "Ward", "provinceId", UUID.randomUUID(), "provinceName", "Province"));
     }
 
     private static void assertError(Runnable call, ErrorCode expected) {

@@ -1,30 +1,37 @@
 package com.phananh.arenaflow.application.service.impl;
 
+import com.phananh.arenaflow.application.dto.request.AdminSearchVenueRequest;
 import com.phananh.arenaflow.application.dto.request.ResolveVenueReportRequest;
 import com.phananh.arenaflow.application.dto.response.AdminVenueReportResponse;
 import com.phananh.arenaflow.application.dto.response.AdminVenueResponse;
 import com.phananh.arenaflow.application.dto.response.PageResponse;
+import com.phananh.arenaflow.application.dto.response.VenueSummaryResponse;
 import com.phananh.arenaflow.application.mapper.VenueMapper;
 import com.phananh.arenaflow.application.service.AdminVenueService;
 import com.phananh.arenaflow.application.service.VenueReportStatusFilter;
+import com.phananh.arenaflow.application.service.VenueStatusFilter;
 import com.phananh.arenaflow.application.support.AdminAuditLog;
 import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
+import com.phananh.arenaflow.application.support.LikePatterns;
 import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.support.VenueGuard;
 import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
 import com.phananh.arenaflow.domain.entity.venue.Venue;
 import com.phananh.arenaflow.domain.entity.venue.VenueReport;
+import com.phananh.arenaflow.domain.projection.VenueSummaryView;
 import com.phananh.arenaflow.domain.repository.VenueImageRepository;
 import com.phananh.arenaflow.domain.repository.VenueReportRepository;
 import com.phananh.arenaflow.domain.repository.VenueRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+/** Nghiệp vụ Admin trên địa điểm; quyền Admin đã được chặn ở tầng web theo đường dẫn {@code /api/v1/admin/**}. */
 @Service
 @RequiredArgsConstructor
 public class AdminVenueServiceImpl implements AdminVenueService {
@@ -37,6 +44,21 @@ public class AdminVenueServiceImpl implements AdminVenueService {
     private final VenueMapper venueMapper;
     private final PageRequestFactory pageRequestFactory;
     private final AdminAuditLog adminAuditLog;
+
+    /**
+     * Q1 trang + Q2 count. {@code ALL} dùng truy vấn không lọc trạng thái, trạng thái cụ thể dùng truy vấn có index
+     * theo trạng thái; cả hai sắp theo tên rồi id.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<VenueSummaryResponse> listVenues(AdminSearchVenueRequest request) {
+        var pageable = pageRequestFactory.create(request.page(), request.pageSize());
+        String qPattern = LikePatterns.contains(request.q());
+        Page<VenueSummaryView> venues = request.status() == VenueStatusFilter.ALL
+                ? venueRepository.searchAll(qPattern, pageable)
+                : venueRepository.searchByStatus(request.status().toQueryValue(), qPattern, pageable);
+        return PageResponse.from(venues, venueMapper::toSummary, request.page(), request.pageSize());
+    }
 
     /** Q1 venue, Q2 cập nhật CAS, Q3 bulk xác minh các report CLOSED đang chờ, Q4–Q5 chi tiết cho admin. */
     @Override

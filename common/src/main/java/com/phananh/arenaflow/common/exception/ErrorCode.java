@@ -2,6 +2,7 @@ package com.phananh.arenaflow.common.exception;
 
 import org.springframework.http.HttpStatus;
 
+/** Danh mục mã lỗi nghiệp vụ trả cho client: mỗi mã gắn HTTP status và thông báo tiếng Việt mặc định. */
 public enum ErrorCode {
     VALIDATION_ERROR("VALIDATION_ERROR", HttpStatus.BAD_REQUEST, "Dữ liệu không hợp lệ"),
     AUTH_001("AUTH_001", HttpStatus.UNAUTHORIZED, "Token không hợp lệ hoặc đã hết hạn"),
@@ -43,6 +44,9 @@ public enum ErrorCode {
     VENUE_014("VENUE_014", HttpStatus.CONFLICT, "Bạn đã report địa điểm này, đang chờ admin xử lý"),
     VENUE_015("VENUE_015", HttpStatus.FORBIDDEN, "Quản trị viên không report địa điểm; hãy sửa hoặc đánh dấu ngừng hoạt động trực tiếp"),
     VENUE_016("VENUE_016", HttpStatus.UNPROCESSABLE_ENTITY, "Địa điểm cần bổ sung phường/xã"),
+    VENUE_017("VENUE_017", HttpStatus.FORBIDDEN, "Chỉ quản trị viên được nhập số điện thoại và website của địa điểm"),
+    VENUE_018("VENUE_018", HttpStatus.BAD_REQUEST,
+            "Danh sách này chỉ gồm địa điểm đang hoạt động; quản trị viên dùng danh sách quản trị"),
     // Lỗi tầng HTTP/hệ thống (không gắn miền nghiệp vụ). SYS_004/SYS_005: response giữ status gốc của exception.
     SYS_001("SYS_001", HttpStatus.NOT_FOUND, "Không tìm thấy tài nguyên"),
     SYS_002("SYS_002", HttpStatus.METHOD_NOT_ALLOWED, "Phương thức không được hỗ trợ"),

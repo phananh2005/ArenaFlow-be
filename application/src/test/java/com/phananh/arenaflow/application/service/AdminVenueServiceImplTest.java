@@ -1,9 +1,11 @@
 package com.phananh.arenaflow.application.service;
 
+import com.phananh.arenaflow.application.dto.request.AdminSearchVenueRequest;
 import com.phananh.arenaflow.application.dto.request.ResolveVenueReportRequest;
 import com.phananh.arenaflow.application.dto.response.AdminVenueReportResponse;
 import com.phananh.arenaflow.application.dto.response.AdminVenueResponse;
 import com.phananh.arenaflow.application.dto.response.PageResponse;
+import com.phananh.arenaflow.application.dto.response.VenueSummaryResponse;
 import com.phananh.arenaflow.application.mapper.VenueMapper;
 import com.phananh.arenaflow.application.service.impl.AdminVenueServiceImpl;
 import com.phananh.arenaflow.application.support.AdminAuditLog;
@@ -16,6 +18,7 @@ import com.phananh.arenaflow.domain.entity.venue.Venue;
 import com.phananh.arenaflow.domain.entity.venue.VenueReport;
 import com.phananh.arenaflow.domain.projection.AdminVenueReportView;
 import com.phananh.arenaflow.domain.projection.VenueDetailView;
+import com.phananh.arenaflow.domain.projection.VenueSummaryView;
 import com.phananh.arenaflow.domain.repository.VenueImageRepository;
 import com.phananh.arenaflow.domain.repository.VenueReportRepository;
 import com.phananh.arenaflow.domain.repository.VenueRepository;
@@ -48,6 +51,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/** Kiểm nghiệp vụ Admin trên địa điểm: danh sách toàn bộ địa điểm, ngừng/kích hoạt lại và xử lý report. */
 class AdminVenueServiceImplTest {
 
     private final VenueRepository venueRepository = mock(VenueRepository.class);
@@ -69,6 +73,40 @@ class AdminVenueServiceImplTest {
                 imageRepository, retrier, Mappers.getMapper(VenueMapper.class), new PageRequestFactory(), auditLog);
         when(retrier.execute(eq(ErrorCode.VENUE_011), any())).thenAnswer(invocation ->
                 ((Supplier<Object>) invocation.getArgument(1)).get());
+    }
+
+    @Test
+    void listVenuesDefaultsToEveryStatusSortedByNameWithoutDistance() {
+        VenueSummaryView inactive = projections.createProjection(VenueSummaryView.class, Map.of(
+                "venueId", venueId, "venueName", "Sân A", "address", "Address",
+                "latitude", BigDecimal.ONE, "longitude", BigDecimal.ONE, "status", "INACTIVE"));
+        when(venueRepository.searchAll(eq(null), any()))
+                .thenReturn(new PageImpl<>(List.of(inactive), PageRequest.of(0, 20), 1));
+
+        PageResponse<VenueSummaryResponse> page = service.listVenues(new AdminSearchVenueRequest(null, null, null, null));
+
+        assertThat(page.data()).singleElement().satisfies(row -> {
+            assertThat(row.status()).isEqualTo("INACTIVE");
+            assertThat(row.distanceKm()).isNull();
+        });
+        assertThat(page.pagination().totalItems()).isEqualTo(1);
+        verify(venueRepository).searchAll(eq(null), eq(PageRequest.of(0, 20)));
+        verify(venueRepository, never()).searchByStatus(any(), any(), any());
+    }
+
+    @Test
+    void listVenuesFiltersByRequestedStatusAndEscapesKeyword() {
+        when(venueRepository.searchByStatus(eq("INACTIVE"), eq("%100\\%\\_a%"), any()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(1, 5), 0));
+        when(venueRepository.searchByStatus(eq("ACTIVE"), eq(null), any()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        service.listVenues(new AdminSearchVenueRequest(" 100%_a ", VenueStatusFilter.INACTIVE, 2, 5));
+        service.listVenues(new AdminSearchVenueRequest(null, VenueStatusFilter.ACTIVE, null, null));
+
+        verify(venueRepository).searchByStatus(eq("INACTIVE"), eq("%100\\%\\_a%"), eq(PageRequest.of(1, 5)));
+        verify(venueRepository).searchByStatus(eq("ACTIVE"), eq(null), eq(PageRequest.of(0, 20)));
+        verify(venueRepository, never()).searchAll(any(), any());
     }
 
     @Test
