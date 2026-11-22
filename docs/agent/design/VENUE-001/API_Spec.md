@@ -11,12 +11,12 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); USER-001 `API_Spec.md` §1.1 "Quy ước chung" và §1.2 "Lỗi chung" |
 | Quyết định liên quan | [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) — ảnh lưu trên Cloudinary, FE upload thẳng lên Cloudinary bằng chữ ký backend cấp |
-| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.9) — UC-V01..V06, BR-V01..V11, BC-V01..V07 (BC-V05 sửa 2026-11-14 — trận ngoài hệ thống), BC-U02, Business_Rules §2.6, §5.1/§5.4, AC-V01..V05 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v5.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.14) — UC-V01..V07, BR-V01..V13 (BR-V12, BR-V13 thêm 2026-11-22), BC-V01..V07 (BC-V05 sửa 2026-11-14 — trận ngoài hệ thống; BC-V04 sửa 2026-11-22), BC-U02, Business_Rules §2.6, §5.1/§5.4, AC-V01..V06 |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v6.0** (solution-architect · 2026-11-22) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
-Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ duyệt), tìm địa điểm, thêm ảnh sân (tối đa 5 ảnh, đúng 1 ảnh chính khi có ảnh) và report địa điểm sai thông tin / đã đóng cửa. Người tạo địa điểm hoặc Admin sửa thông tin và xoá ảnh. Admin xử lý report, đánh dấu địa điểm ngừng hoạt động và kích hoạt lại. Kèo chỉ tham chiếu địa điểm nên luôn hiển thị thông tin địa điểm mới nhất (BR-V10); sửa địa điểm không bị chặn khi đã có kèo.
+Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ duyệt), tìm địa điểm, thêm ảnh sân (tối đa 5 ảnh, đúng 1 ảnh chính khi có ảnh) và report địa điểm sai thông tin / đã đóng cửa. Người tạo địa điểm hoặc Admin sửa thông tin và xoá ảnh; điện thoại và website chỉ Admin nhập / sửa / xoá (BR-V12). Danh sách / tìm của người dùng chỉ có địa điểm `ACTIVE`; Admin có danh sách riêng xem mọi trạng thái (BR-V13). Admin xử lý report, đánh dấu địa điểm ngừng hoạt động và kích hoạt lại. Kèo chỉ tham chiếu địa điểm nên luôn hiển thị thông tin địa điểm mới nhất (BR-V10); sửa địa điểm không bị chặn khi đã có kèo.
 
 **Ngoài phạm vi:** frontend · gửi thông báo cho admin/người dùng (NOTIFICATION-001; API này chưa gửi thông báo) · `lastSelectedAt` được cập nhật khi địa điểm được chọn cho kèo (MATCH-001) hoặc được khai báo cho trận ngoài hệ thống (MERCENARY-001 2.28, 2.31 — v4.0), không có endpoint riêng · sắp xếp lại thứ tự ảnh · header `Idempotency-Key` (`api-convention.md` §13) chưa hỗ trợ.
 
@@ -28,8 +28,8 @@ Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ du
 - Enum viết UPPERCASE, phân biệt hoa thường (§4.1); riêng `format` ảnh viết thường.
 - User đã xoá tài khoản (ADR-0002 sửa đổi 2026-11-12, SYSTEM-001 v1.7 BC-U02; quy tắc chung: USER-001 `API_Spec.md` §1.1):
   - Endpoint thường (ngoài `/api/v1/admin/**`, kể cả khi người gọi là Admin — vd 2.3, 2.12): che tên → `"Người dùng đã xóa"`; id giữ nguyên.
-  - **Mọi endpoint `/api/v1/admin/**`:** không che — tên thật, mỗi field tên user có cờ `is…Deleted` đi kèm (`true` = đã xoá tài khoản; `false` cả khi field tên là `null`). Ở mã này: 2.8–2.9 (`reporterName` + `isReporterDeleted`, `handledByName` + `isHandledByDeleted`), 2.10–2.11 (`createdByName` + `isCreatedByDeleted`, đối tượng AdminVenue §4.8). Các response Admin của mã này không có field ảnh của user.
-- Chuỗi được cắt khoảng trắng đầu/cuối trước khi lưu. Field tuỳ chọn gửi `""`: ở request tạo coi như không nhập (lưu `null`, không báo lỗi); ở `PATCH /venues/{venueId}` (2.12) nghĩa là xoá giá trị.
+  - **Mọi endpoint `/api/v1/admin/**`:** không che — tên thật, mỗi field tên user có cờ `is…Deleted` đi kèm (`true` = đã xoá tài khoản; `false` cả khi field tên là `null`). Ở mã này: 2.8–2.9 (`reporterName` + `isReporterDeleted`, `handledByName` + `isHandledByDeleted`), 2.10–2.11 (`createdByName` + `isCreatedByDeleted`, đối tượng AdminVenue §4.8); 2.14 không có field tên user. Các response Admin của mã này không có field ảnh của user.
+- Chuỗi được cắt khoảng trắng đầu/cuối trước khi lưu. Field tuỳ chọn gửi `""`: ở request tạo coi như không nhập (lưu `null`, không báo lỗi); ở `PATCH /venues/{venueId}` (2.12) nghĩa là xoá giá trị. Riêng `phone` / `website` (2.1, 2.12): người gọi không phải Admin **không được gửi** (kể cả `""`) → `403 VENUE_017`; chỉ được bỏ vắng hoặc `null` (BR-V12).
 - Danh sách: `page` (≥ 1, mặc định 1), `pageSize` (1..100, mặc định 20); response có `pagination` (`api-convention.md` §7). Thứ tự sắp xếp cố định, ghi ở từng endpoint; không có tham số `sort`.
 - Lỗi trả theo envelope `error` (`api-convention.md` §4.4). Sai định dạng / độ dài / enum / thiếu field bắt buộc / id trên path không phải UUID → `400 VALIDATION_ERROR` kèm `validationErrors[].field` (`api-convention.md` §11).
 - Khi một request vi phạm nhiều điều kiện, backend trả **lỗi đầu tiên** theo thứ tự: `401`/`403 AUTH_*` → `400 VALIDATION_ERROR` → các dòng trong bảng lỗi của endpoint, **từ trên xuống**.
@@ -40,7 +40,7 @@ Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ du
 | # | Method + Path | Dùng khi | Ai gọi được | Thành công |
 |---|---|---|---|---|
 | 2.1 | `POST /api/v1/venues` | Thêm địa điểm | Mọi user | 201 |
-| 2.2 | `GET /api/v1/venues` | Danh sách / tìm / gợi ý địa điểm gần | Mọi user | 200 |
+| 2.2 | `GET /api/v1/venues` | Danh sách / tìm / gợi ý địa điểm gần (chỉ `ACTIVE`) | Mọi user | 200 |
 | 2.3 | `GET /api/v1/venues/{venueId}` | Xem chi tiết địa điểm | Mọi user | 200 |
 | 2.4 | `POST /api/v1/venues/{venueId}/image-upload-signatures` | Thêm ảnh — Bước 1: xin chữ ký upload | Mọi user (địa điểm `INACTIVE`: chỉ Admin) | 200 |
 | 2.5 | `POST /api/v1/venues/{venueId}/images` | Thêm ảnh — Bước 3: lưu ảnh đã upload | Chính người đã xin chữ ký ở 2.4 | 201 |
@@ -52,11 +52,12 @@ Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ du
 | 2.11 | `PATCH /api/v1/admin/venues/{venueId}/reactivate` | Admin kích hoạt lại | Admin | 200 |
 | 2.12 | `PATCH /api/v1/venues/{venueId}` | Sửa thông tin địa điểm | Người tạo, Admin | 200 |
 | 2.13 | `DELETE /api/v1/venues/{venueId}/images/{imageId}` | Xoá ảnh | Người tạo, Admin | 200 (có body) |
+| 2.14 | `GET /api/v1/admin/venues` | Admin xem danh sách mọi địa điểm | Admin | 200 |
 
 ### 2.1. Thêm địa điểm — `POST /api/v1/venues`
 
 **Dùng khi:** người dùng mở màn "Thêm địa điểm", nhập thông tin sân rồi lưu (UC-V01, AC-V01). Địa điểm có hiệu lực ngay (`ACTIVE`), hiện trong gợi ý, không chờ admin duyệt.
-**Ai gọi được:** mọi user đã đăng nhập, kể cả Admin.
+**Ai gọi được:** mọi user đã đăng nhập, kể cả Admin. Chỉ Admin được gửi `phone` / `website` (BR-V12) — FE ẩn hai ô này với người không phải Admin.
 
 **Request body**
 
@@ -66,10 +67,12 @@ Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ du
 | `address` | string | Có | Không rỗng / không chỉ khoảng trắng; ≤ 500 ký tự `[cần xác nhận #5]` | `"2 Đinh Tiên Hoàng, Phường Đa Kao, TP.HCM"` |
 | `latitude` | number | Có | -90..90; tối đa 7 chữ số thập phân | `10.7881234` |
 | `longitude` | number | Có | -180..180; tối đa 7 chữ số thập phân | `106.6991234` |
-| `wardId` | string (UUID) | Có | Phường/xã từ danh mục đơn vị hành chính (BR-V11) — cùng danh mục chọn khu vực hồ sơ (USER-001) | `"0192f000-aaaa-7000-8000-000000000101"` |
+| `wardId` | string (UUID) | Có | Phường/xã từ danh mục đơn vị hành chính (BR-V11) — lấy từ danh mục tỉnh/thành và phường/xã (USER-003 `API_Spec.md` §2.1–§2.2) | `"0192f000-aaaa-7000-8000-000000000101"` |
 | `venueType` | string | Không | `FIVE_A_SIDE` \| `SEVEN_A_SIDE` \| `ELEVEN_A_SIDE` (BR-V05); vắng / `null` / `""` = không chọn | `"SEVEN_A_SIDE"` |
-| `phone` | string | Không | Khớp `^0[0-9]{9,10}$` (10–11 chữ số, bắt đầu bằng 0) `[cần xác nhận #5]`; `""` = không nhập | `"0281234567"` |
-| `website` | string | Không | URL bắt đầu `http://` hoặc `https://`; ≤ 500 ký tự; `""` = không nhập | `"https://example.com"` |
+| `phone` | string | Không | Chỉ Admin → `403 VENUE_017` (§1). Admin: khớp `^0[0-9]{9,10}$` (10–11 chữ số, bắt đầu bằng 0) `[cần xác nhận #5]`; `""` = không nhập | `"0281234567"` |
+| `website` | string | Không | Chỉ Admin → `403 VENUE_017` (§1). Admin: URL bắt đầu `http://` hoặc `https://`; ≤ 500 ký tự; `""` = không nhập | `"https://example.com"` |
+
+Ví dụ dưới là request của người không phải Admin (không có `phone`, `website`). Admin gửi thêm `"phone": "0281234567"`, `"website": "https://example.com"` nếu có.
 
 ```json
 {
@@ -78,9 +81,7 @@ Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ du
   "latitude": 10.7881234,
   "longitude": 106.6991234,
   "wardId": "0192f000-aaaa-7000-8000-000000000101",
-  "venueType": "SEVEN_A_SIDE",
-  "phone": "0281234567",
-  "website": "https://example.com"
+  "venueType": "SEVEN_A_SIDE"
 }
 ```
 
@@ -96,8 +97,8 @@ Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ du
     "longitude": 106.6991234,
     "ward": { "wardId": "0192f000-aaaa-7000-8000-000000000101", "wardName": "Phường Sài Gòn", "provinceId": "0192f000-aaaa-7000-8000-000000000001", "provinceName": "TP. Hồ Chí Minh" },
     "venueType": "SEVEN_A_SIDE",
-    "phone": "0281234567",
-    "website": "https://example.com",
+    "phone": null,
+    "website": null,
     "status": "ACTIVE",
     "createdByType": "USER",
     "createdById": "01935e10-2b7c-7a44-9e15-6c3d8f2b1a90",
@@ -117,6 +118,7 @@ Người dùng thêm địa điểm sân (có hiệu lực ngay, không chờ du
 |---|---|---|---|
 | 400 | `VALIDATION_ERROR` | Field sai ràng buộc ở bảng trên (gồm thiếu `wardId`) | Hiện lỗi dưới từng field theo `validationErrors[].field` |
 | 404 | `USER_001` | Tài khoản đang đăng nhập không còn tồn tại (đã xoá) | Đăng xuất, về màn đăng nhập |
+| 403 | `VENUE_017` | Người gọi không phải Admin mà gửi `phone` hoặc `website` khác `null` (kể cả `""`) (v6.0, BR-V12) | Lỗi FE — ẩn hai ô này với người không phải Admin, bỏ hai field khỏi request |
 | 400 | `USER_002` | `wardId` không tồn tại hoặc không phải phường/xã (v4.0) | Báo "Khu vực không hợp lệ", cho chọn lại phường/xã |
 
 Backend không chặn gửi lặp (chưa hỗ trợ `Idempotency-Key`) → FE khoá nút "Lưu" khi request đang chạy.
@@ -125,15 +127,15 @@ Backend không chặn gửi lặp (chưa hỗ trợ `Idempotency-Key`) → FE kh
 
 ### 2.2. Danh sách / tìm địa điểm — `GET /api/v1/venues`
 
-**Dùng khi:** màn danh sách / tìm địa điểm; gợi ý địa điểm gần khi chọn sân cho kèo (AC-V01, BC-V04); Admin xem cả địa điểm ngừng hoạt động.
-**Ai gọi được:** mọi user đã đăng nhập.
+**Dùng khi:** màn danh sách / tìm địa điểm; gợi ý địa điểm gần khi chọn sân cho kèo (AC-V01, AC-V06, BC-V04). Chỉ trả địa điểm `ACTIVE` (BR-V13). Màn quản trị xem mọi địa điểm (kể cả `INACTIVE`) dùng 2.14.
+**Ai gọi được:** mọi user đã đăng nhập; kết quả chỉ có địa điểm `ACTIVE` (BR-V13).
 
 **Query params**
 
 | Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
 |---|---|---|---|---|
-| `q` | string | Không | ≤ 100 ký tự; khớp một phần, không phân biệt hoa thường, trong tên **hoặc** địa chỉ | `hoa lư` |
-| `status` | string | Không | `ACTIVE` \| `INACTIVE` \| `ALL`; mặc định `ACTIVE` | `ACTIVE` |
+| `q` | string | Không | ≤ 100 ký tự; cắt khoảng trắng đầu/cuối; khớp một phần, không phân biệt hoa thường, trong tên **hoặc** địa chỉ; `%`, `_` được tìm như ký tự thường | `hoa lư` |
+| `status` | string | Không | Chỉ nhận `ACTIVE`; mặc định `ACTIVE` (FE không cần gửi). `INACTIVE` / `ALL` → `400 VENUE_018`; giá trị ngoài enum → `400 VALIDATION_ERROR` | `ACTIVE` |
 | `lat` | number | Không | -90..90, tối đa 7 chữ số thập phân; phải gửi cùng `lng` | `10.78` |
 | `lng` | number | Không | -180..180, tối đa 7 chữ số thập phân; phải gửi cùng `lat` | `106.70` |
 | `radiusKm` | number | Không | 0.1..50; mặc định 5 khi có `lat`/`lng`; chỉ được gửi khi có `lat`/`lng` | `3` |
@@ -173,6 +175,7 @@ GET /api/v1/venues?lat=10.78&lng=106.70&radiusKm=3&page=1&pageSize=20
 | HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
 | 400 | `VALIDATION_ERROR` | Tham số sai miền giá trị; chỉ gửi một trong `lat`/`lng` (`field` = `lat`); gửi `radiusKm` mà thiếu toạ độ (`field` = `radiusKm`) | Sửa bộ lọc; luôn gửi `lat` và `lng` cùng nhau |
+| 400 | `VENUE_018` | `status` = `INACTIVE` hoặc `ALL`, kể cả khi người gọi là Admin (v6.0, BR-V13) | Lỗi FE — bỏ `status` (hoặc gửi `ACTIVE`); màn quản trị dùng 2.14 |
 
 ---
 
@@ -584,7 +587,7 @@ Không đổi trạng thái địa điểm — muốn ngừng hoạt động đ�
 
 **Path params:** `venueId` (UUID, bắt buộc). **Request body:** không có.
 
-Kết quả: `status` `ACTIVE` → `INACTIVE`, `adminVerifiedInactiveAt` = thời điểm xử lý. Các report `CLOSED` đang `PENDING` của địa điểm tự chuyển `VERIFIED` (người xử lý = admin này); report `WRONG_INFO` / `OTHER` vẫn `PENDING` `[cần xác nhận #4]`. Địa điểm bị loại khỏi danh sách mặc định (2.2), không chọn được cho kèo mới; kèo cũ vẫn giữ tham chiếu và xem được chi tiết địa điểm.
+Kết quả: `status` `ACTIVE` → `INACTIVE`, `adminVerifiedInactiveAt` = thời điểm xử lý. Các report `CLOSED` đang `PENDING` của địa điểm tự chuyển `VERIFIED` (người xử lý = admin này); report `WRONG_INFO` / `OTHER` vẫn `PENDING` `[cần xác nhận #4]`. Địa điểm không còn trong danh sách của người dùng (2.2), chỉ thấy ở danh sách Admin (2.14); không chọn được cho kèo mới; kèo cũ vẫn giữ tham chiếu và xem được chi tiết địa điểm.
 
 **Response 200** — AdminVenue (§4.8): như Venue (§4.2) nhưng `createdByName` không che, kèm `isCreatedByDeleted`. Ví dụ người tạo địa điểm đã xoá tài khoản.
 
@@ -676,7 +679,7 @@ Kết quả: `status` `INACTIVE` → `ACTIVE`, `adminVerifiedInactiveAt` = `null
 ### 2.12. Sửa thông tin địa điểm — `PATCH /api/v1/venues/{venueId}`
 
 **Dùng khi:** người tạo hoặc Admin chọn "Sửa địa điểm" (UC-V05, AC-V04).
-**Ai gọi được:** người tạo khi địa điểm `ACTIVE`; Admin ở mọi trạng thái (BR-V06). Địa điểm không có người tạo (`createdById = null`) → chỉ Admin.
+**Ai gọi được:** người tạo khi địa điểm `ACTIVE`; Admin ở mọi trạng thái (BR-V06). Địa điểm không có người tạo (`createdById = null`) → chỉ Admin. `phone` / `website` chỉ Admin được gửi (BR-V12) — FE ẩn hoặc khoá hai ô này với người không phải Admin.
 
 **Path params:** `venueId` (UUID, bắt buộc).
 
@@ -690,10 +693,12 @@ Kết quả: `status` `INACTIVE` → `ACTIVE`, `adminVerifiedInactiveAt` = `null
 | `longitude` | number | Không | -180..180, ≤ 7 chữ số thập phân; gửi riêng được | `106.6991` |
 | `wardId` | string (UUID) | Có điều kiện | Phường/xã (BR-V11). **Bắt buộc** khi địa điểm chưa có phường (`ward = null` — địa điểm tạo trước v4.0); không xoá được phường đã có | `"0192f000-aaaa-7000-8000-000000000101"` |
 | `venueType` | string | Không | `FIVE_A_SIDE` \| `SEVEN_A_SIDE` \| `ELEVEN_A_SIDE`; `""` = xoá giá trị | `"FIVE_A_SIDE"` |
-| `phone` | string | Không | Khớp `^0[0-9]{9,10}$`; `""` = xoá giá trị | `""` |
-| `website` | string | Không | URL `http(s)://`, ≤ 500 ký tự; `""` = xoá giá trị | `"https://hoalu.vn"` |
+| `phone` | string | Không | Chỉ Admin → `403 VENUE_017` (§1). Admin: khớp `^0[0-9]{9,10}$`; `""` = xoá giá trị | `""` |
+| `website` | string | Không | Chỉ Admin → `403 VENUE_017` (§1). Admin: URL `http(s)://`, ≤ 500 ký tự; `""` = xoá giá trị | `"https://hoalu.vn"` |
 
-Field vắng hoặc `null` → giữ nguyên; `""` cho `venueType` / `phone` / `website` → xoá giá trị `[cần xác nhận #7]`. Địa điểm chưa có phường mà request không gửi `wardId` → `422 VENUE_016` (mọi lần sửa phải bổ sung phường trước — BR-V11). Không field nào thay đổi → `200` với dữ liệu hiện tại. Không sửa được `status`, người tạo, `lastSelectedAt` hay ảnh qua endpoint này.
+Field vắng hoặc `null` → giữ nguyên (người không phải Admin không gửi `phone` / `website` → giữ nguyên giá trị đã có, kể cả giá trị Admin đã nhập); `""` cho `venueType` → xoá giá trị; `""` cho `phone` / `website` → xoá giá trị, chỉ Admin `[cần xác nhận #7]`. Địa điểm chưa có phường mà request không gửi `wardId` → `422 VENUE_016` (mọi lần sửa phải bổ sung phường trước — BR-V11). Không field nào thay đổi → `200` với dữ liệu hiện tại. Không sửa được `status`, người tạo, `lastSelectedAt` hay ảnh qua endpoint này.
+
+Ví dụ request của Admin (xoá `phone`); người không phải Admin chỉ gửi `{ "venueType": "FIVE_A_SIDE" }`.
 
 ```json
 { "venueType": "FIVE_A_SIDE", "phone": "" }
@@ -731,6 +736,7 @@ Field vắng hoặc `null` → giữ nguyên; `""` cho `venueType` / `phone` / `
 | HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
 | 400 | `VALIDATION_ERROR` | Field sai ràng buộc | Hiện lỗi dưới field |
+| 403 | `VENUE_017` | Người gọi không phải Admin mà gửi `phone` hoặc `website` khác `null` (kể cả `""` để xoá) — báo trước mọi lỗi bên dưới (v6.0, BR-V12) | Lỗi FE — bỏ hai field khỏi request của người không phải Admin |
 | 404 | `VENUE_001` | Địa điểm không tồn tại | Báo, quay về danh sách |
 | 403 | `VENUE_013` | Không phải người tạo, không phải Admin | Ẩn nút "Sửa"; gợi ý "Report thông tin sai" (2.7, UC-V05 1a1) |
 | 422 | `VENUE_002` | Địa điểm `INACTIVE` và người gọi không phải Admin | Ẩn nút "Sửa"; tải lại chi tiết (2.3) |
@@ -778,6 +784,59 @@ Xoá vĩnh viễn, không khôi phục được. Xoá ảnh chính khi còn ản
 
 ---
 
+### 2.14. Admin xem danh sách địa điểm — `GET /api/v1/admin/venues`
+
+**Dùng khi:** màn quản trị "Địa điểm" — xem mọi địa điểm, kể cả `INACTIVE`, để mở chi tiết (2.3), sửa (2.12), đánh dấu ngừng hoạt động (2.10) hoặc kích hoạt lại (2.11) (UC-V07, AC-V06, BR-V13). Thay cho việc gọi 2.2 với `status=INACTIVE` / `ALL` (nay bị từ chối).
+**Ai gọi được:** Admin.
+
+**Query params**
+
+| Tên | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
+|---|---|---|---|---|
+| `q` | string | Không | ≤ 100 ký tự; cắt khoảng trắng đầu/cuối; khớp một phần, không phân biệt hoa thường, trong tên **hoặc** địa chỉ; `%`, `_` được tìm như ký tự thường | `hoa lư` |
+| `status` | string | Không | `ACTIVE` \| `INACTIVE` \| `ALL`; mặc định **`ALL`** | `INACTIVE` |
+| `page` | integer | Không | ≥ 1; mặc định 1 | `1` |
+| `pageSize` | integer | Không | 1..100; mặc định 20 | `20` |
+
+Không lọc theo vị trí: không có `lat` / `lng` / `radiusKm`; tham số không có trong bảng bị bỏ qua.
+
+**Thứ tự sắp xếp:** `venueName` A→Z, bằng nhau → `venueId` tăng dần.
+
+```http
+GET /api/v1/admin/venues?status=INACTIVE&page=1&pageSize=20
+```
+
+**Response 200** — mảng VenueSummary (§4.3) + `pagination`; `distanceKm` luôn `null`.
+
+```json
+{
+  "data": [
+    {
+      "venueId": "01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01",
+      "venueName": "Sân bóng Hoa Lư",
+      "address": "2 Đinh Tiên Hoàng, Phường Đa Kao, TP.HCM",
+      "latitude": 10.7881234,
+      "longitude": 106.6991234,
+      "venueType": "SEVEN_A_SIDE",
+      "status": "INACTIVE",
+      "primaryImageUrl": null,
+      "distanceKm": null,
+      "lastSelectedAt": "2026-11-08T19:30:00"
+    }
+  ],
+  "pagination": { "page": 1, "pageSize": 20, "totalPages": 1, "totalItems": 1 }
+}
+```
+
+**Lỗi**
+
+| HTTP | Mã | Khi nào | FE nên làm gì |
+|---|---|---|---|
+| 403 | `AUTH_004` | Tài khoản không phải admin | Ẩn menu quản trị |
+| 400 | `VALIDATION_ERROR` | `status` ngoài enum (phân biệt hoa thường); `q` > 100 ký tự; `page` / `pageSize` ngoài miền | Sửa bộ lọc |
+
+---
+
 ## 3. Hành động theo trạng thái
 
 ### 3.1. Địa điểm (`ACTIVE` / `INACTIVE`)
@@ -787,7 +846,9 @@ Xoá vĩnh viễn, không khôi phục được. Xoá ảnh chính khi còn ản
 | Hành động (endpoint) | `ACTIVE` · Người tạo | `ACTIVE` · User khác | `ACTIVE` · Admin | `INACTIVE` · Người tạo | `INACTIVE` · User khác | `INACTIVE` · Admin |
 |---|---|---|---|---|---|---|
 | Xem chi tiết (2.3) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Thấy trong danh sách (2.2) | ✅ mặc định | ✅ mặc định | ✅ mặc định | chỉ khi lọc `status=INACTIVE` / `ALL` | như bên trái | như bên trái |
+| Thấy trong danh sách người dùng (2.2) | ✅ | ✅ | ✅ | Không (lọc `INACTIVE` / `ALL` → `400 VENUE_018`) | như bên trái | như bên trái — Admin dùng 2.14 |
+| Thấy trong danh sách Admin (2.14) | `403 AUTH_004` | `403 AUTH_004` | ✅ | `403 AUTH_004` | `403 AUTH_004` | ✅ |
+| Nhập / sửa / xoá `phone`, `website` (2.1, 2.12) | `403 VENUE_017` | `403 VENUE_017` | ✅ | `403 VENUE_017` | `403 VENUE_017` | ✅ |
 | Thêm ảnh (2.4 → 2.5), khi < 5 ảnh | ✅ | ✅ | ✅ | `422 VENUE_002` | `422 VENUE_002` | ✅ |
 | Đặt ảnh chính (2.6) | ✅ | ✅ | ✅ | `422 VENUE_002` | `422 VENUE_002` | ✅ |
 | Sửa thông tin (2.12) | ✅ | `403 VENUE_013` | ✅ | `422 VENUE_002` | `403 VENUE_013` | ✅ |
@@ -812,8 +873,8 @@ User không có endpoint xem lại report của mình; trạng thái report ch�
 
 | Kiểu / enum | Giá trị | Ý nghĩa |
 |---|---|---|
-| `status` (địa điểm) | `ACTIVE` | Đang hoạt động: có trong danh sách mặc định, chọn được cho kèo |
-| | `INACTIVE` | Admin đã xác nhận ngừng hoạt động: vẫn xem được chi tiết, chỉ Admin được ghi |
+| `status` (địa điểm) | `ACTIVE` | Đang hoạt động: có trong danh sách người dùng (2.2), chọn được cho kèo |
+| | `INACTIVE` | Admin đã xác nhận ngừng hoạt động: vẫn xem được chi tiết, chỉ Admin được ghi; chỉ có trong danh sách Admin (2.14) |
 | `venueType` | `FIVE_A_SIDE` \| `SEVEN_A_SIDE` \| `ELEVEN_A_SIDE` | Sân 5 / sân 7 / sân 11 (BR-V05); `null` = chưa khai báo |
 | `createdByType` | `ADMIN` \| `USER` | Địa điểm do tài khoản admin / user thường tạo |
 | `reason` (report) | `CLOSED` | Địa điểm đã đóng cửa / ngừng hoạt động |
@@ -822,7 +883,8 @@ User không có endpoint xem lại report của mình; trạng thái report ch�
 | `status` (report) | `PENDING` | Chờ admin xử lý |
 | | `VERIFIED` | Admin xác nhận report đúng |
 | | `REJECTED` | Admin từ chối report |
-| Bộ lọc `status` của 2.2 | `ACTIVE` \| `INACTIVE` \| `ALL` | `ALL` = cả hai trạng thái |
+| Bộ lọc `status` của 2.2 | `ACTIVE` | Chỉ nhận `ACTIVE` (mặc định); `INACTIVE` / `ALL` → `400 VENUE_018` |
+| Bộ lọc `status` của 2.14 | `ACTIVE` \| `INACTIVE` \| `ALL` | `ALL` = cả hai trạng thái (mặc định) |
 | Bộ lọc `status` của 2.8 | `PENDING` \| `VERIFIED` \| `REJECTED` \| `ALL` | `ALL` = mọi trạng thái |
 | `format` (ảnh, chữ thường) | `jpg` \| `jpeg` \| `png` \| `webp` | Định dạng ảnh được nhận |
 
@@ -845,13 +907,13 @@ User không có endpoint xem lại report của mình; trạng thái report ch�
 | `createdAt`, `updatedAt` | datetime | |
 | `images` | VenueImage[] | §4.4, theo `displayOrder` tăng dần |
 
-### 4.3. VenueSummary — một dòng danh sách (2.2)
+### 4.3. VenueSummary — một dòng danh sách (2.2, 2.14)
 
 | Field | Kiểu | Ghi chú |
 |---|---|---|
 | `venueId`, `venueName`, `address`, `latitude`, `longitude`, `venueType`, `status`, `lastSelectedAt` | | Cùng nghĩa §4.2 |
 | `primaryImageUrl` | string \| `null` | URL ảnh chính; `null` khi chưa có ảnh |
-| `distanceKm` | number \| `null` | Khoảng cách (km) tới `lat`/`lng`, làm tròn 2 chữ số thập phân; `null` khi không gửi toạ độ |
+| `distanceKm` | number \| `null` | Khoảng cách (km) tới `lat`/`lng`, làm tròn 2 chữ số thập phân; `null` khi không gửi toạ độ; luôn `null` ở 2.14 |
 
 ### 4.4. VenueImage — ảnh (2.3, 2.5, 2.6, 2.13)
 
@@ -939,8 +1001,10 @@ Các endpoint không thuộc `/api/v1/admin/**` (2.1, 2.3, 2.12) vẫn trả Ven
 | `VENUE_014` | 409 | "Bạn đã report địa điểm này, đang chờ admin xử lý" | 2.7 |
 | `VENUE_015` | 403 | "Quản trị viên không report địa điểm; hãy sửa hoặc đánh dấu ngừng hoạt động trực tiếp" | 2.7 |
 | `VENUE_016` | 422 | "Địa điểm cần bổ sung phường/xã" | 2.12 |
+| `VENUE_017` | 403 | "Chỉ quản trị viên được nhập số điện thoại và website của địa điểm" | 2.1, 2.12 |
+| `VENUE_018` | 400 | "Danh sách này chỉ gồm địa điểm đang hoạt động; quản trị viên dùng danh sách quản trị" | 2.2 |
 
-**Mã dùng lại** (message theo mục "Mã lỗi" của USER-001 `API_Spec.md`): `VALIDATION_ERROR` (400, mọi endpoint) · `AUTH_001` (401, mọi endpoint) · `AUTH_004` (403, 2.8–2.11) · `USER_001` (404, 2.1) · `USER_002` (400, 2.1, 2.12 — "Khu vực không hợp lệ") · `SYS_*` (`api-convention.md` §6). FE nên làm gì: `AUTH_001`, `SYS_*` → theo USER-001 `API_Spec.md` §1.2 "Lỗi chung"; `AUTH_004` → ẩn chức năng quản trị. `VENUE_013` / `VENUE_015` (403) là từ chối theo quy tắc của địa điểm; `AUTH_004` (403) là endpoint chỉ dành cho admin.
+**Mã dùng lại** (message theo mục "Mã lỗi" của USER-001 `API_Spec.md`): `VALIDATION_ERROR` (400, mọi endpoint) · `AUTH_001` (401, mọi endpoint) · `AUTH_004` (403, 2.8–2.11, 2.14) · `USER_001` (404, 2.1) · `USER_002` (400, 2.1, 2.12 — "Khu vực không hợp lệ") · `SYS_*` (`api-convention.md` §6). FE nên làm gì: `AUTH_001`, `SYS_*` → theo USER-001 `API_Spec.md` §1.2 "Lỗi chung"; `AUTH_004` → ẩn chức năng quản trị. `VENUE_013` / `VENUE_015` / `VENUE_017` (403) là từ chối theo quy tắc của địa điểm; `AUTH_004` (403) là endpoint chỉ dành cho admin.
 
 ## 6. Danh sách [cần xác nhận]
 
@@ -952,5 +1016,5 @@ Số thứ tự giữ theo toàn bộ thiết kế VENUE-001; các số không c
 | 4 | 2.10 chỉ chuyển report `CLOSED` → `VERIFIED`; `WRONG_INFO` / `OTHER` giữ `PENDING` | Không chặn |
 | 5 | Giới hạn spec không nêu: `address` ≤ 500, `detail` ≤ 1000, `phone` `^0[0-9]{9,10}$` | Không chặn |
 | 6 | Admin tạo địa điểm → `createdByType = ADMIN`, `createdById` = admin đó (admin là "người tạo") | Không chặn |
-| 7 | 2.12: `""` = xoá field tuỳ chọn, `null` = giữ nguyên | Không chặn |
+| 7 | 2.12: `""` = xoá field tuỳ chọn, `null` = giữ nguyên (`phone` / `website`: chỉ Admin — BR-V12) | Không chặn |
 | 19 | Giới hạn dung lượng file ảnh chưa chốt (chữ ký upload không giới hạn được dung lượng; áp giới hạn của gói Cloudinary). FE nên tự giới hạn dung lượng trước khi upload | Không chặn |

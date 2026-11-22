@@ -1,5 +1,28 @@
 # CHANGELOG — VENUE-001 Quản lý địa điểm sân
 
+## [v6.0] — 2026-11-22
+
+**Type:** MAJOR (2.1, 2.12 thêm mã lỗi `403 VENUE_017` cho `phone` / `website` từ người không phải Admin; 2.2 từ chối `status=INACTIVE` / `ALL` bằng `400 VENUE_018`, kể cả Admin; thêm endpoint 2.14) · **Tóm tắt:** Điện thoại / website địa điểm chỉ Admin nhập, sửa, xoá; danh sách người dùng chỉ có địa điểm `ACTIVE`, Admin xem mọi địa điểm qua endpoint riêng (SRS `SYSTEM-001` v1.14 — BR-V12, BR-V13, UC-V07, AC-V06; user chốt 2026-11-22).
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | 2.1 `phone`, `website`; bảng lỗi 2.1; §1 quy ước `""` | Đổi ràng buộc + thêm mã lỗi | Mọi user gửi được → chỉ Admin. Người không phải Admin gửi giá trị khác `null` (kể cả `""`) → `403 VENUE_017`; thứ tự: sau `USER_001`, trước `USER_002` | BR-V12 | Ẩn ô điện thoại / website với người không phải Admin; không gửi hai field này trong request của họ |
+| 2 | 2.12 `phone`, `website`; bảng lỗi 2.12 | Đổi ràng buộc + thêm mã lỗi | Người tạo sửa / xoá được → chỉ Admin. Người không phải Admin gửi giá trị khác `null` (kể cả `""` để xoá) → `403 VENUE_017`, báo trước mọi mã lỗi nghiệp vụ khác của 2.12. Không gửi → giữ giá trị cũ (kể cả giá trị Admin đã nhập) | BR-V12 | Ẩn hoặc khoá hai ô với người không phải Admin; chỉ gửi field đã đổi |
+| 3 | 2.2 `status`; bảng lỗi 2.2; §4.1 | Đổi miền giá trị + thêm mã lỗi | `ACTIVE` \| `INACTIVE` \| `ALL` (Admin xem được địa điểm ngừng hoạt động) → chỉ `ACTIVE` (mặc định); `INACTIVE` / `ALL` → `400 VENUE_018`, kể cả khi người gọi là Admin. Lọc `q`, `lat` / `lng` / `radiusKm` không đổi | BR-V13 | Bỏ tham số `status` khi gọi 2.2; màn quản trị chuyển sang 2.14 |
+| 4 | 2.14 `GET /api/v1/admin/venues` | Thêm endpoint | — → danh sách mọi địa điểm cho Admin: `q`, `status` (`ACTIVE` \| `INACTIVE` \| `ALL`, mặc định `ALL`), `page`, `pageSize`; không lọc vị trí; sắp theo tên rồi `venueId`; trả VenueSummary (`distanceKm` luôn `null`) + `pagination`; không phải Admin → `403 AUTH_004` | UC-V07, BR-V13 | Màn quản trị "Địa điểm" gọi 2.14 thay cho 2.2 |
+| 5 | §1 tổng quan, §2 bảng endpoint, §3.1 bảng hành động, §4.3 (dùng cho 2.2 và 2.14), §5 (thêm `VENUE_017`, `VENUE_018`; `AUTH_004` thêm 2.14), 2.10 (câu "loại khỏi danh sách mặc định") | Sửa | Cập nhật theo #1–#4 | Như #1–#4 | Theo bảng §3.1 để ẩn / hiện nút |
+| 6 | Ví dụ request / response 2.1; ví dụ request 2.12 | Sửa | Ví dụ 2.1 là request người không phải Admin (không `phone` / `website`, response hai field `null`); ví dụ 2.12 ghi rõ là request của Admin | Như #1–#2 | Không |
+| 7 | Header "Spec nghiệp vụ" | Sửa | `SYSTEM-001` v1.9 → v1.14 (thêm BR-V12, BR-V13, UC-V07, AC-V06; sửa BC-V04) | Đồng bộ SRS | Không |
+| 8 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Đồng bộ với code | Không |
+| 9 | Header 3 tài liệu thiết kế VENUE-001 | Ghi nhận | v5.0 → v6.0 | Đánh phiên bản theo entry này | Không |
+| 10 | 2.1 `wardId` | Sửa câu chữ | Danh mục khu vực trỏ USER-001 → USER-003 `API_Spec.md` §2.1–§2.2 | Đồng bộ việc treo từ USER-003 | Lấy danh mục tỉnh/phường từ USER-003 |
+
+### Ảnh hưởng
+- Endpoint đang chạy đổi hành vi: 2.1, 2.12 (người không phải Admin gửi `phone` / `website`), 2.2 (`status` khác `ACTIVE`). FE phải cập nhật màn thêm / sửa địa điểm và màn quản trị địa điểm.
+- Không đổi shape response; không đổi 2.3–2.11, 2.13. Chi tiết địa điểm `INACTIVE` (2.3) vẫn xem được.
+
 ## [v5.0] — 2026-11-21
 
 **Type:** MAJOR (đổi định dạng mọi giá trị thời gian của response: bỏ `Z`/offset, giá trị theo giờ Việt Nam; đổi `validationErrors[].field` của lỗi đọc body) · **Tóm tắt:** Thời gian theo giờ Việt Nam, không kèm múi giờ; lỗi body sai kiểu trả đúng tên field (SYSTEM-002).

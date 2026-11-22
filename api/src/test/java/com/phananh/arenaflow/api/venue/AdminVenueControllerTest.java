@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/** Kiểm các API Admin trên địa điểm qua HTTP với DB thật: danh sách toàn bộ địa điểm, ngừng/kích hoạt lại, report. */
 class AdminVenueControllerTest extends ApiIntegrationTest {
 
     @Autowired private JdbcTemplate jdbcTemplate;
@@ -78,6 +79,36 @@ class AdminVenueControllerTest extends ApiIntegrationTest {
                         .content("{\"status\":\"VERIFIED\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("VENUE_010"));
+    }
+
+    @Test
+    void adminListsEveryVenueStatusByDefaultWithoutLocationFilter() throws Exception {
+        User user = saveUser("Admin List User");
+        User admin = saveUser("Admin List Admin", User.Role.ADMIN);
+        String token = "AdmList" + UUID.randomUUID().toString().substring(0, 8);
+        UUID activeId = createVenue(user, token + " A");
+        UUID inactiveId = createVenue(user, token + " B");
+        jdbcTemplate.update("UPDATE venue SET status = 'INACTIVE', admin_verified_inactive_at = NOW() WHERE id = ?",
+                inactiveId);
+        flush();
+
+        mockMvc.perform(as(user, get("/api/v1/admin/venues")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("AUTH_004"));
+        mockMvc.perform(as(admin, get("/api/v1/admin/venues")).param("q", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].venueId").value(activeId.toString()))
+                .andExpect(jsonPath("$.data[1].venueId").value(inactiveId.toString()))
+                .andExpect(jsonPath("$.data[1].status").value("INACTIVE"))
+                .andExpect(jsonPath("$.data[0].distanceKm").doesNotExist());
+        mockMvc.perform(as(admin, get("/api/v1/admin/venues")).param("q", token).param("status", "INACTIVE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].venueId").value(inactiveId.toString()));
+        mockMvc.perform(as(admin, get("/api/v1/admin/venues")).param("pageSize", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.validationErrors[0].field").value("pageSize"));
     }
 
     @Test

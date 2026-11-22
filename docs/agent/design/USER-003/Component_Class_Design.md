@@ -376,7 +376,7 @@ Không thêm dependency (giới hạn 2.3 viết bằng `ConcurrentHashMap` củ
 | `docs/agent/api-convention.md` §6 | Ví dụ `USER_004`..`USER_007` | `chore/agent-framework-*` |
 | `docs/agent/api-convention.md` §5 (Client Error 4xx) | Thêm `429 Too Many Requests` — vượt giới hạn số lần gọi; response kèm header `Retry-After` (số nguyên giây); mã lỗi theo miền (`USER_007` là mã đầu tiên) | `chore/agent-framework-*` |
 | `docs/agent/security-backend.md` §7 | Ghi mẫu đang dùng: giới hạn theo `userId` trong bộ nhớ, cửa sổ trượt, không dependency (USER-003 2.3); ví dụ resilience4j hiện có chưa áp dụng ở repo | `chore/agent-framework-*` |
-| VENUE-001 `API_Spec.md` (dòng `wardId`, khoảng :69) | Đang trỏ danh mục khu vực sang USER-001 → trỏ USER-003 `API_Spec.md` §2.1–§2.2 | Lần sửa VENUE-001 kế tiếp (không sửa trong USER-003) |
+| VENUE-001 `API_Spec.md` (dòng `wardId`, khoảng :69) | Đang trỏ danh mục khu vực sang USER-001 → trỏ USER-003 `API_Spec.md` §2.1–§2.2 | ✅ Đã làm ở VENUE-001 v6.0 (2026-11-22) |
 | NOTIFICATION-001 `API_Spec.md` (thông báo `TEAM_INVITATION`, khoảng :281) | Ghi thêm: lời mời cũng xem được ở USER-003 `API_Spec.md` §2.4 | Lần sửa NOTIFICATION-001 kế tiếp (không sửa trong USER-003) |
 | `docs/agent/api-convention.md` §7 (bảng "Áp dụng") | Dòng ngoại lệ "không phân trang": 2.1, 2.2 (danh mục, trả toàn bộ), 2.3 (tối đa 20, `{items, hasMore}` — dùng hình dạng §7.2 nhưng không có con trỏ) | `chore/agent-framework-*` |
 | `docs/agent/non-functional-standards.md` §2 | Ngoại lệ "danh mục chỉ đọc có chặn trên tự nhiên / gợi ý tìm kiếm có `LIMIT` cố định" — user chốt D1 2026-11-17 | `chore/agent-framework-*` |

@@ -26,6 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/** Kiểm các API địa điểm của người dùng qua HTTP với DB thật: thêm, tìm, sửa, ảnh và report địa điểm. */
 class VenueControllerTest extends ApiIntegrationTest {
 
     @Autowired private JdbcTemplate jdbcTemplate;
@@ -57,6 +58,9 @@ class VenueControllerTest extends ApiIntegrationTest {
         mockMvc.perform(as(creator, get("/api/v1/venues")).param("pageSize", "101"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.validationErrors[0].field").value("pageSize"));
+        mockMvc.perform(as(creator, get("/api/v1/venues")).param("status", "ALL"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VENUE_018"));
     }
 
     @Test
@@ -92,12 +96,19 @@ class VenueControllerTest extends ApiIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("VENUE_013"));
         mockMvc.perform(as(owner, patch("/api/v1/venues/" + venueId)).content("{\"venueName\":\"Sân mới\",\"phone\":\"\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("VENUE_017"));
+        mockMvc.perform(as(owner, patch("/api/v1/venues/" + venueId)).content("{\"venueName\":\"Sân mới\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.venueName").value("Sân mới"))
-                .andExpect(jsonPath("$.data.phone").doesNotExist());
-        mockMvc.perform(as(admin, patch("/api/v1/venues/" + venueId)).content("{\"address\":\"Địa chỉ admin\"}"))
+                .andExpect(jsonPath("$.data.venueName").value("Sân mới"));
+        mockMvc.perform(as(admin, patch("/api/v1/venues/" + venueId))
+                        .content("{\"address\":\"Địa chỉ admin\",\"phone\":\"0901234567\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.address").value("Địa chỉ admin"));
+                .andExpect(jsonPath("$.data.address").value("Địa chỉ admin"))
+                .andExpect(jsonPath("$.data.phone").value("0901234567"));
+        mockMvc.perform(as(owner, post("/api/v1/venues")).content(body.replace("}", ",\"website\":\"https://san.vn\"}")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("VENUE_017"));
     }
 
     @Test

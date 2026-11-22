@@ -1,6 +1,7 @@
 package com.phananh.arenaflow.application.service;
 
 import com.phananh.arenaflow.application.dto.request.AddVenueImageRequest;
+import com.phananh.arenaflow.application.dto.request.AdminSearchVenueRequest;
 import com.phananh.arenaflow.application.dto.request.CreateVenueRequest;
 import com.phananh.arenaflow.application.dto.request.ReportVenueRequest;
 import com.phananh.arenaflow.application.dto.request.ResolveVenueReportRequest;
@@ -86,6 +87,10 @@ class VenueNfsQueryCountTest {
         assertThat(measure(() -> venueService.listVenues(new SearchVenueRequest(
                 null, null, null, null, null, 1, 2))))
                 .as("GET /api/v1/venues")
+                .isEqualTo(2)
+                .isLessThanOrEqualTo(LIST_LIMIT);
+        assertThat(measure(() -> adminVenueService.listVenues(new AdminSearchVenueRequest(null, null, 1, 2))))
+                .as("GET /api/v1/admin/venues")
                 .isEqualTo(2)
                 .isLessThanOrEqualTo(LIST_LIMIT);
 

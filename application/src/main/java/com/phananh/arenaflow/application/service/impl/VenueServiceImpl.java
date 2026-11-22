@@ -18,6 +18,7 @@ import com.phananh.arenaflow.application.support.AdminAuditLog;
 import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
 import com.phananh.arenaflow.application.support.DataIntegrityViolations;
+import com.phananh.arenaflow.application.support.LikePatterns;
 import com.phananh.arenaflow.application.support.VenueGuard;
 import com.phananh.arenaflow.application.support.security.CurrentActor;
 import com.phananh.arenaflow.common.exception.BusinessException;
@@ -43,6 +44,10 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Nghiệp vụ địa điểm sân cho người dùng đã đăng nhập: thêm, xem, tìm, sửa và report địa điểm.
+ * Điện thoại/website chỉ Admin được ghi; danh sách chỉ trả địa điểm đang hoạt động.
+ */
 @Service
 @RequiredArgsConstructor
 public class VenueServiceImpl implements VenueService {
@@ -61,12 +66,17 @@ public class VenueServiceImpl implements VenueService {
     private final ApplicationEventPublisher eventPublisher;
     private final AdminAuditLog adminAuditLog;
 
-    /** Q1 caller, Q2 phường/tỉnh, Q3 insert; trả kết quả từ dữ liệu đã đọc, không cần truy vấn thứ tư. */
+    /**
+     * Q1 caller, Q2 phường/tỉnh, Q3 insert; trả kết quả từ dữ liệu đã đọc, không cần truy vấn thứ tư.
+     * Caller không phải Admin gửi điện thoại/website (kể cả chuỗi rỗng) → {@code VENUE_017} trước khi tra phường;
+     * vai trò lấy từ bản ghi user vừa đọc, cùng nguồn với {@code createdByType}.
+     */
     @Override
     @Transactional
     public VenueResponse createVenue(UUID callerId, CreateVenueRequest request) {
         User creator = userRepository.findByIdAndDeletedAtIsNull(callerId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_001));
+        requireAdminForContactFields(creator.getRole() == User.Role.ADMIN, request.phone(), request.website());
         WardView ward = administrativeUnitRepository.findWardWithProvince(request.wardId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_002));
         Venue venue = venueRepository.save(Venue.builder()
@@ -96,34 +106,44 @@ public class VenueServiceImpl implements VenueService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.VENUE_001));
     }
 
-    /** Q1 trang + Q2 count; chọn native query có index phù hợp cho từng kiểu tìm kiếm. */
+    /**
+     * Q1 trang + Q2 count; chỉ địa điểm đang hoạt động, chọn native query có index phù hợp (có hoặc không toạ độ).
+     * Lọc trạng thái khác {@code ACTIVE} → {@code VENUE_018} trước mọi truy vấn, kể cả khi caller là Admin
+     * (Admin xem toàn bộ địa điểm qua danh sách riêng của Admin).
+     */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<VenueSummaryResponse> listVenues(SearchVenueRequest request) {
+        if (request.status() != VenueStatusFilter.ACTIVE) {
+            throw new BusinessException(ErrorCode.VENUE_018);
+        }
         var pageable = pageRequestFactory.create(request.page(), request.pageSize());
-        String qPattern = request.q() == null || request.q().isEmpty() ? null : "%" + escapeLike(request.q()) + "%";
+        String qPattern = LikePatterns.contains(request.q());
         Page<VenueSummaryView> venues;
         if (request.lat() == null) {
-            venues = request.status() == VenueStatusFilter.ALL
-                    ? venueRepository.searchAll(qPattern, pageable)
-                    : venueRepository.searchByStatus(request.status().toQueryValue(), qPattern, pageable);
+            venues = venueRepository.searchByStatus(VenueStatusFilter.ACTIVE.toQueryValue(), qPattern, pageable);
         } else {
             double lat = request.lat().doubleValue();
             double lng = request.lng().doubleValue();
             double radiusKm = request.radiusKm().doubleValue();
             double latitudeDelta = radiusKm / 111.32d;
             double longitudeDelta = radiusKm / (111.32d * Math.cos(Math.toRadians(lat)));
-            venues = request.status() == VenueStatusFilter.ACTIVE
-                    ? venueRepository.searchNearbyActive(qPattern, lat, lng, radiusKm, lat - latitudeDelta,
-                    lat + latitudeDelta, lng - longitudeDelta, lng + longitudeDelta, pageable)
-                    : venueRepository.searchNearbyAny(request.status().toQueryValue(), qPattern, lat, lng, radiusKm,
-                    lat - latitudeDelta, lat + latitudeDelta, lng - longitudeDelta, lng + longitudeDelta, pageable);
+            venues = venueRepository.searchNearbyActive(qPattern, lat, lng, radiusKm, lat - latitudeDelta,
+                    lat + latitudeDelta, lng - longitudeDelta, lng + longitudeDelta, pageable);
         }
         return PageResponse.from(venues, venueMapper::toSummary, request.page(), request.pageSize());
     }
 
+    /**
+     * Sửa thông tin địa điểm, thử lại khi xung đột phiên bản ({@code VENUE_011}).
+     * Thứ tự kiểm: điện thoại/website từ caller không phải Admin ({@code VENUE_017}, trước mọi truy vấn) → tồn tại
+     * ({@code VENUE_001}) → người tạo hoặc Admin ({@code VENUE_013}) → địa điểm ngừng hoạt động chỉ Admin sửa
+     * ({@code VENUE_002}) → địa điểm chưa có phường phải gửi phường ({@code VENUE_016}).
+     * Admin sửa địa điểm của người khác → ghi audit sau commit.
+     */
     @Override
     public VenueResponse updateVenue(UUID venueId, CurrentActor actor, UpdateVenueRequest request) {
+        requireAdminForContactFields(actor.admin(), request.phone(), request.website());
         return concurrencyConflictRetrier.execute(ErrorCode.VENUE_011, () -> {
             Venue venue = venueGuard.findVenue(venueId);
             venueGuard.requireOwnerOrAdmin(venue, actor);
@@ -186,11 +206,17 @@ public class VenueServiceImpl implements VenueService {
         return venueMapper.toReport(report);
     }
 
-    /** Từ khoá được so khớp nguyên văn: backslash là ký tự escape mặc định của LIKE trong PostgreSQL. */
-    private static String escapeLike(String keyword) {
-        return keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    /**
+     * Điện thoại và website chỉ Admin được ghi: caller khác Admin gửi bất kỳ giá trị nào khác {@code null},
+     * kể cả chuỗi rỗng để xoá, đều bị từ chối {@code VENUE_017}.
+     */
+    private static void requireAdminForContactFields(boolean admin, String phone, String website) {
+        if (!admin && (phone != null || website != null)) {
+            throw new BusinessException(ErrorCode.VENUE_017);
+        }
     }
 
+    /** Chuỗi rỗng nghĩa là xoá giá trị; giá trị còn lại được cắt khoảng trắng hai đầu. */
     private static String emptyToNull(String value) {
         return value == null || value.isEmpty() ? null : value.trim();
     }

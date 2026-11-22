@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Kiểm mã lỗi khớp HTTP status, định dạng mã và thông báo mặc định. */
 class ErrorCodeTest {
 
     @Test
@@ -31,6 +32,18 @@ class ErrorCodeTest {
     void exposesTheApiCodeAndMessage() {
         assertThat(ErrorCode.USER_001.getCode()).isEqualTo("USER_001");
         assertThat(ErrorCode.USER_001.getMessage()).isEqualTo("Không tìm thấy người dùng");
+    }
+
+    @Test
+    void venueContactFieldsAreAdminOnlyAndPublicListIsActiveOnly() {
+        assertThat(ErrorCode.VENUE_017.getCode()).isEqualTo("VENUE_017");
+        assertThat(ErrorCode.VENUE_017.getHttpStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(ErrorCode.VENUE_017.getMessage())
+                .isEqualTo("Chỉ quản trị viên được nhập số điện thoại và website của địa điểm");
+        assertThat(ErrorCode.VENUE_018.getCode()).isEqualTo("VENUE_018");
+        assertThat(ErrorCode.VENUE_018.getHttpStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(ErrorCode.VENUE_018.getMessage())
+                .isEqualTo("Danh sách này chỉ gồm địa điểm đang hoạt động; quản trị viên dùng danh sách quản trị");
     }
 
     @Test

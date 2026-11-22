@@ -1046,7 +1046,7 @@
 
 **Main Flow:**
 1. Actor chọn "Thêm địa điểm"
-2. Actor nhập thông tin (tên, địa chỉ, tọa độ, loại sân — sân 5 / sân 7 / sân 11, không bắt buộc — điện thoại, website)
+2. Actor nhập thông tin (tên, địa chỉ, tọa độ, loại sân — sân 5 / sân 7 / sân 11, không bắt buộc — điện thoại, website). Điện thoại, website chỉ Admin nhập; người dùng khác không nhập (không gửi) (BR-V12)
 3. Actor submit
 4. Hệ thống tạo địa điểm với trạng thái active, lưu người tạo
 5. Hệ thống hiển thị "Địa điểm đã được thêm"
@@ -1060,6 +1060,10 @@
 **3a. Validation thất bại:**
 - 3a1. Hệ thống hiển thị lỗi (vd: "Tên không được để trống")
 - 3a2. Quay về bước 2
+
+**3b. Actor không phải Admin nhập điện thoại hoặc website (BR-V12):**
+- 3b1. Hệ thống không tạo địa điểm, báo lỗi chỉ Admin được nhập điện thoại / website
+- 3b2. Quay về bước 2
 
 ---
 
@@ -1137,11 +1141,11 @@
 3. (Nếu đúng ngừng hoạt động) Admin chọn "Đánh dấu ngừng hoạt động"
 4. Admin xác nhận
 5. Hệ thống chuyển địa điểm sang inactive
-6. Hệ thống loại địa điểm khỏi gợi ý mặc định (Match cũ giữ tham chiếu)
+6. Hệ thống bỏ địa điểm khỏi danh sách địa điểm của người dùng (Match cũ giữ tham chiếu)
 
 **Postconditions:**
 - Địa điểm chuyển sang inactive
-- Địa điểm bị loại khỏi gợi ý
+- Địa điểm không còn hiện trong danh sách địa điểm của người dùng (chỉ Admin xem)
 - Match cũ vẫn giữ tham chiếu
 
 ---
@@ -1157,7 +1161,7 @@
 
 **Main Flow:**
 1. Actor chọn "Sửa địa điểm"
-2. Actor sửa một hoặc nhiều thông tin: tên, địa chỉ, tọa độ, loại sân, điện thoại, website
+2. Actor sửa một hoặc nhiều thông tin: tên, địa chỉ, tọa độ, loại sân, điện thoại, website. Điện thoại, website chỉ Admin sửa / xóa; người tạo không phải Admin không thay đổi được, giá trị đã có (kể cả do Admin nhập) giữ nguyên (BR-V12)
 3. Actor submit
 4. Hệ thống lưu thông tin mới và thời điểm cập nhật
 5. Hệ thống hiển thị "Địa điểm đã được cập nhật"
@@ -1175,6 +1179,10 @@
 **3a. Validation thất bại:**
 - 3a1. Hệ thống hiển thị lỗi (vd: "Tên không được để trống")
 - 3a2. Quay về bước 2
+
+**3b. Actor không phải Admin sửa hoặc xóa điện thoại / website (BR-V12):**
+- 3b1. Hệ thống không lưu thay đổi nào, báo lỗi chỉ Admin được nhập điện thoại / website — báo sau kiểm tra định dạng dữ liệu (3a), trước mọi kiểm tra khác, kể cả 1a
+- 3b2. Quay về bước 2
 
 ---
 
@@ -1202,6 +1210,30 @@
 
 **1a. Actor không phải người tạo và không phải Admin:**
 - 1a1. Hệ thống không cho xóa
+- 1a2. Use case kết thúc
+
+---
+
+### UC-V07: Admin xem danh sách địa điểm
+
+**Actor:** Admin
+
+**Preconditions:**
+- Admin đã đăng nhập
+
+**Main Flow:**
+1. Admin mở màn quản trị "Địa điểm"
+2. Hệ thống hiển thị mọi địa điểm (đang hoạt động và ngừng hoạt động), sắp theo tên, phân trang (BR-V13)
+3. (Tùy chọn) Admin lọc theo trạng thái (đang hoạt động / ngừng hoạt động / tất cả) và từ khóa trong tên hoặc địa chỉ; không lọc theo vị trí
+4. Admin chọn một địa điểm để xem chi tiết, sửa (UC-V05), đánh dấu ngừng hoạt động (UC-V04) hoặc kích hoạt lại
+
+**Postconditions:**
+- Không thay đổi dữ liệu
+
+**Exception Flows:**
+
+**1a. Actor không phải Admin:**
+- 1a1. Hệ thống không cho xem
 - 1a2. Use case kết thúc
 
 ---

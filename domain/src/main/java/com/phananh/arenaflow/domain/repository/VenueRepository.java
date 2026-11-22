@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/** Truy cập bảng {@code venue}: tìm kiếm phân trang theo trạng thái/vị trí, khoá dòng và cập nhật cờ cảnh báo. */
 public interface VenueRepository extends JpaRepository<Venue, UUID> {
 
     /** Lấy row lock PostgreSQL trước khi ghi ảnh và tăng version cho các writer CAS đồng thời. */
@@ -152,34 +153,4 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
             @Param("lng") double lng, @Param("radiusKm") double radiusKm, @Param("minLat") double minLat,
             @Param("maxLat") double maxLat, @Param("minLng") double minLng, @Param("maxLng") double maxLng,
             Pageable pageable);
-
-    @Query(value = """
-            SELECT * FROM (
-                SELECT v.id AS venueId, v.name AS venueName, v.address AS address, v.latitude AS latitude,
-                       v.longitude AS longitude, v.venue_type AS venueType, v.status AS status,
-                       vi.image_url AS primaryImageUrl,
-                       6371 * 2 * ASIN(SQRT(POWER(SIN(RADIANS(v.latitude - :lat) / 2), 2)
-                           + COS(RADIANS(:lat)) * COS(RADIANS(v.latitude))
-                           * POWER(SIN(RADIANS(v.longitude - :lng) / 2), 2))) AS distanceKm,
-                       v.last_selected_at AS lastSelectedAt
-                FROM venue v
-                LEFT JOIN venue_image vi ON vi.venue_id = v.id AND vi.is_primary
-                WHERE (:status IS NULL OR v.status = :status)
-                  AND v.latitude BETWEEN :minLat AND :maxLat AND v.longitude BETWEEN :minLng AND :maxLng
-                  AND (:qPattern IS NULL OR v.name ILIKE :qPattern OR v.address ILIKE :qPattern)
-            ) nearby WHERE distanceKm <= :radiusKm ORDER BY distanceKm ASC, venueId ASC
-            """, countQuery = """
-            SELECT COUNT(*) FROM (
-                SELECT 6371 * 2 * ASIN(SQRT(POWER(SIN(RADIANS(v.latitude - :lat) / 2), 2)
-                    + COS(RADIANS(:lat)) * COS(RADIANS(v.latitude))
-                    * POWER(SIN(RADIANS(v.longitude - :lng) / 2), 2))) AS distanceKm
-                FROM venue v WHERE (:status IS NULL OR v.status = :status)
-                    AND v.latitude BETWEEN :minLat AND :maxLat AND v.longitude BETWEEN :minLng AND :maxLng
-                    AND (:qPattern IS NULL OR v.name ILIKE :qPattern OR v.address ILIKE :qPattern)
-            ) nearby WHERE distanceKm <= :radiusKm
-            """, nativeQuery = true)
-    Page<VenueSummaryView> searchNearbyAny(@Param("status") String status, @Param("qPattern") String qPattern,
-            @Param("lat") double lat, @Param("lng") double lng, @Param("radiusKm") double radiusKm,
-            @Param("minLat") double minLat, @Param("maxLat") double maxLat, @Param("minLng") double minLng,
-            @Param("maxLng") double maxLng, Pageable pageable);
 }
