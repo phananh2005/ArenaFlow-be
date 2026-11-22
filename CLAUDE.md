@@ -41,7 +41,7 @@
 | Phân tích yêu cầu nghiệp vụ | procedure `business-analyst` → duyệt → spec nghiệp vụ | đoán yêu cầu, bỏ qua phân tích |
 | Thiết kế chức năng mới | kiểm tra spec → chưa có → `business-analyst`; đã có spec → `solution-architect` → duyệt → `architect-reviewer` | bỏ qua thiết kế, code thẳng |
 | Implement chức năng mới | kiểm tra thiết kế → chưa có → `solution-architect`; đã có → `developer` | code chức năng mới khi chưa có thiết kế |
-| Sửa chức năng đã triển khai | `developer` → code & test → `code-reviewer` (nếu có code) → kiểm tra ảnh hưởng → cập nhật design (nếu có) → cập nhật SRS (nếu có) → `architect-reviewer` (nếu sửa design) → có sửa code thêm → test + `code-reviewer` phần sửa → commit | bỏ qua cập nhật tài liệu khi có ảnh hưởng; đối chiếu ảnh hưởng trước khi qua `code-reviewer` |
+| Sửa chức năng đã triển khai | `developer` → code & test → `code-reviewer` (nếu có code) → kiểm tra ảnh hưởng → (có ảnh hưởng design) **vòng lặp design**: cập nhật design → `architect-reviewer` phần sửa → có sửa code → test + `code-reviewer` phần sửa → lặp tới khi không còn finding được chọn sửa → **sau đó** cập nhật SRS (nếu có ảnh hưởng nghiệp vụ; SRS kéo theo sửa design/code → quay lại vòng lặp) → commit | bỏ qua cập nhật tài liệu khi có ảnh hưởng; đối chiếu ảnh hưởng trước khi qua `code-reviewer`; cập nhật SRS khi vòng lặp design chưa xong |
 | Debug / lỗi | skill `debug` | đoán nguyên nhân khi chưa reproduce |
 | Review thiết kế | procedure `architect-reviewer` | tự sửa thiết kế |
 | Review code / trước commit | procedure `code-reviewer` (code xong + test PASS; ngay trước **mỗi** commit có code) | commit code chưa qua `code-reviewer` |
@@ -102,8 +102,8 @@
   - **Chức năng mới** (endpoint mới, entity mới, use case mới) → **MUST** chạy `solution-architect` sinh tài liệu thiết kế → duyệt → `architect-reviewer` → duyệt → mới cho `developer` code.
     - **Lệch thiết kế khi đang code:** code khác design → **NEVER** sửa design giữa chừng; **MUST** ghi ngay vào bảng "Lệch thiết kế" trong `current-task.md` (phase · design · code thực tế · lý do · file design cần sửa). Sau khi **mọi phase đã code xong + test PASS** → `code-reviewer` (cổng review bên dưới) → `developer` tự đối chiếu code với design → cập nhật design **một lần** theo bảng → `architect-reviewer` review phần sửa → có sửa code → test lại + `code-reviewer` phần sửa. Thay đổi làm đổi API contract / DB schema / nghiệp vụ so với design đã duyệt → **dừng, hỏi user** trước khi code (không chỉ ghi lệch).
   - **Sửa chức năng đã có** → `developer` code trước → sau khi test PASS → `code-reviewer` → kiểm tra ảnh hưởng:
-    - Có ảnh hưởng design (API/DB/sequence/integration) → **MUST** cập nhật design document → `architect-reviewer` review phần sửa
-    - Có ảnh hưởng nghiệp vụ (use case/business rule/actor) → **MUST** cập nhật SRS
+    - Có ảnh hưởng design (API/DB/sequence/integration) → **MUST** chạy xong **vòng lặp design**: cập nhật design document → `architect-reviewer` review phần sửa → có sửa code → test + `code-reviewer` phần sửa → lặp tới khi không còn finding được chọn sửa
+    - Có ảnh hưởng nghiệp vụ (use case/business rule/actor) → **MUST** cập nhật SRS **sau khi** vòng lặp design đã xong; **NEVER** cập nhật SRS giữa vòng lặp
     - Không ảnh hưởng → bỏ qua cập nhật tài liệu
 - TDD **luôn bật và bắt buộc** cho mọi thay đổi làm đổi hành vi code: viết test trước (Red), xác nhận fail đúng lý do, viết code tối thiểu (Green), rồi refactor và chạy lại test. Chỉ thay đổi thuần tài liệu mới không cần TDD.
 - Nhận yêu cầu implement **chức năng mới** → **MUST** chạy `task-state-init` trước khi viết code (sau khi thiết kế đã duyệt).
@@ -113,14 +113,14 @@
   - **Unit test thuần** (không dựng Spring context/DB) chạy độc lập, **không** cần `.env.dev`.
   - **Integration test** (`@SpringBootTest`, `@DataJpaTest`, migration test) cần DB → agent **tự nạp `.env.dev`** (DB dev) rồi chạy, không cần hỏi: `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Duser.timezone=Asia/Ho_Chi_Minh -Dtest=<Test> test`. **NEVER** in giá trị biến môi trường.
   - Chỉ báo blocker khi không có `.env.dev` hoặc DB dev không kết nối được; khi đó không khẳng định PASS.
-- **Sau khi sửa chức năng đã triển khai, test PASS và qua `code-reviewer` → MUST tự kiểm tra:**
-  1. Có thay đổi API contract / database schema / luồng component / integration? → cập nhật design
-  2. Có thay đổi use case / business rule / actor / workflow? → cập nhật SRS
-  3. Đã cập nhật design → gọi `architect-reviewer` review phần sửa
-  4. Bước 1–3 dẫn tới sửa code → test lại → `code-reviewer` phần sửa trước khi commit
+- **Sau khi sửa chức năng đã triển khai, test PASS và qua `code-reviewer` → MUST tự kiểm tra theo thứ tự:**
+  1. Có thay đổi API contract / database schema / luồng component / integration? → **vòng lặp design**: cập nhật design → `architect-reviewer` review phần sửa → có sửa code → test lại + `code-reviewer` phần sửa → lặp tới khi `architect-reviewer` và `code-reviewer` không còn finding được chọn sửa
+  2. Vòng lặp xong (hoặc không ảnh hưởng design) → có thay đổi use case / business rule / actor / workflow? → cập nhật SRS
+  3. Cập nhật SRS dẫn tới sửa design hoặc code → quay lại bước 1
+  4. `code-reviewer` luôn là bước cuối trước commit có code
 - Sau mỗi bước implement → **MUST** chạy `progress-tracker`.
 - **Cổng review đặt trước mỗi commit có code — `code-reviewer` là bước cuối cùng trước commit.** Commit có code (`*/src/**` (Java, migration SQL, `application*.properties`), `pom.xml` / `*/pom.xml`, hook `.cjs`, `docs/agent/scripts/*.cjs`, `.githooks/*`, `.github/workflows/*`) → **MUST** chạy agent `code-reviewer` ngay trước commit trên phần chưa review = thay đổi chưa commit (`git diff HEAD` + file mới chưa track); còn CRITICAL/MAJOR → sửa (TDD), test lại, chạy lại `code-reviewer` cho phần sửa rồi mới commit. Sau lần review cuối mà còn sửa code → review lại phần sửa trước commit.
-  - Thứ tự khi triển khai: mọi phase code xong + test PASS → `code-reviewer` → `developer` tự đối chiếu lệch design → cập nhật design / SRS → `architect-reviewer` → có sửa code → test + `code-reviewer` phần sửa → commit. Commit giữa chừng (lưu việc dở) cũng qua `code-reviewer` cho phần code của nó.
+  - Thứ tự khi triển khai: mọi phase code xong + test PASS → `code-reviewer` → `developer` tự đối chiếu lệch design → cập nhật design / SRS → `architect-reviewer` → có sửa code → test + `code-reviewer` phần sửa → commit (sửa chức năng đã có: SRS cập nhật sau vòng lặp design — xem khối "Sửa chức năng đã có" ở trên). Commit giữa chừng (lưu việc dở) cũng qua `code-reviewer` cho phần code của nó.
   - Mọi commit có code đã qua review → trước push / tạo PR / push thêm vào PR đang mở **không** review lại; code do rebase kéo từ `origin/main` không tính (đã review ở PR của nó). Nhánh còn commit có code chưa review (tạo trước quy tắc 2026-11-20) → lần commit kế tiếp review toàn nhánh: `git diff origin/main...HEAD` + chưa commit + chưa track.
   - Đây là cổng review **duy nhất**: không chạy thêm skill `code-review`, không review lại phần đã review. **Thay đổi không có code** (tài liệu `*.md`, `.claude/settings.json`, `.gitignore`, `.gitattributes`, `.env.example`…) → không chạy `code-reviewer` lẫn `code-review`. Git pre-commit vẫn quét secret ở **mỗi** commit.
   - Ảnh chụp `refs/wip/*` (`/af-handoff-push`) không phải commit trên nhánh / push nhánh / tạo PR → **không** qua cổng này; secret scan vẫn chạy trên file dở và commit chưa push.
