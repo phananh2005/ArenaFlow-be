@@ -63,6 +63,8 @@
 - [ ] Report không tự ẩn địa điểm (cần admin xác minh)
 - [ ] Chỉ người tạo hoặc Admin sửa địa điểm / xóa ảnh; xóa ảnh chính tự chọn ảnh chính mới
 - [ ] Không trùng report chờ xử lý cho cùng (user, địa điểm, lý do)
+- [ ] Điện thoại, website địa điểm chỉ Admin nhập / sửa / xóa (BR-V12)
+- [ ] Danh sách / tìm địa điểm của người dùng chỉ có địa điểm đang hoạt động; Admin có danh sách riêng mọi trạng thái (BR-V13)
 
 #### COST DOMAIN
 - [ ] Thỏa thuận chi phí chỉ hiển thị, không thanh toán
@@ -634,6 +636,8 @@
 - Người tạo được lưu
 - Địa điểm hiển thị trong gợi ý
 - KHÔNG cần admin duyệt trước
+- Admin nhập điện thoại, website → được lưu
+- Actor không phải Admin nhập điện thoại hoặc website (kể cả giá trị rỗng) → bị từ chối (chỉ Admin được nhập), địa điểm không được tạo (BR-V12)
 
 ---
 
@@ -677,6 +681,9 @@
 - Kèo tham chiếu địa điểm hiển thị thông tin mới
 - Actor khác → bị từ chối, thông tin giữ nguyên
 - Loại sân ngoài sân 5/7/11 → bị từ chối
+- Admin nhập, sửa, xóa điện thoại / website → được lưu
+- Actor không phải Admin (kể cả người tạo) gửi điện thoại hoặc website, kể cả giá trị rỗng để xóa → bị từ chối (chỉ Admin được nhập), không thông tin nào thay đổi; lỗi này được báo sau lỗi định dạng dữ liệu, trước mọi kiểm tra khác (kể cả quyền sửa, địa điểm ngừng hoạt động) (BR-V12)
+- Người tạo không phải Admin sửa thông tin khác, không gửi điện thoại / website → điện thoại / website giữ nguyên, kể cả giá trị Admin đã nhập
 
 ---
 
@@ -690,6 +697,21 @@
 - Ảnh A không còn hiển thị; địa điểm còn 2 ảnh
 - Ảnh B thành ảnh chính (đúng 1 ảnh chính)
 - User không phải người tạo/Admin xóa ảnh → bị từ chối
+
+---
+
+### AC-V06: Danh sách địa điểm — người dùng chỉ thấy địa điểm đang hoạt động, Admin xem mọi trạng thái
+
+**Given:** Địa điểm A đang hoạt động, địa điểm B đã ngừng hoạt động
+
+**When:** Người dùng xem / tìm danh sách địa điểm (có hoặc không theo vị trí); Admin mở danh sách địa điểm của Admin
+
+**Then:**
+- Danh sách / tìm kiếm của người dùng chỉ có A, kể cả khi người xem là Admin (BR-V13)
+- Yêu cầu xem địa điểm ngừng hoạt động trong danh sách của người dùng → bị từ chối; lỗi hướng Admin sang danh sách quản trị
+- Danh sách của Admin mặc định có cả A và B, sắp theo tên; lọc "ngừng hoạt động" → chỉ B; lọc "đang hoạt động" → chỉ A; lọc từ khóa → địa điểm có từ khóa trong tên hoặc địa chỉ; không lọc theo vị trí (UC-V07)
+- Người không phải Admin mở danh sách của Admin → bị từ chối
+- Chi tiết B vẫn xem được (vd từ kèo cũ)
 
 ---
 

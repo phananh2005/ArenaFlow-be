@@ -7,11 +7,11 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway · Cloudinary |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + `Component_Class_Design.md` §4.9 |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v5.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v6.0** (solution-architect · 2026-11-22) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
-13 endpoint + 2 scheduled job + 2 method port cho MATCH-001. Mã lỗi: `API_Spec.md` §5; thứ tự guard: §1.1; giá trị cấu hình: `Component_Class_Design.md` §8. Số truy vấn tính cho **một lần thử**; JWT không truy vấn DB. Ký hiệu: **S** SELECT, **I** INSERT, **U** UPDATE, **D** DELETE. Không gọi HTTP ra ngoài trong request; Admin API Cloudinary chỉ trong job dọn (§3.16).
+14 endpoint (v6.0: + 2.14) + 2 scheduled job + 2 method port cho MATCH-001. Mã lỗi: `API_Spec.md` §5; thứ tự guard: §1.1; giá trị cấu hình: `Component_Class_Design.md` §8. Số truy vấn tính cho **một lần thử**; JWT không truy vấn DB. Ký hiệu: **S** SELECT, **I** INSERT, **U** UPDATE, **D** DELETE. Không gọi HTTP ra ngoài trong request; Admin API Cloudinary chỉ trong job dọn (§3.16).
 
 ### 1.1. Thứ tự guard (nguồn duy nhất)
 
@@ -19,7 +19,8 @@ Chuyển từ `API_Spec.md` v1.0; `API_Spec.md` thể hiện cùng thứ tự b�
 
 | Endpoint | Thứ tự guard |
 |---|---|
-| 2.1 | Bean Validation (gồm `wardId` bắt buộc) → `USER_001` → `USER_002` (`wardId` không phải phường/xã) |
+| 2.1 | Bean Validation (gồm `wardId` bắt buộc) → `USER_001` → `VENUE_017` (v6.0: role của bản ghi user vừa đọc không phải `ADMIN` mà gửi `phone`/`website` ≠ `null`) → `USER_002` (`wardId` không phải phường/xã) |
+| 2.2 | Bean Validation (`@ValidGeoQuery`, miền giá trị) → `VENUE_018` (v6.0: `status` ≠ `ACTIVE`, kể cả Admin; không truy vấn) |
 | 2.3 | `VENUE_001` |
 | 2.4 | `VENUE_012` → `VENUE_001` → `VENUE_002` (không phải Admin) → `VENUE_003` |
 | 2.5 | `VENUE_012` → `VENUE_005` (không chạm DB: mẫu `publicId`, người xin chữ ký, hạn xác nhận, chữ ký response) → `VENUE_001` → `VENUE_002` (không phải Admin) → `VENUE_003` → `VENUE_006` (khi INSERT) |
@@ -28,8 +29,9 @@ Chuyển từ `API_Spec.md` v1.0; `API_Spec.md` thể hiện cùng thứ tự b�
 | 2.9 | `VENUE_009` → `VENUE_010` |
 | 2.10 | `VENUE_001` → `VENUE_007` |
 | 2.11 | `VENUE_001` → `VENUE_008` |
-| 2.12 | `VENUE_001` → `VENUE_013` → `VENUE_002` (không phải Admin) → `VENUE_016` (địa điểm chưa có phường và không gửi `wardId`) → `USER_002` (`wardId` không phải phường/xã) |
+| 2.12 | `VENUE_017` (v6.0: `!actor.admin()` mà gửi `phone`/`website` ≠ `null`, kể cả `""`; trước retrier, không truy vấn) → `VENUE_001` → `VENUE_013` → `VENUE_002` (không phải Admin) → `VENUE_016` (địa điểm chưa có phường và không gửi `wardId`) → `USER_002` (`wardId` không phải phường/xã) |
 | 2.13 | `VENUE_001` → `VENUE_013` → `VENUE_002` (không phải Admin) → `VENUE_004` |
+| 2.14 | `AUTH_004` (filter `/api/v1/admin/**`) → Bean Validation; không guard nghiệp vụ |
 
 `VENUE_011` (2.9–2.12) phát sinh khi retrier hết lượt, không theo vị trí cố định trong chuỗi guard.
 
@@ -107,8 +109,8 @@ sequenceDiagram
 
 | # | Endpoint | Truy vấn | Tổng / Ngưỡng |
 |---|---|---|---|
-| 2.1 | `POST /venues` | S user, S phường + tỉnh, I venue | 3 / W6 ✅ (v4.0: +1) |
-| 2.2 | `GET /venues` | S trang, S count | 2 / L4 ✅ |
+| 2.1 | `POST /venues` | S user, S phường + tỉnh, I venue | 3 / W6 ✅ (v4.0: +1; v6.0: `VENUE_017` dừng sau S user → 1) |
+| 2.2 | `GET /venues` | S trang, S count | 2 / L4 ✅ (v6.0: `VENUE_018` → 0) |
 | 2.3 | `GET /venues/{id}` | S detail, S ảnh | 2 / D3 ✅ |
 | 2.4 | `POST …/image-upload-signatures` | S venue, S count ảnh | 2 / D3 ✅ (không ghi) |
 | 2.5 | `POST …/images` | U khoá, S venue, S thống kê, (U bỏ ảnh chính), I ảnh | 4–5 / W6 ✅ |
@@ -120,17 +122,18 @@ sequenceDiagram
 | 2.11 | `PATCH …/reactivate` | S venue, U venue, S detail, S ảnh | 4 / W6 ✅ |
 | 2.12 | `PATCH /venues/{id}` | S venue, (S phường khi gửi `wardId`), (U venue), S detail, S ảnh | 3–5 / W6 ✅ (v4.0: +1 khi gửi `wardId`) |
 | 2.13 | `DELETE …/images/{imageId}` | U khoá, S venue, S ảnh, D ảnh, (U ảnh chính mới), S ảnh còn lại | 5–6 / W6 ✅ (= 6 khi xoá ảnh chính) |
+| 2.14 | `GET /admin/venues` | S trang, S count | 2 / L4 ✅ (v6.0; đo ở `VenueNfsQueryCountTest`) |
 | Port | `requireSelectable` / `markSelected` | S / U bulk | 1 / 1 (tính vào ngân sách MATCH-001; v4.0: cả MERCENARY-001 2.28, 2.31) |
 | Job | `alertStaleVenues` (mỗi lô) | U … RETURNING | 1 / lô |
 | Job | `cleanupOrphanAssets` (mỗi trang asset) | S `public_id IN (…)` | 1 / trang |
 
-**NFS gate:** 13/13 trong ngưỡng; 2.13 chạm đúng W6 khi xoá ảnh chính — mọi truy vấn thêm phải gộp hoặc xin duyệt. 2.10–2.12 đọc lại venue qua projection: lệch NFS §3 có chủ đích (`Component_Class_Design.md` §10). Không truy vấn trong vòng lặp.
+**NFS gate:** 14/14 trong ngưỡng; 2.13 chạm đúng W6 khi xoá ảnh chính — mọi truy vấn thêm phải gộp hoặc xin duyệt. 2.10–2.12 đọc lại venue qua projection: lệch NFS §3 có chủ đích (`Component_Class_Design.md` §10). Không truy vấn trong vòng lặp.
 
 ### 3.1. `POST /venues`
-Q1 `findByIdAndDeletedAtIsNull(callerId)` → `USER_001` (lấy `role`, `displayName`) → Q2 `AdministrativeUnitRepository.findWardWithProvince(wardId)` (USER-001) → `USER_002` → trim, `""` → `null` → `Venue.builder()` (`createdByType` theo role, `createdByUserId = callerId`, `wardId`) → Q3 `save`. Response từ entity + phường/tỉnh của Q2, không đọc lại.
+Q1 `findByIdAndDeletedAtIsNull(callerId)` → `USER_001` (lấy `role`, `displayName`) → v6.0: `role ≠ ADMIN` và `phone`/`website` ≠ `null` (kể cả `""`) → `VENUE_017` (BR-V12; role từ Q1, cùng nguồn với `createdByType`) → Q2 `AdministrativeUnitRepository.findWardWithProvince(wardId)` (USER-001) → `USER_002` → trim, `""` → `null` → `Venue.builder()` (`createdByType` theo role, `createdByUserId = callerId`, `wardId`) → Q3 `save`. Response từ entity + phường/tỉnh của Q2, không đọc lại.
 
 ### 3.2. `GET /venues`
-Bean Validation (`SearchVenueRequest` + mặc định ở compact constructor, `@ValidGeoQuery`) → chọn truy vấn: không toạ độ + `ACTIVE|INACTIVE` → `searchByStatus`; không toạ độ + `ALL` → `searchAll`; có toạ độ + `ACTIVE` → `searchNearbyActive`; có toạ độ + `INACTIVE|ALL` → `searchNearbyAny` (`Component_Class_Design.md` §5.2). Q1 trang + Q2 count.
+Bean Validation (`SearchVenueRequest` + mặc định ở compact constructor, `@ValidGeoQuery`) → v6.0: `status ≠ ACTIVE` → `VENUE_018` (BR-V13; kể cả Admin, trước truy vấn) → `LikePatterns.contains(q)` → chọn truy vấn: không toạ độ → `searchByStatus('ACTIVE')`; có toạ độ → `searchNearbyActive` (`Component_Class_Design.md` §5.2). Q1 trang + Q2 count. Danh sách mọi trạng thái: §3.17.
 
 ### 3.3. `GET /venues/{venueId}`
 Q1 `findDetailById` → `VENUE_001`; Q2 `findByVenueIdOrderByDisplayOrderAsc`.
@@ -167,7 +170,7 @@ Q1 `findVenue` → `VENUE_001`; đã `INACTIVE` → `VENUE_007` → setter `stat
 Q1 `findVenue`; đang `ACTIVE` → `VENUE_008` → setter `ACTIVE`, `adminVerifiedInactiveAt = null`, cả hai `*_alertedAt = null` → Q2 CAS → Q3–Q4 `adminDetail` (như §3.10). Địa điểm có `last_selected_at` > 180 ngày sẽ được cảnh báo lại ở lần chạy job sau `[cần xác nhận #2]`. `adminAuditLog.afterCommit(REACTIVATE, …)`.
 
 ### 3.12. `PATCH /venues/{venueId}` (retrier)
-Q1 `findVenue` → `VENUE_001` → `requireOwnerOrAdmin` → `VENUE_013` → `requireWritable` → `VENUE_002` (BR-V06) → `venue.wardId == null && r.wardId == null` → `VENUE_016` → `r.wardId != null`: `findWardWithProvince` → `USER_002` (v4.0) → setter (`null` bỏ qua; trim; `""` → xoá `venueType`/`phone`/`website`) → Q2 UPDATE CAS khi flush (không đổi gì → không `UPDATE`) → Q3–Q4 `getVenue`. Không chặn theo kèo (BR-V10). Admin không phải người tạo → `adminAuditLog.afterCommit(ADMIN_UPDATE_VENUE, …)` trong lambda retrier.
+v6.0: `!actor.admin()` và `phone`/`website` ≠ `null` (kể cả `""`) → `VENUE_017` (BR-V12) **trước** retrier, không truy vấn, không ghi audit → Q1 `findVenue` → `VENUE_001` → `requireOwnerOrAdmin` → `VENUE_013` → `requireWritable` → `VENUE_002` (BR-V06) → `venue.wardId == null && r.wardId == null` → `VENUE_016` → `r.wardId != null`: `findWardWithProvince` → `USER_002` (v4.0) → setter (`null` bỏ qua; trim; `""` → xoá `venueType`/`phone`/`website`) → Q2 UPDATE CAS khi flush (không đổi gì → không `UPDATE`) → Q3–Q4 `getVenue`. Không chặn theo kèo (BR-V10). Admin không phải người tạo → `adminAuditLog.afterCommit(ADMIN_UPDATE_VENUE, …)` trong lambda retrier.
 
 ### 3.13. `DELETE …/images/{imageId}` (`@Transactional`)
 Q1–Q2 `lockForImageWrite` (`VENUE_001`) → `requireOwnerOrAdmin` (`VENUE_013`) → `requireWritable` (`VENUE_002`) → Q3 `findByIdAndVenueId` → `VENUE_004` → Q4 `delete` (Hibernate flush trước Q5/Q6) → nếu là ảnh chính: Q5 `promoteFirstAsPrimary` (BR-V08; 0 dòng khi hết ảnh) → Q6 danh sách còn lại. Không gọi Cloudinary (gọi HTTP trong transaction trái NFS §5; gọi trước commit mà rollback thì mất asset trong khi dòng còn) — asset do job §3.16 dọn. `display_order` có khoảng trống, chấp nhận. Admin không phải người tạo → `adminAuditLog.afterCommit(ADMIN_DELETE_IMAGE, …)` gọi trong method `@Transactional` — log chỉ ghi khi transaction commit, không ghi nếu rollback.
@@ -195,11 +198,14 @@ Xoá asset trong `rootPrefix("venues")` không còn dòng `venue_image` tham chi
 
 **Lỗi** (theo thứ tự kiểm, mọi trường hợp đều dừng lần chạy): 420/429 → log `WARN` kèm `X-FeatureRateLimit-Reset`; 401/403 → log `ERROR`; HTTP lỗi khác (4xx còn lại, 5xx) → log `WARN` kèm mã HTTP; timeout/mạng → log `WARN` kèm tên lớp nguyên nhân gốc; lỗi DB ở bước 3 → log `ERROR` kèm stack trace, không xoá khi chưa đối chiếu; lỗi bất ngờ khác → log `ERROR` kèm stack trace. **NEVER** log body response, URL request (chứa public ID), `apiSecret`. Không retry trong cùng lần chạy.
 
+### 3.17. `GET /admin/venues` (readOnly, v6.0)
+Filter `/api/v1/admin/**` → `AUTH_004` → Bean Validation (`AdminSearchVenueRequest`; mặc định `status = ALL`, `page = 1`, `pageSize = 20`) → `LikePatterns.contains(q)` → `status = ALL` → Q1 `searchAll`; `ACTIVE`/`INACTIVE` → Q1 `searchByStatus` → Q2 count → `toSummary` (`distanceKm = null`). Không lọc vị trí; sắp `name, id`. Hiệu năng mặc định `ALL`: `Component_Class_Design.md` §5.2.
+
 ## 4. Transaction Boundary
 
 | Nhóm | Ranh giới |
 |---|---|
-| Đọc (2.2, 2.3, 2.4, 2.8, `requireSelectable`) | `@Transactional(readOnly = true)` |
+| Đọc (2.2, 2.3, 2.4, 2.8, 2.14, `requireSelectable`) | `@Transactional(readOnly = true)` |
 | Ghi thường (2.1, 2.7) | `@Transactional` |
 | Ghi ảnh (2.5, 2.6, 2.13) | 1 transaction (2.5: `TransactionTemplate` sau bước kiểm không DB); khoá dòng `venue` đầu transaction; không retrier |
 | Ghi có retry (2.9–2.12) | Mỗi lần thử một transaction do retrier mở; hết lượt → `VENUE_011` |
@@ -234,7 +240,7 @@ Xoá asset trong `rootPrefix("venues")` không còn dòng `venue_image` tham chi
 
 **Deadlock** [Inference — suy từ thứ tự khoá, chưa tái hiện]: ghi ảnh khoá `venue` (`FOR NO KEY UPDATE`) rồi `venue_image`; INSERT con lấy `FOR KEY SHARE` trên `venue` (tương thích). Mark-inactive: `venue` → `venue_report`; resolve: `venue_report` → có thể `venue` (thứ tự ngược với mark-inactive → có thể deadlock; cả hai trong retrier, bên bị huỷ `40P01` thử lại, hết lượt `VENUE_011` `[cần xác nhận #16]`). Ghi ảnh không chạm `venue_report` → không khép vòng với hai luồng trên; nếu quan sát thấy deadlock ở ghi ảnh → bọc retrier (`VENUE_011`).
 
-**Test bắt buộc** (integration, commit thật, không `@Transactional` mức test): thêm ảnh thứ 5 song song (đúng 5, `VENUE_003`, không retry); hai ảnh chính song song và thêm ảnh chính vs xoá ảnh chính (đúng 1 ảnh chính, không 500); xoá cùng ảnh song song (`VENUE_004`); ghi ảnh vs mark-inactive (người thường `VENUE_002`, Admin 201); 2.12 vs ghi ảnh (retry, không mất dữ liệu); double-submit report (`VENUE_014`); hai report `CLOSED` (1 event); hai resolve (`VENUE_010`); resolve `CLOSED` vs mark-inactive (không 500); quyền (người tạo / Admin / user khác) cho 2.4–2.7, 2.12, 2.13 trên `ACTIVE` và `INACTIVE`; 2.5: caller khác người xin chữ ký, quá `confirm-window`, `signedAt` tương lai → `VENUE_005`; job dọn với `ImageAssetAdmin` giả lập (không xoá asset trẻ hơn `grace` / còn trong DB / sai mẫu / `signedAt` tương lai; dừng khi 420; tôn trọng ngân sách); fail-fast khởi động khi bật job với `folder` trống / `arenaflow`; không đặt `VENUE_IMAGE_CLEANUP_CRON` → placeholder `${VENUE_IMAGE_CLEANUP_CRON:-}` resolve ra `-` (job tắt, scheduler không chạy); `folder` chứa ký tự đặc biệt regex (vd `arenaflow.dev`) → `parsePublicId` dùng `Pattern.quote`, không khớp nhầm thư mục khác (vd `arenaflowXdev`); audit log admin ghi đúng một lần khi commit và không ghi khi rollback (2.13, 2.10); `NfsQueryCountTest`: 2.5 = 5 (có ảnh chính cũ), 2.6 = 5, 2.10 = 5, 2.12 = 4, 2.13 = 6 (xoá ảnh chính).
+**Test bắt buộc** (integration, commit thật, không `@Transactional` mức test): thêm ảnh thứ 5 song song (đúng 5, `VENUE_003`, không retry); hai ảnh chính song song và thêm ảnh chính vs xoá ảnh chính (đúng 1 ảnh chính, không 500); xoá cùng ảnh song song (`VENUE_004`); ghi ảnh vs mark-inactive (người thường `VENUE_002`, Admin 201); 2.12 vs ghi ảnh (retry, không mất dữ liệu); double-submit report (`VENUE_014`); hai report `CLOSED` (1 event); hai resolve (`VENUE_010`); resolve `CLOSED` vs mark-inactive (không 500); quyền (người tạo / Admin / user khác) cho 2.4–2.7, 2.12, 2.13 trên `ACTIVE` và `INACTIVE`; 2.5: caller khác người xin chữ ký, quá `confirm-window`, `signedAt` tương lai → `VENUE_005`; job dọn với `ImageAssetAdmin` giả lập (không xoá asset trẻ hơn `grace` / còn trong DB / sai mẫu / `signedAt` tương lai; dừng khi 420; tôn trọng ngân sách); fail-fast khởi động khi bật job với `folder` trống / `arenaflow`; không đặt `VENUE_IMAGE_CLEANUP_CRON` → placeholder `${VENUE_IMAGE_CLEANUP_CRON:-}` resolve ra `-` (job tắt, scheduler không chạy); `folder` chứa ký tự đặc biệt regex (vd `arenaflow.dev`) → `parsePublicId` dùng `Pattern.quote`, không khớp nhầm thư mục khác (vd `arenaflowXdev`); audit log admin ghi đúng một lần khi commit và không ghi khi rollback (2.13, 2.10); `NfsQueryCountTest`: 2.5 = 5 (có ảnh chính cũ), 2.6 = 5, 2.10 = 5, 2.12 = 4, 2.13 = 6 (xoá ảnh chính); v6.0: 2.14 = 2.
 
 ## 6. Error Handling
 
@@ -260,7 +266,7 @@ Native projection + JOIN, ảnh chính bằng `LEFT JOIN … AND is_primary`, kh
 
 | Bảng | Index | Dùng cho | Nguồn |
 |---|---|---|---|
-| `venue` | `(status, name, id)` | `searchByStatus` | V5 |
+| `venue` | `(status, name, id)` | `searchByStatus` (2.2 không toạ độ; 2.14 lọc `ACTIVE`/`INACTIVE`). `searchAll` (2.14 `ALL`) không dùng được — chấp nhận, `Component_Class_Design.md` §5.2 | V5 |
 | `venue` | `(latitude, longitude, status) WHERE status = 'ACTIVE'` | `searchNearbyActive` (literal `'ACTIVE'`) | V1 |
 | `venue_image` | unique `(venue_id, is_primary) WHERE is_primary` | ảnh chính, bất biến 1 ảnh chính | V1 |
 | `venue_image` | `(venue_id, display_order)` | 2.3, 2.6, 2.13, thống kê | V1 |

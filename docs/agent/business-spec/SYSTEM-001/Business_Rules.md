@@ -87,6 +87,8 @@
 | BR-V09 | Mỗi user chỉ có tối đa 1 report chờ xử lý cho mỗi (địa điểm, lý do); không report địa điểm đã ngừng hoạt động | Khi report địa điểm |
 | BR-V10 | Kèo chỉ tham chiếu địa điểm; luôn hiển thị thông tin địa điểm mới nhất (không lưu bản sao) | Khi sửa địa điểm, hiển thị kèo |
 | BR-V11 | Địa điểm có phường/xã chọn từ danh mục Vietnam Administrative Units; bắt buộc khi thêm hoặc sửa địa điểm. Địa điểm tạo trước đó chưa có phường vẫn hoạt động, tìm bằng GPS bình thường, nhưng không hiển thị khu vực và không xuất hiện trong tìm kèo mercenary không GPS cho tới khi được bổ sung phường (cho MERCENARY-001 — BR-ME03, BR-ME04) (user chốt 2026-11-14) | Khi thêm/sửa địa điểm, tìm kèo mercenary |
+| BR-V12 | Chỉ Admin được nhập, sửa, xóa điện thoại và website của địa điểm. Người dùng khác khi thêm địa điểm không nhập (không gửi) hai thông tin này; khi sửa địa điểm không được thay đổi hay xóa chúng. Gửi kèm điện thoại hoặc website (kể cả giá trị rỗng để xóa) → bị từ chối vì chỉ Admin được nhập; khi sửa, lỗi này được báo sau kiểm tra định dạng dữ liệu và trước mọi kiểm tra khác (kể cả quyền sửa địa điểm — BR-V06). Sửa địa điểm không gửi hai thông tin này → giữ nguyên giá trị đã có, kể cả giá trị Admin đã nhập (user chốt 2026-11-22) | Khi thêm/sửa địa điểm |
+| BR-V13 | Danh sách / tìm kiếm / gợi ý địa điểm của người dùng chỉ gồm địa điểm đang hoạt động; yêu cầu xem địa điểm ngừng hoạt động trong danh sách này → bị từ chối, kể cả khi người xem là Admin; lỗi hướng Admin sang danh sách quản trị. Admin có danh sách địa điểm riêng: mặc định mọi trạng thái, lọc được theo trạng thái và từ khóa trong tên hoặc địa chỉ, không lọc theo vị trí, sắp theo tên. Xem chi tiết một địa điểm (kể cả đã ngừng hoạt động, vd từ kèo cũ) không đổi (user chốt 2026-11-22) | Khi xem danh sách / tìm địa điểm |
 | **COST** | | |
 | BR-C01 | Tiền tệ mặc định VND trong MVP | Khi nhập thỏa thuận chi phí |
 | BR-C02 | Số tiền phải > 0 | Khi nhập thỏa thuận chi phí |
@@ -288,7 +290,7 @@ stateDiagram-v2
 ```
 
 **Quy tắc:**
-- Địa điểm `inactive` bị loại khỏi gợi ý mặc định
+- Địa điểm `inactive` không hiện trong danh sách / tìm kiếm / gợi ý của người dùng; chỉ Admin xem được trong danh sách địa điểm của Admin (BR-V13, sửa 2026-11-22)
 - Match cũ giữ tham chiếu đến địa điểm `inactive`
 - Admin cảnh báo 1 lần khi địa điểm không được chọn trong 180 ngày hoặc có báo cáo ngừng hoạt động
 
@@ -436,7 +438,7 @@ Không tính: Match CONFIRMED chưa đá, EXPIRED, CANCELLED khi còn OPEN, CANC
 | BC-V01 | Ảnh sân tối đa 5 mỗi địa điểm |
 | BC-V02 | Chỉ 1 ảnh is_primary=true mỗi venue (unique constraint hoặc check) |
 | BC-V03 | Report địa điểm không tự ẩn địa điểm; admin xác minh rồi đánh dấu ngừng hoạt động |
-| BC-V04 | Địa điểm ngừng hoạt động bị loại khỏi gợi ý mặc định; Match cũ giữ tham chiếu |
+| BC-V04 | Địa điểm ngừng hoạt động không hiện trong danh sách / tìm kiếm / gợi ý của người dùng; chỉ Admin xem được trong danh sách địa điểm của Admin (BR-V13, sửa 2026-11-22); Match cũ giữ tham chiếu |
 | BC-V05 | Admin cảnh báo 1 lần khi địa điểm không được chọn trong 180 ngày hoặc có báo cáo ngừng hoạt động; không nhắc định kỳ. Luồng B: địa điểm "được chọn" = địa điểm của phương án đã chốt, tính tại lúc kèo được ghép (không tính các lựa chọn địa điểm lúc tạo kèo) (2026-11-10). Khai báo trận ngoài hệ thống (BR-ME19) ở địa điểm nào cũng tính là địa điểm đó "được chọn" (user chốt 2026-11-14) |
 | BC-V06 | Chỉ người tạo địa điểm hoặc Admin được sửa địa điểm và xóa ảnh; người khác dùng report "thông tin sai" |
 | BC-V07 | Không trùng report chờ xử lý cho cùng (user, địa điểm, lý do) |
@@ -470,7 +472,8 @@ Không tính: Match CONFIRMED chưa đá, EXPIRED, CANCELLED khi còn OPEN, CANC
 | Report đội sau trận mercenary | Report đội khác khi không tham gia trận |
 | Xóa tài khoản (soft-delete) | Hard-delete tài khoản (để sau, có chính sách retention) |
 | Thêm địa điểm, thêm ảnh sân, đổi ảnh chính | Sửa địa điểm / xóa ảnh của địa điểm do người khác tạo |
-| Sửa địa điểm và xóa ảnh của địa điểm do mình tạo | — |
+| Sửa địa điểm và xóa ảnh của địa điểm do mình tạo | Nhập, sửa, xóa điện thoại và website của địa điểm, kể cả địa điểm do mình tạo (chỉ Admin — BR-V12) |
+| Xem danh sách / tìm địa điểm đang hoạt động (BR-V13) | Xem địa điểm ngừng hoạt động trong danh sách / tìm kiếm (BR-V13) |
 | Report địa điểm đang hoạt động | Report trùng khi report cùng lý do còn chờ xử lý; report địa điểm đã ngừng hoạt động |
 | Xem thông báo của mình trong 30 ngày, xem số chưa đọc, đánh dấu một / tất cả đã đọc (BR-N11) | Xem thông báo của người khác; xóa thông báo; đánh dấu lại chưa đọc |
 
@@ -518,6 +521,8 @@ Không tính: Match CONFIRMED chưa đá, EXPIRED, CANCELLED khi còn OPEN, CANC
 | Đánh dấu đội INACTIVE | Xóa cứng đội |
 | Thêm địa điểm sân | Xóa cứng địa điểm |
 | Sửa mọi địa điểm, xóa mọi ảnh sân | — |
+| Nhập, sửa, xóa điện thoại và website của địa điểm (BR-V12) | — |
+| Xem danh sách mọi địa điểm, kể cả ngừng hoạt động; lọc theo trạng thái, từ khóa (BR-V13) | Xem địa điểm ngừng hoạt động qua danh sách / tìm kiếm của người dùng (dùng danh sách của Admin — BR-V13) |
 | Xem chi tiết report địa điểm | Tự xóa địa điểm khi có report (phải xác minh trước); report địa điểm (dùng sửa/đánh dấu ngừng hoạt động trực tiếp) |
 | Xác minh report địa điểm và đánh dấu ngừng hoạt động | — |
 | Xử lý tranh chấp report bùng (quyết định cuối cùng) | Tự report thay User |

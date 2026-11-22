@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · Cloudinary (ký/xác minh cục bộ trong request; Admin API chỉ trong job dọn asset) |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §10 · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (§5.1); entity hiện có `domain/.../entity/venue/{Venue,VenueImage,VenueReport}` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v5.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v6.0** (solution-architect · 2026-11-22) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -23,7 +23,8 @@ Layered theo 4 module Maven (ADR-0006) như USER-001. Hợp đồng: `API_Spec.m
 
 ```text
 common/        com.phananh.arenaflow.common
-└── exception/       ErrorCode (+ VENUE_001..VENUE_015; đã soát 2026-11-09: chưa có VENUE_*)
+└── exception/       ErrorCode (+ VENUE_001..VENUE_015; đã soát 2026-11-09: chưa có VENUE_*; v4.0: + VENUE_016;
+                     v6.0: + VENUE_017 FORBIDDEN, VENUE_018 BAD_REQUEST)
 
 domain/        com.phananh.arenaflow.domain
 ├── entity/venue/    Venue, VenueImage, VenueReport (sửa — §6)
@@ -36,7 +37,7 @@ application/   com.phananh.arenaflow.application
 │   │                VenueAlertService, VenueImageCleanupService, VenueStatusFilter, VenueReportStatusFilter
 │   └── impl/        *ServiceImpl
 ├── event/venue/     VenueAdminAlertEvent, VenueAlertType (package mới) — v4.2: bỏ VenueReportedEvent
-├── support/         VenueGuard, AdminAuditLog (mới), ConcurrencyConflictRetrier (sửa — §4.9)
+├── support/         VenueGuard, AdminAuditLog (mới), ConcurrencyConflictRetrier (sửa — §4.9), LikePatterns (mới v6.0 — §4.15)
 │   ├── security/    CurrentActor (mới)
 │   ├── storage/     ImageUploadSigner, UploadSignature, SignedPublicId, CloudinaryImageUploadSigner,
 │   │                ImageAssetAdmin, AssetPage, AssetAdminRateLimitedException,
@@ -44,7 +45,7 @@ application/   com.phananh.arenaflow.application
 │   └── venue/       VenueAlertProperties, VenueImageCleanupProperties (mới)
 ├── validation/      ValidGeoQuery + ValidGeoQueryValidator (mới); OneOf (tái dùng)
 ├── dto/request/     CreateVenueRequest, UpdateVenueRequest, SearchVenueRequest, AddVenueImageRequest,
-│                    ReportVenueRequest, ResolveVenueReportRequest
+│                    ReportVenueRequest, ResolveVenueReportRequest, AdminSearchVenueRequest (v6.0)
 ├── dto/response/    VenueResponse, AdminVenueResponse, VenueSummaryResponse, VenueImageResponse,
 │                    VenueImageUploadSignatureResponse, VenueReportResponse, AdminVenueReportResponse
 └── mapper/          VenueMapper (MapStruct); MapperSupport (tái dùng)
@@ -56,7 +57,7 @@ api/           com.phananh.arenaflow.api
 └── config/          SchedulingConfig (@EnableScheduling)
 ```
 
-Thành phần dùng chung mới/sửa (`VenueGuard`, `ImageUploadSigner`, `ImageAssetAdmin`, `event/`, `ConcurrencyConflictRetrier`, `ValidGeoQuery`, `CurrentActor`, `CurrentUserArgumentResolver`) → developer MUST chạy `reuse-scan` trước khi tạo.
+Thành phần dùng chung mới/sửa (`VenueGuard`, `ImageUploadSigner`, `ImageAssetAdmin`, `event/`, `ConcurrencyConflictRetrier`, `ValidGeoQuery`, `CurrentActor`, `CurrentUserArgumentResolver`, `LikePatterns`) → developer MUST chạy `reuse-scan` trước khi tạo.
 
 ## 3. Controller Layer
 
@@ -66,10 +67,10 @@ Quy ước như USER-001 §3 (`@Validated`, `ResponseEntity<ApiResponse<…>>`, 
 |---|---|---|---|
 | `VenueController` | `/api/v1/venues` | 2.1, 2.2, 2.3, 2.7, 2.12 | `VenueService` |
 | `VenueImageController` | `/api/v1/venues/{venueId}` (`/image-upload-signatures`, `/images`, `/images/{imageId}/set-primary`, `DELETE /images/{imageId}`) | 2.4, 2.5, 2.6, 2.13 | `VenueImageService` |
-| `AdminVenueController` | `/api/v1/admin/venues` | 2.10, 2.11 | `AdminVenueService` |
+| `AdminVenueController` | `/api/v1/admin/venues` | 2.10, 2.11, 2.14 | `AdminVenueService` |
 | `AdminVenueReportController` | `/api/v1/admin/venue-reports` | 2.8, 2.9 | `AdminVenueService` |
 
-- 2.2: `@Valid @ModelAttribute SearchVenueRequest` (§7). 2.8: `@RequestParam` như `AdminTeamController`.
+- 2.2: `@Valid @ModelAttribute SearchVenueRequest` (§7). 2.8: `@RequestParam` như `AdminTeamController`. 2.14 (v6.0): `@GetMapping` `listVenues(@Valid @ModelAttribute AdminSearchVenueRequest)` → `ResponseEntity<PageResponse<VenueSummaryResponse>>` (như 2.2); quyền Admin do `SecurityConfig` chặn theo `/api/v1/admin/**` (`AUTH_004`), service không kiểm lại.
 - Không đổi `SecurityConfig`.
 
 **Mã thành công theo `api-convention.md` §5** (chuyển từ `API_Spec.md` v1.0; hợp đồng không đổi):
@@ -77,7 +78,7 @@ Quy ước như USER-001 §3 (`@Validated`, `ResponseEntity<ApiResponse<…>>`, 
 | Endpoint | Mã | Tiêu chí |
 |---|---|---|
 | 2.1, 2.5, 2.7 | 201 | B2 |
-| 2.2, 2.3, 2.8 | 200 | B1 |
+| 2.2, 2.3, 2.8, 2.14 | 200 | B1 |
 | 2.4 | 200 | B3 (chữ ký, `publicId` do server sinh; không tạo tài nguyên) |
 | 2.6, 2.10, 2.11, 2.12 | 200 | B4 |
 | 2.9 | 200 | B3 (`handledAt`, `handledByName`) |
@@ -97,10 +98,11 @@ VenueReportResponse reportVenue(UUID venueId, CurrentActor actor, ReportVenueReq
 VenueResponse updateVenue(UUID venueId, CurrentActor actor, UpdateVenueRequest r);       // retrier(VENUE_011)
 ```
 Deps: `VenueRepository`, `VenueReportRepository`, `UserRepository` (`findByIdAndDeletedAtIsNull`), `AdministrativeUnitRepository` (`findWardWithProvince` — USER-001, v4.0), `VenueImageRepository`, `VenueGuard`, `VenueMapper`, `PageRequestFactory`, `ApplicationEventPublisher`, `AdminAuditLog`.
-- `createVenue`: `findWardWithProvince(wardId)` → `USER_002` (v4.0) → chuẩn hoá (trim; `""` → `null`) → `Venue.builder()` → `save`; response từ entity + `displayName` + phường/tỉnh, không đọc lại.
-- `listVenues`: escape `q` (`%`, `_`, `\`) rồi bọc `%…%`; chọn 1 trong 4 truy vấn theo (có toạ độ?, `status`) — §5.2.
+- `createVenue`: `findByIdAndDeletedAtIsNull(callerId)` → `USER_001` → v6.0: `requireAdminForContactFields(creator.getRole() == ADMIN, phone, website)` → `VENUE_017` (role đọc từ bản ghi user vừa nạp — cùng nguồn với `createdByType`, không dùng JWT) → `findWardWithProvince(wardId)` → `USER_002` (v4.0) → chuẩn hoá (trim; `""` → `null`) → `Venue.builder()` → `save`; response từ entity + `displayName` + phường/tỉnh, không đọc lại.
+- `listVenues` (v6.0): `request.status() != ACTIVE` → `VENUE_018` **trước** mọi truy vấn (kể cả Admin — Admin dùng 2.14); `q` → `LikePatterns.contains` (§4.15); không toạ độ → `searchByStatus("ACTIVE", …)`, có toạ độ → `searchNearbyActive` — §5.2.
 - `reportVenue`: `actor.admin()` → `VENUE_015` → `activeVenue` → `saveAndFlush`; constraint `uq_venue_report_pending` → `VENUE_014` (so tên constraint qua `DataIntegrityViolations` §4.14; vi phạm khác ném lại → 500).
-- `updateVenue`: `findVenue` → `requireOwnerOrAdmin` → `requireWritable` → phường (v4.0: chưa có và không gửi → `VENUE_016`; gửi → `findWardWithProvince` → `USER_002`) → setter → `save` → `getVenue`.
+- `updateVenue`: v6.0: `requireAdminForContactFields(actor.admin(), phone, website)` → `VENUE_017` **trước** retrier và mọi truy vấn (role từ JWT như các guard khác của 2.12 — `[cần xác nhận #15]`) → `findVenue` → `requireOwnerOrAdmin` → `requireWritable` → phường (v4.0: chưa có và không gửi → `VENUE_016`; gửi → `findWardWithProvince` → `USER_002`) → setter → `save` → `getVenue`.
+- `requireAdminForContactFields(boolean admin, String phone, String website)` (private static, v6.0 — BR-V12): `!admin && (phone != null || website != null)` → `VENUE_017`; `""` cũng bị chặn (người không phải Admin không xoá được). Không gửi (`null`) → setter bỏ qua, giữ giá trị cũ.
 - Luồng chi tiết: `Processing_Flow.md` §3.1–§3.3, §3.7, §3.12.
 
 ### 4.2. VenueImageService
@@ -118,6 +120,7 @@ Deps: `VenueGuard`, `VenueImageRepository`, `ImageUploadSigner`, `VenueMapper`, 
 
 ### 4.3. AdminVenueService
 ```java
+PageResponse<VenueSummaryResponse> listVenues(AdminSearchVenueRequest request);            // readOnly (v6.0 — 2.14)
 AdminVenueResponse markInactive(UUID venueId, UUID adminId);                               // retrier(VENUE_011)
 AdminVenueResponse reactivate(UUID venueId, UUID adminId);                                 // retrier(VENUE_011)
 PageResponse<AdminVenueReportResponse> listReports(VenueReportStatusFilter s, UUID venueId, int page, int pageSize); // readOnly
@@ -125,6 +128,7 @@ AdminVenueReportResponse resolveReport(UUID reportId, UUID adminId, ResolveVenue
 ```
 Deps: `VenueGuard`, `VenueRepository`, `VenueReportRepository`, `VenueImageRepository`, `ConcurrencyConflictRetrier`, `VenueMapper`, `PageRequestFactory`, `AdminAuditLog` (§4.13). Không phụ thuộc `VenueService`.
 - Response Admin không che user đã xoá, kèm cờ `is…Deleted` (`API_Spec.md` §1, ADR-0002 sửa đổi 2026-11-12).
+- `listVenues` (v6.0, BR-V13): `pageRequestFactory.create(page, pageSize)` → `LikePatterns.contains(q)` (§4.15) → `status == ALL` → `venueRepository.searchAll(qPattern, …)`; `ACTIVE`/`INACTIVE` → `searchByStatus(status.toQueryValue(), qPattern, …)` → `PageResponse.from(…, venueMapper::toSummary, …)` (`distanceKm` của projection `null`). Q1 trang + Q2 count = 2 / L4 (`Processing_Flow.md` §3.17). Dùng lại `VenueSummaryResponse`, không tạo DTO Admin riêng (không có field tên user nên không cần cờ `is…Deleted`). Hiệu năng mặc định `ALL`: §5.2 ghi chú SQL.
 - `markInactive`/`reactivate` đọc lại qua helper private `adminDetail(venueId)`: `venueRepository.findDetailById` (`VENUE_001` nếu rỗng) + `venueImageRepository.findByVenueIdOrderByDisplayOrderAsc` → `venueMapper.toAdminResponse(view, images)` — cùng 2 truy vấn như `VenueService#getVenue`, không gọi `getVenue` vì method đó trả `VenueResponse` đã che (tiền lệ USER-001 `AdminTeamServiceImpl#adminDetail`).
 
 ### 4.4. VenueGuard (`application/support`, `@Component`)
@@ -201,7 +205,7 @@ Theo USER-001 §4.6: không `@Transactional` mức class.
 
 | Method | Ranh giới |
 |---|---|
-| `listVenues`, `getVenue`, `issueUploadSignature`, `listReports`, `requireSelectable` | `@Transactional(readOnly = true)` |
+| `listVenues` (2.2 và 2.14), `getVenue`, `issueUploadSignature`, `listReports`, `requireSelectable` | `@Transactional(readOnly = true)` |
 | `createVenue`, `reportVenue` | `@Transactional` |
 | `setPrimaryImage`, `deleteImage` | `@Transactional`; tuần tự hoá bằng `lockForImageWrite`, không retrier |
 | `addImage` | Không annotate; kiểm không DB trước, phần DB trong `TransactionTemplate` (khoá như trên), không retrier |
@@ -236,6 +240,12 @@ public record AssetPage(List<String> publicIds, String nextCursor) {}
 
 ### 4.14. DataIntegrityViolations (dùng chung, `application/support`)
 Lớp tiện ích tĩnh: `constraintName(DataIntegrityViolationException)` — tên constraint từ cause Hibernate, `null` nếu không có (không đọc message SQL vì có thể chứa giá trị dòng); `violates(exception, constraint)`. Dùng ở `reportVenue`, `addImage` để chỉ đổi đúng vi phạm unique thành mã nghiệp vụ; `GlobalExceptionHandler` dùng `constraintName` để log.
+
+### 4.15. LikePatterns (dùng chung, `application/support`, v6.0)
+```java
+public static String contains(String keyword); // null/"" → null (không lọc); còn lại "%" + escape + "%"
+```
+Lớp tiện ích tĩnh (constructor private), thay helper private `escapeLike` cũ của `VenueServiceImpl`. Escape `\` trước, rồi `%`, `_` (backslash là ký tự escape mặc định của `LIKE`/`ILIKE` PostgreSQL) → từ khoá khớp nguyên văn. Nhận từ khoá đã trim (compact constructor DTO). Dùng ở `VenueServiceImpl#listVenues` (2.2) và `AdminVenueServiceImpl#listVenues` (2.14); test `LikePatternsTest`.
 
 ## 5. Repository & Data Model
 
@@ -302,12 +312,10 @@ Native + interface projection như USER-001 §5; `Page` native có `countQuery`;
 public interface VenueRepository extends JpaRepository<Venue, UUID> {
     @Modifying int lockRow(UUID id);                                       // UPDATE venue SET version = version + 1 WHERE id = :id
     Optional<VenueDetailView> findDetailById(UUID id);                     // LEFT JOIN "user" người tạo
-    Page<VenueSummaryView> searchByStatus(String status, String qPattern, Pageable p);   // status ∈ ACTIVE|INACTIVE
-    Page<VenueSummaryView> searchAll(String qPattern, Pageable p);                        // status = ALL
+    Page<VenueSummaryView> searchByStatus(String status, String qPattern, Pageable p);   // 2.2 ('ACTIVE'); 2.14 ACTIVE|INACTIVE
+    Page<VenueSummaryView> searchAll(String qPattern, Pageable p);                        // chỉ 2.14 status = ALL (v6.0)
     Page<VenueSummaryView> searchNearbyActive(String qPattern, double lat, double lng, double radiusKm,
-            double minLat, double maxLat, double minLng, double maxLng, Pageable p);      // literal 'ACTIVE'
-    Page<VenueSummaryView> searchNearbyAny(String status /* null = ALL */, String qPattern, double lat, double lng,
-            double radiusKm, double minLat, double maxLat, double minLng, double maxLng, Pageable p);
+            double minLat, double maxLat, double minLng, double maxLng, Pageable p);      // 2.2 có toạ độ; literal 'ACTIVE'
     List<SelectableVenueView> findSelectableByIdIn(Collection<UUID> ids);  // LEFT JOIN venue_image ảnh chính
     @Modifying int markClosureAlerted(UUID id, LocalDateTime now);        // WHERE status='ACTIVE' AND closure_alerted_at IS NULL
     @Modifying int reopenClosureAlertIfNoPending(UUID id);                 // WHERE closure_alerted_at IS NOT NULL AND NOT EXISTS report CLOSED PENDING
@@ -334,7 +342,8 @@ public interface VenueReportRepository extends JpaRepository<VenueReport, UUID> 
 ```
 
 Ghi chú SQL:
-- **Tìm kiếm tách 4 truy vấn tường minh** để planner dùng được index: `searchByStatus` (`v.status = :status`, sort `name, id` → `idx_venue_status_name`); `searchAll` (không lọc status); `searchNearbyActive` dùng literal `v.status = 'ACTIVE'` để khớp partial index `idx_venue_location … WHERE status = 'ACTIVE'` (tham số bind không chứng minh được vị từ partial index ở generic plan); `searchNearbyAny` cho `INACTIVE|ALL` (hiếm, chủ yếu Admin, không bảo đảm index). Chung: `(:qPattern IS NULL OR v.name ILIKE :qPattern OR v.address ILIKE :qPattern)` `[cần xác nhận #8]`; `LEFT JOIN venue_image vi ON vi.venue_id = v.id AND vi.is_primary`. Nearby: hộp giới hạn (`Δlat = r/111.32`, `Δlng = r/(111.32·cos lat)`, tính ở service) + lọc `distance_km <= :radiusKm` qua subquery; Haversine R = 6371 km.
+- **Tìm kiếm tách 3 truy vấn tường minh** để planner dùng được index (v6.0: bỏ `searchNearbyAny` — 2.2 chỉ trả `ACTIVE`, 2.14 không lọc vị trí nên không còn nơi dùng): `searchByStatus` (`v.status = :status`, sort `name, id` → `idx_venue_status_name`; 2.2 không toạ độ với `'ACTIVE'`, 2.14 với `ACTIVE`/`INACTIVE`); `searchAll` (không lọc status; chỉ 2.14 `ALL`); `searchNearbyActive` (2.2 có toạ độ) dùng literal `v.status = 'ACTIVE'` để khớp partial index `idx_venue_location … WHERE status = 'ACTIVE'` (tham số bind không chứng minh được vị từ partial index ở generic plan). Chung: `(:qPattern IS NULL OR v.name ILIKE :qPattern OR v.address ILIKE :qPattern)` `[cần xác nhận #8]`; `LEFT JOIN venue_image vi ON vi.venue_id = v.id AND vi.is_primary`. Nearby: hộp giới hạn (`Δlat = r/111.32`, `Δlng = r/(111.32·cos lat)`, tính ở service) + lọc `distance_km <= :radiusKm` qua subquery; Haversine R = 6371 km.
+- **Hiệu năng 2.14 mặc định `ALL`** (review m2, user chấp nhận 2026-11-22): `searchAll` không có `WHERE status` nên không dùng được `idx_venue_status_name (status, name, id)` để sắp → quét + sort toàn bảng `venue`. Chấp nhận vì bảng `venue` nhỏ và chỉ Admin gọi. Nếu chậm → thêm index `venue(name, id)` bằng migration sau (không làm ở v6.0). Lọc `ACTIVE`/`INACTIVE` vẫn qua `searchByStatus` dùng index.
 - `lockRow`: Venue chưa nằm trong persistence context lúc gọi → `findById` sau đó nạp bản mới; entity không dirty nên không bị ghi lại lúc commit. Lock mode PostgreSQL của `UPDATE` không đổi cột khoá là `FOR NO KEY UPDATE` — tương thích với `FOR KEY SHARE` mà INSERT `venue_image`/`venue_report` lấy qua FK.
 - `promoteFirstAsPrimary`: `UPDATE venue_image SET is_primary = TRUE WHERE id = (SELECT id FROM venue_image WHERE venue_id = :venueId ORDER BY display_order, id LIMIT 1)`; Hibernate tự flush `DELETE` trước câu này (comment một dòng — NFS §4.1).
 - `markStaleAlerted`: `UPDATE venue SET stale_alerted_at = :now, version = version + 1 WHERE id IN (SELECT id FROM venue WHERE status = 'ACTIVE' AND stale_alerted_at IS NULL AND COALESCE(last_selected_at, created_at) < :threshold ORDER BY id LIMIT :limit) AND status = 'ACTIVE' AND stale_alerted_at IS NULL AND COALESCE(last_selected_at, created_at) < :threshold RETURNING id, name` — WHERE ngoài lặp **đủ** điều kiện: dòng bị ghi đồng thời (`markSelected`, mark-inactive) chỉ được PostgreSQL kiểm lại trên bản mới theo WHERE ngoài, subquery dùng lại kết quả cũ (race test commit thật `VenueStaleAlertRaceTest`); khai báo không `@Modifying` (đã kiểm: `VenueStaleAlertRepositoryTest`).
@@ -367,8 +376,9 @@ Giữ Lombok/builder/`@PrePersist` (`convention-backend.md` §6, §6.1); `src/ma
 
 - DTO là `record`; enum dạng chuỗi dùng `@OneOf` (phân biệt hoa thường).
 - v4.0: `CreateVenueRequest.wardId` `@NotNull UUID`; `UpdateVenueRequest.wardId` `UUID` (tuỳ chọn ở DTO, bắt buộc có điều kiện ở service — `VENUE_016`). `VenueResponse`, `AdminVenueResponse` + `ward` (`WardResponse` của USER-001 hoặc record `VenueWardResponse(wardId, wardName, provinceId, provinceName)` — developer chọn khi reuse-scan; shape API ở `API_Spec.md` §4.2). Entity `venue.Venue` + `wardId` (`UUID`).
-- **Field tuỳ chọn chấp nhận `""`** (cả tạo và sửa — `API_Spec.md` §1, §2.1, §2.12): `venueType` `@OneOf({"FIVE_A_SIDE","SEVEN_A_SIDE","ELEVEN_A_SIDE",""})`; `phone` `@Pattern(regexp = "^$|^0[0-9]{9,10}$")`; `website` `@URL(regexp = "^$|^https?://.*")` + `@Size(max = 500)` ([Inference] `@URL` của Hibernate Validator coi `""` hợp lệ — có test). Service đổi `""` → `null` (tạo) hoặc xoá giá trị (sửa). `UpdateVenueRequest.venueName/address`: `@Size` + `@Pattern(regexp = "(?s).*\\S.*")` (null hợp lệ, chỉ khoảng trắng → 400).
-- **`SearchVenueRequest`** (record, bind `@ModelAttribute`): `page`, `pageSize` kiểu `Integer`, `status` kiểu `VenueStatusFilter`; compact constructor gán mặc định khi `null` (`page = 1`, `pageSize = 20`, `status = ACTIVE`, `radiusKm = 5` nếu có toạ độ) **trước** Bean Validation (`@Min/@Max` chạy trên giá trị sau mặc định). `@ValidGeoQuery` mức lớp gắn lỗi vào property node (`lat` / `radiusKm`) vì `GlobalExceptionHandler` chỉ đọc `getFieldErrors()`. Test bắt buộc: không gửi `page`/`pageSize`/`status` → 1/20/`ACTIVE`; `pageSize=101` → 400. `pageSize` tối đa 100 (không theo 50 của AC §3.4): user chốt 2026-11-09 để nhất quán `PageRequestFactory` dùng chung.
+- **Field tuỳ chọn chấp nhận `""`** (cả tạo và sửa — `API_Spec.md` §1, §2.1, §2.12): `venueType` `@OneOf({"FIVE_A_SIDE","SEVEN_A_SIDE","ELEVEN_A_SIDE",""})`; `phone` `@Pattern(regexp = "^$|^0[0-9]{9,10}$")`; `website` `@URL(regexp = "^$|^https?://.*")` + `@Size(max = 500)` ([Inference] `@URL` của Hibernate Validator coi `""` hợp lệ — có test). Service đổi `""` → `null` (tạo) hoặc xoá giá trị (sửa). v6.0: `phone`/`website` khác `null` (kể cả `""`) từ caller không phải Admin bị service chặn `VENUE_017` (§4.1) **sau** Bean Validation — giá trị sai định dạng vẫn trả `400 VALIDATION_ERROR` trước. `UpdateVenueRequest.venueName/address`: `@Size` + `@Pattern(regexp = "(?s).*\\S.*")` (null hợp lệ, chỉ khoảng trắng → 400).
+- **`SearchVenueRequest`** (record, bind `@ModelAttribute`): `page`, `pageSize` kiểu `Integer`, `status` kiểu `VenueStatusFilter`; compact constructor gán mặc định khi `null` (`page = 1`, `pageSize = 20`, `status = ACTIVE`, `radiusKm = 5` nếu có toạ độ) **trước** Bean Validation (`@Min/@Max` chạy trên giá trị sau mặc định). `@ValidGeoQuery` mức lớp gắn lỗi vào property node (`lat` / `radiusKm`) vì `GlobalExceptionHandler` chỉ đọc `getFieldErrors()`. Test bắt buộc: không gửi `page`/`pageSize`/`status` → 1/20/`ACTIVE`; `pageSize=101` → 400. `pageSize` tối đa 100 (không theo 50 của AC §3.4): user chốt 2026-11-09 để nhất quán `PageRequestFactory` dùng chung. v6.0: `status` vẫn bind `VenueStatusFilter` (giá trị ngoài enum → 400), nhưng khác `ACTIVE` bị service chặn `VENUE_018` (§4.1) — không đổi DTO.
+- **`AdminSearchVenueRequest`** (v6.0, record, bind `@ModelAttribute`): `@Size(max = 100) String q`, `VenueStatusFilter status`, `@Min(1) Integer page`, `@Min(1) @Max(100) Integer pageSize`; compact constructor trim `q`, mặc định `status = ALL`, `page = 1`, `pageSize = 20`. Không có `lat`/`lng`/`radiusKm` (tham số lạ bị bỏ qua khi bind). Test `AdminSearchVenueRequestValidationTest`.
 - `VenueMapper` (`componentModel = "spring"`, `uses`/`imports` `MapperSupport`, `unmappedTargetPolicy = ERROR`): `toResponse(VenueDetailView, List<VenueImage>)` (che `createdByName`), `toAdminResponse(VenueDetailView, List<VenueImage>)` (không che; `@Mapping(target = "isCreatedByDeleted", source = "createdByDeleted")`), `toCreatedResponse(Venue, String creatorName)`, `toSummary(VenueSummaryView)` (`distanceKm` HALF_UP 2 chữ số), `toImage(VenueImage)` (không map `publicId`), `toReport(VenueReport)`, `toAdminReport(AdminVenueReportView)` (không che: giữ `reporterName`, `handledByName` gốc; ánh xạ cờ `reporterDeleted` → `isReporterDeleted`, `handledByDeleted` → `isHandledByDeleted` bằng `@Mapping(target = "is…Deleted", source = "…Deleted")`), `toSignatureResponse(UploadSignature)`. Response report Admin không có avatar reporter.
 - `AdminVenueResponse` (record): field như `VenueResponse` + `boolean isCreatedByDeleted` (sau `createdByName`); record tách riêng để `VenueResponse` (2.1, 2.3, 2.12) giữ nguyên hợp đồng. `AdminVenueReportResponse`: thêm `boolean isHandledByDeleted` (sau `handledByName`). Method mapper cho Admin không gọi `MapperSupport.maskName`.
 
@@ -415,7 +425,7 @@ Không thêm Maven dependency: `MessageDigest`/`Mac`/`HexFormat`/`Base64` của 
 - Không endpoint public mới; không đổi `SecurityConfig`.
 - Chỉ lưu URL tự dựng từ `publicId` đã xác minh (chữ ký response + mẫu + người xin chữ ký + hạn).
 - `apiSecret`/`tagKey` chỉ ở `CloudinaryImageUploadSigner`/`CloudinaryImageAssetAdmin`; response 2.4 chỉ có `apiKey`; không log header Basic Auth.
-- Quyền: thêm ảnh/đổi ảnh chính mọi user trên địa điểm `ACTIVE` (BR-V07); sửa địa điểm/xoá ảnh người tạo hoặc Admin (BR-V06); địa điểm `INACTIVE` chỉ Admin ghi; Admin không report (UC-V03). Audit log §4.13.
+- Quyền: thêm ảnh/đổi ảnh chính mọi user trên địa điểm `ACTIVE` (BR-V07); sửa địa điểm/xoá ảnh người tạo hoặc Admin (BR-V06); địa điểm `INACTIVE` chỉ Admin ghi; Admin không report (UC-V03); `phone`/`website` chỉ Admin ghi (BR-V12, `VENUE_017` — 2.1 role từ DB, 2.12 role từ JWT); 2.2 chỉ `ACTIVE` (BR-V13, `VENUE_018`), danh sách mọi trạng thái chỉ qua 2.14 `/api/v1/admin/**`. Audit log §4.13.
 - Ảnh đã xoá còn truy cập được qua URL tới khi job dọn chạy và cache CDN hết hạn (`Processing_Flow.md` §9).
 
 ## 10. Lệch convention / chuẩn có chủ đích
@@ -436,7 +446,7 @@ Sau khi mọi phase code xong + test PASS (CLAUDE.md §8):
 | `docs/database/schema.dbml`, `schema-design.md` §5 | Cột/index/CHECK V5 (v4.0: + `venue.ward_id`, `idx_venue_ward`) | `feature/VENUE-001-*` |
 | `docs/database/data-model.md` §3.5 (v4.0) | Địa điểm có phường/xã (BR-V11) — bắt buộc khi thêm / sửa, nullable cho địa điểm cũ | `feature/VENUE-001-*` |
 | `docs/database/data-model.md` §3.5 | Loại sân enum, quyền sửa/xoá ảnh, trạng thái + chống trùng report, hard-delete ảnh, `public_id` | `feature/VENUE-001-*` |
-| `docs/agent/api-convention.md` §5 · §6 | 13 endpoint (gồm `DELETE` trả 200 — B3) + domain `VENUE` (v4.0: + `VENUE_016`) | `chore/agent-framework-*` (qua `workflow-adapt`) |
+| `docs/agent/api-convention.md` §5 · §6 | 13 endpoint (gồm `DELETE` trả 200 — B3) + domain `VENUE` (v4.0: + `VENUE_016`; v6.0: + 2.14 — B1, `VENUE_017`, `VENUE_018`) | `chore/agent-framework-*` (qua `workflow-adapt`) |
 | `docs/agent/convention-backend.md` §1 | Package `application/support/storage/`, `api/scheduler/`; `@CurrentUser CurrentActor` (`application/event/venue/` đã khớp quy ước `event/<miền>/`) | `chore/agent-framework-*` |
 | `docs/agent/design/USER-001/Component_Class_Design.md` §9.4, `Processing_Flow.md` §5 | Resolver hỗ trợ `CurrentActor`; retrier có overload mã lỗi | `feature/VENUE-001-*` (+ `USER-001/CHANGELOG.md`) |
 | `docs/agent/decisions/0003-optimistic-locking-strategy.md` | Mục Sửa đổi 2026-11-09 (đã viết sẵn trong thay đổi thiết kế này) — kiểm lại khớp code | Cùng nhánh thiết kế |
