@@ -21,7 +21,11 @@ import org.mapstruct.factory.Mappers;
 import org.mockito.InOrder;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +46,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+/** Nghiệp vụ hồ sơ: xem, cập nhật, xoá tài khoản (khoá membership, chặn đội trưởng, ghi thời điểm từ {@code Clock}). */
 class ProfileServiceImplTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
@@ -53,13 +58,17 @@ class ProfileServiceImplTest {
     private final SpelAwareProxyProjectionFactory projections = new SpelAwareProxyProjectionFactory();
     private final UUID userId = UUID.randomUUID();
 
+    /** 20:00 UTC ngày 19 = 03:00 giờ Việt Nam ngày 20. */
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-19T20:00:00Z"), ZoneId.systemDefault());
+    private static final LocalDateTime NOW_VN = LocalDateTime.of(2026, 11, 20, 3, 0);
+
     private ProfileServiceImpl service;
 
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
         service = new ProfileServiceImpl(userRepository, oauthAccountRepository, administrativeUnitRepository,
-                teamMemberRepository, retrier, profileMapper);
+                teamMemberRepository, retrier, profileMapper, CLOCK);
         when(retrier.execute(any())).thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(0)).get());
     }
 
@@ -147,8 +156,8 @@ class ProfileServiceImplTest {
         // Q1 khoá → kiểm trên dữ liệu đã khoá → Q2 bulk gộp → Q3 soft delete; không còn bước kiểm lại.
         InOrder order = inOrder(teamMemberRepository, userRepository);
         order.verify(teamMemberRepository).findByUserIdAndStatusInOrderByIdAsc(eq(userId), argThat(ProfileServiceImplTest::isOpen));
-        order.verify(teamMemberRepository).leaveAndRejectAllOpen(eq(userId), any());
-        order.verify(userRepository).softDelete(eq(userId), any());
+        order.verify(teamMemberRepository).leaveAndRejectAllOpen(userId, NOW_VN);
+        order.verify(userRepository).softDelete(userId, NOW_VN);
         verifyNoMoreInteractions(teamMemberRepository);
     }
 

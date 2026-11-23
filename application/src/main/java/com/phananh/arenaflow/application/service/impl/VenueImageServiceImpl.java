@@ -18,7 +18,6 @@ import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
 import com.phananh.arenaflow.domain.entity.venue.Venue;
 import com.phananh.arenaflow.domain.repository.VenueImageRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +28,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+/** Ảnh địa điểm: cấp chữ ký upload, thêm ảnh đã upload, đặt ảnh chính, xoá ảnh. */
 @Service
 public class VenueImageServiceImpl implements VenueImageService {
 
@@ -43,15 +43,6 @@ public class VenueImageServiceImpl implements VenueImageService {
     private final VenueImageCleanupProperties cleanupProperties;
     private final AdminAuditLog adminAuditLog;
     private final Clock clock;
-
-    @Autowired
-    public VenueImageServiceImpl(VenueGuard venueGuard, VenueImageRepository venueImageRepository,
-                                 ImageUploadSigner imageUploadSigner, VenueMapper venueMapper,
-                                 TransactionTemplate transactionTemplate, VenueImageCleanupProperties cleanupProperties,
-                                 AdminAuditLog adminAuditLog) {
-        this(venueGuard, venueImageRepository, imageUploadSigner, venueMapper, transactionTemplate, cleanupProperties,
-                adminAuditLog, Clock.systemUTC());
-    }
 
     public VenueImageServiceImpl(VenueGuard venueGuard, VenueImageRepository venueImageRepository,
                           ImageUploadSigner imageUploadSigner, VenueMapper venueMapper,

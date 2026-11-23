@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.domain.entity.mercenary;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -9,7 +10,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -52,21 +53,23 @@ public class MercenaryRecruitment {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Setter(AccessLevel.NONE)
-    private OffsetDateTime createdAt;
+    private LocalDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
     @Setter(AccessLevel.NONE)
-    private OffsetDateTime updatedAt;
+    private LocalDateTime updatedAt;
 
+    /** Gán {@code createdAt} và {@code updatedAt} = giờ hiện tại ({@link AppTime#now()}) khi lưu lần đầu. */
     @PrePersist
     protected void onCreate() {
-        createdAt = OffsetDateTime.now();
-        updatedAt = OffsetDateTime.now();
+        createdAt = AppTime.now();
+        updatedAt = AppTime.now();
     }
 
+    /** Cập nhật {@code updatedAt} = giờ hiện tại ({@link AppTime#now()}) mỗi lần entity được sửa. */
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = OffsetDateTime.now();
+        updatedAt = AppTime.now();
     }
 
     public enum Position {

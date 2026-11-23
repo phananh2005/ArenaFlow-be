@@ -23,7 +23,8 @@ public class VenueImageCleanupScheduler {
         this.venueImageCleanupService = venueImageCleanupService;
     }
 
-    @Scheduled(cron = "${arenaflow.venue.image-cleanup.cron}", zone = "Asia/Ho_Chi_Minh")
+    /** Dọn asset ảnh mồ côi trên storage theo cron cấu hình; cron chạy theo timezone JVM (giờ Việt Nam). */
+    @Scheduled(cron = "${arenaflow.venue.image-cleanup.cron}")
     public void cleanupOrphanAssets() {
         venueImageCleanupService.cleanupOrphanAssets();
     }

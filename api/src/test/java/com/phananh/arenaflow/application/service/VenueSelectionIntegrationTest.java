@@ -3,6 +3,7 @@ package com.phananh.arenaflow.application.service;
 import com.phananh.arenaflow.application.dto.request.CreateVenueRequest;
 import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
+import com.phananh.arenaflow.common.time.AppTime;
 import com.phananh.arenaflow.domain.entity.user.User;
 import com.phananh.arenaflow.domain.projection.SelectableVenueView;
 import com.phananh.arenaflow.domain.repository.UserRepository;
@@ -19,7 +20,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -27,6 +29,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/** Chọn địa điểm trên DB thật: đọc dữ liệu hiển thị trong một câu, ghi thời điểm được chọn không lùi và tăng version. */
 @SpringBootTest(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
 @Transactional
 class VenueSelectionIntegrationTest {
@@ -56,7 +59,7 @@ class VenueSelectionIntegrationTest {
         assertThat(views.get(0).getProvinceName()).isEqualTo("Selection Province");
         assertThat(views.get(0).getStatus()).isEqualTo("ACTIVE");
 
-        jdbcTemplate.update("UPDATE venue SET status = 'INACTIVE', admin_verified_inactive_at = NOW() WHERE id = ?", first);
+        jdbcTemplate.update("UPDATE venue SET status = 'INACTIVE', admin_verified_inactive_at = (now() AT TIME ZONE 'Asia/Ho_Chi_Minh') WHERE id = ?", first);
         assertError(() -> venueSelectionService.requireSelectable(List.of(second, first)), ErrorCode.VENUE_002);
         assertError(() -> venueSelectionService.requireSelectable(List.of(second, UUID.randomUUID())), ErrorCode.VENUE_001);
     }
@@ -64,9 +67,9 @@ class VenueSelectionIntegrationTest {
     @Test
     void markSelectedKeepsLatestTimeResetsStaleGateAndBumpsVersionInOneQuery() {
         UUID venueId = venue("Selected Venue");
-        OffsetDateTime later = OffsetDateTime.parse("2026-11-19T10:00:00Z");
-        OffsetDateTime earlier = OffsetDateTime.parse("2026-11-01T10:00:00Z");
-        jdbcTemplate.update("UPDATE venue SET stale_alerted_at = NOW() WHERE id = ?", venueId);
+        LocalDateTime later = LocalDateTime.of(2026, 11, 19, 17, 0);
+        LocalDateTime earlier = LocalDateTime.of(2026, 11, 1, 17, 0);
+        jdbcTemplate.update("UPDATE venue SET stale_alerted_at = (now() AT TIME ZONE 'Asia/Ho_Chi_Minh') WHERE id = ?", venueId);
         Long versionBefore = jdbcTemplate.queryForObject("SELECT version FROM venue WHERE id = ?", Long.class, venueId);
         Statistics statistics = statistics();
 
@@ -76,7 +79,7 @@ class VenueSelectionIntegrationTest {
 
         Map<String, Object> row = jdbcTemplate.queryForMap(
                 "SELECT last_selected_at, stale_alerted_at, version FROM venue WHERE id = ?", venueId);
-        assertThat(((java.sql.Timestamp) row.get("last_selected_at")).toInstant()).isEqualTo(later.toInstant());
+        assertThat(((Timestamp) row.get("last_selected_at")).toLocalDateTime()).isEqualTo(later);
         assertThat(row.get("stale_alerted_at")).isNull();
         assertThat((Long) row.get("version")).isEqualTo(versionBefore + 2);
     }
@@ -84,7 +87,7 @@ class VenueSelectionIntegrationTest {
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void markSelectedRefusesToRunOutsideCallerTransaction() {
-        assertThatThrownBy(() -> venueSelectionService.markSelected(List.of(UUID.randomUUID()), OffsetDateTime.now()))
+        assertThatThrownBy(() -> venueSelectionService.markSelected(List.of(UUID.randomUUID()), AppTime.now()))
                 .isInstanceOf(IllegalTransactionStateException.class);
     }
 

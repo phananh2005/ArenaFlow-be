@@ -31,8 +31,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,13 +66,17 @@ class AdminVenueServiceImplTest {
     private final UUID venueId = UUID.randomUUID();
     private final UUID reportId = UUID.randomUUID();
 
+    /** 20:00 UTC ngày 19 = 03:00 giờ Việt Nam ngày 20. */
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-19T20:00:00Z"), ZoneId.systemDefault());
+    private static final LocalDateTime NOW_VN = LocalDateTime.of(2026, 11, 20, 3, 0);
+
     private AdminVenueService service;
 
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
         service = new AdminVenueServiceImpl(new VenueGuard(venueRepository), venueRepository, reportRepository,
-                imageRepository, retrier, Mappers.getMapper(VenueMapper.class), new PageRequestFactory(), auditLog);
+                imageRepository, retrier, Mappers.getMapper(VenueMapper.class), new PageRequestFactory(), auditLog, CLOCK);
         when(retrier.execute(eq(ErrorCode.VENUE_011), any())).thenAnswer(invocation ->
                 ((Supplier<Object>) invocation.getArgument(1)).get());
     }
@@ -122,7 +128,7 @@ class AdminVenueServiceImplTest {
         assertThat(report.isReporterDeleted()).isTrue();
         assertThat(report.handledByName()).isNull();
         assertThat(report.isHandledByDeleted()).isFalse();
-        assertThat(report.createdAt()).isEqualTo(OffsetDateTime.parse("2026-11-19T00:00:00Z"));
+        assertThat(report.createdAt()).isEqualTo(LocalDateTime.of(2026, 11, 19, 7, 0));
 
         when(reportRepository.findAdminReports(eq(null), eq(null), any())).thenReturn(new PageImpl<>(List.of()));
         service.listReports(VenueReportStatusFilter.ALL, null, 2, 5);
@@ -154,7 +160,7 @@ class AdminVenueServiceImplTest {
         service.resolveReport(reportId, adminId, new ResolveVenueReportRequest("VERIFIED"));
 
         InOrder order = inOrder(reportRepository, venueRepository);
-        order.verify(reportRepository).resolveIfPending(eq(reportId), eq("VERIFIED"), eq(adminId), any());
+        order.verify(reportRepository).resolveIfPending(reportId, "VERIFIED", adminId, NOW_VN);
         order.verify(venueRepository).reopenClosureAlertIfNoPending(venueId);
         order.verify(reportRepository).findAdminViewById(reportId);
     }
@@ -188,10 +194,10 @@ class AdminVenueServiceImplTest {
         AdminVenueResponse response = service.markInactive(venueId, adminId);
 
         assertThat(venue.getStatus()).isEqualTo(Venue.Status.INACTIVE);
-        assertThat(venue.getAdminVerifiedInactiveAt()).isNotNull();
+        assertThat(venue.getAdminVerifiedInactiveAt()).isEqualTo(NOW_VN);
         InOrder order = inOrder(venueRepository, reportRepository, imageRepository);
         order.verify(venueRepository).save(venue);
-        order.verify(reportRepository).verifyPendingClosureReports(eq(venueId), eq(adminId), any());
+        order.verify(reportRepository).verifyPendingClosureReports(venueId, adminId, NOW_VN);
         order.verify(venueRepository).findDetailById(venueId);
         assertThat(response.createdByName()).isEqualTo("Real Creator");
         assertThat(response.isCreatedByDeleted()).isTrue();
@@ -212,8 +218,8 @@ class AdminVenueServiceImplTest {
     @Test
     void reactivateClearsInactiveStateAndBothAlertGatesWithoutTouchingReports() {
         Venue venue = Venue.builder().id(venueId).status(Venue.Status.INACTIVE)
-                .adminVerifiedInactiveAt(OffsetDateTime.now()).staleAlertedAt(OffsetDateTime.now())
-                .closureAlertedAt(OffsetDateTime.now()).build();
+                .adminVerifiedInactiveAt(NOW_VN).staleAlertedAt(NOW_VN)
+                .closureAlertedAt(NOW_VN).build();
         when(venueRepository.findById(venueId)).thenReturn(Optional.of(venue));
         stubAdminDetail("ACTIVE");
 
@@ -266,7 +272,7 @@ class AdminVenueServiceImplTest {
         values.put("reason", "CLOSED");
         values.put("status", status);
         values.put("handledByDeleted", false);
-        values.put("createdAt", Instant.parse("2026-11-19T00:00:00Z"));
+        values.put("createdAt", LocalDateTime.of(2026, 11, 19, 7, 0));
         return projections.createProjection(AdminVenueReportView.class, values);
     }
 

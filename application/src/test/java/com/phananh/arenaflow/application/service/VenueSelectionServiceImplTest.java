@@ -8,7 +8,7 @@ import com.phananh.arenaflow.domain.repository.VenueRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -21,6 +21,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/** Chọn địa điểm: kiểm tồn tại và ACTIVE theo thứ tự lỗi, giữ thứ tự yêu cầu, đầu vào rỗng không chạy SQL. */
 class VenueSelectionServiceImplTest {
 
     private final VenueRepository venueRepository = mock(VenueRepository.class);
@@ -60,7 +61,7 @@ class VenueSelectionServiceImplTest {
     @Test
     void emptyInputsRunNoQuery() {
         assertThat(service.requireSelectable(List.of())).isEmpty();
-        service.markSelected(List.of(), OffsetDateTime.now());
+        service.markSelected(List.of(), LocalDateTime.of(2026, 11, 20, 19, 0));
 
         verifyNoInteractions(venueRepository);
     }
@@ -68,7 +69,7 @@ class VenueSelectionServiceImplTest {
     @Test
     void markSelectedDelegatesToSingleBulkUpdate() {
         UUID venueId = UUID.randomUUID();
-        OffsetDateTime selectedAt = OffsetDateTime.parse("2026-11-19T00:00:00Z");
+        LocalDateTime selectedAt = LocalDateTime.of(2026, 11, 19, 7, 0);
 
         service.markSelected(List.of(venueId), selectedAt);
 

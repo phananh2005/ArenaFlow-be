@@ -21,10 +21,8 @@ import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,10 +30,11 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Mapper hồ sơ, đội, thành viên: dựng địa giới, che tên user đã xoá, giữ nguyên thời điểm giờ Việt Nam. */
 class MapperTest {
 
-    private static final Instant CREATED = Instant.parse("2026-11-01T10:00:00Z");
-    private static final OffsetDateTime CREATED_UTC = OffsetDateTime.of(2026, 11, 1, 10, 0, 0, 0, ZoneOffset.UTC);
+    /** Giờ Việt Nam có micro giây: mapper gán thẳng, không đổi múi giờ. */
+    private static final LocalDateTime CREATED = LocalDateTime.of(2026, 11, 1, 17, 0, 0, 123_456_000);
 
     private final SpelAwareProxyProjectionFactory projections = new SpelAwareProxyProjectionFactory();
     private final ProfileMapper profileMapper = Mappers.getMapper(ProfileMapper.class);
@@ -47,7 +46,7 @@ class MapperTest {
     }
 
     @Test
-    void profileMapperBuildsWardUppercasesProviderAndConvertsTimeToUtc() {
+    void profileMapperBuildsWardUppercasesProviderAndKeepsVietnamLocalTime() {
         UUID userId = UUID.randomUUID();
         UUID wardId = UUID.randomUUID();
         UUID provinceId = UUID.randomUUID();
@@ -79,7 +78,7 @@ class MapperTest {
         assertThat(response.ward()).isNotNull();
         assertThat(response.ward().wardId()).isEqualTo(wardId);
         assertThat(response.ward().provinceName()).isEqualTo("TP. Hồ Chí Minh");
-        assertThat(response.createdAt()).isEqualTo(CREATED_UTC);
+        assertThat(response.createdAt()).isEqualTo(CREATED);
     }
 
     @Test
@@ -114,7 +113,7 @@ class MapperTest {
         assertThat(response.captainName()).isEqualTo("Người dùng đã xóa");
         assertThat(response.captainId()).isNotNull();
         assertThat(response.memberCount()).isEqualTo(5L);
-        assertThat(response.createdAt()).isEqualTo(CREATED_UTC);
+        assertThat(response.createdAt()).isEqualTo(CREATED);
     }
 
     @Test
@@ -137,7 +136,7 @@ class MapperTest {
         assertThat(summary.captainName()).isEqualTo("Trần B");
         assertThat(summary.skillLevels()).isEmpty();
         assertThat(admin.inactiveReason()).isEqualTo("Vi phạm");
-        assertThat(admin.createdAt()).isEqualTo(CREATED_UTC);
+        assertThat(admin.createdAt()).isEqualTo(CREATED);
     }
 
     @Test
@@ -159,7 +158,7 @@ class MapperTest {
         assertThat(response.fromUserName()).isEqualTo("First");
         assertThat(response.toUserName()).isEqualTo("Người dùng đã xóa");
         assertThat(response.reason()).isEqualTo("Bận");
-        assertThat(response.transferredAt()).isEqualTo(CREATED_UTC);
+        assertThat(response.transferredAt()).isEqualTo(CREATED);
     }
 
     @Test
@@ -169,7 +168,7 @@ class MapperTest {
                 .userId(UUID.randomUUID())
                 .role(TeamMember.Role.MEMBER)
                 .status(TeamMember.Status.PENDING)
-                .invitedAt(CREATED_UTC)
+                .invitedAt(CREATED)
                 .build();
 
         InvitationResponse invitation = membershipMapper.toInvitation(member, "Team Alpha");
@@ -177,7 +176,7 @@ class MapperTest {
         assertThat(invitation.teamName()).isEqualTo("Team Alpha");
         assertThat(invitation.userId()).isEqualTo(member.getUserId());
         assertThat(invitation.status()).isEqualTo("PENDING");
-        assertThat(invitation.invitedAt()).isEqualTo(CREATED_UTC);
+        assertThat(invitation.invitedAt()).isEqualTo(CREATED);
 
         Map<String, Object> values = new HashMap<>();
         values.put("memberId", UUID.randomUUID());
@@ -195,7 +194,7 @@ class MapperTest {
         assertThat(response.displayName()).isEqualTo("Người dùng đã xóa");
         assertThat(response.avatarUrl()).isNull();
         assertThat(response.role()).isEqualTo("MEMBER");
-        assertThat(response.joinedAt()).isEqualTo(CREATED_UTC);
+        assertThat(response.joinedAt()).isEqualTo(CREATED);
     }
 
     // ---------- Giải tán đội, lịch sử thành viên ----------
@@ -220,7 +219,7 @@ class MapperTest {
 
         assertThat(response.status()).isEqualTo("DISBANDED");
         assertThat(response.disbandReason()).isEqualTo("Hết người chơi");
-        assertThat(response.disbandedAt()).isEqualTo(CREATED_UTC);
+        assertThat(response.disbandedAt()).isEqualTo(CREATED);
         assertThat(response.disbandedById()).isEqualTo(disbanderId);
         assertThat(response.disbandedByName()).isEqualTo("Người dùng đã xóa");
         assertThat(response.inactiveReason()).isEqualTo("Admin khoá");
@@ -304,7 +303,7 @@ class MapperTest {
         assertThat(admin.inactiveReason()).isEqualTo("Vi phạm");
         assertThat(admin.skillLevels()).containsExactly("Nhiệt tình");
         assertThat(admin.memberCount()).isEqualTo(5L);
-        assertThat(admin.createdAt()).isEqualTo(CREATED_UTC);
+        assertThat(admin.createdAt()).isEqualTo(CREATED);
         assertThat(teamMapper.toResponse(view).captainName()).isEqualTo("Người dùng đã xóa");
     }
 
@@ -329,7 +328,7 @@ class MapperTest {
         assertThat(response.avatarUrl()).isEqualTo("https://cdn.example.com/x.png");
         assertThat(response.role()).isEqualTo("CAPTAIN");
         assertThat(response.status()).isEqualTo("LEFT");
-        assertThat(response.joinedAt()).isEqualTo(CREATED_UTC);
-        assertThat(response.leftAt()).isEqualTo(CREATED_UTC);
+        assertThat(response.joinedAt()).isEqualTo(CREATED);
+        assertThat(response.leftAt()).isEqualTo(CREATED);
     }
 }

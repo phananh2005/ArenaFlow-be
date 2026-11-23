@@ -11,7 +11,10 @@ import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Handler lỗi bảo mật ghi thân lỗi chuẩn cho 401 và 403 (thời điểm không kèm múi giờ). */
 class SecurityErrorHandlersTest {
+
+    private static final String LOCAL_DATE_TIME = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?$";
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -28,6 +31,8 @@ class SecurityErrorHandlersTest {
         JsonNode error = jsonMapper.readTree(response.getContentAsString()).get("error");
         assertThat(error.get("code").asString()).isEqualTo("AUTH_001");
         assertThat(error.get("path").asString()).isEqualTo("/api/v1/users/me");
+        // Giờ Việt Nam, không có Z / offset.
+        assertThat(error.get("timestamp").asString()).matches(LOCAL_DATE_TIME);
     }
 
     @Test
@@ -43,5 +48,6 @@ class SecurityErrorHandlersTest {
         JsonNode error = jsonMapper.readTree(response.getContentAsString()).get("error");
         assertThat(error.get("code").asString()).isEqualTo("AUTH_004");
         assertThat(error.get("path").asString()).isEqualTo("/api/v1/admin/teams");
+        assertThat(error.get("timestamp").asString()).matches(LOCAL_DATE_TIME);
     }
 }

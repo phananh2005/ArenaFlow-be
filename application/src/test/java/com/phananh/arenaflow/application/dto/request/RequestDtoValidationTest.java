@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.application.dto.request;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -8,7 +9,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Ràng buộc Bean Validation của các request DTO xác thực, hồ sơ, đội và thành viên. */
 class RequestDtoValidationTest {
 
     private static ValidatorFactory factory;
@@ -67,13 +68,13 @@ class RequestDtoValidationTest {
     void profileUpdateRequestAllowsAllNullButValidatesPresentFields() {
         assertThat(invalidFields(new ProfileUpdateRequest(null, null, null, null, null, null, null))).isEmpty();
         assertThat(invalidFields(new ProfileUpdateRequest("Nguyễn Văn A", "https://cdn.example.com/a.png", "bio",
-                "Tiền vệ", LocalDate.now().minusYears(20), "MALE", UUID.randomUUID()))).isEmpty();
+                "Tiền vệ", AppTime.today().minusYears(20), "MALE", UUID.randomUUID()))).isEmpty();
         assertThat(invalidFields(new ProfileUpdateRequest("   ", "not a url", "x".repeat(1001),
-                "Thủ thành", LocalDate.now().minusYears(10), "male", null)))
+                "Thủ thành", AppTime.today().minusYears(10), "male", null)))
                 .containsExactlyInAnyOrder("displayName", "avatarUrl", "bio", "preferredPosition",
                         "dateOfBirth", "gender");
         assertThat(invalidFields(new ProfileUpdateRequest("x".repeat(101), null, null, null,
-                LocalDate.now().plusDays(1), null, null)))
+                AppTime.today().plusDays(1), null, null)))
                 .containsExactlyInAnyOrder("displayName", "dateOfBirth");
     }
 

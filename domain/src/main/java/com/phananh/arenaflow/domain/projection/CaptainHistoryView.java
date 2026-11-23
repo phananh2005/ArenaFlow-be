@@ -1,9 +1,12 @@
 package com.phananh.arenaflow.domain.projection;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
-/** Lịch sử chuyển quyền captain; fromUserId null = lần tạo đội. Cờ *Deleted → mapper che tên. */
+/**
+ * Lịch sử chuyển quyền captain; fromUserId null = lần tạo đội. Cờ *Deleted → mapper che tên.
+ * Cột thời điểm ({@code transferredAt}) là {@code TIMESTAMP} giờ Việt Nam, đọc thẳng thành {@code LocalDateTime}.
+ */
 public interface CaptainHistoryView {
     UUID getHistoryId();
     UUID getTeamId();
@@ -14,5 +17,5 @@ public interface CaptainHistoryView {
     String getToUserName();
     Boolean getToUserDeleted();
     String getReason();
-    Instant getTransferredAt();
+    LocalDateTime getTransferredAt();
 }

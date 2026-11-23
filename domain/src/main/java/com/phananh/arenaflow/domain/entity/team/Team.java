@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.domain.entity.team;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import com.phananh.arenaflow.domain.entity.converter.SkillLevelsConverter;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -11,7 +12,7 @@ import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -58,7 +59,7 @@ public class Team {
     private String disbandReason;
 
     @Column(name = "disbanded_at")
-    private OffsetDateTime disbandedAt;
+    private LocalDateTime disbandedAt;
 
     @Column(name = "disbanded_by")
     private UUID disbandedBy;
@@ -110,21 +111,23 @@ public class Team {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Setter(AccessLevel.NONE)
-    private OffsetDateTime createdAt;
+    private LocalDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
     @Setter(AccessLevel.NONE)
-    private OffsetDateTime updatedAt;
+    private LocalDateTime updatedAt;
 
+    /** Gán {@code createdAt} và {@code updatedAt} = giờ hiện tại ({@link AppTime#now()}) khi lưu lần đầu. */
     @PrePersist
     protected void onCreate() {
-        createdAt = OffsetDateTime.now();
-        updatedAt = OffsetDateTime.now();
+        createdAt = AppTime.now();
+        updatedAt = AppTime.now();
     }
 
+    /** Cập nhật {@code updatedAt} = giờ hiện tại ({@link AppTime#now()}) mỗi lần entity được sửa. */
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = OffsetDateTime.now();
+        updatedAt = AppTime.now();
     }
 
     public enum TeamStatus {

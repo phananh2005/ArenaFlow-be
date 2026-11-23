@@ -26,7 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +48,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/** Dọn asset ảnh mồ côi: chỉ xoá asset cũ không còn tham chiếu, theo batch, dừng an toàn khi lỗi, log không lộ dữ liệu. */
 @ExtendWith(OutputCaptureExtension.class)
 class VenueImageCleanupServiceImplTest {
 
@@ -196,6 +197,6 @@ class VenueImageCleanupServiceImplTest {
         return new VenueImageCleanupServiceImpl(assetAdmin, signer, imageRepository, readOnlyTransaction,
                 new VenueImageCleanupProperties(Duration.ofHours(24), Duration.ofHours(6), Duration.ofMinutes(5),
                         500, maxAdminCalls, null, null),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneId.systemDefault()));
     }
 }

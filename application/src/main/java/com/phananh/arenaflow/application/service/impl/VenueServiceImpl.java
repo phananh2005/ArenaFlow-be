@@ -40,7 +40,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -65,6 +66,7 @@ public class VenueServiceImpl implements VenueService {
     private final ConcurrencyConflictRetrier concurrencyConflictRetrier;
     private final ApplicationEventPublisher eventPublisher;
     private final AdminAuditLog adminAuditLog;
+    private final Clock clock;
 
     /**
      * Q1 caller, Q2 phường/tỉnh, Q3 insert; trả kết quả từ dữ liệu đã đọc, không cần truy vấn thứ tư.
@@ -197,7 +199,7 @@ public class VenueServiceImpl implements VenueService {
             throw exception;
         }
         if (report.getReason() == VenueReport.Reason.CLOSED && venue.getClosureAlertedAt() == null) {
-            OffsetDateTime now = OffsetDateTime.now();
+            LocalDateTime now = LocalDateTime.now(clock);
             if (venueRepository.markClosureAlerted(venueId, now) == 1) {
                 eventPublisher.publishEvent(new VenueAdminAlertEvent(venueId, venue.getName(),
                         VenueAlertType.CLOSURE_REPORTED, now));

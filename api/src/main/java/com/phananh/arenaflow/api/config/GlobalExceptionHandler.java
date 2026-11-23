@@ -6,6 +6,7 @@ import com.phananh.arenaflow.common.exception.ErrorCode;
 import com.phananh.arenaflow.common.exception.ErrorEnvelope;
 import com.phananh.arenaflow.common.exception.ErrorResponse;
 import com.phananh.arenaflow.common.exception.ValidationError;
+import com.phananh.arenaflow.common.time.AppTime;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -21,8 +22,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.exc.MismatchedInputException;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Objects;
 
@@ -35,6 +37,7 @@ import java.util.Objects;
 public class GlobalExceptionHandler {
 
     private static final String PENDING_OR_ACTIVE_UNIQUE_INDEX = "idx_team_member_pending_or_active";
+    private static final String BODY_FIELD = "body";
 
     /**
      * Giữ status/mã lỗi nghiệp vụ và details; chỉ log mã lỗi cùng path, không ghi details có thể chứa dữ liệu nhạy cảm.
@@ -90,7 +93,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorEnvelope> handleMessageNotReadable(
             HttpMessageNotReadableException exception, HttpServletRequest request) {
-        return validationResponse(request, List.of(new ValidationError("body", "Nội dung request không hợp lệ")));
+        return validationResponse(request,
+                List.of(new ValidationError(bodyField(exception), "Nội dung request không hợp lệ")));
     }
 
     /** Path/query sai kiểu (UUID sai định dạng, enum không hợp lệ như status=BOGUS) → 400. */
@@ -167,10 +171,45 @@ public class GlobalExceptionHandler {
         return Objects.requireNonNullElse(DataIntegrityViolations.constraintName(exception), "unknown");
     }
 
+    /**
+     * Đường dẫn field từ lỗi Jackson (vd "startsAt", "timeOptions[0].startsAt"); JSON sai cú pháp / thiếu body → "body".
+     * Lấy MismatchedInputException đầu tiên trong chuỗi cause: cause sâu nhất của lỗi ngày giờ / UUID
+     * (DateTimeParseException, IllegalArgumentException) không mang đường dẫn.
+     */
+    private static String bodyField(HttpMessageNotReadableException exception) {
+        for (Throwable cause = exception.getCause(); cause != null; cause = cause.getCause()) {
+            if (cause instanceof MismatchedInputException mismatch) {
+                String path = path(mismatch.getPath());
+                return path.isEmpty() ? BODY_FIELD : path;
+            }
+        }
+        return BODY_FIELD;
+    }
+
+    /**
+     * Ghép đường dẫn Jackson thành chuỗi field: tên thuộc tính nối bằng dấu chấm, phần tử mảng thành {@code [i]}
+     * (vd {@code timeOptions[0].startsAt}). Danh sách rỗng → chuỗi rỗng.
+     */
+    private static String path(List<JacksonException.Reference> references) {
+        StringBuilder path = new StringBuilder();
+        for (JacksonException.Reference reference : references) {
+            if (reference.getPropertyName() != null) {
+                if (!path.isEmpty()) {
+                    path.append('.');
+                }
+                path.append(reference.getPropertyName());
+            } else if (reference.getIndex() >= 0) {
+                path.append('[').append(reference.getIndex()).append(']');
+            }
+        }
+        return path.toString();
+    }
+
+    /** Response 400 {@code VALIDATION_ERROR} kèm danh sách field lỗi; {@code timestamp} = {@link AppTime#now()}. */
     private ResponseEntity<ErrorEnvelope> validationResponse(HttpServletRequest request, List<ValidationError> errors) {
         ErrorCode errorCode = ErrorCode.VALIDATION_ERROR;
         ErrorResponse error = new ErrorResponse(errorCode.getCode(), errorCode.getMessage(), null,
-                OffsetDateTime.now(), request.getRequestURI(), errors);
+                AppTime.now(), request.getRequestURI(), errors);
         return ResponseEntity.status(errorCode.getHttpStatus()).body(new ErrorEnvelope(error));
     }
 

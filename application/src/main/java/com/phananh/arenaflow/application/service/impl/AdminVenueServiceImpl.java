@@ -28,7 +28,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /** Nghiệp vụ Admin trên địa điểm; quyền Admin đã được chặn ở tầng web theo đường dẫn {@code /api/v1/admin/**}. */
@@ -44,6 +45,7 @@ public class AdminVenueServiceImpl implements AdminVenueService {
     private final VenueMapper venueMapper;
     private final PageRequestFactory pageRequestFactory;
     private final AdminAuditLog adminAuditLog;
+    private final Clock clock;
 
     /**
      * Q1 trang + Q2 count. {@code ALL} dùng truy vấn không lọc trạng thái, trạng thái cụ thể dùng truy vấn có index
@@ -68,7 +70,7 @@ public class AdminVenueServiceImpl implements AdminVenueService {
             if (venue.getStatus() == Venue.Status.INACTIVE) {
                 throw new BusinessException(ErrorCode.VENUE_007);
             }
-            OffsetDateTime now = OffsetDateTime.now();
+            LocalDateTime now = LocalDateTime.now(clock);
             venue.setStatus(Venue.Status.INACTIVE);
             venue.setAdminVerifiedInactiveAt(now);
             venueRepository.save(venue);
@@ -114,7 +116,7 @@ public class AdminVenueServiceImpl implements AdminVenueService {
             VenueReport report = venueReportRepository.findById(reportId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.VENUE_009));
             if (report.getStatus() != VenueReport.Status.PENDING
-                    || venueReportRepository.resolveIfPending(reportId, request.status(), adminId, OffsetDateTime.now()) == 0) {
+                    || venueReportRepository.resolveIfPending(reportId, request.status(), adminId, LocalDateTime.now(clock)) == 0) {
                 throw new BusinessException(ErrorCode.VENUE_010);
             }
             if (report.getReason() == VenueReport.Reason.CLOSED) {

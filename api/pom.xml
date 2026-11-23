@@ -103,6 +103,13 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<!-- spring-boot:run chạy app trong JVM riêng: ghim giờ Việt Nam cho JVM đó, không phụ thuộc múi giờ của máy.
+					     Dùng system property thay vì jvmArguments để vẫn truyền được -Dspring-boot.run.jvmArguments (vd debug) từ dòng lệnh. -->
+					<systemPropertyVariables>
+						<user.timezone>Asia/Ho_Chi_Minh</user.timezone>
+					</systemPropertyVariables>
+				</configuration>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>

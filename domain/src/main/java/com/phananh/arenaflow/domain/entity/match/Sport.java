@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.domain.entity.match;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -9,7 +10,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -38,10 +39,11 @@ public class Sport {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Setter(AccessLevel.NONE)
-    private OffsetDateTime createdAt;
+    private LocalDateTime createdAt;
 
+    /** Gán {@code createdAt} = giờ hiện tại ({@link AppTime#now()}) khi lưu lần đầu. */
     @PrePersist
     protected void onCreate() {
-        createdAt = OffsetDateTime.now();
+        createdAt = AppTime.now();
     }
 }

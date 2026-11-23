@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +18,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/** Kiểm tra địa điểm được chọn còn tồn tại và ACTIVE, ghi thời điểm được chọn gần nhất. */
 @Service
 @RequiredArgsConstructor
 public class VenueSelectionServiceImpl implements VenueSelectionService {
@@ -41,9 +42,13 @@ public class VenueSelectionServiceImpl implements VenueSelectionService {
         return venueIds.stream().map(byId::get).toList();
     }
 
+    /**
+     * Ghi {@code last_selected_at} (không lùi giá trị đã có) cho các địa điểm; danh sách rỗng → không chạy SQL.
+     * Bắt buộc chạy trong transaction của caller.
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
-    public void markSelected(Collection<UUID> venueIds, OffsetDateTime selectedAt) {
+    public void markSelected(Collection<UUID> venueIds, LocalDateTime selectedAt) {
         if (!venueIds.isEmpty()) {
             venueRepository.markSelected(venueIds, selectedAt);
         }

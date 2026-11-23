@@ -41,7 +41,10 @@ import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -76,12 +79,16 @@ class VenueServiceImplTest {
     private final UUID venueId = UUID.randomUUID();
     private final UUID wardId = UUID.randomUUID();
 
+    /** 20:00 UTC ngày 19 = 03:00 giờ Việt Nam ngày 20. */
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-19T20:00:00Z"), ZoneId.systemDefault());
+    private static final LocalDateTime NOW_VN = LocalDateTime.of(2026, 11, 20, 3, 0);
+
     private VenueServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new VenueServiceImpl(userRepository, unitRepository, venueRepository, imageRepository, reportRepository,
-                venueMapper, new PageRequestFactory(), new VenueGuard(venueRepository), retrier, eventPublisher, auditLog);
+                venueMapper, new PageRequestFactory(), new VenueGuard(venueRepository), retrier, eventPublisher, auditLog, CLOCK);
         when(retrier.execute(eq(ErrorCode.VENUE_011), any())).thenAnswer(invocation ->
                 ((Supplier<Object>) invocation.getArgument(1)).get());
         when(venueRepository.save(any(Venue.class))).thenAnswer(invocation -> {
@@ -370,7 +377,7 @@ class VenueServiceImplTest {
         when(venueRepository.findById(venueId)).thenReturn(Optional.of(
                 Venue.builder().id(venueId).name("Venue").status(Venue.Status.ACTIVE).build()));
         stubSavedReport();
-        when(venueRepository.markClosureAlerted(eq(venueId), any())).thenReturn(1);
+        when(venueRepository.markClosureAlerted(venueId, NOW_VN)).thenReturn(1);
 
         service.reportVenue(venueId, new CurrentActor(callerId, false), new ReportVenueRequest("CLOSED", null));
 
@@ -379,13 +386,13 @@ class VenueServiceImplTest {
         assertThat(event.getValue().venueId()).isEqualTo(venueId);
         assertThat(event.getValue().venueName()).isEqualTo("Venue");
         assertThat(event.getValue().alertType()).isEqualTo(VenueAlertType.CLOSURE_REPORTED);
-        assertThat(event.getValue().triggeredAt()).isNotNull();
+        assertThat(event.getValue().triggeredAt()).isEqualTo(NOW_VN);
     }
 
     @Test
     void closedReportDoesNotAlertAgainWhenGateIsAlreadyClosedOrLostRace() {
         when(venueRepository.findById(venueId)).thenReturn(Optional.of(Venue.builder().id(venueId).name("Venue")
-                .status(Venue.Status.ACTIVE).closureAlertedAt(OffsetDateTime.now()).build()));
+                .status(Venue.Status.ACTIVE).closureAlertedAt(NOW_VN).build()));
         stubSavedReport();
         service.reportVenue(venueId, new CurrentActor(callerId, false), new ReportVenueRequest("CLOSED", null));
         verify(venueRepository, never()).markClosureAlerted(any(), any());
@@ -462,7 +469,7 @@ class VenueServiceImplTest {
         when(reportRepository.saveAndFlush(any(VenueReport.class))).thenAnswer(invocation -> {
             VenueReport report = invocation.getArgument(0);
             ReflectionTestUtils.setField(report, "id", UUID.randomUUID());
-            ReflectionTestUtils.setField(report, "createdAt", OffsetDateTime.parse("2026-11-19T00:00:00Z"));
+            ReflectionTestUtils.setField(report, "createdAt", LocalDateTime.of(2026, 11, 19, 7, 0));
             return report;
         });
     }

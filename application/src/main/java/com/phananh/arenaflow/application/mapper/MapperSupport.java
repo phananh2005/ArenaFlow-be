@@ -3,9 +3,6 @@ package com.phananh.arenaflow.application.mapper;
 import com.phananh.arenaflow.common.DeletedUserMasking;
 import com.phananh.arenaflow.domain.entity.converter.SkillLevelsConverter;
 
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 
 /**
@@ -16,11 +13,6 @@ public final class MapperSupport {
     private static final SkillLevelsConverter SKILL_LEVELS = new SkillLevelsConverter();
 
     private MapperSupport() {
-    }
-
-    /** Thời gian projection (native timestamptz → Instant) → response UTC. */
-    public static OffsetDateTime toUtc(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
     }
 
     /** JSON thô của cột skill_levels → danh sách nhãn. */

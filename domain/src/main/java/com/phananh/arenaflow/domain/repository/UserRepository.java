@@ -7,10 +7,11 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
+/** Truy cập bảng {@code "user"}: tìm user chưa xoá mềm, hồ sơ kèm địa giới, xoá mềm idempotent. */
 public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByIdAndDeletedAtIsNull(UUID id);
@@ -38,5 +39,5 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             UPDATE "user" SET deleted_at = :now, updated_at = :now
             WHERE id = :id AND deleted_at IS NULL
             """, nativeQuery = true)
-    int softDelete(@Param("id") UUID id, @Param("now") OffsetDateTime now);
+    int softDelete(@Param("id") UUID id, @Param("now") LocalDateTime now);
 }

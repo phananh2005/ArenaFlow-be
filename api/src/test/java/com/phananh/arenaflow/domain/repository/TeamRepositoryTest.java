@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.domain.repository;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import com.phananh.arenaflow.domain.entity.team.Team;
 import com.phananh.arenaflow.domain.entity.team.TeamCaptainHistory;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
@@ -16,13 +17,14 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
 import static com.phananh.arenaflow.domain.repository.UserRepositoryTest.newUser;
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Truy vấn native của đội và thành viên trên DB thật: chi tiết, danh sách, lịch sử, giải tán, số câu SQL. */
 class TeamRepositoryTest extends RepositoryIntegrationTest {
 
     @Autowired private UserRepository userRepository;
@@ -77,9 +79,9 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
         Team inactive = saveTeam("Inactive", captain, List.of());
         flushAndClear();
         // Đặt created_at ở tương lai để 3 đội test đứng đầu thứ tự created_at DESC dù DB có dữ liệu khác.
-        setCreatedAt(older, "2100-01-01T00:00:00Z");
-        setCreatedAt(newer, "2100-01-02T00:00:00Z");
-        setCreatedAt(inactive, "2100-01-03T00:00:00Z");
+        setCreatedAt(older, "2100-01-01T00:00:00");
+        setCreatedAt(newer, "2100-01-02T00:00:00");
+        setCreatedAt(inactive, "2100-01-03T00:00:00");
         jdbcTemplate.update("UPDATE team SET status = 'INACTIVE', inactive_reason = 'test' WHERE id = ?", inactive.getId());
         Statistics statistics = resetStatistics();
 
@@ -118,7 +120,7 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
         User captain = userRepository.save(newUser("Captain M", null));
         User early = userRepository.save(newUser("Early", null));
         User deleted = newUser("Gone", null);
-        deleted.setDeletedAt(OffsetDateTime.now());
+        deleted.setDeletedAt(AppTime.now());
         userRepository.save(deleted);
         User leaver = userRepository.save(newUser("Leaver", null));
         Team team = saveTeam("Members", captain, List.of());
@@ -156,7 +158,7 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
         Team former = saveTeam("Former", owner, List.of());
         TeamMember active = saveMember(a, user, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
         // Accept commit sau thời điểm :now của xoá tài khoản → left_at phải lấy joined_at (CHECK left_at ≥ joined_at).
-        active.setJoinedAt(OffsetDateTime.now().plusHours(1));
+        active.setJoinedAt(AppTime.now().plusHours(1));
         TeamMember pending = saveMember(b, user, TeamMember.Role.MEMBER, TeamMember.Status.PENDING);
         TeamMember captainRow = saveMember(captained, user, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE);
         TeamMember leftRow = saveMember(former, user, TeamMember.Role.MEMBER, TeamMember.Status.LEFT);
@@ -166,12 +168,12 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
         long activeVersionBefore = teamMemberRepository.findById(active.getId()).orElseThrow().getVersion();
         flushAndClear();
 
-        assertThat(teamMemberRepository.leaveAndRejectAllOpen(user.getId(), OffsetDateTime.now())).isEqualTo(2);
+        assertThat(teamMemberRepository.leaveAndRejectAllOpen(user.getId(), AppTime.now())).isEqualTo(2);
         flushAndClear();
 
         TeamMember left = teamMemberRepository.findById(active.getId()).orElseThrow();
         assertThat(left.getStatus()).isEqualTo(TeamMember.Status.LEFT);
-        assertThat(left.getLeftAt()).isAtSameInstantAs(left.getJoinedAt());
+        assertThat(left.getLeftAt()).isEqualTo(left.getJoinedAt());
         assertThat(left.getVersion()).isEqualTo(activeVersionBefore + 1);
         TeamMember rejected = teamMemberRepository.findById(pending.getId()).orElseThrow();
         assertThat(rejected.getStatus()).isEqualTo(TeamMember.Status.REJECTED);
@@ -190,7 +192,7 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
     void findsCaptainHistoryNewestFirstWithUserNamesInTwoQueries() {
         User first = userRepository.save(newUser("First Captain", null));
         User second = newUser("Second Captain", null);
-        second.setDeletedAt(OffsetDateTime.now());
+        second.setDeletedAt(AppTime.now());
         userRepository.save(second);
         Team team = saveTeam("History", first, List.of());
         TeamCaptainHistory created = saveHistory(team, null, first, null);
@@ -217,7 +219,7 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
     @Test
     void findsDisbandedTeamDetailWithDisbanderAndDeletedFlagInOneQuery() {
         User captain = newUser("Disbander", null);
-        captain.setDeletedAt(OffsetDateTime.now());
+        captain.setDeletedAt(AppTime.now());
         userRepository.save(captain);
         Team team = saveDisbandedTeam("Disbanded Detail", captain, "Hết người chơi");
         team.setInactiveReason("Admin khoá trước đó");
@@ -260,8 +262,8 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
         Team disbanded = saveDisbandedTeam("Disbanded Summary", captain, "Giải tán");
         Team active = saveTeam("Active Summary", captain, List.of());
         flushAndClear();
-        setCreatedAt(disbanded, "2100-02-01T00:00:00Z");
-        setCreatedAt(active, "2100-02-02T00:00:00Z");
+        setCreatedAt(disbanded, "2100-02-01T00:00:00");
+        setCreatedAt(active, "2100-02-02T00:00:00");
         Statistics statistics = resetStatistics();
 
         Page<TeamSummaryView> page = teamRepository.findSummaries("DISBANDED", PageRequest.of(0, 1));
@@ -294,7 +296,7 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
         jdbcTemplate.update("UPDATE team_member SET joined_at = invited_at WHERE id IN (?, ?)", earlyRow.getId(), otherRow.getId());
         // Accept commit sau thời điểm :now của disband: joined_at ở tương lai -> left_at phải = joined_at.
         jdbcTemplate.update("UPDATE team_member SET joined_at = invited_at + interval '1 hour' WHERE id = ?", lateRow.getId());
-        OffsetDateTime now = OffsetDateTime.now();
+        LocalDateTime now = AppTime.now();
         Statistics statistics = resetStatistics();
 
         int updated = teamMemberRepository.disbandRemaining(team.getId(), now);
@@ -308,7 +310,7 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
         assertThat(earlyLeft.getVersion()).isEqualTo(1L);
         TeamMember lateLeft = teamMemberRepository.findById(lateRow.getId()).orElseThrow();
         assertThat(lateLeft.getStatus()).isEqualTo(TeamMember.Status.LEFT);
-        assertThat(lateLeft.getLeftAt().toInstant()).isEqualTo(lateLeft.getJoinedAt().toInstant());
+        assertThat(lateLeft.getLeftAt()).isEqualTo(lateLeft.getJoinedAt());
         TeamMember rejected = teamMemberRepository.findById(pendingRow.getId()).orElseThrow();
         assertThat(rejected.getStatus()).isEqualTo(TeamMember.Status.REJECTED);
         assertThat(rejected.getLeftAt()).isNull();
@@ -352,7 +354,7 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
         User captain = userRepository.save(newUser("History Captain", null));
         User leaver = userRepository.save(newUser("History Leaver", null));
         User deleted = newUser("History Gone", null);
-        deleted.setDeletedAt(OffsetDateTime.now());
+        deleted.setDeletedAt(AppTime.now());
         userRepository.save(deleted);
         User invitee = userRepository.save(newUser("History Invitee", null));
         User refuser = userRepository.save(newUser("History Refuser", null));
@@ -401,7 +403,7 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
                 .skillLevels(List.of())
                 .status(Team.TeamStatus.DISBANDED)
                 .disbandReason(reason)
-                .disbandedAt(OffsetDateTime.now())
+                .disbandedAt(AppTime.now())
                 .disbandedBy(disbander.getId())
                 .build();
         return teamRepository.save(team);
@@ -436,7 +438,7 @@ class TeamRepositoryTest extends RepositoryIntegrationTest {
         return historyRepository.save(history);
     }
 
-    private void setCreatedAt(Team team, String isoInstant) {
-        jdbcTemplate.update("UPDATE team SET created_at = ?::timestamptz WHERE id = ?", isoInstant, team.getId());
+    private void setCreatedAt(Team team, String isoLocal) {
+        jdbcTemplate.update("UPDATE team SET created_at = ?::timestamp WHERE id = ?", isoLocal, team.getId());
     }
 }

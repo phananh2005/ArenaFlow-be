@@ -20,35 +20,39 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 
+/** Chuyển entity/projection địa điểm sang response; thời điểm {@code LocalDateTime} gán thẳng, không đổi múi giờ. */
 @Mapper(componentModel = "spring", uses = MapperSupport.class, imports = MapperSupport.class,
         unmappedTargetPolicy = ReportingPolicy.ERROR)
 public interface VenueMapper {
 
+    /** Chi tiết địa điểm (không Admin): tên người tạo đã xoá tài khoản được che. */
     @Mapping(target = "venueId", source = "view.venueId")
     @Mapping(target = "venueName", source = "view.venueName")
     @Mapping(target = "createdByName",
             expression = "java(MapperSupport.maskName(view.getCreatedByName(), view.getCreatedByDeleted()))")
     @Mapping(target = "ward", expression = "java(toWard(view))")
-    @Mapping(target = "lastSelectedAt", expression = "java(MapperSupport.toUtc(view.getLastSelectedAt()))")
-    @Mapping(target = "adminVerifiedInactiveAt", expression = "java(MapperSupport.toUtc(view.getAdminVerifiedInactiveAt()))")
-    @Mapping(target = "createdAt", expression = "java(MapperSupport.toUtc(view.getCreatedAt()))")
-    @Mapping(target = "updatedAt", expression = "java(MapperSupport.toUtc(view.getUpdatedAt()))")
+    @Mapping(target = "lastSelectedAt", source = "view.lastSelectedAt")
+    @Mapping(target = "adminVerifiedInactiveAt", source = "view.adminVerifiedInactiveAt")
+    @Mapping(target = "createdAt", source = "view.createdAt")
+    @Mapping(target = "updatedAt", source = "view.updatedAt")
     VenueResponse toResponse(VenueDetailView view, List<VenueImage> images);
 
+    /** Chi tiết địa điểm cho Admin: tên thật người tạo kèm cờ đã xoá tài khoản. */
     @Mapping(target = "venueId", source = "view.venueId")
     @Mapping(target = "venueName", source = "view.venueName")
     @Mapping(target = "isCreatedByDeleted", source = "view.createdByDeleted")
     @Mapping(target = "ward", expression = "java(toWard(view))")
-    @Mapping(target = "lastSelectedAt", expression = "java(MapperSupport.toUtc(view.getLastSelectedAt()))")
-    @Mapping(target = "adminVerifiedInactiveAt", expression = "java(MapperSupport.toUtc(view.getAdminVerifiedInactiveAt()))")
-    @Mapping(target = "createdAt", expression = "java(MapperSupport.toUtc(view.getCreatedAt()))")
-    @Mapping(target = "updatedAt", expression = "java(MapperSupport.toUtc(view.getUpdatedAt()))")
+    @Mapping(target = "lastSelectedAt", source = "view.lastSelectedAt")
+    @Mapping(target = "adminVerifiedInactiveAt", source = "view.adminVerifiedInactiveAt")
+    @Mapping(target = "createdAt", source = "view.createdAt")
+    @Mapping(target = "updatedAt", source = "view.updatedAt")
     AdminVenueResponse toAdminResponse(VenueDetailView view, List<VenueImage> images);
 
+    /** Một dòng danh sách địa điểm; khoảng cách làm tròn 2 chữ số thập phân. */
     @Mapping(target = "venueId", source = "view.venueId")
     @Mapping(target = "venueName", source = "view.venueName")
     @Mapping(target = "distanceKm", expression = "java(roundDistance(view.getDistanceKm()))")
-    @Mapping(target = "lastSelectedAt", expression = "java(MapperSupport.toUtc(view.getLastSelectedAt()))")
+    @Mapping(target = "lastSelectedAt", source = "view.lastSelectedAt")
     VenueSummaryResponse toSummary(VenueSummaryView view);
 
     @Mapping(target = "imageId", source = "id")
@@ -61,10 +65,11 @@ public interface VenueMapper {
     @Mapping(target = "createdAt", expression = "java(report.getCreatedAt())")
     VenueReportResponse toReport(VenueReport report);
 
+    /** Report cho Admin; cờ đã xoá tài khoản null (không có người xử lý) → false. */
     @Mapping(target = "isReporterDeleted", expression = "java(Boolean.TRUE.equals(view.getReporterDeleted()))")
     @Mapping(target = "isHandledByDeleted", expression = "java(Boolean.TRUE.equals(view.getHandledByDeleted()))")
-    @Mapping(target = "handledAt", expression = "java(MapperSupport.toUtc(view.getHandledAt()))")
-    @Mapping(target = "createdAt", expression = "java(MapperSupport.toUtc(view.getCreatedAt()))")
+    @Mapping(target = "handledAt", source = "view.handledAt")
+    @Mapping(target = "createdAt", source = "view.createdAt")
     AdminVenueReportResponse toAdminReport(AdminVenueReportView view);
 
     default WardResponse toWard(VenueDetailView view) {

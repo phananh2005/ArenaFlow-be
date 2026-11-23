@@ -10,7 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,8 +33,8 @@ class VenueStaleAlertRepositoryTest {
 
     @Test
     void markStaleAlertedClaimsOnlyEligibleVenuesOnceAndReturnsIdAndName() {
-        OffsetDateTime now = OffsetDateTime.parse("2026-11-19T03:00:00Z");
-        OffsetDateTime threshold = now.minusDays(180);
+        LocalDateTime now = LocalDateTime.of(2026, 11, 19, 10, 0);
+        LocalDateTime threshold = now.minusDays(180);
         UUID creator = userRepository.saveAndFlush(User.builder().displayName("Stale Creator").build()).getId();
         UUID neverSelectedOld = venue(creator, "Stale Never Selected", "ACTIVE", now.minusDays(200), null, null);
         UUID selectedLongAgo = venue(creator, "Stale Selected Long Ago", "ACTIVE", now.minusDays(400), now.minusDays(181), null);
@@ -60,7 +60,7 @@ class VenueStaleAlertRepositoryTest {
 
     @Test
     void markStaleAlertedHonoursBatchLimit() {
-        OffsetDateTime now = OffsetDateTime.parse("2026-11-19T03:00:00Z");
+        LocalDateTime now = LocalDateTime.of(2026, 11, 19, 10, 0);
         UUID creator = userRepository.saveAndFlush(User.builder().displayName("Stale Limit Creator").build()).getId();
         venue(creator, "Stale Limit A", "ACTIVE", now.minusDays(300), null, null);
         venue(creator, "Stale Limit B", "ACTIVE", now.minusDays(300), null, null);
@@ -68,8 +68,8 @@ class VenueStaleAlertRepositoryTest {
         assertThat(venueRepository.markStaleAlerted(now.minusDays(180), now, 1)).hasSize(1);
     }
 
-    private UUID venue(UUID creator, String name, String status, OffsetDateTime createdAt, OffsetDateTime lastSelectedAt,
-                       OffsetDateTime staleAlertedAt) {
+    private UUID venue(UUID creator, String name, String status, LocalDateTime createdAt, LocalDateTime lastSelectedAt,
+                       LocalDateTime staleAlertedAt) {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("INSERT INTO venue (id, name, address, latitude, longitude, status, created_by_type, "
                         + "created_by_user_id, created_at, updated_at, last_selected_at, stale_alerted_at, admin_verified_inactive_at) "

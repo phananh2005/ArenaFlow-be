@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.domain.entity.user;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -11,7 +12,7 @@ import org.hibernate.annotations.UuidGenerator;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -97,23 +98,25 @@ public class User {
     private Integer cleanStreak = 0;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private OffsetDateTime createdAt;
+    private LocalDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
-    private OffsetDateTime updatedAt;
+    private LocalDateTime updatedAt;
 
     @Column(name = "deleted_at")
-    private OffsetDateTime deletedAt;
+    private LocalDateTime deletedAt;
 
+    /** Gán {@code createdAt} và {@code updatedAt} = giờ hiện tại ({@link AppTime#now()}) khi lưu lần đầu. */
     @PrePersist
     protected void onCreate() {
-        createdAt = OffsetDateTime.now();
-        updatedAt = OffsetDateTime.now();
+        createdAt = AppTime.now();
+        updatedAt = AppTime.now();
     }
 
+    /** Cập nhật {@code updatedAt} = giờ hiện tại ({@link AppTime#now()}) mỗi lần entity được sửa. */
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = OffsetDateTime.now();
+        updatedAt = AppTime.now();
     }
 
     public enum Role {

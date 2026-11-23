@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.domain.entity.match;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -10,7 +11,7 @@ import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -57,13 +58,13 @@ public class Match {
     private UUID venueId;
 
     @Column(name = "match_start_time", nullable = false)
-    private OffsetDateTime matchStartTime;
+    private LocalDateTime matchStartTime;
 
     @Column(name = "match_end_time", nullable = false)
-    private OffsetDateTime matchEndTime;
+    private LocalDateTime matchEndTime;
 
     @Column(name = "expires_at", nullable = false)
-    private OffsetDateTime expiresAt;
+    private LocalDateTime expiresAt;
 
     @Column(name = "search_lat", precision = 10, scale = 7)
     private BigDecimal searchLat;
@@ -96,31 +97,33 @@ public class Match {
     private UUID confirmedVenueId;
 
     @Column(name = "confirmed_match_time")
-    private OffsetDateTime confirmedMatchTime;
+    private LocalDateTime confirmedMatchTime;
 
     @Column(name = "cancelled_by_team_id")
     private UUID cancelledByTeamId;
 
     @Column(name = "cancelled_at")
-    private OffsetDateTime cancelledAt;
+    private LocalDateTime cancelledAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Setter(AccessLevel.NONE)
-    private OffsetDateTime createdAt;
+    private LocalDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
     @Setter(AccessLevel.NONE)
-    private OffsetDateTime updatedAt;
+    private LocalDateTime updatedAt;
 
+    /** Gán {@code createdAt} và {@code updatedAt} = giờ hiện tại ({@link AppTime#now()}) khi lưu lần đầu. */
     @PrePersist
     protected void onCreate() {
-        createdAt = OffsetDateTime.now();
-        updatedAt = OffsetDateTime.now();
+        createdAt = AppTime.now();
+        updatedAt = AppTime.now();
     }
 
+    /** Cập nhật {@code updatedAt} = giờ hiện tại ({@link AppTime#now()}) mỗi lần entity được sửa. */
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = OffsetDateTime.now();
+        updatedAt = AppTime.now();
     }
 
     public enum Type {

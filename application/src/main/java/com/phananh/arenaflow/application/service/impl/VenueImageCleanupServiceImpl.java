@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+/** Dọn asset ảnh địa điểm trên storage không còn dòng {@code venue_image} tương ứng, sau thời gian ân hạn. */
 @Slf4j
 @Service
 public class VenueImageCleanupServiceImpl implements VenueImageCleanupService {
@@ -39,15 +40,16 @@ public class VenueImageCleanupServiceImpl implements VenueImageCleanupService {
     private final VenueImageCleanupProperties properties;
     private final Clock clock;
 
+    /** Constructor cho Spring: dựng transaction chỉ đọc từ {@code transactionManager}. */
     @Autowired
     public VenueImageCleanupServiceImpl(ImageAssetAdmin assetAdmin, ImageUploadSigner imageUploadSigner,
                                         VenueImageRepository venueImageRepository,
                                         PlatformTransactionManager transactionManager,
-                                        VenueImageCleanupProperties properties) {
-        this(assetAdmin, imageUploadSigner, venueImageRepository, readOnly(transactionManager), properties,
-                Clock.systemUTC());
+                                        VenueImageCleanupProperties properties, Clock clock) {
+        this(assetAdmin, imageUploadSigner, venueImageRepository, readOnly(transactionManager), properties, clock);
     }
 
+    /** Constructor nhận sẵn transaction chỉ đọc (test truyền template và {@code Clock} cố định). */
     public VenueImageCleanupServiceImpl(ImageAssetAdmin assetAdmin, ImageUploadSigner imageUploadSigner,
                                         VenueImageRepository venueImageRepository, TransactionTemplate readOnlyTransaction,
                                         VenueImageCleanupProperties properties, Clock clock) {

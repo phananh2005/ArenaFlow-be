@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.api;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import com.phananh.arenaflow.domain.entity.team.Team;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.entity.user.User;
@@ -19,7 +20,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 
@@ -68,7 +69,7 @@ public abstract class ApiIntegrationTest {
     }
 
     protected TeamMember saveMember(Team team, User user, TeamMember.Role role, TeamMember.Status status) {
-        OffsetDateTime now = OffsetDateTime.now();
+        LocalDateTime now = AppTime.now();
         return teamMemberRepository.save(TeamMember.builder()
                 .teamId(team.getId())
                 .userId(user.getId())
