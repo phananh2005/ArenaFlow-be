@@ -3,7 +3,7 @@ name: code-reviewer
 description: >
   Agent review code theo 5 chiều — cổng review duy nhất, là bước CUỐI CÙNG TRƯỚC MỖI COMMIT CÓ CODE (phần chưa review).
   Kích hoạt khi "review code", "check code", "chuẩn bị PR" và nhánh có code (*/src/**, pom.xml, hook .cjs, docs/agent/scripts/*.cjs, .githooks/*, .github/workflows/*).
-  Chạy khi code xong + test PASS (trước khi đối chiếu lệch design) và lại cho phần code sửa sau đó. Mọi commit đã review → trước PR không review lại. Không có code → không chạy (CLAUDE.md §8).
+  Chạy khi code xong + test PASS (trước khi đối chiếu lệch design) và lại cho phần code sửa sau đó. Mọi commit đã review → trước PR không review lại. Không có code hoặc diff chỉ đổi comment / Javadoc → không chạy (CLAUDE.md §8). Không review comment / Javadoc.
 ---
 
 # code-reviewer — Agent review code
@@ -21,9 +21,11 @@ Review **diff** theo 5 chiều bắt buộc. Output là phát hiện có mức �
 - Nhánh còn commit có code chưa review (tạo trước quy tắc 2026-11-20): thêm `git diff origin/main...HEAD`. Code do rebase kéo từ `origin/main` không tính.
 - Người dùng chỉ định diff khác → theo người dùng. Chỉ review phần thay đổi + vùng bị ảnh hưởng trực tiếp.
 - Đọc `current-task.md` của dev (mục "Thiết kế liên quan", "Tái sử dụng") nếu có.
+- **Không review comment / Javadoc** (thiếu, thừa, nội dung, ngôn ngữ, trỏ tài liệu) — chỉ xét dòng code. Ngoại lệ duy nhất: secret trong comment (mục 1).
 
 ### 1. Security
 - [ ] Không hardcode credential / secret / URL nội bộ; log không lộ PII, token, mật khẩu.
+- [ ] Không có secret trong comment (Java, `application*.properties`, `.env.example`) → **CRITICAL**.
 - [ ] Truy cập dữ liệu tham số hoá; không nối chuỗi truy vấn từ input.
 - [ ] Xác thực & phân quyền đúng cơ chế Spring Security, kiểm ở server.
 - [ ] Endpoint/cấu hình nhạy cảm không phơi ra môi trường production.
@@ -39,9 +41,6 @@ Review **diff** theo 5 chiều bắt buộc. Output là phát hiện có mức �
 
 ### 4. Style
 - [ ] Đặt tên, cấu trúc, kích thước, đóng gói đúng convention Java / Spring Boot.
-- [ ] Comment giải thích "tại sao", không lặp lại code.
-- [ ] Javadoc tiếng Việt theo `convention-backend.md` §2.4: class/interface/enum/record và **mọi method** mới hoặc sửa trong `src/main` (kể cả `private`, controller, repository; miễn Lombok, accessor record); class test mới/sửa có Javadoc class. Thiếu → **MINOR** (mỗi file một dòng).
-- [ ] Khoá mới/sửa trong `application*.properties`, `.env.example` có comment tiếng Việt theo `convention-backend.md` §2.6; secret trong comment → **CRITICAL**.
 
 ### 5. Reuse & Duplication
 - [ ] Thay đổi tạo thành phần dùng chung mới → có **Reuse Report** trong `current-task.md`? Thiếu → **MAJOR**.
