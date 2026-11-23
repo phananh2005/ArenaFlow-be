@@ -44,7 +44,7 @@
 | `POST /api/v1/bookings` | ✅ | ✅ | ❌ |
 | `PATCH /api/v1/bookings/{id}` | ✅ (own) | ✅ (all) | ❌ |
 | `DELETE /api/v1/bookings/{id}` | ✅ (own, pending) | ✅ (all) | ❌ |
-| `GET /actuator/health`, `GET /actuator/health/**` | ✅ | ✅ | ✅ — chỉ trạng thái tổng `UP`/`DOWN`; đường dẫn thành phần (vd `/health/db`) bị ẩn → 404 |
+| `GET /actuator/health`, `GET /actuator/health/**` | ✅ | ✅ | ✅ — chỉ trạng thái tổng `UP`/`DOWN` (body `/actuator/health` kèm `groups`); nhóm `/actuator/health/liveness` (không kiểm DB — dùng cho UptimeRobot / nền tảng deploy) và `/actuator/health/readiness`; đường dẫn thành phần (vd `/health/db`) bị ẩn → 404. Chỉ mở `GET` (`HEAD` → 401) |
 | `GET /v3/api-docs/**`, `GET /swagger-ui/**`, `GET /swagger-ui.html` | ✅ | ✅ | ✅ khi `SPRINGDOC_ENABLED=true` (chỉ dev); **mặc định tắt** → 404 |
 | Actuator khác (`metrics`, `env`, `prometheus`…) | ❌ | ❌ | ❌ — chưa expose qua web; nếu expose phải cần token, NEVER `permitAll` |
 

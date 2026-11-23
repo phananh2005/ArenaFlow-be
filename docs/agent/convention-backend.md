@@ -94,7 +94,7 @@ Resource: `api/src/main/resources/` (`application.properties`, `db/migration/` F
   - **Mọi method**, kể cả `private`, controller handler, method repository (cả derived query), method của interface service, compact constructor có xử lý (gán mặc định, trim).
   - Method có hợp đồng không hiển nhiên ghi thêm: quyền, thứ tự kiểm và mã lỗi, retry/transaction, số truy vấn khi đáng kể, xử lý race; method hiển nhiên chỉ cần 1 câu.
   - Record: mô tả field bằng `@param` trong Javadoc của record (không viết Javadoc cho từng accessor).
-- **Miễn**: getter/setter/constructor do Lombok sinh (không có code để gắn Javadoc), accessor tự sinh của record, hằng enum tự đủ nghĩa (`ACTIVE`, `INACTIVE`).
+- **Miễn**: getter/setter/constructor do Lombok sinh (không có code để gắn Javadoc), accessor tự sinh của record, hằng enum tự đủ nghĩa (`ACTIVE`, `INACTIVE`), getter của projection interface (mô tả cột ở Javadoc của interface, vd cột thời điểm là giờ Việt Nam).
 - **`src/test`**: bắt buộc Javadoc ở **class test** (test kiểm cái gì); method test không bắt buộc — tên method mô tả hành vi.
 - **Phạm vi áp dụng**: code **mới hoặc bị sửa** (class/method được thêm hoặc đổi trong diff) phải đạt; class cũ được chạm tới thì thêm Javadoc class nếu thiếu. Code cũ chưa đạt được bổ sung trên nhánh `refactor/javadoc-backfill` sau khi các nhánh đang code song song đã merge.
 - **NEVER** trỏ sang bất kỳ tài liệu nào trong comment: ADR (`ADR-0007`), đường dẫn/mục tài liệu thiết kế/spec (`USER-002 API_Spec §2.4`), mã neo nghiệp vụ/thiết kế (`BR-T12`, `W6`, `L4`, `race M1`). Viết mô tả tự đủ nghĩa thay thế (vd `(W6)` → "6 truy vấn") — người đọc (dev/AI) không phải mở tài liệu khác. Mã lỗi (`TEAM_014`) được dùng vì là enum trong code.
@@ -350,7 +350,7 @@ captain.setUserId(userId);
 
 ### 6.2. Thời gian (ngày giờ)
 
-Mọi thời điểm là **giờ Việt Nam, không kèm múi giờ** ([ADR-0017](decisions/0017-vietnam-local-datetime.md); chi tiết: `docs/agent/design/SYSTEM-002/Component_Class_Design.md` §2).
+Mọi thời điểm là **giờ Việt Nam, không kèm múi giờ** ([ADR-0017](decisions/0017-vietnam-local-datetime.md); "bây giờ" theo timezone JVM: [ADR-0018](decisions/0018-jvm-time-zone-as-single-clock-source.md); chi tiết: `docs/agent/design/SYSTEM-002/Component_Class_Design.md` §2).
 
 | Loại giá trị | Java | DB | JSON |
 |---|---|---|---|
@@ -365,18 +365,20 @@ Mọi thời điểm là **giờ Việt Nam, không kèm múi giờ** ([ADR-0017
 
   | Nơi | Lấy bằng |
   |---|---|
-  | Service, job, component có DI | Inject `Clock` (bean ở `api/config/ClockConfig`, zone `Asia/Ho_Chi_Minh`, độ phân giải micro giây) → `LocalDateTime.now(clock)`; `clock.instant()` chỉ cho ngoại lệ epoch |
-  | Entity `@PrePersist`/`@PreUpdate`, record factory, `GlobalExceptionHandler`, `ConstraintValidator` | `AppTime.now()` / `AppTime.today()` (`common/time/AppTime`) |
-  | Test | `Clock.fixed(instant, AppTime.ZONE)` |
+  | Service, job, component có DI | Inject `Clock` (bean ở `api/config/ClockConfig` = `Clock.tick(Clock.systemDefaultZone(), 1 µs)` — theo timezone JVM, độ phân giải micro giây) → `LocalDateTime.now(clock)`; `clock.instant()` chỉ cho ngoại lệ epoch |
+  | Entity `@PrePersist`/`@PreUpdate`, record factory, `GlobalExceptionHandler`, `ConstraintValidator` | `AppTime.now()` / `AppTime.today()` (`common/time/AppTime`, theo timezone JVM) |
+  | Test | `Clock.fixed(instant, ZoneId.systemDefault())` |
 
-  - **NEVER** `LocalDateTime.now()` / `LocalDate.now()` không tham số trong `src/main`; **NEVER** `Clock.systemUTC()` (mốc lệch 7 giờ).
-  - JVM vẫn chạy `-Duser.timezone=Asia/Ho_Chi_Minh` (log, phiên JDBC — `docs/agent/README.md`) nhưng code không phụ thuộc vào nó.
+  - **NEVER** `LocalDateTime.now()` / `LocalDate.now()` không tham số trong `src/main` (trừ bên trong `AppTime`).
+  - Code **dựa vào** timezone JVM: JVM luôn chạy `Asia/Ho_Chi_Minh`, được ghim ở surefire `argLine` (root `pom.xml`, mọi JVM test), `spring-boot:run` `systemPropertyVariables` (`api/pom.xml`), Dockerfile nhánh deploy (`TZ` + `-Duser.timezone`); chạy từ IDE hoặc `java -jar` phải tự thêm `-Duser.timezone=Asia/Ho_Chi_Minh` (`docs/agent/README.md`).
+  - **NEVER** khai múi giờ trong code `src/main`: `ZoneId.of(`, `ZoneOffset.`, `TimeZone.getTimeZone(`, `Clock.systemUTC()`, chuỗi `"Asia/Ho_Chi_Minh"`, `zone =` trong `@Scheduled` — `NoExplicitTimeZoneTest` chặn. Nơi cần zone (vd đổi epoch → giờ địa phương) dùng `clock.getZone()`.
 - **SQL:** **NEVER** dùng `now()`, `CURRENT_TIMESTAMP`, `LOCALTIMESTAMP`, `CURRENT_DATE` trần để ghi hoặc so sánh cột thời gian (đổi theo TimeZone của phiên; Neon mặc định `GMT`).
   - Native query: Java truyền `:now`.
   - DEFAULT / migration / `@SQLDelete`: `(now() AT TIME ZONE 'Asia/Ho_Chi_Minh')`.
   - Không đặt `ALTER DATABASE … SET timezone`, không đặt `hibernate.jdbc.time_zone`.
-- **Job:** mọi `@Scheduled(cron = …)` khai `zone = AppTime.ZONE_ID`; `fixedDelay`/`fixedRate` không cần zone. Mốc nghiệp vụ = cộng/trừ trên `LocalDateTime.now(clock)` (`minusDays(180)`, `plusHours(2)`…).
+- **Job:** `@Scheduled(cron = …)` **không** khai `zone` — cron chạy theo timezone JVM; `fixedDelay`/`fixedRate` không liên quan zone. Mốc nghiệp vụ = cộng/trừ trên `LocalDateTime.now(clock)` (`minusDays(180)`, `plusHours(2)`…).
 - **JSON:** không cấu hình định dạng ghi — `LocalDateTime` ghi ISO-8601 không offset, phần lẻ giây 1–6 chữ số. Request body kèm `Z`/offset → `400 VALIDATION_ERROR`; lỗi đọc JSON body trả `field` = đường dẫn field (vd `startsAt`, `timeOptions[0].startsAt`), chỉ JSON sai cú pháp / thiếu body trả `"body"`. Query param `LocalDateTime`: `@DateTimeFormat(iso = ISO.DATE_TIME)` và từ chối chuỗi có offset.
+- **JSON số nguyên chặt** (`api/config/JsonNumberConfig`, toàn ứng dụng): field kiểu số nguyên trong request body chỉ nhận số nguyên JSON — `4.5`, `4.0`, `"4"` → `400 VALIDATION_ERROR`, `field` = đường dẫn field; `""` đọc như `null` (không gửi). Field số nguyên trong request DTO dùng `Integer` / `Long` (bắt buộc thì thêm `@NotNull`), **không** dùng `int` / `long` nguyên thuỷ.
 
 ## 7. DTO
 
@@ -642,5 +644,5 @@ class ArenaRepositoryTest {
 - [ ] DTO là `record`, không expose entity, có validation
 - [ ] Exception có custom exception + global handler
 - [ ] Soft delete dùng `deletedAt`
-- [ ] Thời gian theo §6.2: `LocalDateTime`/`LocalDate` ↔ `TIMESTAMP`/`DATE` giờ Việt Nam; "bây giờ" qua `Clock` bean / `AppTime`, không `LocalDateTime.now()` / `LocalDate.now()` không tham số, không `now()` trần trong SQL; `@Scheduled(cron)` có `zone = AppTime.ZONE_ID`
+- [ ] Thời gian theo §6.2: `LocalDateTime`/`LocalDate` ↔ `TIMESTAMP`/`DATE` giờ Việt Nam; "bây giờ" qua `Clock` bean / `AppTime`, không `LocalDateTime.now()` / `LocalDate.now()` không tham số, không `now()` trần trong SQL; không khai múi giờ trong code (kể cả `zone =` ở `@Scheduled`); field số nguyên request DTO là `Integer` / `Long`
 - [ ] Logging dùng `@Slf4j`, không log sensitive data
