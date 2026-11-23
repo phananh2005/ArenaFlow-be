@@ -261,3 +261,20 @@ Reviewer chạy lại 13 lớp unit liên quan: PASS.
 - **User quyết 2026-11-23: sửa** m25 — đã sửa CCD §9. → `architect-reviewer` lượt 5.
 
 ### architect-reviewer lượt 5 (m25) — 0C / 0M / 0 MINOR — ĐẠT. Vòng lặp design SYSTEM-002 xong; không ảnh hưởng SRS (cả 5 lượt).
+
+## USER-001 liveness (nhánh `feature/USER-001-liveness-probe`)
+- code-reviewer: 0 finding (2 test `SecurityConfigIntegrationTest`).
+### architect-reviewer lượt 1 — 0C / 1 MAJOR / 3 MINOR — CHỜ DUYỆT; không ảnh hưởng SRS
+- **M1** ADR-0004 Sửa đổi "Hệ quả" thiếu: job định kỳ (vd MATCH-001 mỗi 5 phút khi có) / pool kết nối vẫn có thể giữ Neon thức → thêm câu + kiểm biểu đồ compute Neon sau deploy.
+- **m1** `/actuator/health` thực tế trả thêm `groups: ["liveness","readiness"]` [Inference từ mã nguồn] → CCD §9.1 + ADR-0004 bảng ghi đúng; tuỳ chọn thêm assert `$.groups`.
+- **m2** Javadoc `healthComponentPathIsPublicButHidden` "permitAll dành cho probe … khi được bật" lỗi thời.
+- **m3** `security-backend.md:47` không nhắc probe + vế "chỉ trạng thái tổng" → nhánh `chore/`.
+- **User quyết 2026-11-23:** sửa M1, m1, m2; m3 → nhánh `chore/`. Đã sửa: assert `$.groups` (containsInAnyOrder liveness, readiness) trong `healthIsPublic` — PASS, xác nhận m1; Javadoc `healthComponentPathIsPublicButHidden`; CCD §9.1 body có `groups`; ADR-0004 bảng + Hệ quả (job định kỳ / pool kết nối). `SecurityConfigIntegrationTest` 12/12 PASS. → code-reviewer (assert) + architect-reviewer lượt 2.
+- code-reviewer (assert `$.groups`): 0 finding — ĐẠT. Hai điểm reviewer gắn [Unverified] đã được chứng minh trong phiên (metadata `spring-boot-health` 4.0.9 `probes.enabled` default true; test assert `$.groups` PASS; curl Render dev `/actuator/health/liveness` → 200 `{"status":"UP"}` 2026-11-23).
+### architect-reviewer lượt 2 (liveness) — 0C / 0M / 1 MINOR — CHỜ DUYỆT
+- M1, m1, m2 xử lý đúng; không ảnh hưởng SRS.
+- **m4** ADR-0004 hàng metadata `Sửa đổi` (l.9) chưa nhắc `/actuator/health` thêm `groups` → nối "; `/actuator/health` thêm `groups` (tên nhóm probe)". Có thể bỏ qua.
+- Ghi chú cho m3 (nhánh `chore/`): `security-backend.md:47` sửa cả probe lẫn `groups`.
+- **User quyết 2026-11-23: sửa** m4 — đã sửa hàng metadata ADR-0004. → architect-reviewer lượt 3.
+- architect-reviewer lượt 3 (m4): 0 finding — **vòng lặp design liveness xong**, không ảnh hưởng SRS.
+- 2026-11-23 debug UptimeRobot 401: tái hiện trên Render dev — `HEAD /actuator/health/liveness` → 401, `GET` → 200; nguyên nhân `SecurityConfig.java:48` chỉ permitAll `GET`. User chọn **đổi cấu hình UptimeRobot** (Keyword / GET), không đổi code.

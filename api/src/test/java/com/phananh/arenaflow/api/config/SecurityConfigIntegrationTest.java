@@ -6,6 +6,8 @@ import com.phananh.arenaflow.application.support.security.JwtTokenService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.health.actuate.endpoint.HealthEndpointGroup;
+import org.springframework.boot.health.actuate.endpoint.HealthEndpointGroups;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
@@ -16,12 +18,15 @@ import org.springframework.web.context.WebApplicationContext;
 
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/** Quy tắc truy cập của SecurityConfig: token, quyền Admin, đường dẫn public (auth, health, probe), API docs, actuator. */
 @SpringBootTest
 @Import(SecurityConfigIntegrationTest.ProbeController.class)
 class SecurityConfigIntegrationTest {
@@ -31,6 +36,9 @@ class SecurityConfigIntegrationTest {
 
     @Autowired
     private JwtTokenService tokenService;
+
+    @Autowired
+    private HealthEndpointGroups healthGroups;
 
     private MockMvc mockMvc;
 
@@ -93,18 +101,38 @@ class SecurityConfigIntegrationTest {
         mockMvc.perform(get("/actuator/health")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"))
                 .andExpect(jsonPath("$.components").doesNotExist())
-                .andExpect(jsonPath("$.details").doesNotExist());
+                .andExpect(jsonPath("$.details").doesNotExist())
+                .andExpect(jsonPath("$.groups", containsInAnyOrder("liveness", "readiness")));
     }
 
     /**
      * /actuator/health/** public (không 401) nhưng thành phần bị ẩn theo mặc định Spring Boot → 404,
-     * không lộ trạng thái DB. permitAll dành cho probe liveness/readiness khi được bật.
+     * không lộ trạng thái DB. Cùng quy tắc permitAll mở các nhóm probe liveness/readiness (test riêng bên dưới).
      */
     @Test
     void healthComponentPathIsPublicButHidden() throws Exception {
         mockMvc.perform(get("/actuator/health/db"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").doesNotExist());
+    }
+
+    /** Probe liveness public, chỉ phản ánh trạng thái sống của ứng dụng: không kiểm DB nên ping không đánh thức DB. */
+    @Test
+    void livenessIsPublicAndDoesNotCheckDatabase() throws Exception {
+        mockMvc.perform(get("/actuator/health/liveness"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+        HealthEndpointGroup liveness = healthGroups.get("liveness");
+        assertThat(liveness).isNotNull();
+        assertThat(liveness.isMember("livenessState")).isTrue();
+        assertThat(liveness.isMember("db")).isFalse();
+    }
+
+    @Test
+    void readinessIsPublic() throws Exception {
+        mockMvc.perform(get("/actuator/health/readiness"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
     }
 
     /** API docs mặc định TẮT (fail-closed) — chỉ bật khi SPRINGDOC_ENABLED=true (dev). */
