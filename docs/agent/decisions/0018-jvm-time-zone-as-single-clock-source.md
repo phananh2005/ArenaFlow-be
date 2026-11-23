@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Trạng thái** | Proposed (chủ repo chốt nội dung 2026-11-21 / 2026-11-23 khi review code SYSTEM-002; chuyển `Accepted` qua PR SYSTEM-002) |
+| **Trạng thái** | Accepted (chủ repo chốt nội dung 2026-11-21 / 2026-11-23 khi review code SYSTEM-002; `Accepted` qua PR SYSTEM-002 #84) |
 | **Ngày** | 2026-11-23 |
 | **Người quyết định** | Chủ repo (bỏ cả 5 chỗ khai zone trong code — 2026-11-21; ghim timezone cho JVM test và `spring-boot:run` — 2026-11-23) · developer (đề xuất cách thực hiện) |
 | **Liên quan** | Thay **Quyết định 3 và 6** của [ADR-0017](0017-vietnam-local-datetime.md) (các quyết định khác của ADR-0017 giữ nguyên) · `docs/agent/design/SYSTEM-002/` v1.2 · SRS `docs/agent/business-spec/SYSTEM-001/` BC-M05 (không đổi) |

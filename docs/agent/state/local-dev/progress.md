@@ -50,7 +50,7 @@ status: in_progress
 
 ## Đang làm
 - Nhánh chore rule review: PR #83 merge (squash) `922b359` vào `main` 2026-11-23; worktree đã gỡ, nhánh giữ nguyên. Nhánh SYSTEM-002 cần rebase lên `922b359` trước push.
-- Chờ user: push / PR SYSTEM-002 (cần `--force-with-lease`).
+- 2026-11-23: SYSTEM-002 rebase lên `922b359`, unit test lại PASS (common 14, domain 65, application 208/2 skip, api 42), push `--force-with-lease` (`530136f` → `7cc6ed4`), **PR #84** — chờ user merge. Lúc merge: ADR-0018 Accepted + ADR-0017 `Sửa đổi`; áp V6 lên DB dev theo PF §4.1 bước 6–8.
 
 ## Còn lại
 - Vòng lặp design: cập nhật design một lần theo bảng "Lệch thiết kế" (9 dòng; ADR-0017, CCD §2.2/§2.3/§2.5/§6.1/§8; convention §6.2 + `docs/agent/README.md:132` + miễn Javadoc getter projection ở convention §2.4 trên nhánh `chore/`) → `architect-reviewer` → SRS (nếu ảnh hưởng, sau vòng lặp design) → commit. Test cần DB ở giai đoạn tích hợp (Neon branch, V6–V12). 6 worktree rebase sau khi SYSTEM-002 merge (user chọn B).
