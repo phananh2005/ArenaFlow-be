@@ -375,6 +375,7 @@ Authorization: Bearer <JWT_TOKEN>
   - `datetime`: `YYYY-MM-DDTHH:mm:ss` theo giờ Việt Nam, **không** `Z`, **không** offset (vd `"2026-11-20T19:00:00"`); response có thể có phần lẻ giây 1–6 chữ số, không có số 0 ở cuối.
   - `date`: `YYYY-MM-DD` (vd `"1995-05-15"`).
   - Request gửi `datetime` kèm `Z`/offset → `400 VALIDATION_ERROR`, `validationErrors[].field` = đường dẫn field.
+- **Số nguyên** (`integer` trong request body — SYSTEM-002 `API_Spec.md` §2): chỉ nhận số nguyên JSON (vd `4`). Gửi `4.5`, `4.0` hoặc chuỗi `"4"` → `400 VALIDATION_ERROR`, `validationErrors[].field` = đường dẫn field; `""` được đọc như `null` (field bắt buộc → `400` như khi thiếu field). Field kiểu `number` (vd `latitude`) không áp quy tắc này.
 - **ID:** suffix `Id`: `arenaId`, `userId`, `bookingId`
 
 ---
