@@ -46,8 +46,11 @@ status: in_progress
 - 2026-11-23: `code-reviewer` lượt 10 (m24): 0 finding. `architect-reviewer` lượt 4: 1 MINOR (m25) → sửa → lượt 5: 0 finding. **Vòng lặp design xong; không ảnh hưởng SRS** (5 lượt architect-reviewer đều kết luận) → bỏ bước cập nhật SRS.
 - 2026-11-23: rule mới (user chốt): `code-reviewer` không review comment / Javadoc; diff chỉ đổi comment / Javadoc không cần `code-reviewer` trước commit. Áp ngay trong phiên; file framework sửa trong worktree `.claude/worktrees/chore-code-review-skip-comments` (nhánh `chore/agent-framework-code-review-skip-comments` từ `origin/main` 5e17d63): `.claude/agents/code-reviewer.md`, `CLAUDE.md` §8, `.agent-bootstrap/project-profile.md` §12 — chưa commit.
 
+- 2026-11-23: commit SYSTEM-002 trên `feature/SYSTEM-002-local-datetime` (base `origin/main` 5e17d63, rebase không có commit mới): `fef540d` feat (code + state, 127 file), `92d116e` docs(SYSTEM-002) (design + ADR, 14 file). Chưa push.
+
 ## Đang làm
-- Chờ user yêu cầu commit SYSTEM-002 (code + `docs(SYSTEM-002)` tách commit) và commit nhánh chore rule review.
+- Nhánh chore rule review: PR #83 merge (squash) `922b359` vào `main` 2026-11-23; worktree đã gỡ, nhánh giữ nguyên. Nhánh SYSTEM-002 cần rebase lên `922b359` trước push.
+- Chờ user: push / PR SYSTEM-002 (cần `--force-with-lease`).
 
 ## Còn lại
 - Vòng lặp design: cập nhật design một lần theo bảng "Lệch thiết kế" (9 dòng; ADR-0017, CCD §2.2/§2.3/§2.5/§6.1/§8; convention §6.2 + `docs/agent/README.md:132` + miễn Javadoc getter projection ở convention §2.4 trên nhánh `chore/`) → `architect-reviewer` → SRS (nếu ảnh hưởng, sau vòng lặp design) → commit. Test cần DB ở giai đoạn tích hợp (Neon branch, V6–V12). 6 worktree rebase sau khi SYSTEM-002 merge (user chọn B).

@@ -2,7 +2,7 @@
 task: SYSTEM-002 — chuẩn hoá ngày giờ LocalDateTime / TIMESTAMP giờ Việt Nam (V6)
 created: 2026-11-21
 updated: 2026-11-23
-percent: 88
+percent: 92
 status: in_progress
 ---
 
@@ -34,7 +34,7 @@ Bối cảnh (user chốt 2026-11-21): 7 mã còn lại implement song song, m�
 - [x] 4. Chạy unit test thuần & xác nhận PASS (dán output); `test-compile` toàn repo PASS
 - [x] 5. `code-reviewer` trên phần chưa review → sửa CRITICAL/MAJOR, test lại (lượt 1–7, lượt 7: 0 finding)
 - [x] 6. Đối chiếu code với design → cập nhật design theo bảng "Lệch thiết kế" → `architect-reviewer` review phần sửa (lượt 1–5, lượt 5: 0 finding; ADR-0018 mới; không ảnh hưởng SRS)
-- [ ] 7. Bước 6 có sửa code → test lại + `code-reviewer` phần sửa → commit (khi user yêu cầu)
+- [x] 7. Bước 6 có sửa code → test lại + `code-reviewer` phần sửa → commit (khi user yêu cầu) — `fef540d`, `92d116e` (2026-11-23)
 - [ ] 8. (Giai đoạn tích hợp) chạy test cần DB trên Neon branch đã chốt — không tick PASS trước khi chạy thật
 
 ## Lệch thiết kế
