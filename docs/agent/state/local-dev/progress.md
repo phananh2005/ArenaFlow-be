@@ -48,9 +48,9 @@ status: in_progress
 
 - 2026-11-23: commit SYSTEM-002 trên `feature/SYSTEM-002-local-datetime` (base `origin/main` 5e17d63, rebase không có commit mới): `fef540d` feat (code + state, 127 file), `92d116e` docs(SYSTEM-002) (design + ADR, 14 file). Chưa push.
 
-## Đang làm
-- Nhánh chore rule review: PR #83 merge (squash) `922b359` vào `main` 2026-11-23; worktree đã gỡ, nhánh giữ nguyên. Nhánh SYSTEM-002 cần rebase lên `922b359` trước push.
-- 2026-11-23: SYSTEM-002 rebase lên `922b359`, unit test lại PASS (common 14, domain 65, application 208/2 skip, api 42), push `--force-with-lease` (`530136f` → `7cc6ed4`), **PR #84** — chờ user merge. Lúc merge: ADR-0018 Accepted + ADR-0017 `Sửa đổi`; áp V6 lên DB dev theo PF §4.1 bước 6–8.
+- 2026-11-23: **test cần DB SYSTEM-002 chạy trên DB dev (đã V6)** — `-pl api -am test` từ code trùng `main` `865a855`: common 14, domain 65, application 208, api 189 → 1 fail `SecurityConfigIntegrationTest.apiDocsAreDisabledByDefault` do lệnh của agent dùng `set -a` (export cả `SPRINGDOC_ENABLED` — ADR-0004 đã nêu); chạy lại lớp đó bằng lệnh chuẩn hub (chỉ export 4 biến) → 10/10 PASS. `set -a` cũng làm `CloudinaryImageAssetAdminLiveTest` (2) chạy thật trên cloud-dev: upload + xoá đúng 1 ảnh spike, PASS, không để lại asset. Gồm cả 3 test DB của PR #81 (VENUE-001).
 
-## Còn lại
-- Vòng lặp design: cập nhật design một lần theo bảng "Lệch thiết kế" (9 dòng; ADR-0017, CCD §2.2/§2.3/§2.5/§6.1/§8; convention §6.2 + `docs/agent/README.md:132` + miễn Javadoc getter projection ở convention §2.4 trên nhánh `chore/`) → `architect-reviewer` → SRS (nếu ảnh hưởng, sau vòng lặp design) → commit. Test cần DB ở giai đoạn tích hợp (Neon branch, V6–V12). 6 worktree rebase sau khi SYSTEM-002 merge (user chọn B).
+- 2026-11-23: task USER-001 liveness (nhánh `feature/USER-001-liveness-probe`): Spring Boot 4 bật probe sẵn → không đổi code main; thêm test liveness / readiness / `groups`; USER-001 v5.2 + ADR-0004 `Sửa đổi`; code-reviewer + architect-reviewer xong; commit. Render dev liveness 200 (curl). UptimeRobot 401 do monitor gửi `HEAD` → user đổi monitor sang GET / Keyword.
+
+## Đang làm
+- Còn lại: user xác nhận Render dev deploy lại + response không còn `Z` (bước 9); rebase 6 nhánh song song theo quy tắc ADR-0018 (bước 10); nhánh `chore/` convention §6.2/§2.4/`api-convention.md`/README l.132 (CCD §9 (c)); Neon branch riêng của bước 4 không tạo nên không cần xoá.
