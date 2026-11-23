@@ -1,11 +1,11 @@
 package com.phananh.arenaflow.api.auth;
 
 import com.phananh.arenaflow.api.ApiIntegrationTest;
+import com.phananh.arenaflow.common.time.AppTime;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 
-import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasItems;
@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/** API xác thực qua HTTP: đăng ký/đăng nhập OAuth, luồng OTP, làm mới token, lỗi body và tài khoản đã xoá. */
 class AuthControllerTest extends ApiIntegrationTest {
 
     private static String oauthBody(String provider, String email) {
@@ -58,7 +59,7 @@ class AuthControllerTest extends ApiIntegrationTest {
         flush();
         entityManager.createNativeQuery("UPDATE \"user\" SET deleted_at = :now WHERE id = "
                         + "(SELECT user_id FROM oauth_account WHERE provider_user_id = :email)")
-                .setParameter("now", OffsetDateTime.now()).setParameter("email", email).executeUpdate();
+                .setParameter("now", AppTime.now()).setParameter("email", email).executeUpdate();
 
         mockMvc.perform(json(post("/api/v1/auth/oauth"), oauthBody("FACEBOOK", email)))
                 .andExpect(status().isForbidden())

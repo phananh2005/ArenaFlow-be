@@ -12,7 +12,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -30,7 +30,7 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
     @Modifying
     @Query(value = "UPDATE venue SET closure_alerted_at = :now, version = version + 1 "
             + "WHERE id = :venueId AND status = 'ACTIVE' AND closure_alerted_at IS NULL", nativeQuery = true)
-    int markClosureAlerted(@Param("venueId") UUID venueId, @Param("now") OffsetDateTime now);
+    int markClosureAlerted(@Param("venueId") UUID venueId, @Param("now") LocalDateTime now);
 
     /** Đặt lại cảnh báo đóng cửa khi không còn report CLOSED đang chờ, để đợt sau lại cảnh báo. */
     @Modifying
@@ -54,7 +54,7 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
     @Modifying
     @Query(value = "UPDATE venue SET last_selected_at = GREATEST(COALESCE(last_selected_at, :selectedAt), :selectedAt), "
             + "stale_alerted_at = NULL, version = version + 1 WHERE id IN (:ids)", nativeQuery = true)
-    int markSelected(@Param("ids") Collection<UUID> ids, @Param("selectedAt") OffsetDateTime selectedAt);
+    int markSelected(@Param("ids") Collection<UUID> ids, @Param("selectedAt") LocalDateTime selectedAt);
 
     /**
      * Claim một batch địa điểm ACTIVE không được chọn từ {@code threshold} và chưa cảnh báo. Khai báo không có
@@ -70,7 +70,7 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
               AND COALESCE(last_selected_at, created_at) < :threshold
             RETURNING id AS id, name AS name
             """, nativeQuery = true)
-    List<StaleVenueView> markStaleAlerted(@Param("threshold") OffsetDateTime threshold, @Param("now") OffsetDateTime now,
+    List<StaleVenueView> markStaleAlerted(@Param("threshold") LocalDateTime threshold, @Param("now") LocalDateTime now,
                                           @Param("batchLimit") int batchLimit);
 
     /** Địa điểm, người tạo (kèm cờ đã xoá) và phường/tỉnh nếu có, trong một truy vấn. */

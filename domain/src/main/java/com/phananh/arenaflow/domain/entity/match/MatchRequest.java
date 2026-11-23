@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.domain.entity.match;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -9,7 +10,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -40,18 +41,19 @@ public class MatchRequest {
     private Status status;
 
     @Column(name = "requested_at", nullable = false)
-    private OffsetDateTime requestedAt;
+    private LocalDateTime requestedAt;
 
     @Column(name = "responded_at")
-    private OffsetDateTime respondedAt;
+    private LocalDateTime respondedAt;
 
     @Column(name = "withdrawn_at")
-    private OffsetDateTime withdrawnAt;
+    private LocalDateTime withdrawnAt;
 
+    /** Gán {@code requestedAt} = giờ hiện tại ({@link AppTime#now()}) khi lưu lần đầu, chỉ khi service chưa gán sẵn. */
     @PrePersist
     protected void onCreate() {
         if (requestedAt == null) {
-            requestedAt = OffsetDateTime.now();
+            requestedAt = AppTime.now();
         }
     }
 

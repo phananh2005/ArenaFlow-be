@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.domain.repository;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import com.phananh.arenaflow.domain.entity.team.Team;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.entity.user.User;
@@ -8,12 +9,13 @@ import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static com.phananh.arenaflow.domain.repository.UserRepositoryTest.newUser;
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Projection một thành viên kèm user, đọc trong một câu SQL. */
 class MemberViewByIdRepositoryTest extends RepositoryIntegrationTest {
 
     @Autowired private UserRepository userRepository;
@@ -28,7 +30,7 @@ class MemberViewByIdRepositoryTest extends RepositoryIntegrationTest {
                 .createdBy(user.getId())
                 .build();
         teamRepository.save(team);
-        OffsetDateTime invitedAt = OffsetDateTime.now();
+        LocalDateTime invitedAt = AppTime.now();
         TeamMember member = TeamMember.builder()
                 .teamId(team.getId())
                 .userId(user.getId())

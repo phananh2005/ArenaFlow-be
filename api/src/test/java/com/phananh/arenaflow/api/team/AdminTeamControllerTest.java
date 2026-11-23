@@ -2,12 +2,12 @@ package com.phananh.arenaflow.api.team;
 
 import com.phananh.arenaflow.api.ApiIntegrationTest;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import com.phananh.arenaflow.domain.entity.team.Team;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.entity.user.User;
 import org.junit.jupiter.api.Test;
 
-import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.everyItem;
@@ -19,6 +19,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/** API quản trị đội: chỉ Admin, ngừng/khôi phục hoạt động, lịch sử thành viên với tên thật và cờ đã xoá tài khoản. */
 class AdminTeamControllerTest extends ApiIntegrationTest {
 
     @Test
@@ -118,12 +119,12 @@ class AdminTeamControllerTest extends ApiIntegrationTest {
         User captain = saveUser("Deleted History Captain");
         User gone = saveUser("Nguyễn Văn Đã Xoá");
         gone.setAvatarUrl("https://res.cloudinary.com/demo/image/upload/gone.jpg");
-        gone.setDeletedAt(OffsetDateTime.now());
+        gone.setDeletedAt(AppTime.now());
         userRepository.save(gone);
         Team team = saveTeam("Team Deleted History", captain);
         TeamMember left = saveMember(team, gone, TeamMember.Role.MEMBER, TeamMember.Status.ACTIVE);
         left.setStatus(TeamMember.Status.LEFT);
-        left.setLeftAt(OffsetDateTime.now());
+        left.setLeftAt(AppTime.now());
         teamMemberRepository.save(left);
         flush();
 
@@ -146,7 +147,7 @@ class AdminTeamControllerTest extends ApiIntegrationTest {
         flush();
         mockMvc.perform(as(captain, post("/api/v1/teams/" + team.getId() + "/disband"))).andExpect(status().isOk());
         User gone = userRepository.findById(captain.getId()).orElseThrow();
-        gone.setDeletedAt(OffsetDateTime.now());
+        gone.setDeletedAt(AppTime.now());
         userRepository.save(gone);
         flush();
         String row = "$.data[?(@.teamId == '" + team.getId() + "')]";

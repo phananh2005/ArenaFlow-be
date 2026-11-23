@@ -12,23 +12,22 @@ import org.mapstruct.factory.Mappers;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Mapper địa điểm: che tên người tạo cho người dùng thường, giữ tên thật cho Admin, làm tròn khoảng cách. */
 class VenueMapperTest {
 
-    private static final Instant TIME = Instant.parse("2026-11-18T00:00:00Z");
+    private static final LocalDateTime TIME = LocalDateTime.of(2026, 11, 18, 7, 0);
     private final SpelAwareProxyProjectionFactory projections = new SpelAwareProxyProjectionFactory();
     private final VenueMapper mapper = Mappers.getMapper(VenueMapper.class);
 
     @Test
-    void regularVenueMasksDeletedCreatorAndBuildsWardImagesAndUtcTimes() {
+    void regularVenueMasksDeletedCreatorAndBuildsWardImagesAndVietnamLocalTimes() {
         UUID venueId = UUID.randomUUID();
         UUID wardId = UUID.randomUUID();
         VenueDetailView view = projection(VenueDetailView.class, Map.ofEntries(
@@ -53,7 +52,7 @@ class VenueMapperTest {
             assertThat(mapped.isPrimary()).isTrue();
             assertThat(mapped.createdAt()).isNull();
         });
-        assertThat(response.createdAt()).isEqualTo(OffsetDateTime.ofInstant(TIME, ZoneOffset.UTC));
+        assertThat(response.createdAt()).isEqualTo(TIME);
     }
 
     @Test

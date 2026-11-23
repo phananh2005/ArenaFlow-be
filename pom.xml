@@ -141,6 +141,14 @@
 					</execution>
 				</executions>
 			</plugin>
+			<!-- Kế thừa xuống mọi module: JVM chạy test luôn ở giờ Việt Nam, không phụ thuộc múi giờ của máy hay cờ trong lệnh -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-Duser.timezone=Asia/Ho_Chi_Minh</argLine>
+				</configuration>
+			</plugin>
 		</plugins>
 	</build>
 

@@ -9,10 +9,11 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
+/** Truy cập bảng {@code venue_report}: danh sách report cho Admin, xử lý report có điều kiện theo trạng thái. */
 public interface VenueReportRepository extends JpaRepository<VenueReport, UUID> {
 
     /** {@code status}/{@code venueId} null = không lọc. Sắp xếp cố định: mới nhất trước, sau đó id giảm dần. */
@@ -58,11 +59,15 @@ public interface VenueReportRepository extends JpaRepository<VenueReport, UUID> 
     @Query(value = "UPDATE venue_report SET status = :status, handled_by = :adminId, handled_at = :now "
             + "WHERE id = :reportId AND status = 'PENDING'", nativeQuery = true)
     int resolveIfPending(@Param("reportId") UUID reportId, @Param("status") String status,
-                         @Param("adminId") UUID adminId, @Param("now") OffsetDateTime now);
+                         @Param("adminId") UUID adminId, @Param("now") LocalDateTime now);
 
+    /**
+     * Admin đánh dấu địa điểm ngừng hoạt động: mọi report CLOSED còn PENDING của địa điểm → VERIFIED, ghi người và
+     * thời điểm xử lý. Trả số report đã cập nhật (0 khi không còn report chờ).
+     */
     @Modifying
     @Query(value = "UPDATE venue_report SET status = 'VERIFIED', handled_by = :adminId, handled_at = :now "
             + "WHERE venue_id = :venueId AND reason = 'CLOSED' AND status = 'PENDING'", nativeQuery = true)
     int verifyPendingClosureReports(@Param("venueId") UUID venueId, @Param("adminId") UUID adminId,
-                                    @Param("now") OffsetDateTime now);
+                                    @Param("now") LocalDateTime now);
 }

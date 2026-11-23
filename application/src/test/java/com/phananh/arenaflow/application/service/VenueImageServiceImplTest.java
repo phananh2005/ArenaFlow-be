@@ -31,8 +31,8 @@ import org.junit.jupiter.api.Test;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,6 +44,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/** Nghiệp vụ ảnh địa điểm: cấp chữ ký upload, thêm ảnh đã xác minh, đặt ảnh chính, thứ tự kiểm lỗi. */
 class VenueImageServiceImplTest {
 
     private final VenueRepository venueRepository = mock(VenueRepository.class);
@@ -61,7 +62,7 @@ class VenueImageServiceImplTest {
                 Mappers.getMapper(VenueMapper.class), transactionTemplate,
                 new VenueImageCleanupProperties(Duration.ofHours(24), Duration.ofHours(6), Duration.ofMinutes(5),
                         null, null, null, null),
-                auditLog, Clock.fixed(Instant.ofEpochSecond(1_795_193_200L), ZoneOffset.UTC));
+                auditLog, Clock.fixed(Instant.ofEpochSecond(1_795_193_200L), ZoneId.systemDefault()));
         when(transactionTemplate.execute(any(TransactionCallback.class))).thenAnswer(invocation ->
                 ((TransactionCallback<?>) invocation.getArgument(0)).doInTransaction(null));
     }
@@ -70,7 +71,7 @@ class VenueImageServiceImplTest {
     void issuesUploadSignatureOnlyForWritableVenueBelowImageLimit() {
         Venue venue = Venue.builder().id(venueId).status(Venue.Status.ACTIVE).build();
         UploadSignature signature = new UploadSignature("upload-url", "cloud", "api-key", "public-id", 123L,
-                "jpg,jpeg,png,webp", false, "signature", OffsetDateTime.parse("2026-11-18T00:00:00Z"));
+                "jpg,jpeg,png,webp", false, "signature", LocalDateTime.of(2026, 11, 18, 7, 0));
         when(signer.isConfigured()).thenReturn(true);
         when(venueRepository.findById(venueId)).thenReturn(java.util.Optional.of(venue));
         when(imageRepository.countByVenueId(venueId)).thenReturn(4L);
@@ -103,7 +104,7 @@ class VenueImageServiceImplTest {
         when(imageRepository.saveAndFlush(any(VenueImage.class))).thenAnswer(invocation -> {
             VenueImage image = invocation.getArgument(0);
             ReflectionTestUtils.setField(image, "id", UUID.randomUUID());
-            ReflectionTestUtils.setField(image, "createdAt", OffsetDateTime.parse("2026-11-18T00:00:00Z"));
+            ReflectionTestUtils.setField(image, "createdAt", LocalDateTime.of(2026, 11, 18, 7, 0));
             return image;
         });
 
@@ -382,7 +383,7 @@ class VenueImageServiceImplTest {
     private VenueImage image(UUID imageId, boolean primary, int displayOrder) {
         VenueImage image = VenueImage.builder().id(imageId).venueId(venueId).publicId("public-" + imageId)
                 .imageUrl("url-" + imageId).isPrimary(primary).displayOrder(displayOrder).uploadedBy(actorId).build();
-        ReflectionTestUtils.setField(image, "createdAt", OffsetDateTime.parse("2026-11-18T00:00:00Z"));
+        ReflectionTestUtils.setField(image, "createdAt", LocalDateTime.of(2026, 11, 18, 7, 0));
         return image;
     }
 

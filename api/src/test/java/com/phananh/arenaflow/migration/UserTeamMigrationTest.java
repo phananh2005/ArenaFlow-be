@@ -12,6 +12,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/** Schema quản lý user/đội và giải tán đội sau khi Flyway chạy đủ migration. */
 @SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=none")
 class UserTeamMigrationTest {
 
@@ -48,7 +49,7 @@ class UserTeamMigrationTest {
 
         int inserted = jdbcTemplate.update(
                 "INSERT INTO team (id, name, created_by, status, disband_reason, disbanded_at, disbanded_by) " +
-                        "VALUES (?, 'Disband Migration Team', ?, 'DISBANDED', 'Đội trưởng giải tán đội', NOW(), ?)",
+                        "VALUES (?, 'Disband Migration Team', ?, 'DISBANDED', 'Đội trưởng giải tán đội', (now() AT TIME ZONE 'Asia/Ho_Chi_Minh'), ?)",
                 UUID.randomUUID(), userId, userId);
 
         assertThat(inserted).isEqualTo(1);

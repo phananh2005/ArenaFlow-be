@@ -12,7 +12,7 @@
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); USER-001 `API_Spec.md` §1.1 "Quy ước chung" và §1.2 "Lỗi chung" |
 | Quyết định liên quan | [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) — ảnh lưu trên Cloudinary, FE upload thẳng lên Cloudinary bằng chữ ký backend cấp |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.14) — UC-V01..V07, BR-V01..V13 (BR-V12, BR-V13 thêm 2026-11-22), BC-V01..V07 (BC-V05 sửa 2026-11-14 — trận ngoài hệ thống; BC-V04 sửa 2026-11-22), BC-U02, Business_Rules §2.6, §5.1/§5.4, AC-V01..V06 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v6.0** (solution-architect · 2026-11-22) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v6.1** (developer · 2026-11-23) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -326,7 +326,7 @@ Không tạo dữ liệu; gọi lặp an toàn (mỗi lần nhận `publicId` m�
 | Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
 |---|---|---|---|---|
 | `publicId` | string | Có | Không rỗng; ≤ 255 ký tự; = `public_id` Cloudinary trả về | `"arenaflow-dev/venues/01936a1c-…/1794193200-q8Zr…-Jc4N…"` |
-| `version` | integer | Có | > 0; = `version` Cloudinary trả về | `1794193260` |
+| `version` | integer | Có | > 0; = `version` Cloudinary trả về, gửi dạng số nguyên JSON — không chuỗi, không `.0` (SYSTEM-002 `API_Spec.md` §2) | `1794193260` |
 | `format` | string | Có | `jpg` \| `jpeg` \| `png` \| `webp` (chữ thường, như Cloudinary trả) | `"jpg"` |
 | `signature` | string | Có | Không rỗng; ≤ 128 ký tự; = `signature` Cloudinary trả về | `"b7e2c4a9d1f3e5a7c9b1d3f5a7c9e1b3d5f7a9c1"` |
 | `isPrimary` | boolean | Không | Mặc định `false` | `true` |

@@ -17,8 +17,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -32,9 +32,12 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/** Cảnh báo địa điểm lâu không được chọn: claim theo batch, ngưỡng 180 ngày theo giờ hiện tại, dừng khi lỗi. */
 class VenueAlertServiceImplTest {
 
+    /** 20:00 UTC ngày 19 = 03:00 giờ Việt Nam ngày 20: lệch ngày nếu tính theo UTC. */
     private static final Instant NOW = Instant.parse("2026-11-19T20:00:00Z");
+    private static final LocalDateTime NOW_VN = LocalDateTime.of(2026, 11, 20, 3, 0);
 
     private final VenueRepository venueRepository = mock(VenueRepository.class);
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
@@ -45,14 +48,14 @@ class VenueAlertServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new VenueAlertServiceImpl(venueRepository, eventPublisher, transactionTemplate,
-                new VenueAlertProperties(180, 2, 3), Clock.fixed(NOW, ZoneOffset.UTC));
+                new VenueAlertProperties(180, 2, 3), Clock.fixed(NOW, ZoneId.systemDefault()));
         when(transactionTemplate.execute(any(TransactionCallback.class))).thenAnswer(invocation ->
                 ((TransactionCallback<?>) invocation.getArgument(0)).doInTransaction(null));
     }
 
     @Test
     void keepsClaimingAfterShortBatchUntilEmptyBatchAndPublishesOneStaleAlertPerVenue() {
-        OffsetDateTime now = NOW.atOffset(ZoneOffset.UTC);
+        LocalDateTime now = NOW_VN;
         // Batch thiếu có thể do dòng bị bỏ qua vì ghi đồng thời, không có nghĩa là đã hết dòng.
         when(venueRepository.markStaleAlerted(eq(now.minusDays(180)), eq(now), eq(2)))
                 .thenReturn(views(1), views(2), views(0));
@@ -68,6 +71,15 @@ class VenueAlertServiceImplTest {
             assertThat(event.triggeredAt()).isEqualTo(now);
             assertThat(event.venueName()).startsWith("Stale ");
         });
+    }
+
+    @Test
+    void staleThresholdIs180DaysBeforeVietnamLocalNow() {
+        when(venueRepository.markStaleAlerted(any(), any(), eq(2))).thenReturn(views(0));
+
+        service.alertStaleVenues();
+
+        verify(venueRepository).markStaleAlerted(LocalDateTime.of(2026, 5, 24, 3, 0), NOW_VN, 2);
     }
 
     @Test

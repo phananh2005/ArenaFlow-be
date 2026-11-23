@@ -2,12 +2,12 @@ package com.phananh.arenaflow.api.profile;
 
 import com.phananh.arenaflow.api.ApiIntegrationTest;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import com.phananh.arenaflow.domain.entity.team.Team;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.entity.user.User;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDate;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/** API hồ sơ qua HTTP: bắt buộc access token, xem/sửa hồ sơ, validation, xoá tài khoản idempotent và chặn đội trưởng. */
 class ProfileControllerTest extends ApiIntegrationTest {
 
     private static final String BEN_NGHE_WARD = "10000000-0000-7000-8000-000000000001";
@@ -57,7 +58,7 @@ class ProfileControllerTest extends ApiIntegrationTest {
                 .andExpect(jsonPath("$.error.code").value("USER_002"));
 
         mockMvc.perform(as(user, patch("/api/v1/profile"))
-                        .content("{\"dateOfBirth\":\"" + LocalDate.now().minusYears(10) + "\"}"))
+                        .content("{\"dateOfBirth\":\"" + AppTime.today().minusYears(10) + "\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.error.validationErrors[0].field").value("dateOfBirth"));

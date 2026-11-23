@@ -4,6 +4,7 @@ import com.phananh.arenaflow.application.dto.request.CreateTeamRequest;
 import com.phananh.arenaflow.application.dto.request.TransferCaptainRequest;
 import com.phananh.arenaflow.application.dto.response.CaptainHistoryResponse;
 import com.phananh.arenaflow.application.dto.response.TeamResponse;
+import com.phananh.arenaflow.common.time.AppTime;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.entity.user.User;
 import com.phananh.arenaflow.domain.repository.TeamMemberRepository;
@@ -17,7 +18,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,7 +54,7 @@ class TeamServiceIntegrationTest {
                 .userId(member.getId())
                 .role(TeamMember.Role.MEMBER)
                 .status(TeamMember.Status.ACTIVE)
-                .joinedAt(OffsetDateTime.now().plusSeconds(1))
+                .joinedAt(AppTime.now().plusSeconds(1))
                 .build();
         teamMemberRepository.save(joined);
         entityManager.flush();

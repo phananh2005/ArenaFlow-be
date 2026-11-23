@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.9) — UC-U01..U03, UC-T01..T05, BR-U01..U06, BR-T01..T06, BR-ME18 (xoá tài khoản rút đơn mercenary — v4.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v5.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v5.1** (developer · 2026-11-23) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -58,7 +58,7 @@ Envelope lỗi (`api-convention.md` §4.4, §11). `details` thường là `null`
 
 | HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
-| 400 | `VALIDATION_ERROR` | Sai định dạng/độ dài/enum, thiếu field bắt buộc, JSON sai cú pháp, thiếu body, id trên path không phải UUID, query param sai (`field` = tên tham số, vd `page`). Field trong body sai kiểu / sai định dạng (vd `dateOfBirth` không phải `YYYY-MM-DD`) → `field` = đường dẫn field đó (vd `dateOfBirth`); JSON sai cú pháp / thiếu body → `field = "body"` (SYSTEM-002 `API_Spec.md` §2) | Hiện lỗi tại ô theo `field`; không gửi lại nguyên request |
+| 400 | `VALIDATION_ERROR` | Sai định dạng/độ dài/enum, thiếu field bắt buộc, JSON sai cú pháp, thiếu body, id trên path không phải UUID, query param sai (`field` = tên tham số, vd `page`). Field trong body sai kiểu / sai định dạng (vd `dateOfBirth` không phải `YYYY-MM-DD`) → `field` = đường dẫn field đó (vd `dateOfBirth`); JSON sai cú pháp / thiếu body → `field = "body"`. Field `integer` trong body gửi số có phần thập phân (kể cả `4.0`) hoặc chuỗi số (`"4"`) → `field` = đường dẫn field đó; `""` vào field `integer` đọc như `null` (SYSTEM-002 `API_Spec.md` §2) | Hiện lỗi tại ô theo `field`; không gửi lại nguyên request |
 | 401 | `AUTH_001` | Thiếu access token, token sai, hết hạn, hoặc dùng refresh token thay access token (endpoint không thuộc `/auth/*`) | Gọi `POST /auth/refresh` (2.4) rồi thử lại **một** lần; refresh lỗi → về màn đăng nhập |
 | 403 | `AUTH_004` | Gọi `/api/v1/admin/*` khi tài khoản không phải `ADMIN` | Ẩn chức năng Admin với `role = USER` |
 | 404 | `SYS_001` | URL không khớp endpoint nào (đã đăng nhập) | Lỗi lập trình FE — kiểm tra path |

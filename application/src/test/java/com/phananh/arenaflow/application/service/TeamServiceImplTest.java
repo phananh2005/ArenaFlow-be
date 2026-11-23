@@ -37,6 +37,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -54,6 +58,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/** Nghiệp vụ đội: tạo, xem, sửa, chuyển quyền đội trưởng, lịch sử, giải tán, thời điểm từ {@code Clock}. */
 class TeamServiceImplTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
@@ -68,13 +73,17 @@ class TeamServiceImplTest {
     private final UUID captainId = UUID.randomUUID();
     private final UUID memberId = UUID.randomUUID();
 
+    /** 20:00 UTC ngày 19 = 03:00 giờ Việt Nam ngày 20. */
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-19T20:00:00Z"), ZoneId.systemDefault());
+    private static final LocalDateTime NOW_VN = LocalDateTime.of(2026, 11, 20, 3, 0);
+
     private TeamServiceImpl service;
 
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
         service = new TeamServiceImpl(userRepository, teamRepository, teamMemberRepository, historyRepository,
-                retrier, teamMapper, new PageRequestFactory(), new TeamGuard(teamRepository, teamMemberRepository));
+                retrier, teamMapper, new PageRequestFactory(), new TeamGuard(teamRepository, teamMemberRepository), CLOCK);
         when(retrier.execute(any())).thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(0)).get());
         when(teamRepository.save(any(Team.class))).thenAnswer(invocation -> withId(invocation.getArgument(0), teamId));
     }
@@ -134,7 +143,7 @@ class TeamServiceImplTest {
         verify(teamMemberRepository).save(member.capture());
         assertThat(member.getValue().getRole()).isEqualTo(TeamMember.Role.CAPTAIN);
         assertThat(member.getValue().getStatus()).isEqualTo(TeamMember.Status.ACTIVE);
-        assertThat(member.getValue().getJoinedAt()).isEqualTo(member.getValue().getInvitedAt());
+        assertThat(member.getValue().getJoinedAt()).isEqualTo(member.getValue().getInvitedAt()).isEqualTo(NOW_VN);
         ArgumentCaptor<TeamCaptainHistory> history = ArgumentCaptor.forClass(TeamCaptainHistory.class);
         verify(historyRepository).save(history.capture());
         assertThat(history.getValue().getFromUserId()).isNull();
@@ -262,7 +271,7 @@ class TeamServiceImplTest {
         assertThat(response.fromUserId()).isEqualTo(captainId);
         assertThat(response.toUserId()).isEqualTo(memberId);
         assertThat(response.reason()).isEqualTo("Bận công tác");
-        assertThat(response.transferredAt()).isEqualTo(history.getValue().getTransferredAt());
+        assertThat(response.transferredAt()).isEqualTo(history.getValue().getTransferredAt()).isEqualTo(NOW_VN);
     }
 
     @Test
@@ -321,16 +330,16 @@ class TeamServiceImplTest {
         TeamResponse response = service.disbandTeam(teamId, captainId, new DisbandTeamRequest("  Hết người chơi  "));
 
         assertThat(captain.getStatus()).isEqualTo(TeamMember.Status.LEFT);
-        assertThat(captain.getLeftAt()).isNotNull();
+        assertThat(captain.getLeftAt()).isEqualTo(NOW_VN);
         assertThat(team.getStatus()).isEqualTo(Team.TeamStatus.DISBANDED);
         assertThat(team.getDisbandReason()).isEqualTo("Hết người chơi");
         assertThat(team.getDisbandedBy()).isEqualTo(captainId);
-        assertThat(team.getDisbandedAt()).isNotNull();
+        assertThat(team.getDisbandedAt()).isEqualTo(NOW_VN);
         assertThat(team.getInactiveReason()).isEqualTo("Admin khoá");
         InOrder order = inOrder(teamMemberRepository, teamRepository);
         order.verify(teamMemberRepository).save(captain);
         order.verify(teamRepository).save(team);
-        order.verify(teamMemberRepository).disbandRemaining(eq(teamId), any());
+        order.verify(teamMemberRepository).disbandRemaining(teamId, NOW_VN);
         order.verify(teamRepository).findDetailById(teamId);
         verify(retrier).execute(any());
         assertThat(response.teamId()).isEqualTo(teamId);

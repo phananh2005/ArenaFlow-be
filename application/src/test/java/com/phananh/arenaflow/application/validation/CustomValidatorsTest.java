@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.application.validation;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -14,6 +15,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Validator tự viết: {@code @OneOf}, {@code @MinAge} (tính theo ngày hiện tại), {@code @ValidSkillLevels}. */
 class CustomValidatorsTest {
 
     private static jakarta.validation.ValidatorFactory factory;
@@ -49,7 +51,7 @@ class CustomValidatorsTest {
 
     @Test
     void minAgeAcceptsNullAndExactlyThirteenYearsOld() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = AppTime.today();
         assertThat(validator.validate(new BirthHolder(null))).isEmpty();
         assertThat(validator.validate(new BirthHolder(today.minusYears(13)))).isEmpty();
         assertThat(validator.validate(new BirthHolder(today.minusYears(30)))).isEmpty();

@@ -29,10 +29,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Vòng đời đội: tạo, xem, cập nhật, chuyển quyền đội trưởng, lịch sử đội trưởng, giải tán; thời điểm ghi lấy từ bean
+ * {@code Clock}.
+ */
 @Service
 @RequiredArgsConstructor
 public class TeamServiceImpl implements TeamService {
@@ -48,6 +53,7 @@ public class TeamServiceImpl implements TeamService {
     private final TeamMapper teamMapper;
     private final PageRequestFactory pageRequestFactory;
     private final TeamGuard teamGuard;
+    private final Clock clock;
 
     /** S user, I team, I captain member, I history; response dựng từ dữ liệu đã có (memberCount = 1). */
     @Override
@@ -55,7 +61,7 @@ public class TeamServiceImpl implements TeamService {
     public TeamResponse createTeam(UUID userId, CreateTeamRequest request) {
         User creator = userRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_001));
-        OffsetDateTime now = OffsetDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
 
         Team saved = teamRepository.save(Team.builder()
                 .name(request.teamName().trim())
@@ -147,7 +153,7 @@ public class TeamServiceImpl implements TeamService {
             newCaptain.setRole(TeamMember.Role.CAPTAIN);
             teamMemberRepository.saveAll(List.of(oldCaptain, newCaptain));
 
-            OffsetDateTime now = OffsetDateTime.now();
+            LocalDateTime now = LocalDateTime.now(clock);
             historyRepository.save(TeamCaptainHistory.builder()
                     .teamId(teamId)
                     .fromUserId(userId)
@@ -178,7 +184,7 @@ public class TeamServiceImpl implements TeamService {
         return concurrencyConflictRetrier.execute(() -> {
             Team team = teamGuard.notDisbandedTeam(teamId);
             TeamMember captain = teamGuard.requireCaptain(teamId, captainUserId);
-            OffsetDateTime now = OffsetDateTime.now();
+            LocalDateTime now = LocalDateTime.now(clock);
             captain.setStatus(TeamMember.Status.LEFT);
             captain.setLeftAt(now);
             teamMemberRepository.save(captain);

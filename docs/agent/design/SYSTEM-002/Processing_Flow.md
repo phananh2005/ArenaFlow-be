@@ -6,7 +6,7 @@
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo | ArenaFlow-be |
 | Ràng buộc dữ liệu | `docs/agent/non-functional-standards.md` (3/4/6) — không đổi số truy vấn |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-21 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-21 · v1.0 (baseline) · hiện tại **v1.2** (developer · 2026-11-23 — đồng bộ với code) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan luồng
 
@@ -46,7 +46,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant S as Service / job
-    participant C as Clock (Asia/Ho_Chi_Minh, tick 1 µs)
+    participant C as Clock (timezone JVM = Asia/Ho_Chi_Minh, tick 1 µs)
     participant R as Repository / entity
     participant DB as PostgreSQL
 
@@ -67,12 +67,12 @@ DB `TIMESTAMP` → projection/entity `LocalDateTime` → DTO `LocalDateTime` (ma
 ### 3.4. Request có thời điểm (mã chưa code: MATCH-001 2.1 `startsAt`, lọc `startsAtFrom`…)
 
 1. Jackson / Spring converter parse chuỗi không offset → `LocalDateTime`.
-2. Chuỗi có `Z`/offset → lỗi parse → `GlobalExceptionHandler` → `400 VALIDATION_ERROR` + `field` (CCD §2.5).
+2. Chuỗi có `Z`/offset → lỗi parse (`JsonTimeConfig` tắt leniency) → `GlobalExceptionHandler` → `400 VALIDATION_ERROR` + `field` (CCD §2.5, §6.1). Cùng đường: số thập phân / chuỗi số vào field số nguyên (`JsonNumberConfig`) → `400` + `field`.
 3. So với "bây giờ" (vd `startsAt ≥ now + 1 giờ`) dùng `LocalDateTime.now(clock)` — cùng hệ giờ VN.
 
 ### 3.5. Job theo lịch
 
-- `@Scheduled(cron, zone = AppTime.ZONE_ID)`: 03:00 là 03:00 giờ VN bất kể timezone máy chủ.
+- `@Scheduled(cron)` không khai zone: cron chạy theo timezone JVM, JVM luôn `Asia/Ho_Chi_Minh` (CCD §2.2) → 03:00 là 03:00 giờ VN. Môi trường mới phải đặt timezone JVM trước khi chạy.
 - Mốc: `now = LocalDateTime.now(clock)`; ngưỡng `now.minusDays(180)` (cảnh báo địa điểm), `now.plusHours(2)` (nhắc trước trận), `now.minusDays(90)` (xoá chat), `now.minusDays(30)` (ẩn thông báo) — truyền vào câu native dạng tham số. Việt Nam không có giờ mùa hè → cộng/trừ giờ địa phương = cộng/trừ thời lượng thật.
 
 ## 4. Triển khai và rollback

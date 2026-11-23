@@ -9,7 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -31,8 +31,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class VenueStaleAlertRaceTest extends CommittedDataIntegrationTest {
 
-    private static final OffsetDateTime THRESHOLD = OffsetDateTime.parse("2000-01-01T00:00:00Z");
-    private static final OffsetDateTime NOW = OffsetDateTime.parse("2026-11-20T03:00:00Z");
+    private static final LocalDateTime THRESHOLD = LocalDateTime.of(2000, 1, 1, 7, 0);
+    private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 20, 10, 0);
     private static final int LARGE_LIMIT = 100_000;
     private static final long LOCK_WAIT_TIMEOUT_MS = 10_000;
 
@@ -69,7 +69,7 @@ class VenueStaleAlertRaceTest extends CommittedDataIntegrationTest {
         UUID venueId = staleVenue();
 
         List<UUID> claimed = claimWhileConcurrentWriteCommits(venueId, id -> jdbcTemplate.update(
-                "UPDATE venue SET status = 'INACTIVE', admin_verified_inactive_at = now(), version = version + 1 "
+                "UPDATE venue SET status = 'INACTIVE', admin_verified_inactive_at = (now() AT TIME ZONE 'Asia/Ho_Chi_Minh'), version = version + 1 "
                         + "WHERE id = ?", id));
 
         assertThat(claimed).doesNotContain(venueId);
@@ -132,7 +132,7 @@ class VenueStaleAlertRaceTest extends CommittedDataIntegrationTest {
     /** Địa điểm ACTIVE tạo năm 1990, chưa từng được chọn, chưa cảnh báo: đủ điều kiện với ngưỡng năm 2000. */
     private UUID staleVenue() {
         UUID creator = user("Stale Race Creator").getId();
-        OffsetDateTime createdAt = OffsetDateTime.parse("1990-01-01T00:00:00Z");
+        LocalDateTime createdAt = LocalDateTime.of(1990, 1, 1, 7, 0);
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("INSERT INTO venue (id, name, address, latitude, longitude, status, created_by_type, "
                         + "created_by_user_id, created_at, updated_at) "

@@ -247,7 +247,7 @@ class VenueControllerTest extends ApiIntegrationTest {
                 .andExpect(jsonPath("$.data[1].isPrimary").value(true));
         assertPrimaryCount(venueId, 1);
 
-        jdbcTemplate.update("UPDATE venue SET status = 'INACTIVE', admin_verified_inactive_at = NOW() WHERE id = ?", venueId);
+        jdbcTemplate.update("UPDATE venue SET status = 'INACTIVE', admin_verified_inactive_at = (now() AT TIME ZONE 'Asia/Ho_Chi_Minh') WHERE id = ?", venueId);
         flush();
         mockMvc.perform(as(creator, patch("/api/v1/venues/" + venueId + "/images/" + first + "/set-primary")))
                 .andExpect(status().isUnprocessableEntity())
@@ -291,7 +291,7 @@ class VenueControllerTest extends ApiIntegrationTest {
                 .andExpect(jsonPath("$.data[0].publicId").doesNotExist());
         assertPrimaryCount(venueId, 1);
 
-        jdbcTemplate.update("UPDATE venue SET status = 'INACTIVE', admin_verified_inactive_at = NOW() WHERE id = ?", venueId);
+        jdbcTemplate.update("UPDATE venue SET status = 'INACTIVE', admin_verified_inactive_at = (now() AT TIME ZONE 'Asia/Ho_Chi_Minh') WHERE id = ?", venueId);
         flush();
         mockMvc.perform(as(creator, delete("/api/v1/venues/" + venueId + "/images/" + tieHigh)))
                 .andExpect(status().isUnprocessableEntity())
@@ -318,7 +318,7 @@ class VenueControllerTest extends ApiIntegrationTest {
         User admin = saveUser("Venue Report Admin", User.Role.ADMIN);
         UUID venueId = createVenue(reporter, "Sân report");
         UUID inactiveVenueId = createVenue(reporter, "Sân đã đóng");
-        jdbcTemplate.update("UPDATE venue SET status = 'INACTIVE', admin_verified_inactive_at = NOW() WHERE id = ?",
+        jdbcTemplate.update("UPDATE venue SET status = 'INACTIVE', admin_verified_inactive_at = (now() AT TIME ZONE 'Asia/Ho_Chi_Minh') WHERE id = ?",
                 inactiveVenueId);
         flush();
         String closed = "{\"reason\":\"CLOSED\",\"detail\":\"Sân đã đóng cửa\"}";

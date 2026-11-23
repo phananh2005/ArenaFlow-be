@@ -1,49 +1,35 @@
 ---
 dev: local-dev
-saved: 2026-11-20 01:30
-task: VENUE-001 — quản lý địa điểm sân (V5)
+saved: 2026-11-23 01:04
+task: SYSTEM-002 — chuẩn hoá ngày giờ LocalDateTime / TIMESTAMP giờ Việt Nam (V6)
 status: in_progress
 ---
 
 ## Đang làm dở
-- Task: VENUE-001, ~95%. Phase 1–6 code xong; Phase 7 (final verify + đồng bộ tài liệu + review) đang làm.
-- Bước hiện tại: `code-reviewer` đã chạy → CHƯA ĐẠT (0 CRITICAL, 1 MAJOR, 10 MINOR). Đang đi **từng MINOR một** với user trước khi sửa (memory: hỏi từng câu; trình finding cho user chọn).
-  - **M1 (MAJOR) — user ĐÃ CHỌN sửa:** live test xoá lô 100 `public_ids[]` không tồn tại trên cloud-dev (1 request Admin API, không xoá asset thật); bị từ chối → giảm `DELETE_BATCH`. Chưa làm.
-  - **m1 (thời gian `+07:00` thay vì `Z`) — đang thảo luận, CHƯA chốt.** User đã chốt: **JVM giữ `Asia/Ho_Chi_Minh`**; muốn "toàn bộ dự án dùng UTC Z". Câu hỏi đang chờ (đã bị ngắt 1 lần — **hỏi lại**): chuẩn hoá đến mức nào?
-    1. Chỉ output API (đề xuất): mọi thời điểm trong JSON response + `error.timestamp` ra `Z`, không đụng entity.
-    2. Output + giá trị nội bộ: thêm đổi mọi `OffsetDateTime.now()` trong entity/service sang `now(ZoneOffset.UTC)` (~30 entity).
-  - m2–m10: chưa đi qua chi tiết (đã giải thích tóm tắt một lượt; user muốn đi sâu từng mục).
-- `progress.md` mục "Đang làm" còn ghi "Chờ user cho bắt đầu Phase 7" — đã cũ, cập nhật khi tiếp tục.
-- Nhánh: `feature/VENUE-001-venue-management` (rebase lên `2204f39`, PR #74). Chưa có commit riêng; toàn bộ việc VENUE-001 chưa commit.
+- Task: SYSTEM-002 (nhánh `feature/SYSTEM-002-local-datetime`, mọi thay đổi **chưa commit**, đã rebase lên `origin/main` 5e17d63).
+- Bước hiện tại: `code-reviewer` lượt 5 xong (0C / 1 MAJOR / 2 MINOR) — **chờ user trả lời câu 1/2: M1 áp quy tắc Javadoc (#82) cho SYSTEM-002 tới đâu** (A đủ theo quy tắc ~90 chỗ — đề xuất / B chỉ code mới `GlobalExceptionHandler.path`, `ClockConfigTest` / C = B + method sửa có logic). Câu 2/2 dự kiến: getter của projection interface có miễn Javadoc không.
+- m13 (`api/src/test/.../venue/AdminVenueControllerTest.java:91` `NOW()` trần → `(now() AT TIME ZONE 'Asia/Ho_Chi_Minh')`) và m14 (bảng "Lệch thiết kế" dòng #8 ghi `jvmArguments` → `systemPropertyVariables`) đã đề xuất sửa luôn, **chưa sửa**, chưa được user xác nhận riêng.
 
 ## File đang sửa (git status lúc handoff)
-- Không đổi so với handoff trước: 27 Modified, 72 Untracked (chưa sửa code trong phiên này).
-- Modified: `.env.example`; `api/pom.xml`; `api/src/main/resources/application.properties`; `api` security resolver + test; `CommittedDataIntegrationTest`; `application` `ConcurrencyConflictRetrier` + test; `common` `ErrorCode`; `domain` entity `Venue`/`VenueImage`/`VenueReport`; `docs/agent/design/VENUE-001/*` (v4.3), `docs/agent/design/USER-001/*` (v4.4), `docs/database/{schema.dbml,schema-design.md,data-model.md}`; state `docs/agent/state/local-dev/{current-task,progress,session-handoff,tech-debt}.md`.
-- Untracked: migration `V5__venue_management.sql`; `api/.../venue/`, `api/.../scheduler/`, `api/.../config/SchedulingConfig.java`; DTO/mapper/service/impl/event/support/validation venue trong `application`; repository/projection venue trong `domain`; test unit + integration/race/NFS/migration. Xem `git status --short`.
+- 127 mục: toàn bộ code SYSTEM-002 (22 entity, 9 projection, repository, DTO, service, mapper, `GlobalExceptionHandler`, 2 scheduler, test các module) — `git status --short` để xem đủ.
+- File mới chưa track: `api/.../config/ClockConfig.java`, `JsonNumberConfig.java`, `JsonTimeConfig.java`; `api/.../db/migration/V6__vietnam_local_datetime.sql`; `common/.../time/` (`AppTime` + test); test `ClockConfigTest`, `JsonMapperIntegrationTest`, `JsonTestSupport`, `NoExplicitTimeZoneTest`, `RequestBodyReadErrorTest`, `LocalDatetimeProjectionRepositoryTest`, `migration/V6TimestampColumns`, `VietnamLocalDatetimeMigrationScriptTest`, `VietnamLocalDatetimeMigrationTest`, `EntityTimeTypesTest`; state `pending-review-questions.md`.
+- Sửa gần nhất (2026-11-23): root `pom.xml` (surefire `argLine`), `api/pom.xml` (spring-boot `systemPropertyVariables user.timezone`), `AppTimeTest`, `ErrorResponseTest`, `NoExplicitTimeZoneTest`, Javadoc 3 method bean.
 
 ## Quyết định / context quan trọng
-- **Thời gian — dữ kiện đã xác minh trong phiên:**
-  - DB: mọi thời điểm là `TIMESTAMPTZ` (V1/V4/V5); `date_of_birth` là `DATE`. Neon dev session mặc định `TimeZone = GMT` (`SELECT current_setting('TimeZone')`, 2026-11-19 18:02 UTC).
-  - Thiết kế: `VENUE-001/API_Spec.md:27` quy định ISO-8601 UTC `Z`; CCD VENUE-001:351 (projection `Instant` → mapper UTC); CCD USER-001:249/:365 ghi lệch `OffsetDateTime.now()` ra `+07:00` + hướng tech-debt "nên trả `Z`"; `USER-001/API_Spec.md:29` hiện cho phép offset bất kỳ; tech-debt #7 cùng loại (USER-001).
-  - m1 vị trí: `VenueServiceImpl.java:84` (2.1), `VenueMapper.java:57` (`toImage`), `VenueMapper.java:61` (`toReport`). Phương án m1 đã trình: A1 qua `MapperSupport.toUtc` (đề xuất; cần `reuse-scan` nếu thêm overload `toUtc(OffsetDateTime)`), A2 entity `now(UTC)`, A3 DTO `Instant`, B Jackson toàn cục (chưa kiểm hoạt động với Jackson 3), C tech-debt.
-  - Rà toàn repo: request DTO chỉ có `ProfileUpdateRequest.dateOfBirth` (`LocalDate`); chưa request nào gửi thời điểm. `OffsetDateTime.now()` ở ~30 `@PrePersist` entity + `Team*`/`Profile*`/`AdminVenue*`/`VenueServiceImpl` + `GlobalExceptionHandler:175` + `ErrorResponse:20`. `MinAgeValidator` dùng `LocalDate.now()` (JVM VN) — giữ nguyên.
-  - Quy ước đề xuất cho mã sau (chưa ghi tài liệu): request thời điểm = `OffsetDateTime` (bắt buộc offset, nhận `Z`/`+07:00`), ngày thuần = `LocalDate` `yyyy-MM-dd`, không dùng `LocalDateTime`; response luôn `Z`. Nếu ghi vào `design-standards.md` → nhánh `chore/agent-framework-...` riêng.
-  - Phạm vi đụng USER-001 (bugfix chức năng đã có + đổi `USER-001/API_Spec.md:29`, CHANGELOG, tech-debt #7) → cần chốt **nhánh** (làm trên nhánh VENUE-001 hay nhánh riêng) trước khi code — chưa hỏi.
-- Tham khảo ngoài (user yêu cầu, chỉ đọc): repo `vdbas_expenditure_service_be` dùng `LocalDateTime`/`LocalDate`, JSON `dd-MM-yyyy[ HH:mm:ss]` qua `JacksonConfig` của lib `vdbas-common-be`, Oracle `TIMESTAMP` không múi giờ, JVM không cấu hình TZ. Không ảnh hưởng ArenaFlow.
-- **Finding `code-reviewer` (2026-11-20)** còn lại: m2 `markStaleAlerted` WHERE ngoài lặp `status='ACTIVE' AND COALESCE(...) < :threshold` (`VenueRepository:61-66`) · m3 race report CLOSED vs `reopenClosureAlertIfNoPending` (`VenueServiceImpl:159-178`, `AdminVenueServiceImpl:95-100`) · m4 map `DataIntegrityViolationException` theo tên constraint (`VenueServiceImpl:169`, `VenueImageServiceImpl:165`) · m5 `Pattern` static (`CloudinaryImageUploadSigner#parsePublicId`) · m6 log status/message (`VenueImageCleanupServiceImpl:93`) · m7 comment "TEAM_014" cũ (`ConcurrencyConflictRetrier:44`) · m8 import FQN (`VenueServiceImpl:101`) · m9 2.4 không rate limit (`VenueImageServiceImpl:70-83`) · m10 V5 preflight report legacy trùng trước khi áp ở môi trường khác (Render).
-- **`architect-reviewer` (tài liệu, 2026-11-19) — CHƯA ĐẠT, chưa sửa:** C1 CHANGELOG v4.3/v4.4 chứa tên nội bộ BE · M1 nhãn `[cần xác nhận #9/#11/#12]` còn trong nội dung · M2 "chưa chạy thử" · M3 tách mục "Không chặn" · M4 `PATCH` → `MINOR` · 3 MINOR.
-- Lệch thiết kế #1–#4 trong `current-task.md`; #1 user chốt "sửa design, giữ code".
-- Full suite gần nhất: 364/364 PASS (2026-11-19, trước rebase PR #74 — chỉ tài liệu).
-- `git stash list` có `stash@{0}` (handoff cũ) — chỉ xoá khi user yêu cầu.
-- Integration/live test nạp `.env.dev` (có `CLOUDINARY_*`); KHÔNG commit `.env.dev`.
+- 2026-11-22/23 VENUE-001 sửa: PR #81 đã merge (`c5584d0`) — `VENUE_017` 403 (phone/website chỉ Admin), `VENUE_018` 400 (`GET /venues` chỉ ACTIVE), `GET /api/v1/admin/venues`, `LikePatterns`; SRS v1.14, design v6.0. 3 test DB của #81 chưa chạy (tích hợp). Task VENUE vẫn `in_progress` vì vậy.
+- PR #82 đã merge (`5e17d63`): Javadoc bắt buộc mọi class/method `src/main` (miễn Lombok, accessor record), class test có Javadoc; comment file cấu hình (§2.6). Áp code mới/sửa; backfill trên `refactor/javadoc-backfill` sau khi các nhánh song song merge (gồm comment `application.properties` + `.env.example` hiện có). `.env.dev` đã comment.
+- SYSTEM-002 lượt 3: M1 → A (sửa `AppTime.ZONE` ở 5 worktree khi tích hợp); m6/m8/m12 ghim `user.timezone` ở surefire + spring-boot plugin; m9/m11 `NoExplicitTimeZoneTest`.
+- Rebase 6 worktree: user chọn **B** — để sau khi SYSTEM-002 merge (mô phỏng conflict: state + `ErrorCode`/`ErrorCodeTest`; MATCH-001 thêm `VenueServiceImpl` — giữ `GeoBoundingBox`, gọi `searchNearbyActive`).
+- Quy tắc mới từ #80: sửa chức năng đã có → xong vòng lặp design (design → `architect-reviewer` → sửa code → `code-reviewer`) **rồi mới** cập nhật SRS.
+- Chi tiết finding / quyết định: `docs/agent/state/local-dev/pending-review-questions.md`; bảng "Lệch thiết kế" (9 dòng) trong `current-task.md`.
 
 ## Blockers
-- _không có_ — chờ user chốt mức chuẩn hoá UTC (m1).
+- Test cần DB (SYSTEM-002 + 3 test của #81) **chỉ chạy trên Neon branch riêng ở giai đoạn tích hợp** — cần xin phép user; NEVER chạy Flyway/test DB trên DB dev chung (`.env.dev`) trước khi SYSTEM-002 merge. V1 không chạy được trên schema trống — hỏi user khi tích hợp.
+- Push nhánh SYSTEM-002 sau này cần `--force-with-lease` (remote còn commit docs cũ đã squash vào #77) — chỉ khi user yêu cầu.
 
 ## Việc tiếp theo
-- [ ] Hỏi lại: chuẩn hoá UTC `Z` mức 1 (chỉ output API) hay mức 2 (output + giá trị nội bộ).
-- [ ] Hỏi: làm phần USER-001 (tech-debt #7) trên nhánh VENUE-001 hay nhánh riêng; cập nhật `USER-001/API_Spec.md:29` + CHANGELOG.
-- [ ] Đi sâu từng MINOR m2 → m10, mỗi mục user chọn sửa / ghi tech-debt.
-- [ ] Sửa M1 + các mục đã chọn theo TDD → test liên quan + full suite (`.env.dev`, `-Duser.timezone=Asia/Ho_Chi_Minh`).
-- [ ] `code-reviewer` phần sửa → đối chiếu lệch design → xử lý finding `architect-reviewer` đã chọn → `architect-reviewer` phần sửa.
-- [ ] Commit chỉ khi user yêu cầu (tách `docs(VENUE-001): ...`); không push/PR khi chưa yêu cầu.
+- [ ] Nhận câu trả lời M1 (A/B/C) → hỏi câu 2/2 (projection getter) nếu cần → sửa M1 + m13 + m14 → chạy unit test → `code-reviewer` phần sửa.
+- [ ] Vòng lặp design SYSTEM-002: cập nhật ADR-0017, CCD §2.2/§2.3/§2.5/§6.1/§8 một lần theo bảng "Lệch thiết kế"; convention §6.2 + `docs/agent/README.md:132` trên nhánh `chore/` → `architect-reviewer` → SRS nếu ảnh hưởng.
+- [ ] Commit SYSTEM-002 (khi user yêu cầu) → tích hợp: Neon branch, chạy V6→V12, test DB; rebase 6 worktree theo quy tắc M1.
+- [ ] Câu chéo mã Q2 (MATCH-001 khoá toàn bộ cột uy tín `updatable = false`) — chưa trả lời.
+- [ ] Duyệt câu hỏi 6 nhánh song song (USER-003 CRITICAL V12, MATCH-002, REPUTATION-001, MERCENARY-001, NOTIFICATION-001, MATCH-001) — từng câu một.

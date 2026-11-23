@@ -20,10 +20,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Thành viên đội: mời, chấp nhận/từ chối lời mời, danh sách thành viên, rời đội; thời điểm vào/rời đội lấy từ bean
+ * {@code Clock}.
+ */
 @Service
 @RequiredArgsConstructor
 public class TeamMembershipServiceImpl implements TeamMembershipService {
@@ -37,6 +42,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
     private final MembershipMapper membershipMapper;
     private final PageRequestFactory pageRequestFactory;
     private final TeamGuard teamGuard;
+    private final Clock clock;
 
     /**
      * (retry) S team (force increment) → TEAM_001/016/015 → S captain → TEAM_002 → S invitee → USER_001
@@ -76,7 +82,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
         return concurrencyConflictRetrier.execute(() -> {
             TeamMember invitation = pendingInvitationOf(invitationId, userId);
             invitation.setStatus(TeamMember.Status.ACTIVE);
-            invitation.setJoinedAt(OffsetDateTime.now());
+            invitation.setJoinedAt(LocalDateTime.now(clock));
             teamMemberRepository.save(invitation);
             // Hibernate tự flush thay đổi trên trước native query đọc lại response.
             return teamMemberRepository.findMemberViewById(invitationId).map(membershipMapper::toMember)
@@ -116,7 +122,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
                 throw new BusinessException(ErrorCode.TEAM_009);
             }
             member.setStatus(TeamMember.Status.LEFT);
-            member.setLeftAt(OffsetDateTime.now());
+            member.setLeftAt(LocalDateTime.now(clock));
             teamMemberRepository.save(member);
             return null;
         });

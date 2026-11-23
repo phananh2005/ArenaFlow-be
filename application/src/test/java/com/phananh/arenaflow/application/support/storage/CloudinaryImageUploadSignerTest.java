@@ -4,14 +4,16 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneOffset;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Ký upload Cloudinary: public id ràng buộc người upload, hạn 1 giờ, từ chối public id sai, cấu hình trống. */
 class CloudinaryImageUploadSignerTest {
 
-    private static final Clock CLOCK = Clock.fixed(Instant.ofEpochSecond(1_795_193_200L), ZoneOffset.UTC);
+    private static final Clock CLOCK = Clock.fixed(Instant.ofEpochSecond(1_795_193_200L), ZoneId.systemDefault());
     private static final CloudinaryProperties PROPERTIES = new CloudinaryProperties(
             "demo-cloud", "123456789012345", "abcd", "arenaflow-dev");
 
@@ -29,7 +31,8 @@ class CloudinaryImageUploadSignerTest {
         assertThat(upload.timestamp()).isEqualTo(1_795_193_200L);
         assertThat(upload.allowedFormats()).isEqualTo("jpg,jpeg,png,webp");
         assertThat(upload.overwrite()).isFalse();
-        assertThat(upload.expiresAt()).isEqualTo(Instant.ofEpochSecond(1_795_196_800L).atOffset(ZoneOffset.UTC));
+        // timestamp + 1 giờ = 1_795_196_800 (17:46:40 UTC) → 00:46:40 ngày hôm sau theo giờ Việt Nam.
+        assertThat(upload.expiresAt()).isEqualTo(LocalDateTime.of(2026, 11, 21, 0, 46, 40));
         assertThat(upload.publicId()).matches("^arenaflow-dev/venues/01936a1c-4b2e-7f3a-9c5d-2e8f4a6b1c01/\\d{10}-[A-Za-z0-9_-]{22}-[A-Za-z0-9_-]{22}$");
         assertThat(signer.parsePublicId(upload.publicId())).isPresent();
         assertThat(signer.isUploadedBy(signer.parsePublicId(upload.publicId()).orElseThrow(), uploaderId)).isTrue();

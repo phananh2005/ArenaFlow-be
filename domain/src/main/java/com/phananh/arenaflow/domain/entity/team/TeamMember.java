@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.domain.entity.team;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -9,7 +10,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -46,23 +47,24 @@ public class TeamMember {
     private Status status;
 
     @Column(name = "invited_at", nullable = false)
-    private OffsetDateTime invitedAt;
+    private LocalDateTime invitedAt;
 
     @Column(name = "joined_at")
-    private OffsetDateTime joinedAt;
+    private LocalDateTime joinedAt;
 
     @Column(name = "left_at")
-    private OffsetDateTime leftAt;
+    private LocalDateTime leftAt;
 
     @Version
     @Column(name = "version", nullable = false)
     @Setter(AccessLevel.NONE)
     private Long version;
 
+    /** Gán {@code invitedAt} = giờ hiện tại ({@link AppTime#now()}) khi lưu lần đầu, chỉ khi service chưa gán sẵn. */
     @PrePersist
     protected void onCreate() {
         if (invitedAt == null) {
-            invitedAt = OffsetDateTime.now();
+            invitedAt = AppTime.now();
         }
     }
 

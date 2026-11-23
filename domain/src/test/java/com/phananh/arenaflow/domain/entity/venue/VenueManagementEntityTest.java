@@ -2,17 +2,18 @@ package com.phananh.arenaflow.domain.entity.venue;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Entity địa điểm, ảnh, report: version, mốc cảnh báo, phường, loại sân, trạng thái mặc định của report. */
 class VenueManagementEntityTest {
 
     @Test
     void venueCarriesVersionAlertGatesWardAndTypedVenueType() {
         UUID wardId = UUID.randomUUID();
-        OffsetDateTime alertTime = OffsetDateTime.parse("2026-11-18T00:00:00Z");
+        LocalDateTime alertTime = LocalDateTime.of(2026, 11, 18, 7, 0);
 
         Venue venue = Venue.builder()
                 .venueType(Venue.VenueType.SEVEN_A_SIDE)
@@ -38,7 +39,7 @@ class VenueManagementEntityTest {
     @Test
     void venueReportDefaultsToPendingAndCarriesStructuredLifecycle() {
         UUID adminId = UUID.randomUUID();
-        OffsetDateTime handledAt = OffsetDateTime.parse("2026-11-18T00:00:00Z");
+        LocalDateTime handledAt = LocalDateTime.of(2026, 11, 18, 7, 0);
 
         VenueReport report = VenueReport.builder()
                 .reason(VenueReport.Reason.CLOSED)

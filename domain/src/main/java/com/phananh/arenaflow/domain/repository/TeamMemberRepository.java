@@ -12,12 +12,13 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/** Truy cập bảng {@code team_member}: thành viên/lời mời của đội, lịch sử thành viên, đóng membership hàng loạt. */
 public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
 
     Optional<TeamMember> findByTeamIdAndUserIdAndStatus(UUID teamId, UUID userId, TeamMember.Status status);
@@ -74,7 +75,7 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
                 version = version + 1
             WHERE team_id = :teamId AND status IN ('ACTIVE', 'PENDING')
             """, nativeQuery = true)
-    int disbandRemaining(@Param("teamId") UUID teamId, @Param("now") OffsetDateTime now);
+    int disbandRemaining(@Param("teamId") UUID teamId, @Param("now") LocalDateTime now);
 
     /** 1 dòng thành viên + user (response sau khi chấp nhận lời mời). */
     @Query(value = """
@@ -114,5 +115,5 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
             WHERE user_id = :userId
               AND (status = 'PENDING' OR (status = 'ACTIVE' AND role = 'MEMBER'))
             """, nativeQuery = true)
-    int leaveAndRejectAllOpen(@Param("userId") UUID userId, @Param("now") OffsetDateTime now);
+    int leaveAndRejectAllOpen(@Param("userId") UUID userId, @Param("now") LocalDateTime now);
 }

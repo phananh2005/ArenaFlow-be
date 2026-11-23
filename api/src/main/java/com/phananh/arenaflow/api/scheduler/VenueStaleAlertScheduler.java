@@ -12,7 +12,8 @@ public class VenueStaleAlertScheduler {
 
     private final VenueAlertService venueAlertService;
 
-    @Scheduled(cron = "${arenaflow.venue.stale-alert.cron}", zone = "Asia/Ho_Chi_Minh")
+    /** Cảnh báo Admin về địa điểm lâu không được chọn, theo cron cấu hình; cron chạy theo timezone JVM (giờ Việt Nam). */
+    @Scheduled(cron = "${arenaflow.venue.stale-alert.cron}")
     public void alertStaleVenues() {
         venueAlertService.alertStaleVenues();
     }

@@ -2,7 +2,7 @@ package com.phananh.arenaflow.application.service;
 
 import com.phananh.arenaflow.domain.projection.SelectableVenueView;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -14,5 +14,5 @@ public interface VenueSelectionService {
     List<SelectableVenueView> requireSelectable(Collection<UUID> venueIds);
 
     /** Phải tham gia transaction của caller để last_selected_at rollback cùng kèo. */
-    void markSelected(Collection<UUID> venueIds, OffsetDateTime selectedAt);
+    void markSelected(Collection<UUID> venueIds, LocalDateTime selectedAt);
 }

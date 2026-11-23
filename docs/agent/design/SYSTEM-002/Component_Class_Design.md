@@ -5,10 +5,10 @@
 | Mã chức năng | `SYSTEM-002` |
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo | ArenaFlow-be — Spring Boot 4.0.9, Jackson 3 (`tools.jackson`), Hibernate 7.2, PostgreSQL 18 (Neon), Flyway |
-| Quy ước áp dụng | `convention-backend.md` (module, entity, `@PrePersist`), `api-convention.md` — **cả hai đang ghi `OffsetDateTime` / `timestamptz` / ví dụ `Z`; phải sửa theo §2 trước khi code** (§9 (a)); [ADR-0017](../../decisions/0017-vietnam-local-datetime.md) |
+| Quy ước áp dụng | `convention-backend.md` (module, entity, `@PrePersist`), `api-convention.md` — **cả hai đang ghi `OffsetDateTime` / `timestamptz` / ví dụ `Z`; phải sửa theo §2 trước khi code** (§9 (a)); [ADR-0017](../../decisions/0017-vietnam-local-datetime.md), [ADR-0018](../../decisions/0018-jvm-time-zone-as-single-clock-source.md) (thay quyết định 3, 6 của ADR-0017) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.13) — BC-M05 |
 | Ràng buộc dữ liệu | Schema V1–V5 (V5 = VENUE-001, PR #75 — đã merge `61aa100`) · migration mới `V6__vietnam_local_datetime.sql` (§7) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-21 · v1.0 (baseline) · hiện tại **v1.1** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-21 · v1.0 (baseline) · hiện tại **v1.2** (developer · 2026-11-23 — đồng bộ với code) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -22,7 +22,8 @@
 | Mapper | `MapperSupport.toUtc(Instant)` → `OffsetDateTime` UTC | Gán thẳng `LocalDateTime` (bỏ `toUtc`) |
 | DTO / event / `ErrorResponse` | `OffsetDateTime` | `LocalDateTime` |
 | JSON | `"…Z"` hoặc `"…+07:00"` | `"2026-11-20T19:00:00"` — mặc định Jackson cho `LocalDateTime` (không cấu hình định dạng riêng) |
-| Nguồn "bây giờ" | `OffsetDateTime.now()` (theo JVM), `Clock.systemUTC()` | `Clock` bean zone `Asia/Ho_Chi_Minh` (service) / `AppTime.now()` (nơi không inject được) — §2.2 |
+| Nguồn "bây giờ" | `OffsetDateTime.now()` (theo JVM), `Clock.systemUTC()` | `Clock` bean theo timezone JVM (service) / `AppTime.now()` (nơi không inject được); JVM luôn chạy `Asia/Ho_Chi_Minh` — §2.2 |
+| Đọc JSON request | Jackson lenient: `"…Z"` bị bỏ `Z`; `4.5` vào field số nguyên bị cắt thành `4`; mọi lỗi đọc body trả `field = "body"` | Từ chối `LocalDateTime` kèm `Z`/offset và số thập phân / chuỗi số vào field số nguyên → `400`, `field` = đường dẫn field — §2.5, §6.1 |
 
 Không endpoint mới, không mã lỗi mới, không đổi số truy vấn (`Processing_Flow.md` §2). Hợp đồng FE: `API_Spec.md`.
 
@@ -61,52 +62,66 @@ Không endpoint mới, không mã lỗi mới, không đổi số truy vấn (`P
 | `AssetAdminRateLimitedException.resetAt` | `String` (header Cloudinary nguyên văn) | Chỉ ghi log |
 | `UuidGenerator(VERSION_7)` / `uuidv7()` | epoch ms bên trong UUID (ADR-0008) | Không phải giá trị thời gian của nghiệp vụ |
 
-### 2.2. Nguồn "bây giờ"
+### 2.2. Nguồn "bây giờ" (theo timezone JVM — [ADR-0018](../../decisions/0018-jvm-time-zone-as-single-clock-source.md), thay quyết định 3, 6 của ADR-0017)
 
-- **`common/time/AppTime`** (mới, `final`, constructor private — chạy `reuse-scan` trước khi tạo):
+- **`common/time/AppTime`** (mới, `final`, constructor private; Reuse Report: không có lớp thời gian nào sẵn có):
 
 ```java
 public final class AppTime {
-    public static final String ZONE_ID = "Asia/Ho_Chi_Minh";   // hằng compile-time: dùng được trong @Scheduled(zone = …)
-    public static final ZoneId ZONE = ZoneId.of(ZONE_ID);
-    public static LocalDateTime now()           // LocalDateTime.now(ZONE).truncatedTo(ChronoUnit.MICROS)
-    public static LocalDate today()             // LocalDate.now(ZONE)
+    public static LocalDateTime now()           // LocalDateTime.now().truncatedTo(ChronoUnit.MICROS) — timezone JVM
+    public static LocalDate today()             // LocalDate.now() — timezone JVM
 }
 ```
+
+Không có hằng `ZONE` / `ZONE_ID`: code không khai zone ở đâu cả.
 
 - **`api/config/ClockConfig`** (mới — chuyển lên từ MATCH-001 §8; MATCH-001 dùng lại, không tạo lần hai):
 
 ```java
-@Bean Clock clock() { return Clock.tick(Clock.system(AppTime.ZONE), Duration.ofNanos(1_000)); } // độ phân giải micro giây
+@Bean Clock clock() { return Clock.tick(Clock.systemDefaultZone(), Duration.ofNanos(1_000)); } // timezone JVM, độ phân giải micro giây
 ```
 
 | Nơi | Lấy "bây giờ" bằng |
 |---|---|
-| Service, job, component có DI | Inject `Clock` → `LocalDateTime.now(clock)` (thời điểm) · `clock.instant()` (chỉ cho ngoại lệ §2.1) |
+| Service, job, component có DI | Inject `Clock` → `LocalDateTime.now(clock)` (thời điểm) · `clock.instant()` (chỉ cho ngoại lệ §2.1) · `clock.getZone()` khi đổi epoch → giờ địa phương (vd `CloudinaryImageUploadSigner.expiresAt`) |
 | Entity `@PrePersist`/`@PreUpdate`, record factory (`ErrorResponse.from`), `GlobalExceptionHandler`, `ConstraintValidator` | `AppTime.now()` / `AppTime.today()` |
-| Test | `Clock.fixed(instant, AppTime.ZONE)` |
+| Test | `Clock.fixed(instant, ZoneId.systemDefault())` |
 
-Lý do: (1) zone tường minh → code không phụ thuộc `-Duser.timezone` (IDE, runner, container khác); JVM vẫn chạy `-Duser.timezone=Asia/Ho_Chi_Minh` (hub `CLAUDE.md` §8; Dockerfile của nhánh deploy `chore/docker-render-deploy` — Render dev — đã đặt `TZ` + `-Duser.timezone`) cho log và phiên JDBC. (2) `Clock` cố định được → test biên mốc (24 giờ, 180 ngày…) không phụ thuộc đồng hồ thật — tiền lệ `VenueAlertServiceImpl`, `VenueImageCleanupServiceImpl`. (3) Cắt về micro giây = độ chính xác của `TIMESTAMP` PostgreSQL → giá trị trong response sau khi ghi trùng giá trị đọc lại từ DB.
+**JVM luôn chạy `Asia/Ho_Chi_Minh`** — điều kiện để mọi giá trị đúng giờ Việt Nam:
 
-**Bẫy phải test:** `LocalDateTime.now(clock)` dùng **zone của `clock`**. Mọi `Clock.systemUTC()` (constructor mặc định của `VenueAlertServiceImpl`, `VenueImageCleanupServiceImpl`, `VenueImageServiceImpl`, `CloudinaryImageUploadSigner`) phải đổi sang `Clock` bean / `Clock.system(AppTime.ZONE)` — để `systemUTC` thì mốc lệch 7 giờ. **NEVER** `LocalDateTime.now()` / `LocalDate.now()` không tham số trong `src/main`.
+| Môi trường | Cách đặt |
+|---|---|
+| Render dev | Dockerfile nhánh deploy `chore/docker-render-deploy`: `TZ` + `-Duser.timezone=Asia/Ho_Chi_Minh` |
+| Lệnh `./mvnw` của agent | `-Duser.timezone=Asia/Ho_Chi_Minh` (hub `CLAUDE.md` §8) |
+| Mọi JVM chạy test (4 module) | Root `pom.xml`: `maven-surefire-plugin` `<argLine>-Duser.timezone=Asia/Ho_Chi_Minh</argLine>` |
+| IDE (chạy main class / test runner không qua Maven), `java -jar` | Người chạy tự đặt `-Duser.timezone=Asia/Ho_Chi_Minh` (VM option / dòng lệnh) — không có cơ chế ghim tự động |
+| `spring-boot:run` | `api/pom.xml`: `spring-boot-maven-plugin` `<systemPropertyVariables><user.timezone>Asia/Ho_Chi_Minh</user.timezone>` — không dùng `jvmArguments` để vẫn truyền được `-Dspring-boot.run.jvmArguments` (vd debug) từ dòng lệnh |
+
+Lý do: (1) một nguồn giờ duy nhất (JVM) cho code, log và phiên JDBC; không lặp hằng zone. (2) `Clock` cố định được → test biên mốc (24 giờ, 180 ngày…) không phụ thuộc đồng hồ thật — tiền lệ `VenueAlertServiceImpl`, `VenueImageCleanupServiceImpl`. (3) Cắt về micro giây = độ chính xác của `TIMESTAMP` PostgreSQL → giá trị trong response sau khi ghi trùng giá trị đọc lại từ DB.
+
+**Chặn bằng test:** `AppTimeTest.jvmRunningTestsUsesVietnamTimeZone` (timezone JVM test = `Asia/Ho_Chi_Minh`); `NoExplicitTimeZoneTest` quét tĩnh `src/main` của 4 module, cấm `ZoneId.of(`, `ZoneOffset.`, `TimeZone.getTimeZone(`, `Clock.systemUTC()`, chuỗi `"Asia/Ho_Chi_Minh"`, `zone =` trong `@Scheduled`. Constructor mặc định dùng `Clock.systemUTC()` (`VenueAlertServiceImpl`, `VenueImageCleanupServiceImpl`, `VenueImageServiceImpl`, `CloudinaryImageUploadSigner`) bị bỏ — inject bean. Ngoài `AppTime`, **NEVER** `LocalDateTime.now()` / `LocalDate.now()` không tham số trong `src/main`.
 
 ### 2.3. SQL
 
 - **NEVER** dùng `now()`, `CURRENT_TIMESTAMP`, `LOCALTIMESTAMP`, `CURRENT_DATE` trần trong native query / migration để ghi hoặc so sánh cột thời gian: với cột `TIMESTAMP`, PostgreSQL đổi `timestamptz` → `timestamp` theo **TimeZone của phiên** (Neon dev mặc định `GMT` — user kiểm 2026-11-19) → lệch 7 giờ.
   - Native query: Java truyền `:now` (đã làm ở mọi câu hiện có — §6.3; không câu native nào trong code `main` hoặc nhánh VENUE-001 dùng `now()`, grep 2026-11-21).
   - DEFAULT / migration cần "bây giờ" ở DB: `(now() AT TIME ZONE 'Asia/Ho_Chi_Minh')` — không phụ thuộc TimeZone phiên.
-- [Inference — theo mã nguồn pgjdbc, chưa kiểm trên Neon pooler] pgjdbc gửi tham số khởi động `TimeZone` = timezone JVM, nên phiên của ứng dụng chạy `Asia/Ho_Chi_Minh`; phiên khác (console Neon, MCP, `psql`) vẫn `GMT`. Thiết kế **không dựa** vào điều này (quy tắc trên); test §8 #4 ghi nhận giá trị thực tế.
+- [Inference — theo mã nguồn pgjdbc, chưa kiểm trên Neon pooler] pgjdbc gửi tham số khởi động `TimeZone` = timezone JVM, nên phiên của ứng dụng chạy `Asia/Ho_Chi_Minh`; phiên khác (console Neon, MCP, `psql`) vẫn `GMT`. SQL **không dựa** vào điều này (quy tắc trên) — khác Java, vì phiên DB không do JVM quyết định; test §8 #4 ghi nhận giá trị thực tế.
 - Không đặt `ALTER DATABASE … SET timezone` và không đặt `hibernate.jdbc.time_zone`: `LocalDateTime` ↔ `TIMESTAMP` bind không đổi múi giờ.
 
 ### 2.4. Lịch chạy job
 
-- Mọi `@Scheduled(cron = …)` khai `zone = AppTime.ZONE_ID` (VENUE-001 đang ghi chuỗi `"Asia/Ho_Chi_Minh"` → đổi sang hằng). `fixedDelay`/`fixedRate` không cần zone.
+- `@Scheduled(cron = …)` **không** khai `zone` — cron chạy theo timezone JVM (§2.2); 2 scheduler của VENUE-001 bỏ `zone = "Asia/Ho_Chi_Minh"`. `NoExplicitTimeZoneTest` chặn `zone =` quay lại.
 - Mốc nghiệp vụ = phép cộng/trừ trên `LocalDateTime.now(clock)` (`minusDays(180)`, `plusHours(2)`, `minusDays(90)`, `minusDays(30)`…). Việt Nam không có giờ mùa hè → cộng/trừ giờ địa phương bằng cộng/trừ thời lượng thật (theo dõi ở ADR-0017).
 
 ### 2.5. JSON
 
 - Response: không cấu hình — Jackson 3 ghi `LocalDateTime` theo ISO-8601 không offset, `LocalDate` `YYYY-MM-DD` [Inference — theo mặc định Spring Boot / Jackson 3; test §8 #5 khẳng định]. Phần lẻ giây: giây luôn ghi; phần lẻ 1–6 chữ số, bỏ số 0 cuối, không có khi giây tròn [Inference — theo `DateTimeFormatter.ISO_LOCAL_DATE_TIME`; `API_Spec.md` §1.1 hứa với FE như vậy, test §8 #5 khẳng định].
-- Request body: chuỗi kèm `Z`/offset → `400 VALIDATION_ERROR` (`API_Spec.md` §1.1). [Unverified] Jackson 2.x ở chế độ lenient **bỏ `Z` rồi đọc như giờ địa phương** (lệch 7 giờ âm thầm), offset `+07:00` thì lỗi parse. Developer viết test trước (§8 #6); nếu Jackson 3 mặc định vẫn nhận `Z` → thêm `api/config/JsonTimeConfig` (một `JsonMapperBuilderCustomizer` đặt `withConfigOverride(LocalDateTime.class, …JsonFormat.Value.forLeniency(false))`) — chỉ thay đổi độ chặt, không đổi định dạng ghi.
+- Request body: chuỗi kèm `Z`/offset → `400 VALIDATION_ERROR` (`API_Spec.md` §1.1). Đã kiểm (Jackson 3.1.7, test §8 #6): mặc định Jackson **nhận** `"…Z"` (bỏ `Z`, đọc như giờ địa phương — lệch 7 giờ âm thầm), `+07:00` thì lỗi parse → tạo **`api/config/JsonTimeConfig`**: bean `strictLocalDateTimeCustomizer` (`JsonMapperBuilderCustomizer`) đặt `withConfigOverride(LocalDateTime.class, …JsonFormat.Value.forLeniency(false))` — chỉ thay đổi độ chặt, không đổi định dạng ghi.
+  - [Inference — theo hành vi `LocalDateTimeDeserializer` khi tắt leniency, chưa kiểm] chuỗi rỗng `""` ở field `LocalDateTime` thành `400` thay vì `null` — mã đầu tiên có request `LocalDateTime` (MATCH-001) viết test cho ca này.
+- **Số nguyên trong request body** (user chốt 2026-11-21, áp toàn ứng dụng): Jackson mặc định cắt `4.5 → 4` và nhận chuỗi `"4"` âm thầm. **`api/config/JsonNumberConfig`**: bean `strictIntegerCustomizer` đặt CoercionConfig `LogicalType.Integer`: `CoercionInputShape.Float` → `Fail`, `CoercionInputShape.String` → `Fail` → `4.5`, `4.0`, `"4"` gửi vào field số nguyên → `400 VALIDATION_ERROR`, `field` = đường dẫn field (§6.1). Test phủ `int`, `Integer`, `Long`; [Inference — theo `LogicalType.Integer` của Jackson, chưa test] `short`, `BigInteger` cùng quy tắc. Field số thập phân (`BigDecimal`, `Double`) không đổi.
+  - Chuỗi rỗng `""` (không cấu hình `CoercionInputShape.EmptyString`, user chốt 2026-11-23 giữ): field kiểu object (`Integer`, `Long`) → `null` (field bắt buộc vẫn bị `@NotNull` chặn; ở endpoint phân biệt vắng / `null` thì là `null`, không phải vắng); field `int` nguyên thuỷ → `400`.
+  - **Quy tắc DTO** (user chốt 2026-11-23): field số nguyên trong request DTO dùng kiểu object (`Integer`, `Long`), **không** dùng kiểu nguyên thuỷ (`int`, `long`) — để `""` / `null` / vắng xử lý nhất quán qua Bean Validation thay vì lỗi đọc JSON.
 - Query param `LocalDateTime` (MATCH-001 `startsAtFrom`/`startsAtTo` — chưa code): khai `@DateTimeFormat(iso = ISO.DATE_TIME)` **và** từ chối chuỗi có offset (vd constraint/converter dùng `DateTimeFormatter.ISO_LOCAL_DATE_TIME`) — [Unverified] `ISO.DATE_TIME` của Spring parse `ISO_DATE_TIME` (nhận offset tuỳ chọn rồi bỏ). Áp khi code MATCH-001; test như §8 #6.
 - Lỗi parse `datetime` ở **query** → `MethodArgumentTypeMismatchException` → handler hiện có trả `field` = tên tham số (không đổi). Ở **body** → `HttpMessageNotReadableException`: handler hiện trả `field = "body"` cho mọi lỗi đọc JSON → **sửa** để trả đường dẫn field (§6.1), áp cho mọi lỗi đọc JSON body, không riêng thời gian.
 
@@ -119,10 +134,11 @@ domain/  entity/**  (22 entity — §5.1) · projection/** (§5.2) · repository
 application/ mapper/MapperSupport.java, TeamMapper, MembershipMapper, ProfileMapper, VenueMapper (§6.2)
          dto/response/** (§6.4) · event/venue/VenueAdminAlertEvent (§6.5)
          service/impl/** , support/storage/**, validation/MinAgeValidator (§6.3)
-api/     config/ClockConfig.java (mới) · config/JsonTimeConfig.java (mới, có điều kiện — §2.5)
+api/     config/ClockConfig.java (mới) · config/JsonTimeConfig.java (mới — §2.5) · config/JsonNumberConfig.java (mới — §2.5)
          config/GlobalExceptionHandler.java (sửa — §6.1: AppTime.now(), field của lỗi đọc JSON body)
-         scheduler/Venue*Scheduler (zone = AppTime.ZONE_ID)
+         scheduler/Venue*Scheduler (bỏ zone — §2.4)
          resources/db/migration/V6__vietnam_local_datetime.sql (mới — §7)
+pom.xml (surefire argLine) · api/pom.xml (spring-boot-maven-plugin systemPropertyVariables) — §2.2
 ```
 
 ## 4. Controller
@@ -185,12 +201,13 @@ private static String bodyField(HttpMessageNotReadableException exception)
 // Duyệt chuỗi cause từ exception.getCause() (cause, cause.getCause(), …); lấy tools.jackson.databind.exc.MismatchedInputException
 // ĐẦU TIÊN gặp (m). KHÔNG dùng getMostSpecificCause(): cause sâu nhất của lỗi ngày giờ / UUID là DateTimeParseException /
 // IllegalArgumentException, không mang path → sẽ rơi về "body".
-//   → m.getPath(): tên field nối bằng ".", phần tử mảng dạng "[i]" — vd "startsAt", "timeOptions[0].startsAt", "dateOfBirth"
+//   → path(m.getPath()): tên field nối bằng ".", phần tử mảng dạng "[i]" — vd "startsAt", "timeOptions[0].startsAt", "dateOfBirth"
 //   → không có MismatchedInputException trong chuỗi / path rỗng (vd lỗi cú pháp) → "body"
+private static String path(List<JacksonException.Reference> references)
 ```
 
-  - [Unverified] tên lớp / method Jackson 3 (`MismatchedInputException#getPath`, gồm `InvalidFormatException` khi sai định dạng ngày giờ) **và** vị trí của nó trong chuỗi cause: [Inference — theo Jackson 2.x `JSR310DeserializerBase._handleDateTimeException` / `FromStringDeserializer`; Jackson 3 chưa kiểm] lỗi parse ngày giờ / UUID bọc `DateTimeParseException` bên dưới `InvalidFormatException`, nên phải lấy `MismatchedInputException` đầu tiên chứ không lấy cause sâu nhất. Bằng chứng: test §8 #6 (a) (`startsAt`) và (b) (`dateOfBirth`) — viết trước; lệch → dùng lớp cha đúng của Jackson 3 có `getPath()`.
-  - Áp cho **mọi** lỗi đọc JSON body (sai kiểu số/enum/UUID/ngày giờ, ngày giờ kèm offset), không riêng thời gian. `message` giữ `"Nội dung request không hợp lệ"`; không lộ chi tiết parser.
+  - Đã kiểm (Jackson 3.1.7, test §8 #6): `getPath()` khai báo ở `tools.jackson.core.JacksonException` (trả `List<JacksonException.Reference>`), `MismatchedInputException` (gồm `InvalidFormatException`) kế thừa; lỗi ngày giờ / UUID bọc `DateTimeParseException` / `IllegalArgumentException` bên dưới, nên lấy `MismatchedInputException` đầu tiên trong chuỗi cause là đủ cho ngày giờ, số (kể cả số thập phân / chuỗi vào field số nguyên — §2.5), enum, UUID, phần tử mảng. JSON cụt / body rỗng → `"body"`.
+  - Áp cho **mọi** lỗi đọc JSON body (sai kiểu số/enum/UUID/ngày giờ, ngày giờ kèm offset, số không nguyên vào field số nguyên), không riêng thời gian. `message` giữ `"Nội dung request không hợp lệ"`; không lộ chi tiết parser.
   - FE thấy được: `validationErrors[0].field` đổi từ `"body"` sang tên field (vd USER-001 2.6 `dateOfBirth` sai định dạng → `"dateOfBirth"`) — ghi ở CHANGELOG USER-001 v5.0 và `USER-001/API_Spec.md` §1.2.
 
 ### 6.2. Mapper
@@ -207,7 +224,7 @@ private static String bodyField(HttpMessageNotReadableException exception)
 | `AdminVenueServiceImpl` (2), `VenueServiceImpl` (1) | `OffsetDateTime.now()` | như trên |
 | `VenueAlertServiceImpl` | `OffsetDateTime.ofInstant(clock.instant(), UTC)`; mặc định `Clock.systemUTC()` | `LocalDateTime.now(clock)`; `threshold = now.minusDays(staleDays)`; `Clock` bean |
 | `VenueSelectionService.markSelected(ids, selectedAt)` | `OffsetDateTime` | `LocalDateTime` (caller MATCH-001/MERCENARY-001 truyền `now` của lần thử) |
-| `CloudinaryImageUploadSigner.signUpload` | `expiresAt = OffsetDateTime.ofInstant(now + TTL, UTC)` | `LocalDateTime.ofInstant(now.plusSeconds(TTL), AppTime.ZONE)`; `timestamp` epoch giữ nguyên; `Clock` bean |
+| `CloudinaryImageUploadSigner.signUpload` | `expiresAt = OffsetDateTime.ofInstant(now + TTL, UTC)` | `LocalDateTime.ofInstant(now.plusSeconds(TTL), clock.getZone())`; `timestamp` epoch giữ nguyên; `Clock` bean |
 | `UploadSignature.expiresAt`, `VenueImageUploadSignatureResponse.expiresAt` | `OffsetDateTime` | `LocalDateTime` |
 | `VenueImageServiceImpl`, `VenueImageCleanupServiceImpl` | `clock.instant()`; mặc định `Clock.systemUTC()` | Giữ `Instant` (ngoại lệ §2.1); đổi mặc định sang `Clock` bean |
 | `MinAgeValidator` | `LocalDate.now()` | `AppTime.today()` |
@@ -224,7 +241,7 @@ USER-001/002: `AdminTeamResponse`, `AdminTeamSummaryResponse`, `CaptainHistoryRe
 
 ### 6.6. Cấu hình
 
-`application.properties`: không đổi. Không thêm Maven dependency.
+`application.properties`: không đổi. Không thêm Maven dependency. `pom.xml` / `api/pom.xml`: ghim `user.timezone` cho JVM test và `spring-boot:run` (§2.2).
 
 ## 7. Schema — migration `V6__vietnam_local_datetime.sql`
 
@@ -298,13 +315,17 @@ Tổng: 51 cột, 27 DEFAULT (V1 có 28 `DEFAULT NOW()`, trừ `team_tag.created
 
 | # | Loại | Kiểm |
 |---|---|---|
-| 1 | Unit `AppTimeTest`, `ClockConfigTest` | `AppTime.now()` cắt micro giây, zone `Asia/Ho_Chi_Minh`; bean `Clock` có zone đó và tick 1 µs |
-| 2 | Integration migration `VietnamLocalDatetimeMigrationTest` (`@SpringBootTest`, `ddl-auto=none`, Neon branch riêng) | (a) `information_schema.columns WHERE table_schema = current_schema()`: 0 cột `data_type = 'timestamp with time zone'`; 51 cột liệt kê ở §7 là `timestamp without time zone`. (b) 27 `column_default` chứa `AT TIME ZONE 'Asia/Ho_Chi_Minh'`. (c) Trong transaction, `SET LOCAL TimeZone = 'GMT'`, INSERT `"user"` bỏ `created_at` → `created_at` cách `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'` < 5 giây (DEFAULT đúng giờ VN dù phiên GMT) |
-| 3 | Integration giữ thời điểm khi chuyển (schema tạm) | Flyway lập trình vào schema tạm `sys002_<ngẫu nhiên>`: `target=5` → INSERT `match` với `'2026-11-20 12:00:00+00'`, `team_member` với `invited_at < joined_at` → `target=6` → đọc ra `2026-11-20 19:00:00`, CHECK vẫn đúng → `DROP SCHEMA … CASCADE` trong `finally`. Điểm nội bộ, developer kiểm: role có quyền `CREATE SCHEMA` trên Neon branch [Unverified]; không có → tạo branch thứ hai từ trạng thái V5 (xin phép) hoặc bỏ test này, giữ #2 |
+| 1 | Unit `AppTimeTest`, `ClockConfigTest` | `AppTime.now()` cắt micro giây và bằng giờ hiện tại của JVM; `today()` = ngày hiện tại; JVM chạy test có timezone `Asia/Ho_Chi_Minh` (`jvmRunningTestsUsesVietnamTimeZone` — chứng minh `argLine` của surefire); bean `Clock` theo zone JVM và tick 1 µs |
+| 1b | Unit `NoExplicitTimeZoneTest` (`api` test, quét tĩnh `*/src/main/java` 4 module) | Không có `ZoneId.of(`, `ZoneOffset.`, `TimeZone.getTimeZone(`, `Clock.systemUTC()`, `"Asia/Ho_Chi_Minh"`, `zone =` trong `@Scheduled`; kèm test tự kiểm mẫu bắt đủ từng cách |
+| 1c | Unit `EntityTimeTypesTest` (`domain`, reflection) | 22 entity + 9 projection: không field/getter `OffsetDateTime`/`Instant`/`ZonedDateTime`; field thời điểm §5.1 là `LocalDateTime`; callback ghi giờ hiện tại cắt micro giây |
+| 2 | Integration migration `VietnamLocalDatetimeMigrationTest` (`@SpringBootTest`, `ddl-auto=none`, Neon branch riêng) | (a) `information_schema.columns WHERE table_schema = current_schema()`: 0 cột `data_type = 'timestamp with time zone'`; mọi cặp bảng.cột của §7 (danh sách dùng chung `migration/V6TimestampColumns`) là `timestamp without time zone` — assert `containsAll`, không chốt tổng số để migration sau thêm cột không làm test đỏ. (b) DEFAULT của các cột §7 chứa `AT TIME ZONE 'Asia/Ho_Chi_Minh'` (chỉ quét 22 bảng của V6, không quét `flyway_schema_history`). (c) Trong transaction, `SET LOCAL TimeZone = 'GMT'`, INSERT `"user"` bỏ `created_at` → `created_at` cách `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'` < 5 giây (DEFAULT đúng giờ VN dù phiên GMT) |
+| 2b | Unit `VietnamLocalDatetimeMigrationScriptTest` (đọc V6 từ classpath, không DB) | Đủ 22 `ALTER TABLE`, 51 cột `TYPE TIMESTAMP USING … AT TIME ZONE 'Asia/Ho_Chi_Minh'`, 27 `SET DEFAULT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')`, không `now()` trần — bù cho test DB chỉ chạy ở giai đoạn tích hợp |
+| 3 | ~~Integration giữ thời điểm khi chuyển (schema tạm)~~ — **bỏ** | V1 không chạy được trên schema trống (`INSERT INTO sport (name, is_active)` không có `id`, `sport.id` không DEFAULT) → Flyway `target=5` vào schema tạm thất bại. Giữ #2 (user chốt 2026-11-21) |
 | 4 | Integration repository | Projection native trả `LocalDateTime` đúng giá trị đã ghi (vd `TeamRepository.findDetailById`, `VenueRepository` V5) — quyết định kiểu getter §5.2; ghi nhận `SELECT current_setting('TimeZone')` của phiên ứng dụng (log, không assert) |
 | 5 | Unit JSON (`ResponseDtoJsonTest`, `SecurityErrorHandlersTest` — sửa) | `LocalDateTime.of(2026,11,20,19,0)` → `"2026-11-20T19:00:00"`; có micro giây → `"…19:00:00.123456"`; 500 ms → `"…19:00:00.5"`; 120 ms → `"…19:00:00.12"`; `ErrorResponse.timestamp` không có `Z`/offset |
-| 6 | MVC test request (viết trước khi sửa handler — §6.1) | (a) Body `datetime` kèm `Z` / `+07:00` → `400 VALIDATION_ERROR`, `validationErrors[0].field` = tên field (vd `"startsAt"`, phần tử mảng `"timeOptions[0].startsAt"`); dạng không offset → nhận. Nếu Jackson 3 mặc định vẫn nhận `Z` (test đỏ) → thêm `JsonTimeConfig` (§2.5). Dùng DTO test tạm nếu chưa có request có `LocalDateTime` (code hiện tại chưa có). (b) USER-001 2.6 `dateOfBirth: "15/05/1995"` → `field = "dateOfBirth"`; field số/enum sai kiểu → tên field. (c) JSON sai cú pháp / body rỗng → `field = "body"`. Hiện không có test nào assert `"body"` (grep `main` `2787ecc`) |
-| 7 | Unit service có mốc | `VenueAlertServiceImpl` với `Clock.fixed(…, AppTime.ZONE)`: ngưỡng 180 ngày tính theo giờ VN (venue chọn lúc 19:00 VN đúng 180 ngày trước → biên); `CloudinaryImageUploadSigner.expiresAt` = giờ VN của `timestamp + TTL` |
+| 6 | Unit `RequestBodyReadErrorTest` (MockMvc standalone, controller + DTO test tạm; `JsonTestSupport` dựng `JsonMapper` qua customizer của `JsonTimeConfig` và `JsonNumberConfig` — repo không có `@WebMvcTest`) | (a) Body `datetime` kèm `Z` / `+07:00` → `400 VALIDATION_ERROR`, `validationErrors[0].field` = tên field (vd `"startsAt"`, phần tử mảng `"timeOptions[0].startsAt"`); dạng không offset → nhận nguyên giá trị. (b) `dateOfBirth: "15/05/1995"` → `field = "dateOfBirth"`; field số/enum/UUID sai kiểu → tên field. (c) Số nguyên (`Integer`, `Long`, `int` nguyên thuỷ): số nguyên → nhận; `4.5`, `4.0`, `"4"` → `400`, `field` = đường dẫn field (kể cả trong phần tử mảng); `""` → `null` với `Integer`/`Long`, `400` với `int`. (d) JSON sai cú pháp / body rỗng → `field = "body"`. Red ban đầu: `field = "body"`, `Z` → 200, `4.5` → 200 |
+| 6b | Integration `JsonMapperIntegrationTest` (`ApiIntegrationTest`, cần context + DB) | `JsonMapper` thật của Spring Boot đã nhận 2 customizer: `LocalDateTime` kèm `Z` bị từ chối; số thập phân / chuỗi vào field số nguyên bị từ chối |
+| 7 | Unit service có mốc | `VenueAlertServiceImpl` với `Clock.fixed(…, ZoneId.systemDefault())`: ngưỡng 180 ngày tính theo giờ hiện tại (venue chọn đúng 180 ngày trước → biên); `CloudinaryImageUploadSigner.expiresAt` = giờ địa phương (zone của `Clock`) của `timestamp + TTL` |
 | 8 | Hồi quy | Toàn bộ test hiện có đổi `OffsetDateTime`/`Instant` fixture sang `LocalDateTime` (trừ ngoại lệ epoch §2.1); `NfsWriteQueryCountTest`, `VenueNfsQueryCountTest` — số câu SQL không đổi. **SQL trong test dùng `now()` trần** ghi cột thời gian → đổi sang `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'` hoặc tham số Java (§2.3) — trên `main` `2787ecc`: `VenueControllerTest.java:239, 283, 310`, `AdminVenueControllerTest.java:31, 91`, `VenueSelectionIntegrationTest.java:59, 69`, `VenueStaleAlertRaceTest.java:72` (`now()` thường), `UserTeamMigrationTest.java:51` |
 
 ## 9. Tài liệu cần đồng bộ
@@ -319,6 +340,11 @@ Thứ tự bắt buộc: (b) PR #75 merge, rebase, sửa §9.1 — **đã xong 2
 | (a) `docs/agent/convention-backend.md` (trên `main` `2787ecc`: l.286–303 entity mẫu + quy tắc Timestamp, 367–368 DTO mẫu, 410, 431 `ErrorResponse` mẫu, **l.479 `@SQLDelete(sql = "UPDATE arenas SET deleted_at = NOW() …")` phải đổi** sang `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`), `api-convention.md` (l.121, 395 + quy tắc định dạng thời gian ở §10), `security-backend.md` (l.377), `docs/agent/README.md` (l.132), `docs/agent/CLAUDE.md` §2 (thêm dòng trỏ `docs/agent/design/SYSTEM-002/`) | Thay quy ước `OffsetDateTime`/`timestamptz`/ví dụ `Z` bằng §2 | Nhánh riêng `chore/agent-framework-vietnam-local-datetime`, **sau khi thiết kế được duyệt, trước khi code** |
 | (b) USER-001, VENUE-001, `docs/database/{schema.dbml,schema-design.md,data-model.md}` | Như các mã trên + V6 vào tài liệu DB | **Đã sửa 2026-11-21** sau khi PR #75 merge (`61aa100`) và rebase — chi tiết §9.1 |
 | ADR-0011, ADR-0013, ADR-0014 (Accepted) | Mục `Sửa đổi` theo ADR-0017 §Sửa đổi đề xuất | **Đã áp 2026-11-21** cùng PR chuyển ADR-0017 sang `Accepted` (v1.1) |
+| `docs/agent/decisions/0018-jvm-time-zone-as-single-clock-source.md` | ADR mới: "bây giờ" theo timezone JVM, cron không khai zone (§2.2, §2.4) — thay quyết định 3, 6 của ADR-0017 | **v1.2** — cùng nhánh này; **đã** `Accepted` qua PR SYSTEM-002 (#84) |
+| ADR-0017 | Giữ `Accepted`; hàng `Liên quan` trỏ ADR-0018 (quyết định 3, 6). Khi ADR-0018 `Accepted` — theo tiền lệ ADR-0002 / ADR-0005: (1) hàng `Liên quan` bỏ "đề xuất" và "(Proposed)"; (2) thêm hàng `Sửa đổi` + mục `## Sửa đổi <ngày> — Quyết định 3, 6 thay bởi ADR-0018` ghi: dòng Hệ quả "Mốc nghiệp vụ và cron theo giờ Việt Nam tường minh" thôi áp dụng — mốc nghiệp vụ và cron nay theo giờ Việt Nam khi JVM chạy `Asia/Ho_Chi_Minh` (ADR-0018), vế "test cố định `Clock` được" vẫn đúng; "Cần theo dõi" đổi tại biên bằng zone của bean `Clock` thay `AppTime.ZONE`; phương án đã loại "`LocalDateTime.now()` theo JVM" nay được dùng lại kèm điều kiện vận hành của ADR-0018 (quyết định 4–5) | **Đã áp** cùng PR SYSTEM-002 (#84): hàng `Liên quan`, hàng + mục `Sửa đổi 2026-11-23` |
+| VENUE-001 `Component_Class_Design.md` | Bỏ `zone = AppTime.ZONE_ID` ở 2 scheduler; `expiresAt` đổi bằng `clock.getZone()` | **v1.2** — VENUE-001 v6.1 |
+| (c) `docs/agent/convention-backend.md` §6.2 (bảng "bây giờ", dòng test `Clock.fixed(…, AppTime.ZONE)`, quy tắc Job `zone = AppTime.ZONE_ID`, dòng JSON: thêm quy tắc số nguyên chặt §2.5, checklist l.645), §2.4 (miễn Javadoc riêng cho getter projection — user chốt 2026-11-23); `docs/agent/api-convention.md` (kiểu dữ liệu: field `integer` chỉ nhận số nguyên JSON, `""` đọc như `null` — §2.5); `convention-backend.md` mục request DTO (field số nguyên dùng `Integer`/`Long`, không kiểu nguyên thuỷ — §2.5); `docs/agent/README.md` l.132 | Theo ADR-0018 và §2.5 | Nhánh `chore/agent-framework-…` riêng, sau khi commit SYSTEM-002 |
+| MATCH-001, NOTIFICATION-001, REPUTATION-001 `Component_Class_Design.md` (còn `AppTime.ZONE` / `zone = AppTime.ZONE_ID`) | Theo ADR-0018 | Sửa trên nhánh của từng mã khi rebase lên `main` có SYSTEM-002 (cùng quy tắc tích hợp code: test → `ZoneId.systemDefault()`, service → `clock.getZone()`, bỏ `zone =`, lấy `AppTime`/`ClockConfig` bản SYSTEM-002 — user chốt 2026-11-23) |
 
 ### 9.1. Đã sửa sau khi PR #75 merge (2026-11-21, đối chiếu bản trên `main` `61aa100`)
 
@@ -332,4 +358,8 @@ Thứ tự bắt buộc: (b) PR #75 merge, rebase, sửa §9.1 — **đã xong 2
 
 Không còn điểm chờ user. Đã chốt 2026-11-21 (user): ngoại lệ epoch giữ `Instant` nội bộ (§2.1); request kèm `Z`/offset → `400` (§2.5); chưa có production — Render dev chạy trên DB dev chung, deploy lại ngay sau khi V6 áp lên DB dev; FE phát hành trước / BE sau và điểm khôi phục Neon áp khi có production (`Processing_Flow.md` §4.1); hoãn USER-001/VENUE-001/`docs/database/` tới sau PR #75 (§9); integration test trên Neon branch riêng, DB dev chung nhận V6 khi PR merge (§1.1, §8); nhánh framework riêng (§9); Sửa đổi ADR áp khi ADR-0017 Accepted và PR #75 merge (§9); dời số migration V6–V11 → V7–V12 (§1.1).
 
-Điểm nội bộ, developer kiểm bằng test (không chặn): quyền `CREATE SCHEMA` trên Neon branch (§8 #3); kiểu Java Hibernate 7.2 trả cho cột `TIMESTAMP` trong native query (§5.2, §8 #4); Jackson 3 mặc định có nhận `Z` không (§2.5, §8 #6); lớp / method Jackson 3 lấy đường dẫn field (`MismatchedInputException#getPath`) (§6.1, §8 #6).
+Chốt thêm khi code (user, 2026-11-21 – 2026-11-23): "bây giờ" theo timezone JVM, bỏ zone trong code (§2.2, §2.4, ADR-0018); đọc số nguyên chặt toàn ứng dụng (§2.5); bỏ test #3 (§8).
+
+Điểm nội bộ đã kiểm khi code: Jackson 3 mặc định **nhận** `Z` → đã tạo `JsonTimeConfig` (§2.5); `getPath()` ở `JacksonException`, lấy `MismatchedInputException` đầu tiên (§6.1); quyền `CREATE SCHEMA` không còn cần (test #3 bỏ).
+
+Còn kiểm ở giai đoạn tích hợp (không chặn): kiểu Java Hibernate 7.2 trả cho cột `TIMESTAMP` trong native query (§5.2, §8 #4); `JsonMapper` của Spring Boot nhận 2 customizer (§8 #6b); `spring-boot:run` nhận `user.timezone` (§2.2).

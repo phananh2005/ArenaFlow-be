@@ -7,16 +7,18 @@ import com.phananh.arenaflow.application.support.venue.VenueAlertProperties;
 import com.phananh.arenaflow.domain.projection.StaleVenueView;
 import com.phananh.arenaflow.domain.repository.VenueRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Cảnh báo Admin về địa điểm lâu không được chọn (quá số ngày cấu hình tính từ "bây giờ" của bean {@code Clock}),
+ * xử lý theo batch.
+ */
 @Slf4j
 @Service
 public class VenueAlertServiceImpl implements VenueAlertService {
@@ -26,12 +28,6 @@ public class VenueAlertServiceImpl implements VenueAlertService {
     private final TransactionTemplate transactionTemplate;
     private final VenueAlertProperties properties;
     private final Clock clock;
-
-    @Autowired
-    public VenueAlertServiceImpl(VenueRepository venueRepository, ApplicationEventPublisher eventPublisher,
-                                 TransactionTemplate transactionTemplate, VenueAlertProperties properties) {
-        this(venueRepository, eventPublisher, transactionTemplate, properties, Clock.systemUTC());
-    }
 
     public VenueAlertServiceImpl(VenueRepository venueRepository, ApplicationEventPublisher eventPublisher,
                                  TransactionTemplate transactionTemplate, VenueAlertProperties properties, Clock clock) {
@@ -48,8 +44,8 @@ public class VenueAlertServiceImpl implements VenueAlertService {
      */
     @Override
     public int alertStaleVenues() {
-        OffsetDateTime now = OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
-        OffsetDateTime threshold = now.minusDays(properties.staleDays());
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime threshold = now.minusDays(properties.staleDays());
         int alerted = 0;
         for (int batch = 0; batch < properties.maxBatchesPerRun(); batch++) {
             List<StaleVenueView> claimed;

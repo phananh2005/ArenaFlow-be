@@ -2,11 +2,12 @@ package com.phananh.arenaflow.domain.entity.team;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Entity đội: kiểu id, người tạo, trạng thái giải tán và metadata giải tán. */
 class TeamEntityTest {
 
     @Test
@@ -49,7 +50,7 @@ class TeamEntityTest {
                 .inactiveReason("Vi phạm quy định")
                 .build();
         UUID captainId = UUID.randomUUID();
-        OffsetDateTime disbandedAt = OffsetDateTime.now();
+        LocalDateTime disbandedAt = LocalDateTime.of(2026, 11, 20, 19, 0);
 
         team.setStatus(Team.TeamStatus.DISBANDED);
         team.setDisbandReason("Đội trưởng giải tán đội");

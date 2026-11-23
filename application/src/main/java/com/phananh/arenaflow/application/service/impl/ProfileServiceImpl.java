@@ -18,10 +18,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+/** Hồ sơ người dùng: xem, cập nhật, xoá tài khoản; thời điểm xoá lấy từ bean {@code Clock}. */
 @Service
 @RequiredArgsConstructor
 public class ProfileServiceImpl implements ProfileService {
@@ -36,6 +38,7 @@ public class ProfileServiceImpl implements ProfileService {
     private final TeamMemberRepository teamMemberRepository;
     private final ConcurrencyConflictRetrier concurrencyConflictRetrier;
     private final ProfileMapper profileMapper;
+    private final Clock clock;
 
     @Override
     @Transactional(readOnly = true)
@@ -81,7 +84,7 @@ public class ProfileServiceImpl implements ProfileService {
             if (openMemberships.stream().anyMatch(ProfileServiceImpl::isActiveCaptain)) {
                 throw new BusinessException(ErrorCode.USER_003);
             }
-            OffsetDateTime now = OffsetDateTime.now();
+            LocalDateTime now = LocalDateTime.now(clock);
             teamMemberRepository.leaveAndRejectAllOpen(userId, now);
             userRepository.softDelete(userId, now);
             return null;

@@ -5,7 +5,8 @@
 | **Trạng thái** | Accepted (chủ repo chốt 2026-11-21) |
 | **Ngày** | 2026-11-21 |
 | **Người quyết định** | Chủ repo (chốt kiểu dữ liệu, giờ Việt Nam, JSON không offset, migration V6 — 2026-11-20/21; chốt ngoại lệ epoch, từ chối offset, thứ tự phát hành, số migration — 2026-11-21) · solution-architect (đề xuất cách thực hiện) |
-| **Liên quan** | SRS `docs/agent/business-spec/SYSTEM-001/` v1.13 BC-M05 · `docs/agent/design/SYSTEM-002/` · [ADR-0011](0011-domain-events-after-commit.md) (`occurredAt` — Sửa đổi 2026-11-21) · [ADR-0013](0013-reputation-columns-atomic-update.md), [ADR-0014](0014-realtime-chat-stomp-websocket.md), [ADR-0016](0016-user-name-search-fold-tsvector-gin.md) (số migration) · [ADR-0001](0001-jwt-authentication-strategy.md), [ADR-0008](0008-uuid-v7-primary-keys.md), [ADR-0009](0009-cloudinary-signed-direct-upload.md) (giá trị epoch giữ nguyên) |
+| **Liên quan** | SRS `docs/agent/business-spec/SYSTEM-001/` v1.13 BC-M05 · `docs/agent/design/SYSTEM-002/` · [ADR-0011](0011-domain-events-after-commit.md) (`occurredAt` — Sửa đổi 2026-11-21) · [ADR-0013](0013-reputation-columns-atomic-update.md), [ADR-0014](0014-realtime-chat-stomp-websocket.md), [ADR-0016](0016-user-name-search-fold-tsvector-gin.md) (số migration) · [ADR-0001](0001-jwt-authentication-strategy.md), [ADR-0008](0008-uuid-v7-primary-keys.md), [ADR-0009](0009-cloudinary-signed-direct-upload.md) (giá trị epoch giữ nguyên) · Quyết định 3, 6 thay bởi [ADR-0018](0018-jvm-time-zone-as-single-clock-source.md) |
+| **Sửa đổi** | 2026-11-23 — Quyết định 3, 6 hết hiệu lực, thay bởi ADR-0018 (mục `Sửa đổi 2026-11-23` cuối file) |
 
 ## Bối cảnh (Context)
 - SRS cũ: "lưu UTC trong DB, frontend đổi theo múi giờ thiết bị". Code đang dùng `OffsetDateTime` + cột `TIMESTAMPTZ`; response trộn `Z` (đọc qua projection) và `+07:00` (giá trị `OffsetDateTime.now()` theo JVM).
@@ -62,3 +63,13 @@ Chúng tôi sẽ:
 | ADR-0014 | Accepted | Mục Sửa đổi: số migration V6/V7/V9 → V7/V8/V10; cột thời gian của bảng chat là `TIMESTAMP` giờ Việt Nam |
 | ADR-0016 | Proposed | Đã sửa trực tiếp: V11 → V12, V5–V10 → V5–V11 |
 | ADR-0001, ADR-0008, ADR-0009 | Accepted | Không sửa: `iat`/`exp`, bit thời gian UUID v7, `timestamp`/`signedAt` của Cloudinary là epoch — ngoại lệ ở Quyết định 7 |
+
+## Sửa đổi 2026-11-23 — Quyết định 3, 6 thay bởi ADR-0018
+
+**Bối cảnh.** Khi code SYSTEM-002, chủ repo chốt bỏ zone tường minh trong code (2026-11-21) và ghim timezone JVM cho test / `spring-boot:run` (2026-11-23); quyết định được ghi thành [ADR-0018](0018-jvm-time-zone-as-single-clock-source.md), `Accepted` qua PR SYSTEM-002 (#84).
+
+**Thay đổi hiệu lực** (thân ADR này giữ nguyên, đọc theo các điểm dưới):
+- **Quyết định 3 và 6** hết hiệu lực, thay bởi ADR-0018: "bây giờ" lấy theo timezone JVM (JVM luôn chạy `Asia/Ho_Chi_Minh`), `AppTime` không còn hằng zone, `@Scheduled(cron)` không khai `zone`. Quyết định 1, 2, 4, 5, 7 giữ nguyên.
+- **Hệ quả tích cực** "Mốc nghiệp vụ và cron theo giờ Việt Nam tường minh" thôi áp dụng — mốc nghiệp vụ và cron nay theo giờ Việt Nam khi JVM chạy `Asia/Ho_Chi_Minh` (ADR-0018); vế "test cố định `Clock` được" vẫn đúng.
+- **Cần theo dõi** "đổi tại biên tích hợp bằng `AppTime.ZONE`" → đổi bằng zone của bean `Clock`.
+- **Phương án đã loại** "`LocalDateTime.now()` theo JVM" nay được dùng lại, kèm điều kiện vận hành của ADR-0018 (quyết định 4–5: ghim timezone JVM ở mọi nơi chạy code, test chặn zone trong code).

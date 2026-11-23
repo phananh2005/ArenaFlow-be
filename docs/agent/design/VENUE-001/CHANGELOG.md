@@ -1,5 +1,21 @@
 # CHANGELOG — VENUE-001 Quản lý địa điểm sân
 
+## [v6.1] — 2026-11-23
+
+**Type:** MINOR (không đổi endpoint, field, mã lỗi, message; tương thích ngược, trừ: 2.5 `version` gửi dạng chuỗi / có phần thập phân trước được nhận nay `400`) · **Tóm tắt:** 2.5 `version` chỉ nhận số nguyên JSON theo SYSTEM-002 v1.2; cập nhật tài liệu nội bộ BE (nguồn giờ của job và hạn chữ ký upload).
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | 2.5 `version` | Thêm ràng buộc | Nhận cả `"1794193260"` và `1794193260.0` → chỉ nhận số nguyên JSON; còn lại `400 VALIDATION_ERROR`, `field = "version"` | SYSTEM-002 v1.2 — field `integer` trong body chỉ nhận số nguyên JSON | Gửi nguyên số `version` Cloudinary trả về dạng số JSON, không đổi sang chuỗi |
+| 2 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | SYSTEM-002 v1.2 | Không |
+| 3 | Header 3 tài liệu | Ghi nhận | v6.0 → v6.1 | Đánh phiên bản theo entry này | — |
+
+### Ảnh hưởng
+- API contract VENUE-001: không đổi endpoint, field, mã lỗi; 2.5 `version` chặt hơn (#1). `expiresAt` vẫn là giờ Việt Nam, hạn 1 giờ.
+- Nghiệp vụ / SRS: không đổi.
+
 ## [v6.0] — 2026-11-22
 
 **Type:** MAJOR (2.1, 2.12 thêm mã lỗi `403 VENUE_017` cho `phone` / `website` từ người không phải Admin; 2.2 từ chối `status=INACTIVE` / `ALL` bằng `400 VENUE_018`, kể cả Admin; thêm endpoint 2.14) · **Tóm tắt:** Điện thoại / website địa điểm chỉ Admin nhập, sửa, xoá; danh sách người dùng chỉ có địa điểm `ACTIVE`, Admin xem mọi địa điểm qua endpoint riêng (SRS `SYSTEM-001` v1.14 — BR-V12, BR-V13, UC-V07, AC-V06; user chốt 2026-11-22).

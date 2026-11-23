@@ -10,8 +10,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Optional;
@@ -35,12 +34,9 @@ public class CloudinaryImageUploadSigner implements ImageUploadSigner {
     private final Clock clock;
     private final SecureRandom secureRandom;
 
+    /** Constructor cho Spring: nonce sinh bằng {@link SecureRandom} mặc định. */
     @Autowired
-    public CloudinaryImageUploadSigner(CloudinaryProperties properties) {
-        this(properties, Clock.systemUTC());
-    }
-
-    CloudinaryImageUploadSigner(CloudinaryProperties properties, Clock clock) {
+    public CloudinaryImageUploadSigner(CloudinaryProperties properties, Clock clock) {
         this(properties, clock, new SecureRandom());
     }
 
@@ -55,6 +51,13 @@ public class CloudinaryImageUploadSigner implements ImageUploadSigner {
         return properties.isConfigured();
     }
 
+    /**
+     * Ký upload một ảnh vào {@code scopePath}: {@code public_id} gắn thời điểm ký (epoch giây), nonce và tag ràng buộc
+     * người upload; chữ ký hết hạn sau 1 giờ. {@code timestamp} giữ epoch giây (Cloudinary yêu cầu),
+     * {@code expiresAt} đổi sang giờ địa phương theo zone của bean {@code Clock}.
+     *
+     * @throws IllegalStateException khi chưa cấu hình Cloudinary
+     */
     @Override
     public UploadSignature signUpload(String scopePath, UUID uploaderId) {
         requireConfigured();
@@ -68,7 +71,7 @@ public class CloudinaryImageUploadSigner implements ImageUploadSigner {
         return new UploadSignature("https://api.cloudinary.com/v1_1/" + properties.cloudName() + "/image/upload",
                 properties.cloudName(), properties.apiKey(), publicId, timestamp, ALLOWED_FORMATS, false,
                 sha1Hex(parameters + properties.apiSecret()),
-                OffsetDateTime.ofInstant(now.plusSeconds(SIGNATURE_TTL_SECONDS), ZoneOffset.UTC));
+                LocalDateTime.ofInstant(now.plusSeconds(SIGNATURE_TTL_SECONDS), clock.getZone()));
     }
 
     @Override

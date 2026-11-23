@@ -29,7 +29,7 @@ class AdminVenueControllerTest extends ApiIntegrationTest {
         UUID wrongInfo = report(reporter, venueId, "WRONG_INFO");
         UUID closed = report(reporter, venueId, "CLOSED");
         report(reporter, otherVenueId, "OTHER");
-        jdbcTemplate.update("UPDATE \"user\" SET deleted_at = NOW() WHERE id = ?", reporter.getId());
+        jdbcTemplate.update("UPDATE \"user\" SET deleted_at = (now() AT TIME ZONE 'Asia/Ho_Chi_Minh') WHERE id = ?", reporter.getId());
         flush();
 
         mockMvc.perform(as(reporter, get("/api/v1/admin/venue-reports")))
@@ -88,7 +88,7 @@ class AdminVenueControllerTest extends ApiIntegrationTest {
         String token = "AdmList" + UUID.randomUUID().toString().substring(0, 8);
         UUID activeId = createVenue(user, token + " A");
         UUID inactiveId = createVenue(user, token + " B");
-        jdbcTemplate.update("UPDATE venue SET status = 'INACTIVE', admin_verified_inactive_at = NOW() WHERE id = ?",
+        jdbcTemplate.update("UPDATE venue SET status = 'INACTIVE', admin_verified_inactive_at = (now() AT TIME ZONE 'Asia/Ho_Chi_Minh') WHERE id = ?",
                 inactiveId);
         flush();
 
@@ -119,7 +119,7 @@ class AdminVenueControllerTest extends ApiIntegrationTest {
         UUID venueId = createVenue(creator, "Sân ngừng hoạt động");
         UUID closed = report(reporter, venueId, "CLOSED");
         UUID wrongInfo = report(reporter, venueId, "WRONG_INFO");
-        jdbcTemplate.update("UPDATE \"user\" SET deleted_at = NOW() WHERE id = ?", creator.getId());
+        jdbcTemplate.update("UPDATE \"user\" SET deleted_at = (now() AT TIME ZONE 'Asia/Ho_Chi_Minh') WHERE id = ?", creator.getId());
         flush();
 
         mockMvc.perform(as(reporter, patch("/api/v1/admin/venues/" + venueId + "/mark-inactive")))

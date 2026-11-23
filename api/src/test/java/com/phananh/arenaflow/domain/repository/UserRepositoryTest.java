@@ -1,5 +1,6 @@
 package com.phananh.arenaflow.domain.repository;
 
+import com.phananh.arenaflow.common.time.AppTime;
 import com.phananh.arenaflow.domain.entity.user.OAuthAccount;
 import com.phananh.arenaflow.domain.entity.user.User;
 import com.phananh.arenaflow.domain.projection.ProfileView;
@@ -9,12 +10,12 @@ import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Truy vấn user trên DB thật: id UUID v7, lọc user đã xoá mềm, hồ sơ kèm địa giới, xoá mềm idempotent. */
 class UserRepositoryTest extends RepositoryIntegrationTest {
 
     static final UUID HCM_PROVINCE = UUID.fromString("00000000-0000-7000-8000-000000000001");
@@ -44,7 +45,7 @@ class UserRepositoryTest extends RepositoryIntegrationTest {
     void findsOnlyNotDeletedUserById() {
         User active = userRepository.save(newUser("Active", null));
         User deleted = newUser("Deleted", null);
-        deleted.setDeletedAt(OffsetDateTime.now());
+        deleted.setDeletedAt(AppTime.now());
         userRepository.save(deleted);
         flushAndClear();
 
@@ -80,7 +81,7 @@ class UserRepositoryTest extends RepositoryIntegrationTest {
     void profileViewHasNullWardWhenNotChosenAndIsEmptyForDeletedUser() {
         User noWard = userRepository.save(newUser("No Ward", null));
         User deleted = newUser("Deleted", null);
-        deleted.setDeletedAt(OffsetDateTime.now());
+        deleted.setDeletedAt(AppTime.now());
         userRepository.save(deleted);
         flushAndClear();
 
@@ -94,8 +95,8 @@ class UserRepositoryTest extends RepositoryIntegrationTest {
         User user = userRepository.save(newUser("To Delete", null));
         flushAndClear();
 
-        assertThat(userRepository.softDelete(user.getId(), OffsetDateTime.now())).isEqualTo(1);
-        assertThat(userRepository.softDelete(user.getId(), OffsetDateTime.now())).isZero();
+        assertThat(userRepository.softDelete(user.getId(), AppTime.now())).isEqualTo(1);
+        assertThat(userRepository.softDelete(user.getId(), AppTime.now())).isZero();
         flushAndClear();
         assertThat(userRepository.findByIdAndDeletedAtIsNull(user.getId())).isEmpty();
     }

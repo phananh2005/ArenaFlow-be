@@ -28,6 +28,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -44,6 +48,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/** Nghiệp vụ thành viên đội: thứ tự kiểm lỗi, mời, chấp nhận/từ chối, rời đội, đội đã giải tán. */
 class TeamMembershipServiceImplTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
@@ -58,13 +63,17 @@ class TeamMembershipServiceImplTest {
     private final UUID inviteeId = UUID.randomUUID();
     private final UUID invitationId = UUID.randomUUID();
 
+    /** 20:00 UTC ngày 19 = 03:00 giờ Việt Nam ngày 20. */
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-19T20:00:00Z"), ZoneId.systemDefault());
+    private static final LocalDateTime NOW_VN = LocalDateTime.of(2026, 11, 20, 3, 0);
+
     private TeamMembershipServiceImpl service;
 
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
         service = new TeamMembershipServiceImpl(userRepository, teamMemberRepository, retrier,
-                membershipMapper, new PageRequestFactory(), new TeamGuard(teamRepository, teamMemberRepository));
+                membershipMapper, new PageRequestFactory(), new TeamGuard(teamRepository, teamMemberRepository), CLOCK);
         when(retrier.execute(any())).thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(0)).get());
     }
 
@@ -188,7 +197,7 @@ class TeamMembershipServiceImplTest {
         MemberResponse response = service.acceptInvitation(invitationId, inviteeId);
 
         assertThat(invitation.getStatus()).isEqualTo(TeamMember.Status.ACTIVE);
-        assertThat(invitation.getJoinedAt()).isNotNull();
+        assertThat(invitation.getJoinedAt()).isEqualTo(NOW_VN);
         verify(teamMemberRepository).save(invitation);
         assertThat(response.displayName()).isEqualTo("Invitee");
         assertThat(response.status()).isEqualTo("ACTIVE");
@@ -248,7 +257,7 @@ class TeamMembershipServiceImplTest {
         service.leaveTeam(teamId, inviteeId);
 
         assertThat(active.getStatus()).isEqualTo(TeamMember.Status.LEFT);
-        assertThat(active.getLeftAt()).isNotNull();
+        assertThat(active.getLeftAt()).isEqualTo(NOW_VN);
         verify(teamMemberRepository).save(active);
     }
 
