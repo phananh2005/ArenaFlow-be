@@ -1,5 +1,20 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v5.1] — 2026-11-23
+
+**Type:** MINOR (không đổi endpoint, field, mã lỗi, message; tương thích ngược, trừ: field `integer` trong body gửi số thập phân / chuỗi số trước được nhận nay `400`) · **Tóm tắt:** Bảng lỗi chung §1.2 ghi quy tắc field `integer` chỉ nhận số nguyên JSON (SYSTEM-002 v1.2).
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | `API_Spec.md` §1.2 dòng `400 VALIDATION_ERROR` | Thêm ràng buộc | Field `integer` trong body gửi `4.5` (cắt thành `4`), `4.0`, `"4"` được nhận → `400 VALIDATION_ERROR`, `field` = đường dẫn field; `""` đọc như `null` | SYSTEM-002 v1.2 — giá trị bị cắt âm thầm làm sai dữ liệu | Gửi số nguyên JSON cho field `integer`; các endpoint của USER-001 hiện không có field `integer` trong body nên không phải sửa request đang có |
+| 2 | Header 3 tài liệu thiết kế | Ghi nhận | v5.0 → v5.1 | Phiên bản ở header khớp entry mới nhất | Không |
+
+### Ảnh hưởng
+- API contract USER-001: không đổi endpoint, field, mã lỗi; quy tắc áp cho mọi mã kế thừa bảng lỗi chung.
+- Nghiệp vụ / SRS: không đổi.
+
 ## [v5.0] — 2026-11-21
 
 **Type:** MAJOR (đổi định dạng mọi giá trị thời gian của response: bỏ `Z`/offset, giá trị theo giờ Việt Nam; đổi `validationErrors[].field` của lỗi đọc body) · **Tóm tắt:** Thời gian theo giờ Việt Nam, không kèm múi giờ; lỗi body sai kiểu trả đúng tên field (SYSTEM-002).
