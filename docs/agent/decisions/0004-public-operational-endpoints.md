@@ -6,6 +6,7 @@
 | **Ngày** | 2026-11-03 |
 | **Người quyết định** | Product Owner (duyệt mở endpoint + chọn mặc định tắt) · developer (đề xuất) |
 | **Liên quan** | ADR-0001 · `docs/agent/design/USER-001/Component_Class_Design.md` §9.1 · `docs/agent/security-backend.md` §1.3 |
+| **Sửa đổi** | 2026-11-23 — probe liveness / readiness public, liveness không kiểm DB; `/actuator/health` thêm `groups` (tên nhóm probe) (mục `Sửa đổi 2026-11-23` cuối file) |
 
 ## Bối cảnh (Context)
 - Thiết kế USER-001 v1.0 (`Component_Class_Design.md` §9.1) chỉ cho `permitAll` `/api/v1/auth/**`; mọi đường dẫn khác cần access token (cơ chế token: ADR-0001). Mẫu `security-backend.md` §2.1 không có health/API docs trong danh sách public.
@@ -47,3 +48,21 @@ Cấu hình: `springdoc.api-docs.enabled=${SPRINGDOC_ENABLED:false}`, `springdoc
 - Expose thêm actuator endpoint (vd `prometheus`) → quyết định quy tắc truy cập riêng, không mở `permitAll`.
 - Bật `management.endpoint.health.show-details` hoặc `show-components` → xem lại vì health đang public (`show-components` làm `/actuator/health/db` trả 200 kèm trạng thái DB, trái bảng Quyết định).
 - Có API gateway / mạng nội bộ cho hạ tầng → cân nhắc đóng health khỏi internet.
+
+## Sửa đổi 2026-11-23 — probe liveness / readiness
+
+**Bối cảnh.** Cần một health check cho dịch vụ giám sát (UptimeRobot) và nền tảng deploy mà không đánh thức DB Neon (scale-to-zero) — `/actuator/health` kiểm DataSource nên mỗi lần ping đều truy vấn DB.
+
+**Quyết định bổ sung:** dùng hai nhóm probe có sẵn của Spring Boot 4 (`management.endpoint.health.probes.enabled` mặc định `true`, repo không cấu hình thêm), public qua quy tắc `permitAll` `/actuator/health/**` đã có:
+
+| Đường dẫn | Gồm | Dùng cho |
+|---|---|---|
+| `GET /actuator/health/liveness` | chỉ `livenessState` — **không** kiểm DB | Ping giữ app thức, nền tảng quyết định khởi động lại |
+| `GET /actuator/health/readiness` | chỉ `readinessState` | Nền tảng quyết định gửi traffic |
+| `GET /actuator/health` | tổng hợp (có DB); body `{"status":"UP","groups":["liveness","readiness"]}` — thêm tên nhóm probe, vẫn không có thành phần | Giám sát cần biết cả DB lỗi |
+
+Đường dẫn thành phần (`/actuator/health/db`) vẫn 404 như bảng Quyết định. Test `SecurityConfigIntegrationTest` chốt: liveness / readiness public 200 `UP`, nhóm `liveness` không chứa `db`, `/actuator/health` liệt kê `groups`.
+
+**Phương án loại:** API rỗng tự viết (`GET /ping`) — thêm endpoint và quy tắc `permitAll` mới trong khi probe có sẵn đáp ứng; bật `show-components` — lộ trạng thái DB (trái bảng Quyết định).
+
+**Hệ quả:** ping liveness không báo được khi DB lỗi — muốn cảnh báo DB thì giám sát thêm `/actuator/health` với chu kỳ dài. Nâng Spring Boot đổi mặc định probe → test trên báo đỏ. Liveness chỉ bảo đảm **bản thân lần ping** không truy vấn DB: khi ping giữ app luôn thức, job định kỳ (vd job 5 phút của MATCH-001 khi được triển khai) và pool kết nối vẫn có thể giữ DB thức — kiểm biểu đồ compute của Neon sau deploy.

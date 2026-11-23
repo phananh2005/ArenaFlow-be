@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 · v4.1: xoá tài khoản (2.7) cần bảng mercenary của V10 (MERCENARY-001 `Component_Class_Design.md` §5.1) — implement sau MERCENARY-001 phần dữ liệu |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v5.1** (developer · 2026-11-23) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v5.2** (developer · 2026-11-23) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -283,7 +283,7 @@ static String maskAvatar(String avatarUrl, Boolean deleted);   // qua DeletedUse
 | Đường dẫn | Quy tắc |
 |---|---|
 | `/api/v1/auth/**` | `permitAll` |
-| `GET /actuator/health`, `GET /actuator/health/**` | `permitAll` — health check cho hạ tầng. `/actuator/health` trả `{"status":"UP"}` (không có `components`); đường dẫn thành phần (vd `/health/db`) trả 404 vì Spring Boot mặc định ẩn thành phần. `/**` dành cho probe liveness/readiness khi bật |
+| `GET /actuator/health`, `GET /actuator/health/**` | `permitAll` — health check cho hạ tầng. `/actuator/health` trả `{"status":"UP","groups":["liveness","readiness"]}` (tên nhóm probe, không có `components`); đường dẫn thành phần (vd `/health/db`) trả 404 vì Spring Boot mặc định ẩn thành phần. `/**` cho probe: `/actuator/health/liveness` (chỉ `livenessState`, **không** kiểm DB — dùng cho ping giữ app thức / UptimeRobot) và `/actuator/health/readiness` (chỉ `readinessState`) trả `{"status":"UP"}`; Spring Boot 4 bật sẵn (`management.endpoint.health.probes.enabled` mặc định `true`), repo không cấu hình thêm |
 | `GET /v3/api-docs/**`, `GET /swagger-ui/**`, `GET /swagger-ui.html` | `permitAll` — tài liệu API cho dev FE; **mặc định tắt** (404), bật khi `SPRINGDOC_ENABLED=true` |
 | `/api/v1/admin/**` | `hasRole('ADMIN')` |
 | Còn lại | `authenticated()` — gồm actuator khác; hiện chỉ `health` được expose qua web (không cấu hình `management.endpoints.web.exposure.*`), quy tắc này là lớp chặn thứ hai khi expose thêm |

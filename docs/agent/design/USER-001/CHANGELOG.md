@@ -1,5 +1,20 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v5.2] — 2026-11-23
+
+**Type:** MINOR (không đổi endpoint, field, mã lỗi, message) · **Tóm tắt:** Ghi rõ probe health liveness / readiness có sẵn cho hạ tầng; cập nhật tài liệu nội bộ BE, không ảnh hưởng FE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Giám sát hạ tầng cần ping không đánh thức DB | Không |
+| 2 | Header 3 tài liệu thiết kế | Ghi nhận | v5.1 → v5.2 | Phiên bản ở header khớp entry mới nhất | Không |
+
+### Ảnh hưởng
+- API contract USER-001: không đổi.
+- Nghiệp vụ / SRS: không đổi.
+
 ## [v5.1] — 2026-11-23
 
 **Type:** MINOR (không đổi endpoint, field, mã lỗi, message; tương thích ngược, trừ: field `integer` trong body gửi số thập phân / chuỗi số trước được nhận nay `400`) · **Tóm tắt:** Bảng lỗi chung §1.2 ghi quy tắc field `integer` chỉ nhận số nguyên JSON (SYSTEM-002 v1.2).
