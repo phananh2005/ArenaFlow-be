@@ -26,7 +26,8 @@ public class ConcurrencyConflictRetrier {
 
     /**
      * Mỗi lần thử bọc trong {@link TransactionTemplate} (propagation REQUIRED): tối đa 3 lần khi optimistic lock xung
-     * đột hoặc deadlock (PostgreSQL huỷ một bên), hết lượt → TEAM_014. Mỗi lần gặp deadlock ghi WARN kèm SQLState để
+     * đột, câu CAS tự viết không khớp ({@link ConcurrencyConflictException}) hoặc deadlock (PostgreSQL huỷ một bên),
+     * hết lượt → TEAM_014. Mỗi lần gặp deadlock ghi WARN kèm SQLState để
      * theo dõi (chỉ mã + số lần thử, không ghi câu SQL). Lỗi khoá khác (NOWAIT, lock timeout, serialization failure)
      * ném nguyên, không thử lại. Caller không được mở transaction sẵn, nếu không các lần thử dùng chung transaction đã
      * hỏng.
@@ -35,12 +36,12 @@ public class ConcurrencyConflictRetrier {
         return execute(ErrorCode.TEAM_014, operation);
     }
 
-    /** Thử lại khi xung đột optimistic lock/deadlock; hết lượt → ném mã lỗi riêng của use case. */
+    /** Thử lại khi xung đột optimistic lock/CAS/deadlock; hết lượt → ném mã lỗi riêng của use case. */
     public <T> T execute(ErrorCode exhaustedCode, Supplier<T> operation) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 return transactionTemplate.execute(status -> operation.get());
-            } catch (ObjectOptimisticLockingFailureException exception) {
+            } catch (ObjectOptimisticLockingFailureException | ConcurrencyConflictException exception) {
                 // thử lại; hết lượt → exhaustedCode sau vòng lặp
             } catch (PessimisticLockingFailureException exception) {
                 if (!isDeadlock(exception)) {

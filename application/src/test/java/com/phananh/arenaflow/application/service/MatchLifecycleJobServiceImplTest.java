@@ -7,6 +7,7 @@ import com.phananh.arenaflow.application.support.match.MatchLifecycleProperties;
 import com.phananh.arenaflow.domain.projection.DueMatchView;
 import com.phananh.arenaflow.domain.repository.MatchRepository;
 import com.phananh.arenaflow.domain.repository.MatchRequestRepository;
+import com.phananh.arenaflow.domain.repository.PairingRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
@@ -37,6 +38,7 @@ class MatchLifecycleJobServiceImplTest {
 
     private final MatchRepository matchRepository = mock(MatchRepository.class);
     private final MatchRequestRepository requestRepository = mock(MatchRequestRepository.class);
+    private final PairingRepository pairingRepository = mock(PairingRepository.class);
     private final ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
     private final TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-21T03:00:00Z"), ZoneId.systemDefault());
@@ -46,15 +48,21 @@ class MatchLifecycleJobServiceImplTest {
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
-        service = new MatchLifecycleJobServiceImpl(matchRepository, requestRepository, publisher, transactionTemplate,
+        service = new MatchLifecycleJobServiceImpl(matchRepository, requestRepository, pairingRepository, publisher,
+                transactionTemplate,
                 new MatchLifecycleProperties(2, 3), clock);
         when(transactionTemplate.execute(any()))
                 .thenAnswer(invocation -> ((TransactionCallback<Object>) invocation.getArgument(0)).doInTransaction(null));
     }
 
     private DueMatchView due(UUID id, UUID author, UUID opponent) {
+        return due(id, "HAS_VENUE", author, opponent);
+    }
+
+    private DueMatchView due(UUID id, String type, UUID author, UUID opponent) {
         Map<String, Object> row = new HashMap<>();
         row.put("id", id);
+        row.put("type", type);
         row.put("authorTeamId", author);
         row.put("opponentTeamId", opponent);
         row.put("matchEndTime", NOW.minusHours(1));
@@ -67,13 +75,17 @@ class MatchLifecycleJobServiceImplTest {
         UUID b = UUID.randomUUID();
         UUID c = UUID.randomUUID();
         UUID author = UUID.randomUUID();
-        when(matchRepository.claimDueForExpiry(NOW, 2))
-                .thenReturn(List.of(due(a, author, null), due(b, author, null)), List.of(due(c, author, null)));
+        when(matchRepository.claimDueForExpiry(NOW, 2)).thenReturn(
+                List.of(due(a, "HAS_VENUE", author, null), due(b, "NEED_VENUE", author, null)),
+                List.of(due(c, "HAS_VENUE", author, null)));
 
         assertThat(service.expireDueMatches()).isEqualTo(3);
 
         verify(matchRepository).markExpired(List.of(a, b), NOW);
-        verify(requestRepository).expirePendingByMatchIds(List.of(a, b));
+        verify(requestRepository).expirePendingByMatchIds(List.of(a));
+        verify(pairingRepository).expireNegotiatingByMatchIds(List.of(b), NOW);
+        verify(requestRepository).expirePendingByMatchIds(List.of(c));
+        verify(pairingRepository, times(1)).expireNegotiatingByMatchIds(any(), any());
         verify(matchRepository).markExpired(List.of(c), NOW);
         verify(publisher).publishEvent(new MatchExpiredEvent(a, author, NOW));
         verify(publisher).publishEvent(new MatchExpiredEvent(c, author, NOW));
@@ -87,6 +99,7 @@ class MatchLifecycleJobServiceImplTest {
         assertThat(service.expireDueMatches()).isZero();
         verify(matchRepository, never()).markExpired(any(), any());
         verify(requestRepository, never()).expirePendingByMatchIds(any());
+        verify(pairingRepository, never()).expireNegotiatingByMatchIds(any(), any());
     }
 
     @Test
@@ -118,5 +131,6 @@ class MatchLifecycleJobServiceImplTest {
         verify(matchRepository).markArchived(List.of(id), NOW);
         verify(publisher).publishEvent(new MatchArchivedEvent(id, author, opponent, NOW.minusHours(1), NOW));
         verify(requestRepository, never()).expirePendingByMatchIds(any());
+        verify(pairingRepository, never()).expireNegotiatingByMatchIds(any(), any());
     }
 }

@@ -7,7 +7,7 @@ package com.phananh.arenaflow.domain.repository;
  */
 public final class ConversationSql {
 
-    /** Yêu cầu PENDING của kèo OPEN đã tới hạn hiển thị EXPIRED. */
+    /** Yêu cầu PENDING / thương lượng NEGOTIATING của kèo OPEN đã tới hạn hiển thị EXPIRED. */
     public static final String CONTEXT_COLUMNS = """
             c.id AS id, c.context_type AS contextType, c.match_id AS matchId, c.party_a_type AS partyAType,
             c.party_a_id AS partyAId, c.party_b_type AS partyBType, c.party_b_id AS partyBId,
@@ -25,12 +25,16 @@ public final class ConversationSql {
             cb.user_id AS partyBCaptainUserId, tb.disbanded_by AS partyBDisbandedBy,
             lr.id AS requestId, lr.status AS requestStatus,
             CASE WHEN lr.status = 'PENDING' AND m.status = 'OPEN' AND m.expires_at <= :now THEN 'EXPIRED'
-                 ELSE lr.status END AS requestEffectiveStatus
+                 ELSE lr.status END AS requestEffectiveStatus,
+            pr.id AS pairingId, pr.status AS pairingStatus,
+            CASE WHEN pr.status = 'NEGOTIATING' AND m.status = 'OPEN' AND m.expires_at <= :now THEN 'EXPIRED'
+                 ELSE pr.status END AS pairingEffectiveStatus
             """;
 
     /**
      * Yêu cầu GẦN NHẤT của đội tham gia (luồng A): mỗi đội chỉ có một yêu cầu đang hiệu lực mỗi kèo, yêu cầu cũ chỉ có
-     * thể WITHDRAWN / EXPIRED nên yêu cầu gần nhất là yêu cầu quyết định quyền nhắn.
+     * thể WITHDRAWN / EXPIRED nên yêu cầu gần nhất là yêu cầu quyết định quyền nhắn. Thương lượng của đội tham gia
+     * (luồng B): mỗi (kèo, đội) tối đa một pairing — sau SUPERSEDED / EXPIRED kèo không còn OPEN để mở thương lượng mới.
      */
     public static final String CONTEXT_JOINS = """
             LEFT JOIN "user" me ON me.id = :callerId
@@ -45,6 +49,8 @@ public final class ConversationSql {
                                WHERE m.type = 'HAS_VENUE' AND r.match_id = c.match_id
                                  AND r.requester_team_id = c.party_b_id
                                ORDER BY r.requested_at DESC, r.id DESC LIMIT 1) lr ON true
+            LEFT JOIN pairing pr ON m.type = 'NEED_VENUE' AND pr.match_id = c.match_id
+                                AND pr.interested_team_id = c.party_b_id
             """;
 
     /** Cuộc trò chuyện người gọi là một bên: đội trưởng ACTIVE / người đã giải tán đội của một bên, hoặc bên B là chính họ. */

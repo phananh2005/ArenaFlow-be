@@ -1,5 +1,23 @@
 # CHANGELOG — MATCH-001 Kèo (luồng A, luồng B) & vòng đời kèo
 
+## [v3.2] — 2026-11-25
+
+**Type:** MINOR (không đổi endpoint, field, shape response, mã thành công; 2.1 hết điều kiện tạm `422 MATCH_016` đã báo trước ở §1 từ v2.4; message `expiresAt` đổi chữ, thêm một message; 2.4 trả `400` thay vì lỗi hệ thống khi `customItems` có phần tử `null`) · **Tóm tắt:** Luồng B mở cùng bản phát hành MATCH-002 — 2.1 nhận `type = NEED_VENUE`; ghi rõ lỗi kiểm tra dữ liệu của 2.1 và 2.4.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | `API_Spec.md` §1, 2.1 (bảng lỗi), §5 (dòng `MATCH_016`) | Bỏ điều kiện tạm | 2.1 `type = NEED_VENUE` → `422 MATCH_016` (khi luồng B chưa phát hành) → tạo kèo luồng B, `201` như mô tả ở 2.1. `MATCH_016` vẫn trả ở 2.4, 2.6, 2.7 trên kèo luồng B | Luồng B phát hành cùng MATCH-002 | Hiện lựa chọn "Chưa có sân" khi tạo kèo |
+| 2 | 2.1 — message của `expiresAt` | Đổi chữ / Thêm | Luồng A "Thời hạn phải trong khoảng tối đa 7 ngày trước giờ đá đến giờ bắt đầu" → "Thời hạn phải nằm trong 7 ngày trước giờ bắt đầu trận"; luồng B sau khung giờ sớm nhất "Thời hạn không được muộn hơn giờ bắt đầu trận sớm nhất" → "Thời hạn không được sau khung giờ sớm nhất"; luồng B trước khung giờ sớm nhất − 7 ngày: (chưa quy định) → "Thời hạn phải nằm trong 7 ngày trước khung giờ sớm nhất" | Message cũ khó hiểu; trường hợp luồng B quá sớm cần message riêng (user chốt 2026-11-25) | Hiện message server trả; không so khớp chuỗi message |
+| 3 | 2.1 — bảng "Vi phạm / Field lỗi" | Ghi rõ | "trùng địa điểm / trùng giờ bắt đầu, quá 5 lựa chọn → gắn field đó" → `venueOptionIds` rỗng / > 5 / phần tử `null` / trùng → lỗi gắn `venueOptionIds`; `timeOptions` rỗng / > 5 / phần tử `null` → lỗi gắn `timeOptions` (cả danh sách, không theo chỉ số); trùng giờ bắt đầu → `timeOptions[i].startsAt` | User chốt 2026-11-25 | Hiện lỗi `venueOptionIds` / `timeOptions` ở cả danh sách |
+| 4 | 2.4 — request, bảng lỗi | Ghi rõ / Sửa hành vi | `customItems` có phần tử `null` → lỗi hệ thống (`500`) → `400 VALIDATION_ERROR` gắn `customItems`; `costType`, `costSplit` gửi `""` / chỉ khoảng trắng → coi như `null` (theo §1.1; trước đó bị từ chối như sai giá trị enum) | Lỗi do dữ liệu client trả `400`; nhất quán quy ước `""` = không nhập (user chốt 2026-11-25) | Không bắt buộc; có thể gửi `null` hoặc `""` khi không chọn |
+| 5 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Đồng bộ sau khi code luồng B | Không |
+| 6 | Header 3 tài liệu thiết kế MATCH-001 | Ghi nhận | v3.1 → v3.2 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- API contract: không đổi endpoint, field, shape; 2.1 bắt đầu nhận kèo luồng B (đã mô tả từ v2.0). Cùng đợt: MATCH-002 v3.1.
+
 ## [v3.1] — 2026-11-25
 
 **Type:** MINOR (ghi rõ mã lỗi `SYS_004`/`SYS_002`/`SYS_005` và cấu trúc JSON `{code, message}` của frame `ERROR` trên kênh realtime STOMP, quy định UUID chữ thường ở destination `/topic/conversations/{conversationId}`, đóng `[cần xác nhận #12]`; không đổi bất kỳ endpoint REST, field, mã thành công hay mã lỗi nào của 2.1–2.20) · **Tóm tắt:** Hoàn thiện hợp đồng mã lỗi frame `ERROR` kênh STOMP và cập nhật tài liệu nội bộ BE.

@@ -1,5 +1,6 @@
 // ArenaFlow Database Schema
-// Generated from V1__initial_schema.sql — bảng team, team_member cập nhật tới V4 (USER-002); phần còn lại vẫn theo V1
+// Generated from V1__initial_schema.sql — bảng team, team_member cập nhật tới V4 (USER-002); match, match_venue_option,
+// match_time_option, cost_custom_item, pairing cập nhật tới V8 (MATCH-002); phần còn lại theo migration ghi ở note
 // Cột thời gian: timestamp (không múi giờ) giờ Việt Nam theo V6 (SYSTEM-002); DEFAULT now() AT TIME ZONE 'Asia/Ho_Chi_Minh'
 // Use at: https://dbdiagram.io
 
@@ -244,21 +245,20 @@ Table match {
   skill_levels text [not null, default: '[]', note: 'V7; JSON array nhãn trình độ']
   age_note text
   match_nature text
-  venue_id uuid [ref: > venue.id]
-  match_start_time timestamp [not null]
+  venue_id uuid [ref: > venue.id, note: 'HAS_VENUE: bắt buộc; NEED_VENUE: null khi chưa ghép, = địa điểm đã chốt khi ghép (V8 match_type_venue_check)']
+  match_start_time timestamp [not null, note: 'NEED_VENUE chưa ghép: khung giờ sớm nhất; khi ghép: khung đã chốt']
   match_end_time timestamp [not null]
   expires_at timestamp [not null]
-  search_lat decimal(10,7)
-  search_lng decimal(10,7)
-  search_radius_km decimal(5,2)
+  search_lat decimal(10,7) [note: 'Không dùng (V8 bỏ idx_match_search_gps; kèo B tìm theo lựa chọn địa điểm)']
+  search_lng decimal(10,7) [note: 'Không dùng']
+  search_radius_km decimal(5,2) [note: 'Không dùng']
   cost_type varchar(50) [note: 'V7 CHECK: VENUE_ONLY, DRINKS_ONLY, BOTH']
   cost_split varchar(50) [note: 'V7 CHECK: FIFTY_FIFTY, SEVENTY_THIRTY_HOME, SEVENTY_THIRTY_LOSER, LOSER_PAYS_DRINKS']
   cost_venue_amount bigint [note: 'V7 CHECK: > 0']
   cost_drinks_amount bigint [note: 'V7 CHECK: > 0']
-  cost_deposit_holder varchar(100)
+  cost_deposit_amount bigint [note: 'V8; tiền cọc đã chốt, chỉ NEED_VENUE; CHECK > 0']
+  cost_deposit_holder varchar(100) [note: 'V8 CHECK: chỉ có khi có cost_deposit_amount']
   confirmed_opponent_team_id uuid [ref: > team.id]
-  confirmed_venue_id uuid [ref: > venue.id]
-  confirmed_match_time timestamp
   cancelled_by_team_id uuid [ref: > team.id]
   cancelled_at timestamp
   cancel_reason varchar(500) [note: 'V7; lý do huỷ kèo']
@@ -273,18 +273,22 @@ Table match {
     (status, match_end_time)
     (sport_id, status, match_start_time)
     (match_start_time, id) [name: 'idx_match_open_start', note: 'V7; WHERE status = OPEN']
-    (search_lat, search_lng) [note: 'WHERE type = NEED_VENUE AND status = OPEN']
   }
+
+  Note: 'V8 bỏ confirmed_venue_id, confirmed_match_time (kèo B ghi thẳng venue_id, match_start_time/match_end_time, chi phí + cọc khi ghép); CHECK match_type_venue_check, match_deposit_check'
 }
 
 Table match_venue_option {
   id uuid [pk]
   match_id uuid [not null, ref: > match.id]
   venue_id uuid [not null, ref: > venue.id]
+  display_order integer [not null, note: 'V8; thứ tự nhập 1..5']
   created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
 
   indexes {
-    match_id
+    (match_id, venue_id) [unique, name: 'match_venue_option_match_venue_key', note: 'V8; đích FK phương án của pairing']
+    (match_id, display_order) [unique, name: 'match_venue_option_match_order_key', note: 'V8']
+    venue_id [name: 'idx_match_venue_option_venue', note: 'V8; thay idx_match_venue_option_match']
   }
 }
 
@@ -292,17 +296,19 @@ Table match_time_option {
   id uuid [pk]
   match_id uuid [not null, ref: > match.id]
   proposed_start_time timestamp [not null]
-  proposed_end_time timestamp [not null]
+  proposed_end_time timestamp [not null, note: 'V8 CHECK: > proposed_start_time']
   created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
 
   indexes {
-    match_id
+    (match_id, id) [unique, name: 'match_time_option_match_id_key', note: 'V8; đích FK phương án của pairing']
+    (match_id, proposed_start_time) [unique, name: 'match_time_option_match_start_key', note: 'V8; thay idx_match_time_option_match']
   }
 }
 
 Table cost_custom_item {
   id uuid [pk]
-  match_id uuid [not null, ref: > match.id]
+  match_id uuid [ref: > match.id, note: 'V8: bỏ NOT NULL; khoản của kèo (luồng A, hoặc chép từ pairing khi ghép kèo B)']
+  pairing_id uuid [note: 'V8; khoản của thương lượng (luồng B); FK ON DELETE CASCADE']
   item_name varchar(100) [not null]
   amount bigint [not null, note: 'V7 CHECK: > 0']
   display_order integer [not null, note: 'V7; > 0']
@@ -310,8 +316,13 @@ Table cost_custom_item {
 
   indexes {
     (match_id, display_order) [unique, name: 'idx_cost_custom_item_order', note: 'V7; thay idx_cost_custom_item_match']
+    (pairing_id, display_order) [unique, name: 'idx_cost_custom_item_pairing_order', note: 'V8']
   }
+
+  Note: 'V8 CHECK cost_custom_item_owner_check: đúng một trong match_id, pairing_id khác null'
 }
+
+Ref: cost_custom_item.pairing_id > pairing.id [delete: cascade]
 
 Table match_request {
   id uuid [pk]
@@ -336,18 +347,33 @@ Table pairing {
   match_id uuid [not null, ref: > match.id]
   interested_team_id uuid [not null, ref: > team.id]
   status varchar(20) [not null, default: 'NEGOTIATING', note: 'NEGOTIATING, CONFIRMED, EXPIRED, SUPERSEDED']
+  revision integer [not null, default: 0, note: 'V8; tăng mỗi lần sửa gói (phương án / chi phí); CHECK >= 0']
+  proposed_venue_id uuid [note: 'V8; phương án đã chốt — cùng cặp với proposed_time_option_id']
+  proposed_time_option_id uuid [note: 'V8']
+  cost_type varchar(50) [note: 'V8 CHECK: VENUE_ONLY, DRINKS_ONLY, BOTH']
+  cost_split varchar(50) [note: 'V8 CHECK: FIFTY_FIFTY, SEVENTY_THIRTY_HOME, SEVENTY_THIRTY_LOSER, LOSER_PAYS_DRINKS']
+  cost_venue_amount bigint [note: 'V8 CHECK: > 0']
+  cost_drinks_amount bigint [note: 'V8 CHECK: > 0']
+  cost_deposit_amount bigint [note: 'V8 CHECK: > 0']
+  cost_deposit_holder varchar(100) [note: 'V8 CHECK: chỉ có khi có cost_deposit_amount']
   author_confirmed_at timestamp
   interested_confirmed_at timestamp
   final_confirmed_at timestamp
   created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`, note: 'V8']
 
   indexes {
     (match_id, interested_team_id) [unique, note: 'WHERE status NOT IN (EXPIRED, SUPERSEDED)']
     (match_id, status)
     (interested_team_id, status)
-    (match_id, final_confirmed_at) [note: 'WHERE status = CONFIRMED']
+    match_id [unique, name: 'idx_pairing_confirmed', note: 'V8; WHERE status = CONFIRMED — tối đa một pairing CONFIRMED mỗi kèo (thay idx_pairing_race)']
   }
+
+  Note: 'V8 CHECK: pairing_proposal_pair_check (phương án đủ cặp hoặc cùng null), pairing_confirmed_proposal_check (CONFIRMED phải có phương án), pairing_cost_*_check'
 }
+
+Ref pairing_proposed_venue: pairing.(match_id, proposed_venue_id) > match_venue_option.(match_id, venue_id)
+Ref pairing_proposed_time: pairing.(match_id, proposed_time_option_id) > match_time_option.(match_id, id)
 
 // ================================================================
 // 6. Rating & Report

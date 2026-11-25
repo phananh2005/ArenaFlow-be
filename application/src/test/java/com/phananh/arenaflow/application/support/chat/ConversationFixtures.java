@@ -9,7 +9,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/** Dựng dòng ngữ cảnh cuộc trò chuyện luồng A cho unit test (đội A tạo kèo, đội B gửi yêu cầu). */
+/**
+ * Dựng dòng ngữ cảnh cuộc trò chuyện cho unit test: luồng A (đội A tạo kèo, đội B gửi yêu cầu) và luồng B (đội B
+ * thương lượng với đội A).
+ */
 public final class ConversationFixtures {
 
     public static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 21, 10, 0);
@@ -50,6 +53,19 @@ public final class ConversationFixtures {
         row.put("requestId", UUID.randomUUID());
         row.put("requestStatus", "PENDING");
         row.put("requestEffectiveStatus", "PENDING");
+        return row;
+    }
+
+    /** Ngữ cảnh luồng B: như {@link #teamMatchRow}, kèo NEED_VENUE, không có yêu cầu, thương lượng NEGOTIATING. */
+    public static Map<String, Object> needVenueRow(UUID conversationId, UUID teamA, UUID teamB) {
+        Map<String, Object> row = teamMatchRow(conversationId, teamA, teamB);
+        row.put("matchType", "NEED_VENUE");
+        row.remove("requestId");
+        row.remove("requestStatus");
+        row.remove("requestEffectiveStatus");
+        row.put("pairingId", UUID.randomUUID());
+        row.put("pairingStatus", "NEGOTIATING");
+        row.put("pairingEffectiveStatus", "NEGOTIATING");
         return row;
     }
 

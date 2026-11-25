@@ -1,7 +1,9 @@
 package com.phananh.arenaflow.api.realtime;
 
 import com.phananh.arenaflow.application.dto.response.ConversationMessageResponse;
+import com.phananh.arenaflow.application.support.chat.PairingChange;
 import com.phananh.arenaflow.application.support.chat.RealtimeFrame;
+import com.phananh.arenaflow.domain.entity.match.Pairing;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,6 +15,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -53,6 +56,30 @@ class StompChatRealtimeGatewayTest {
 
         verify(template).convertAndSend("/topic/conversations/" + conversationId,
                 (Object) Map.of("type", "MESSAGE_CREATED", "message", message));
+    }
+
+    @Test
+    void sendsPairingUpdatedFrameWithNullConfirmationsAfterCommit() {
+        UUID pairingId = UUID.randomUUID();
+        LocalDateTime authorAt = LocalDateTime.of(2026, 11, 10, 15, 10);
+        TransactionSynchronizationManager.initSynchronization();
+
+        gateway.publishAfterCommit(conversationId, new RealtimeFrame.PairingUpdated(pairingId,
+                Pairing.Status.NEGOTIATING, 3, authorAt, null, null, PairingChange.CONFIRMATION));
+        verifyNoInteractions(template);
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+        Map<String, Object> expected = new LinkedHashMap<>();
+        expected.put("type", "PAIRING_UPDATED");
+        expected.put("pairingId", pairingId);
+        expected.put("status", "NEGOTIATING");
+        expected.put("revision", 3);
+        expected.put("authorConfirmedAt", authorAt);
+        expected.put("interestedConfirmedAt", null);
+        expected.put("confirmedAt", null);
+        expected.put("change", "CONFIRMATION");
+        verify(template).convertAndSend("/topic/conversations/" + conversationId, (Object) expected);
     }
 
     @Test

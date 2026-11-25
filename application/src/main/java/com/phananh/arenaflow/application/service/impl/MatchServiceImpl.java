@@ -4,6 +4,7 @@ import com.phananh.arenaflow.application.dto.request.CancelMatchRequest;
 import com.phananh.arenaflow.application.dto.request.CostCustomItemRequest;
 import com.phananh.arenaflow.application.dto.request.CreateMatchRequest;
 import com.phananh.arenaflow.application.dto.request.SearchMatchRequest;
+import com.phananh.arenaflow.application.dto.request.TimeOptionRequest;
 import com.phananh.arenaflow.application.dto.request.UpdateCostAgreementRequest;
 import com.phananh.arenaflow.application.dto.response.CostAgreementResponse;
 import com.phananh.arenaflow.application.dto.response.MatchCancellationResponse;
@@ -32,9 +33,15 @@ import com.phananh.arenaflow.domain.entity.match.MatchRequest;
 import com.phananh.arenaflow.domain.entity.match.Sport;
 import com.phananh.arenaflow.domain.projection.MatchDetailView;
 import com.phananh.arenaflow.domain.projection.MatchSummaryView;
+import com.phananh.arenaflow.domain.projection.SelectableVenueView;
+import com.phananh.arenaflow.domain.projection.TeamCaptainContextView;
+import com.phananh.arenaflow.domain.projection.TimeOptionView;
 import com.phananh.arenaflow.domain.repository.CostCustomItemRepository;
 import com.phananh.arenaflow.domain.repository.MatchRepository;
 import com.phananh.arenaflow.domain.repository.MatchRequestRepository;
+import com.phananh.arenaflow.domain.repository.MatchTimeOptionRepository;
+import com.phananh.arenaflow.domain.repository.MatchVenueOptionRepository;
+import com.phananh.arenaflow.domain.repository.PairingRepository;
 import com.phananh.arenaflow.domain.repository.SportRepository;
 import com.phananh.arenaflow.domain.repository.TeamRepository;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +53,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -59,6 +67,9 @@ public class MatchServiceImpl implements MatchService {
     private final SportRepository sportRepository;
     private final TeamRepository teamRepository;
     private final MatchRequestRepository matchRequestRepository;
+    private final MatchVenueOptionRepository matchVenueOptionRepository;
+    private final MatchTimeOptionRepository matchTimeOptionRepository;
+    private final PairingRepository pairingRepository;
     private final MatchGuard matchGuard;
     private final TeamGuard teamGuard;
     private final MatchExpiry matchExpiry;
@@ -70,20 +81,63 @@ public class MatchServiceImpl implements MatchService {
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
+    /**
+     * Tạo kèo: đội (đội trưởng, đội ACTIVE) → bộ môn đang bật → địa điểm (kèo B: mọi lựa chọn) → ghi kèo theo luồng.
+     */
     @Override
     @Transactional
     public MatchResponse createMatch(UUID callerId, CreateMatchRequest request) {
-        if (CreateMatchRequest.NEED_VENUE.equals(request.type())) {
-            throw new BusinessException(ErrorCode.MATCH_016);
-        }
         LocalDateTime now = LocalDateTime.now(clock);
-        teamGuard.requireActiveCaptain(request.teamId(), callerId);
-        requireActiveSport(request.sportId());
+        TeamCaptainContextView author = teamGuard.requireActiveCaptain(request.teamId(), callerId);
+        Sport sport = requireActiveSport(request.sportId());
+        if (CreateMatchRequest.NEED_VENUE.equals(request.type())) {
+            return createNeedVenue(request, author, sport, now);
+        }
         List<UUID> venueIds = List.of(request.venueId());
         venueSelectionService.requireSelectable(venueIds);
 
-        Match match = matchRepository.save(Match.builder()
+        Match match = matchRepository.save(openMatch(request)
                 .type(Match.Type.HAS_VENUE)
+                .venueId(request.venueId())
+                .matchStartTime(request.startsAt())
+                .matchEndTime(request.endsAt())
+                .build());
+        // Câu bulk native: Hibernate tự flush INSERT kèo trước khi chạy.
+        venueSelectionService.markSelected(venueIds, now);
+        MatchDetailView view = matchRepository.findDetailById(match.getId(), now)
+                .orElseThrow(() -> new IllegalStateException("Match just created is missing: " + match.getId()));
+        return matchMapper.toResponse(view, List.of());
+    }
+
+    /**
+     * Kèo luồng B: kèo chưa có địa điểm, giờ trận = khung giờ bắt đầu sớm nhất; ghi lựa chọn địa điểm và khung giờ mỗi
+     * loại một câu; response dựng từ dữ liệu đã nạp + id khung giờ trả về lúc ghi (không đọc lại). Không ghi
+     * {@code last_selected_at} (chỉ địa điểm được chốt khi ghép) và không phát event.
+     */
+    private MatchResponse createNeedVenue(CreateMatchRequest request, TeamCaptainContextView author, Sport sport,
+                                          LocalDateTime now) {
+        List<SelectableVenueView> venues = venueSelectionService.requireSelectable(request.venueOptionIds());
+        TimeOptionRequest earliest = request.timeOptions().stream()
+                .min(Comparator.comparing(TimeOptionRequest::startsAt))
+                .orElseThrow();
+        Match match = matchRepository.save(openMatch(request)
+                .type(Match.Type.NEED_VENUE)
+                .matchStartTime(earliest.startsAt())
+                .matchEndTime(earliest.endsAt())
+                .build());
+        // Câu native: Hibernate tự flush INSERT kèo trước khi ghi lựa chọn (khoá ngoại tới kèo).
+        matchVenueOptionRepository.insertAll(match.getId(), request.venueOptionIds().toArray(UUID[]::new), now);
+        LocalDateTime[] starts = request.timeOptions().stream().map(TimeOptionRequest::startsAt)
+                .toArray(LocalDateTime[]::new);
+        LocalDateTime[] ends = request.timeOptions().stream().map(TimeOptionRequest::endsAt)
+                .toArray(LocalDateTime[]::new);
+        List<TimeOptionView> timeOptions = matchTimeOptionRepository.insertAllReturning(match.getId(), starts, ends, now);
+        return matchMapper.toCreatedNeedVenue(match, author, sport, venues, timeOptions);
+    }
+
+    /** Builder kèo OPEN với các field chung hai luồng (đội, bộ môn, thể thức, trình độ, ghi chú, hạn nhận đối). */
+    private static Match.MatchBuilder openMatch(CreateMatchRequest request) {
+        return Match.builder()
                 .status(Match.Status.OPEN)
                 .authorTeamId(request.teamId())
                 .sportId(request.sportId())
@@ -91,16 +145,7 @@ public class MatchServiceImpl implements MatchService {
                 .skillLevels(request.skillLevels() == null ? List.of() : request.skillLevels())
                 .ageNote(trimToNull(request.ageNote()))
                 .matchNature(trimToNull(request.matchNature()))
-                .venueId(request.venueId())
-                .matchStartTime(request.startsAt())
-                .matchEndTime(request.endsAt())
-                .expiresAt(request.expiresAt())
-                .build());
-        // Câu bulk native: Hibernate tự flush INSERT kèo trước khi chạy.
-        venueSelectionService.markSelected(venueIds, now);
-        MatchDetailView view = matchRepository.findDetailById(match.getId(), now)
-                .orElseThrow(() -> new IllegalStateException("Match just created is missing: " + match.getId()));
-        return matchMapper.toResponse(view, List.of());
+                .expiresAt(request.expiresAt());
     }
 
     @Override
@@ -124,12 +169,17 @@ public class MatchServiceImpl implements MatchService {
         return PageResponse.from(matches, matchMapper::toSummary, request.page(), request.pageSize());
     }
 
+    /** Chi tiết kèo: kèo + khoản tự nhập (nếu có) + lựa chọn địa điểm / khung giờ (chỉ kèo luồng B). */
     @Override
     @Transactional(readOnly = true)
     public MatchResponse getMatch(UUID matchId) {
         MatchDetailView view = matchRepository.findDetailById(matchId, LocalDateTime.now(clock))
                 .orElseThrow(() -> new BusinessException(ErrorCode.MATCH_001));
-        return matchMapper.toResponse(view, loadCustomItems(view));
+        List<CostCustomItem> customItems = loadCustomItems(view);
+        if (Match.Type.HAS_VENUE.name().equals(view.getType())) {
+            return matchMapper.toResponse(view, customItems);
+        }
+        return matchMapper.toResponse(view, customItems, matchVenueOptionRepository.findOptionRows(matchId));
     }
 
     @Override
@@ -204,7 +254,11 @@ public class MatchServiceImpl implements MatchService {
         }).valueOrThrowExpired();
     }
 
-    /** Huỷ kèo OPEN (chỉ đội tạo kèo): kèo luồng A còn yêu cầu PENDING → MATCH_010; không trừ điểm; CAS lúc commit. */
+    /**
+     * Huỷ kèo OPEN (chỉ đội tạo kèo), không trừ điểm. Kèo luồng A còn yêu cầu PENDING → MATCH_010; CAS lúc commit.
+     * Kèo luồng B: không chặn theo thương lượng; mọi thương lượng NEGOTIATING → SUPERSEDED sau CAS kèo (lần hoàn tất
+     * ghép chạy đồng thời bị CAS kèo chặn).
+     */
     private MatchCancellationResponse cancelOpen(Match match, UUID teamId, String reason, LocalDateTime now) {
         if (match.getType() == Match.Type.HAS_VENUE
                 && matchRequestRepository.existsByMatchIdAndStatus(match.getId(), MatchRequest.Status.PENDING)) {
@@ -214,6 +268,10 @@ public class MatchServiceImpl implements MatchService {
         match.setCancelledByTeamId(teamId);
         match.setCancelledAt(now);
         match.setCancelReason(reason);
+        if (match.getType() == Match.Type.NEED_VENUE) {
+            // Câu bulk native: Hibernate tự flush UPDATE kèo (CAS) trước — khoá kèo trước pairing như lúc ghép.
+            pairingRepository.supersedeNegotiating(match.getId(), now);
+        }
         eventPublisher.publishEvent(new MatchCancelledEvent(match.getId(), teamId, null, Match.Status.OPEN,
                 MatchCancelledEvent.Cause.CANCEL, null, now));
         return matchMapper.toCancellation(match, 0);
@@ -237,11 +295,13 @@ public class MatchServiceImpl implements MatchService {
         return hasItems ? costCustomItemRepository.findByMatchIdOrderByDisplayOrderAsc(view.getMatchId()) : List.of();
     }
 
-    private void requireActiveSport(UUID sportId) {
+    /** Bộ môn phải tồn tại ({@code SPORT_001}) và đang bật ({@code SPORT_002}); trả bộ môn đã đọc. */
+    private Sport requireActiveSport(UUID sportId) {
         Sport sport = sportRepository.findById(sportId).orElseThrow(() -> new BusinessException(ErrorCode.SPORT_001));
         if (!Boolean.TRUE.equals(sport.getIsActive())) {
             throw new BusinessException(ErrorCode.SPORT_002);
         }
+        return sport;
     }
 
     /** Chuỗi tuỳ chọn: bỏ khoảng trắng đầu/cuối, rỗng → null. */

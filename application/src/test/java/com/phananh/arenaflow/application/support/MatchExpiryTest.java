@@ -4,6 +4,7 @@ import com.phananh.arenaflow.application.event.match.MatchExpiredEvent;
 import com.phananh.arenaflow.domain.entity.match.Match;
 import com.phananh.arenaflow.domain.repository.MatchRepository;
 import com.phananh.arenaflow.domain.repository.MatchRequestRepository;
+import com.phananh.arenaflow.domain.repository.PairingRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -23,8 +24,9 @@ class MatchExpiryTest {
 
     private final MatchRepository matchRepository = mock(MatchRepository.class);
     private final MatchRequestRepository requestRepository = mock(MatchRequestRepository.class);
+    private final PairingRepository pairingRepository = mock(PairingRepository.class);
     private final ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
-    private final MatchExpiry expiry = new MatchExpiry(matchRepository, requestRepository, publisher);
+    private final MatchExpiry expiry = new MatchExpiry(matchRepository, requestRepository, pairingRepository, publisher);
     private final UUID matchId = UUID.randomUUID();
     private final UUID authorTeamId = UUID.randomUUID();
 
@@ -37,6 +39,18 @@ class MatchExpiryTest {
         assertThat(expired).isTrue();
         verify(requestRepository).expirePendingByMatchIds(List.of(matchId));
         verify(publisher).publishEvent(new MatchExpiredEvent(matchId, authorTeamId, NOW));
+        verifyNoInteractions(pairingRepository);
+    }
+
+    @Test
+    void expiresNegotiatingPairingsOfNeedVenueMatchInsteadOfRequests() {
+        when(matchRepository.expireIfDue(matchId, NOW)).thenReturn(1);
+
+        assertThat(expiry.expireIfDue(matchId, authorTeamId, Match.Type.NEED_VENUE, NOW)).isTrue();
+
+        verify(pairingRepository).expireNegotiatingByMatchIds(List.of(matchId), NOW);
+        verifyNoInteractions(requestRepository);
+        verify(publisher).publishEvent(new MatchExpiredEvent(matchId, authorTeamId, NOW));
     }
 
     @Test
@@ -44,6 +58,6 @@ class MatchExpiryTest {
         when(matchRepository.expireIfDue(matchId, NOW)).thenReturn(0);
 
         assertThat(expiry.expireIfDue(matchId, authorTeamId, Match.Type.HAS_VENUE, NOW)).isFalse();
-        verifyNoInteractions(requestRepository, publisher);
+        verifyNoInteractions(requestRepository, pairingRepository, publisher);
     }
 }

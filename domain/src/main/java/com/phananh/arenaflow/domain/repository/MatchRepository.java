@@ -28,17 +28,29 @@ public interface MatchRepository extends JpaRepository<Match, UUID>, MatchReposi
 
     String EFFECTIVE_STATUS = "CASE WHEN m.status = 'OPEN' AND m.expires_at <= :now THEN 'EXPIRED' ELSE m.status END";
 
-    /** Cột chung của kèo rút gọn (thiếu đội đã ghép, khoảng cách — mỗi câu tự thêm). */
+    /**
+     * Cột chung của kèo rút gọn (thiếu đội đã ghép, khoảng cách — mỗi câu tự thêm). Số lựa chọn địa điểm / khung giờ
+     * chỉ có ở kèo luồng B (subquery theo {@code match_id}); kèo luồng A null.
+     */
     String SUMMARY_COLUMNS = """
             m.id AS matchId, m.type AS type, m.sport_id AS sportId, s.name AS sportName, m.format AS format,
             m.skill_levels AS skillLevels, m.match_start_time AS matchStartTime, m.match_end_time AS matchEndTime,
             m.expires_at AS expiresAt, m.author_team_id AS authorTeamId, t.name AS authorTeamName,
             t.reliability_score AS authorTeamReliabilityScore, m.confirmed_opponent_team_id AS opponentTeamId,
             v.id AS venueId, v.name AS venueName, v.address AS venueAddress,
-            CAST(NULL AS integer) AS venueOptionCount, CAST(NULL AS integer) AS timeOptionCount, m.created_at AS createdAt
+            CAST(CASE WHEN m.type = 'NEED_VENUE'
+                      THEN (SELECT count(*) FROM match_venue_option vo WHERE vo.match_id = m.id) END AS integer)
+                AS venueOptionCount,
+            CAST(CASE WHEN m.type = 'NEED_VENUE'
+                      THEN (SELECT count(*) FROM match_time_option tmo WHERE tmo.match_id = m.id) END AS integer)
+                AS timeOptionCount,
+            m.created_at AS createdAt
             """;
 
-    /** Kèo đang tìm đối: OPEN chưa quá hạn, đội tạo kèo ACTIVE, bộ môn đang bật + bộ lọc tuỳ chọn. */
+    /**
+     * Kèo đang tìm đối: OPEN chưa quá hạn, đội tạo kèo ACTIVE, bộ môn đang bật + bộ lọc tuỳ chọn. Khoảng giờ: kèo luồng
+     * A so giờ bắt đầu trận; kèo luồng B khớp khi có một khung giờ đề xuất trong khoảng.
+     */
     String OPEN_SEARCH_FILTER = """
             m.status = 'OPEN' AND m.expires_at > :now
               AND (CAST(:type AS varchar) IS NULL OR m.type = CAST(:type AS varchar))
@@ -46,8 +58,18 @@ public interface MatchRepository extends JpaRepository<Match, UUID>, MatchReposi
               AND (CAST(:format AS varchar) IS NULL OR m.format = CAST(:format AS varchar))
               AND (CAST(:skillLevel AS varchar) IS NULL OR m.skill_levels = '[]'
                    OR jsonb_exists(CAST(m.skill_levels AS jsonb), CAST(:skillLevel AS varchar)))
-              AND (CAST(:startsAtFrom AS timestamp) IS NULL OR m.match_start_time >= CAST(:startsAtFrom AS timestamp))
-              AND (CAST(:startsAtTo AS timestamp) IS NULL OR m.match_start_time <= CAST(:startsAtTo AS timestamp))
+              AND ((CAST(:startsAtFrom AS timestamp) IS NULL AND CAST(:startsAtTo AS timestamp) IS NULL)
+                   OR (m.type = 'HAS_VENUE'
+                       AND (CAST(:startsAtFrom AS timestamp) IS NULL
+                            OR m.match_start_time >= CAST(:startsAtFrom AS timestamp))
+                       AND (CAST(:startsAtTo AS timestamp) IS NULL
+                            OR m.match_start_time <= CAST(:startsAtTo AS timestamp)))
+                   OR (m.type = 'NEED_VENUE' AND EXISTS (
+                       SELECT 1 FROM match_time_option ft WHERE ft.match_id = m.id
+                         AND (CAST(:startsAtFrom AS timestamp) IS NULL
+                              OR ft.proposed_start_time >= CAST(:startsAtFrom AS timestamp))
+                         AND (CAST(:startsAtTo AS timestamp) IS NULL
+                              OR ft.proposed_start_time <= CAST(:startsAtTo AS timestamp)))))
             """;
 
     String OPEN_SEARCH_JOINS = """
@@ -65,6 +87,29 @@ public interface MatchRepository extends JpaRepository<Match, UUID>, MatchReposi
             v.latitude BETWEEN :minLat AND :maxLat AND v.longitude BETWEEN :minLng AND :maxLng
             """;
 
+    /** Haversine tới lựa chọn địa điểm {@code v2} của kèo luồng B (cùng công thức {@link #DISTANCE}). */
+    String OPTION_DISTANCE = """
+            6371 * 2 * ASIN(SQRT(POWER(SIN(RADIANS(v2.latitude - :lat) / 2), 2)
+                + COS(RADIANS(:lat)) * COS(RADIANS(v2.latitude)) * POWER(SIN(RADIANS(v2.longitude - :lng) / 2), 2)))
+            """;
+
+    /**
+     * Join của tìm theo toạ độ: địa điểm của kèo luồng A; lựa chọn địa điểm gần nhất (trong hộp giới hạn) của kèo
+     * luồng B qua {@code LATERAL} — {@code nearest.distance_km} null khi không lựa chọn nào trong hộp.
+     */
+    String NEARBY_JOINS = "LEFT JOIN venue v ON v.id = m.venue_id "
+            + "LEFT JOIN LATERAL (SELECT min(" + OPTION_DISTANCE + ") AS distance_km "
+            + "FROM match_venue_option vo2 JOIN venue v2 ON v2.id = vo2.venue_id "
+            + "WHERE m.type = 'NEED_VENUE' AND vo2.match_id = m.id "
+            + "AND v2.latitude BETWEEN :minLat AND :maxLat AND v2.longitude BETWEEN :minLng AND :maxLng) nearest ON true ";
+
+    /** Khoảng cách của kèo: luồng A tới địa điểm, luồng B tới lựa chọn gần nhất. */
+    String NEARBY_DISTANCE = "CASE WHEN m.type = 'NEED_VENUE' THEN nearest.distance_km ELSE " + DISTANCE + " END";
+
+    /** Kèo luồng A: địa điểm trong hộp; kèo luồng B: có lựa chọn trong hộp. */
+    String NEARBY_WHERE = "((m.type = 'HAS_VENUE' AND " + NEARBY_FILTER + ") "
+            + "OR (m.type = 'NEED_VENUE' AND nearest.distance_km IS NOT NULL))";
+
     String TEAM_MATCH_FILTER = """
             ((CAST(:role AS varchar) IS NULL AND (m.author_team_id = :teamId OR m.confirmed_opponent_team_id = :teamId))
               OR (CAST(:role AS varchar) = 'AUTHOR' AND m.author_team_id = :teamId)
@@ -72,7 +117,10 @@ public interface MatchRepository extends JpaRepository<Match, UUID>, MatchReposi
               AND (CAST(:status AS varchar) IS NULL OR
             """ + EFFECTIVE_STATUS + " = CAST(:status AS varchar))";
 
-    /** Chi tiết kèo một câu; địa điểm LEFT JOIN (kèo luồng B chưa ghép không có địa điểm). */
+    /**
+     * Chi tiết kèo một câu; địa điểm LEFT JOIN (kèo luồng B chưa ghép không có địa điểm); thương lượng đã chốt của kèo
+     * luồng B (tối đa một pairing CONFIRMED mỗi kèo) → {@code confirmedPairingId}.
+     */
     @Query(value = "SELECT m.id AS matchId, m.type AS type, " + EFFECTIVE_STATUS + " AS effectiveStatus, " + """
             m.sport_id AS sportId, s.name AS sportName, m.format AS format, m.skill_levels AS skillLevels,
             m.age_note AS ageNote, m.match_nature AS matchNature, m.match_start_time AS matchStartTime,
@@ -84,8 +132,8 @@ public interface MatchRepository extends JpaRepository<Match, UUID>, MatchReposi
             v.id AS venueId, v.name AS venueName, v.address AS venueAddress, v.latitude AS venueLatitude,
             v.longitude AS venueLongitude, v.status AS venueStatus, vi.image_url AS venuePrimaryImageUrl,
             m.cost_type AS costType, m.cost_split AS costSplit, m.cost_venue_amount AS costVenueAmount,
-            m.cost_drinks_amount AS costDrinksAmount, CAST(NULL AS bigint) AS costDepositAmount,
-            m.cost_deposit_holder AS costDepositHolder, CAST(NULL AS uuid) AS confirmedPairingId,
+            m.cost_drinks_amount AS costDrinksAmount, m.cost_deposit_amount AS costDepositAmount,
+            m.cost_deposit_holder AS costDepositHolder, cp.id AS confirmedPairingId,
             m.cancelled_by_team_id AS cancelledByTeamId, m.cancelled_at AS cancelledAt, m.cancel_reason AS cancelReason,
             m.created_at AS createdAt, m.updated_at AS updatedAt
             FROM match m
@@ -94,6 +142,7 @@ public interface MatchRepository extends JpaRepository<Match, UUID>, MatchReposi
             LEFT JOIN team tb ON tb.id = m.confirmed_opponent_team_id
             LEFT JOIN venue v ON v.id = m.venue_id
             LEFT JOIN venue_image vi ON vi.venue_id = v.id AND vi.is_primary
+            LEFT JOIN pairing cp ON cp.match_id = m.id AND cp.status = 'CONFIRMED'
             WHERE m.id = :id
             """, nativeQuery = true)
     Optional<MatchDetailView> findDetailById(@Param("id") UUID id, @Param("now") LocalDateTime now);
@@ -113,16 +162,17 @@ public interface MatchRepository extends JpaRepository<Match, UUID>, MatchReposi
                                       @Param("now") LocalDateTime now, Pageable pageable);
 
     /**
-     * Tìm kèo theo toạ độ: hộp giới hạn lọc trước, Haversine lọc bán kính; khoảng cách ↑, {@code startsAt} ↑, id ↑.
+     * Tìm kèo theo toạ độ: hộp giới hạn lọc trước, Haversine lọc bán kính (kèo luồng B: tới lựa chọn địa điểm gần
+     * nhất); khoảng cách ↑, {@code startsAt} ↑, id ↑.
      */
     @Query(value = "SELECT * FROM (SELECT " + SUMMARY_COLUMNS + """
             , m.status AS effectiveStatus, CAST(NULL AS varchar) AS opponentTeamName,
-            """ + DISTANCE + " AS distanceKm " + OPEN_SEARCH_JOINS + "JOIN venue v ON v.id = m.venue_id WHERE "
-            + OPEN_SEARCH_FILTER + " AND " + NEARBY_FILTER + """
+            """ + NEARBY_DISTANCE + " AS distanceKm " + OPEN_SEARCH_JOINS + NEARBY_JOINS + "WHERE "
+            + OPEN_SEARCH_FILTER + " AND " + NEARBY_WHERE + """
             ) nearby WHERE distanceKm <= :radiusKm ORDER BY distanceKm ASC, matchStartTime ASC, matchId ASC
             """,
-            countQuery = "SELECT COUNT(*) FROM (SELECT " + DISTANCE + " AS distanceKm " + OPEN_SEARCH_JOINS
-                    + "JOIN venue v ON v.id = m.venue_id WHERE " + OPEN_SEARCH_FILTER + " AND " + NEARBY_FILTER
+            countQuery = "SELECT COUNT(*) FROM (SELECT " + NEARBY_DISTANCE + " AS distanceKm " + OPEN_SEARCH_JOINS
+                    + NEARBY_JOINS + "WHERE " + OPEN_SEARCH_FILTER + " AND " + NEARBY_WHERE
                     + ") nearby WHERE distanceKm <= :radiusKm",
             nativeQuery = true)
     Page<MatchSummaryView> searchOpenNearby(@Param("type") String type, @Param("sportId") UUID sportId,
@@ -188,7 +238,8 @@ public interface MatchRepository extends JpaRepository<Match, UUID>, MatchReposi
      * khác giữ được bỏ qua (lần sau xử lý); nhiều instance không xử lý trùng. Câu đọc nên không {@code @Modifying}.
      */
     @Query(value = """
-            SELECT m.id AS id, m.author_team_id AS authorTeamId, m.confirmed_opponent_team_id AS opponentTeamId,
+            SELECT m.id AS id, m.type AS type, m.author_team_id AS authorTeamId,
+                   m.confirmed_opponent_team_id AS opponentTeamId,
                    m.match_end_time AS matchEndTime
             FROM match m
             WHERE m.status = 'OPEN' AND m.expires_at <= :now
@@ -200,7 +251,8 @@ public interface MatchRepository extends JpaRepository<Match, UUID>, MatchReposi
 
     /** Job: claim một lô kèo CONFIRMED đã qua giờ kết thúc, khoá như {@link #claimDueForExpiry}. */
     @Query(value = """
-            SELECT m.id AS id, m.author_team_id AS authorTeamId, m.confirmed_opponent_team_id AS opponentTeamId,
+            SELECT m.id AS id, m.type AS type, m.author_team_id AS authorTeamId,
+                   m.confirmed_opponent_team_id AS opponentTeamId,
                    m.match_end_time AS matchEndTime
             FROM match m
             WHERE m.status = 'CONFIRMED' AND m.match_end_time <= :now
@@ -234,4 +286,26 @@ public interface MatchRepository extends JpaRepository<Match, UUID>, MatchReposi
             WHERE id = :id AND status = 'OPEN' AND expires_at <= :now
             """, nativeQuery = true)
     int expireIfDue(@Param("id") UUID id, @Param("now") LocalDateTime now);
+
+    /**
+     * Ghép kèo luồng B (CAS trên {@code status = OPEN} + {@code version} đọc cùng lần thử): ghi đội đã ghép, địa
+     * điểm, khung giờ, chi phí + cọc đã chốt; {@code version + 1}. 0 dòng = kèo vừa đổi trạng thái hoặc phiên bản.
+     * Không nạp entity {@code Match} nên không có bản managed nào bị ghi đè lúc flush.
+     */
+    @Modifying
+    @Query(value = """
+            UPDATE match SET status = 'CONFIRMED', confirmed_opponent_team_id = :opponentTeamId, venue_id = :venueId,
+                   match_start_time = :startTime, match_end_time = :endTime,
+                   cost_type = :costType, cost_split = :costSplit, cost_venue_amount = :venueAmount,
+                   cost_drinks_amount = :drinksAmount, cost_deposit_amount = :depositAmount,
+                   cost_deposit_holder = :depositHolder, version = version + 1, updated_at = :now
+            WHERE id = :matchId AND status = 'OPEN' AND version = :expectedVersion
+            """, nativeQuery = true)
+    int confirmPairing(@Param("matchId") UUID matchId, @Param("expectedVersion") long expectedVersion,
+                       @Param("opponentTeamId") UUID opponentTeamId, @Param("venueId") UUID venueId,
+                       @Param("startTime") LocalDateTime startTime, @Param("endTime") LocalDateTime endTime,
+                       @Param("costType") String costType, @Param("costSplit") String costSplit,
+                       @Param("venueAmount") Long venueAmount, @Param("drinksAmount") Long drinksAmount,
+                       @Param("depositAmount") Long depositAmount, @Param("depositHolder") String depositHolder,
+                       @Param("now") LocalDateTime now);
 }

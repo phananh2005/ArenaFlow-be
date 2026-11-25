@@ -11,13 +11,13 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1; mã lỗi `TEAM_*` dùng lại từ USER-001/USER-002 `API_Spec.md`, `VENUE_*` từ VENUE-001 `API_Spec.md`; ghép kèo luồng B (thương lượng), frame `PAIRING_UPDATED` và mã `MATCH_016`: MATCH-002 `API_Spec.md`; chat dùng chung (§1.6, §1.7, 2.16–2.20) — cuộc trò chuyện theo đơn ứng tuyển: MERCENARY-001 `API_Spec.md` §1.7; kênh cá nhân `/user/queue/notifications` (thông báo, tín hiệu tin nhắn mới): NOTIFICATION-001 `API_Spec.md` §1.4; [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (kênh realtime) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10) — UC-M01, M02, M03, M04, M08, M09, UC-C01, C02; BR-M01..M06, BR-M09..M18, BR-C01..C05, BR-N01, BR-N03..BR-N06 (chat giữa hai đội, danh sách tin nhắn); UC-N01, UC-N04; Business_Rules §2.1, §2.2, §3.1, §4 (BC-M01..M07), §5.2, §5.4, §7.3; AC-M01..M03, M06..M12, AC-C01, AC-N01, AC-N03, AC-N04; Scenario 1, 2 (tạo kèo), 4, 5, 6, 10, 11, 12 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.1** (developer · 2026-11-25) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.2** (developer · 2026-11-25) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
 Đội trưởng tạo kèo **luồng A** (đội đã tự đặt sân) cho một bộ môn đang bật. Đội khác tìm kèo và gửi yêu cầu ghép — mỗi đội gửi có ngay một **cuộc trò chuyện** riêng với đội tạo kèo (`conversationId` trong yêu cầu; chat theo §1.6, 2.16–2.20 — bộ endpoint chat dùng chung cho mọi cuộc trò chuyện, gồm luồng B và mercenary); đội tạo kèo chấp nhận đúng một yêu cầu → kèo `CONFIRMED`, các yêu cầu đang chờ khác → `SUPERSEDED`. Đội tạo kèo nhập thoả thuận chi phí khi kèo còn mở (chỉ để hiển thị — ArenaFlow không thu/giữ tiền). Huỷ kèo hoặc rút yêu cầu **sau khi đã ghép** bị trừ điểm uy tín của đội thực hiện (§1.5). Kèo tự hết hạn / tự lưu trữ theo thời gian (§1.3). Admin bật/tắt bộ môn.
 
-Kèo **luồng B** (`type = NEED_VENUE` — đội chưa có sân) được tạo, tìm, xem, huỷ bằng chính các endpoint ở đây, với 1–5 lựa chọn địa điểm và 1–5 khung giờ thay cho một địa điểm + một giờ. Kèo B **không** nhận yêu cầu ghép (2.6–2.10) và không dùng 2.4: đội khác "nhận kèo" để mở thương lượng, hai đội trưởng chat, chốt địa điểm/giờ, chi phí và tiền cọc, rồi cùng xác nhận — theo MATCH-002 `API_Spec.md`. Khi thương lượng hoàn tất, kèo B `CONFIRMED` có một địa điểm, một khung giờ, một đội đã ghép như kèo A. Luồng B mở cùng bản phát hành MATCH-002; trước đó 2.1 với `type = NEED_VENUE` trả `422 MATCH_016` — FE ẩn lựa chọn "Chưa có sân" tới khi luồng B được phát hành.
+Kèo **luồng B** (`type = NEED_VENUE` — đội chưa có sân) được tạo, tìm, xem, huỷ bằng chính các endpoint ở đây, với 1–5 lựa chọn địa điểm và 1–5 khung giờ thay cho một địa điểm + một giờ. Kèo B **không** nhận yêu cầu ghép (2.6–2.10) và không dùng 2.4: đội khác "nhận kèo" để mở thương lượng, hai đội trưởng chat, chốt địa điểm/giờ, chi phí và tiền cọc, rồi cùng xác nhận — theo MATCH-002 `API_Spec.md`. Khi thương lượng hoàn tất, kèo B `CONFIRMED` có một địa điểm, một khung giờ, một đội đã ghép như kèo A.
 
 **Ngoài phạm vi:** ghép kèo luồng B — thương lượng, chốt địa điểm/giờ, chi phí và tiền cọc của luồng B (MATCH-002) · report "giao tiếp tệ" qua chat (REPUTATION-001 2.10) · quy tắc chat riêng của thương lượng luồng B (MATCH-002) và của đơn ứng tuyển (MERCENARY-001) · đánh giá trận, `ARCHIVED → COMPLETED`, Completion Rate (REPUTATION-001) · tuyển người lẻ (mercenary) · gửi thông báo đẩy (NOTIFICATION-001) · **sửa nội dung kèo sau khi tạo**: không có endpoint sửa; muốn đổi thì huỷ rồi tạo kèo mới (BR-M02, BR-M04) · header `Idempotency-Key` (`api-convention.md` §13) chưa hỗ trợ — FE chặn bấm lặp nút tạo kèo.
 
@@ -203,7 +203,24 @@ Lỗi chung `400 VALIDATION_ERROR`, `401 AUTH_001` (§1.1) áp dụng cho mọi 
 | `ageNote` | string | Không | ≤ 100 ký tự | `"U23"` |
 | `matchNature` | string | Không | ≤ 200 ký tự | `"Giao hữu"` |
 
-Vi phạm quy tắc thời gian → `400 VALIDATION_ERROR`, `validationErrors[].field` là field vi phạm (`startsAt` / `endsAt` / `expiresAt`; luồng B: `timeOptions[i].startsAt` / `timeOptions[i].endsAt`). Message của `expiresAt`: luồng A "Thời hạn phải trong khoảng tối đa 7 ngày trước giờ đá đến giờ bắt đầu"; luồng B muộn hơn khung giờ sớm nhất: "Thời hạn không được muộn hơn giờ bắt đầu trận sớm nhất" (UC-M02 4a1). Gửi field của luồng kia (vd `venueId` khi `type = NEED_VENUE`), thiếu field bắt buộc của luồng, trùng địa điểm / trùng giờ bắt đầu, quá 5 lựa chọn → `400 VALIDATION_ERROR` gắn field đó.
+Mọi vi phạm dưới đây → `400 VALIDATION_ERROR`; `validationErrors[].field` là field ở cột "Field lỗi":
+
+| Vi phạm | Field lỗi |
+|---|---|
+| Gửi field của luồng kia (vd `venueId` khi `type = NEED_VENUE`); thiếu field bắt buộc của luồng | Chính field đó |
+| Luồng A: `startsAt` quá sớm; `endsAt` sai khoảng | `startsAt` / `endsAt` |
+| Luồng B: `venueOptionIds` rỗng, > 5 phần tử, có phần tử `null`, trùng địa điểm | `venueOptionIds` (cả danh sách, không theo chỉ số) |
+| Luồng B: `timeOptions` rỗng, > 5 phần tử, có phần tử `null` | `timeOptions` (cả danh sách, không theo chỉ số) |
+| Luồng B: khung giờ thứ `i` (đếm từ 0) thiếu `startsAt`, bắt đầu quá sớm hoặc trùng giờ bắt đầu với một khung đứng trước · thiếu `endsAt` hoặc sai khoảng | `timeOptions[i].startsAt` · `timeOptions[i].endsAt` |
+| `expiresAt` ≤ giờ hiện tại, hoặc nằm ngoài khoảng của cột "Ràng buộc" | `expiresAt` (ngoài khoảng: message ở bảng dưới; ≤ giờ hiện tại: message mặc định "Giá trị không hợp lệ") |
+
+Message của `expiresAt` khi nằm ngoài khoảng (S = khung giờ sớm nhất của luồng B):
+
+| Trường hợp | Message |
+|---|---|
+| Luồng A: sau `startsAt` hoặc trước `startsAt` − 7 ngày | "Thời hạn phải nằm trong 7 ngày trước giờ bắt đầu trận" |
+| Luồng B: sau S (UC-M02 4a1) | "Thời hạn không được sau khung giờ sớm nhất" |
+| Luồng B: trước S − 7 ngày | "Thời hạn phải nằm trong 7 ngày trước khung giờ sớm nhất" |
 
 Ví dụ luồng A:
 
@@ -329,8 +346,7 @@ Ví dụ luồng B (chỉ các field khác luồng A; field còn lại như trê
 
 | HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
-| 400 | `VALIDATION_ERROR` | Sai field / quy tắc thời gian / nhãn trình độ / field không đúng luồng / số lựa chọn | Hiện lỗi cạnh field |
-| 422 | `MATCH_016` | `type = NEED_VENUE` khi luồng B chưa được phát hành (§1) | Ẩn lựa chọn "Chưa có sân"; nếu vẫn gặp → hiện message |
+| 400 | `VALIDATION_ERROR` | Sai field / quy tắc thời gian / nhãn trình độ / field không đúng luồng / danh sách lựa chọn (bảng trên) | Hiện lỗi cạnh field; lỗi gắn `venueOptionIds` / `timeOptions` hiện ở cả danh sách |
 | 403 | `TEAM_002` | Người dùng không phải đội trưởng của `teamId` | Chỉ cho chọn đội mình làm đội trưởng; tải lại danh sách đội |
 | 404 | `TEAM_001` | Không có đội `teamId` | Tải lại danh sách đội |
 | 404 | `SPORT_001` | Không có bộ môn `sportId` | Tải lại danh sách bộ môn (2.13) |
@@ -534,7 +550,7 @@ Mỗi lần gửi **thay toàn bộ** thoả thuận cũ, kể cả danh sách k
 | `customItems[].itemName` | string | Có | Không rỗng, ≤ 100 ký tự | `"Tiền trọng tài"` |
 | `customItems[].amount` | integer | Có | 1..1 000 000 000 | `200000` |
 
-`costType = null` → `costSplit`, `venueAmount`, `drinksAmount` cũng phải `null` (chỉ còn khoản tự nhập, hoặc xoá hết). Vi phạm quan hệ giữa các field → `400 VALIDATION_ERROR` gắn vào field sai.
+`costType`, `costSplit` gửi `""` hoặc chỉ khoảng trắng = không nhập (như `null`, §1.1). `costType = null` → `costSplit`, `venueAmount`, `drinksAmount` cũng phải `null` (chỉ còn khoản tự nhập, hoặc xoá hết). Vi phạm quan hệ giữa các field → `400 VALIDATION_ERROR` gắn vào field sai. `customItems` có phần tử `null` → `400 VALIDATION_ERROR` gắn `customItems` (cả danh sách).
 
 ```json
 {
@@ -568,7 +584,7 @@ Mỗi lần gửi **thay toàn bộ** thoả thuận cũ, kể cả danh sách k
 
 | HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
-| 400 | `VALIDATION_ERROR` | Sai field, quan hệ `costType` ↔ số tiền ↔ `costSplit`, > 10 khoản | Hiện lỗi cạnh field |
+| 400 | `VALIDATION_ERROR` | Sai field, quan hệ `costType` ↔ số tiền ↔ `costSplit`, > 10 khoản, phần tử `null` trong `customItems` | Hiện lỗi cạnh field |
 | 403 | `TEAM_002` | Không phải đội trưởng đội tạo kèo | Ẩn nút sửa chi phí |
 | 404 | `MATCH_001` | Không có kèo | Quay lại danh sách |
 | 409 | `MATCH_003` | Kèo đã được ghép (`CONFIRMED`) | Tải lại kèo (2.3); ẩn nút sửa chi phí |
@@ -1644,7 +1660,7 @@ Mã dùng lại (message theo `API_Spec.md` của mã gốc):
 | `TEAM_016` | 422 | "Đội đã giải tán" | USER-002 | 2.1, 2.4–2.10, 2.12 |
 | `VENUE_001` | 404 | "Không tìm thấy địa điểm" | VENUE-001 | 2.1 |
 | `VENUE_002` | 422 | "Địa điểm đã ngừng hoạt động" | VENUE-001 | 2.1 |
-| `MATCH_016` | 422 | "Thao tác không áp dụng cho loại kèo này" | MATCH-002 | 2.4, 2.6, 2.7 (gọi trên kèo luồng B); 2.1 (`type = NEED_VENUE` khi luồng B chưa được phát hành — §1) |
+| `MATCH_016` | 422 | "Thao tác không áp dụng cho loại kèo này" | MATCH-002 | 2.4, 2.6, 2.7 (gọi trên kèo luồng B) |
 | `SYS_002` | — (STOMP `ERROR`) | "Phương thức không được hỗ trợ" | `api-convention.md` §6 | Kênh realtime: client gửi frame `SEND` (§1.7) |
 | `SYS_004` | — (STOMP `ERROR`) | "Yêu cầu không hợp lệ" | `api-convention.md` §6 | Kênh realtime: `SUBSCRIBE` sai destination hoặc UUID viết hoa (§1.7) |
 | `SYS_005` | — (STOMP `ERROR`) | "Đã xảy ra lỗi hệ thống" | `api-convention.md` §6 | Kênh realtime: lỗi bất ngờ khi xử lý frame (§1.7) |

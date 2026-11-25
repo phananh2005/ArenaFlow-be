@@ -1,180 +1,260 @@
 ---
-task: MATCH-001 đợt 1 — kèo luồng A + lõi chat `conversation` + kênh realtime STOMP (V7)
+task: MATCH-002 — thương lượng ghép kèo luồng B (pairing, tiền cọc) + nhánh luồng B trong MATCH-001 (V8)
 created: 2026-11-21
-updated: 2026-11-25
-percent: 100
-status: done
+status: in_progress
 ---
 
 ## Mô tả
-Triển khai MATCH-001 **đợt 1** (`Component_Class_Design.md` §1.1) trên nhánh `feature/MATCH-001-match-flow-a-impl` (tạo từ `origin/main` `6fe6285`, worktree riêng): vòng đời kèo luồng A (2.1–2.12), bộ môn (2.13–2.15), lõi chat dùng chung (2.16–2.20), kênh realtime STOMP `/topic/conversations/{id}`, job hết hạn / `ARCHIVED`, migration `V7__match_flow_a_lifecycle.sql`. Không code nhánh luồng B (đợt MATCH-002, sau V8): 2.1 `type = NEED_VENUE` → `422 MATCH_016` trước truy vấn đầu tiên.
+Triển khai MATCH-002 theo thiết kế đã duyệt (v3.0): pairing (nhận kèo, chốt phương án, chi phí + tiền cọc, xác nhận / ghép kèo), phần luồng B của chat (tạo cuộc trò chuyện khi nhận kèo, frame `PAIRING_UPDATED`), migration `V8__match_flow_b_pairing.sql`, và các nhánh luồng B nằm trong thành phần MATCH-001 (MATCH-001 CCD §1.1 "đợt MATCH-002").
 
-Bối cảnh song song (user chốt 2026-11-21): 7 mã chạy cùng lúc, mỗi mã một worktree/nhánh từ `origin/main`. SYSTEM-002 (V6) đứng trước → `AppTime`, `ClockConfig`, đổi kiểu thời gian entity **chưa có** trên `main`. Test tích hợp / test chéo làm ở giai đoạn tích hợp. Giai đoạn 1 (phiên này) = chỉ lập kế hoạch.
+Bối cảnh (user chốt 2026-11-21): 7 mã còn lại implement **song song**, mỗi mã một worktree/nhánh từ `origin/main`. Chuỗi migration: SYSTEM-002 (V6) → MATCH-001 đợt 1 (V7) → **MATCH-002 (V8)** → REPUTATION-001 (V9) → MERCENARY-001 (V10) → NOTIFICATION-001 (V11) → USER-003 (V12). Class của SYSTEM-002 và MATCH-001 **chưa có** trên `main` → dùng "Phụ thuộc tạm" (mục dưới). Test cần DB / Spring context / migration / NFS viết ở giai đoạn 2, **chỉ chạy** ở giai đoạn tích hợp (worktree không có `.env.dev`).
+
+Nhánh: `feature/MATCH-002-match-flow-b-impl` (tạo từ `origin/main` 6fe6285, 2026-11-21). Nhánh thiết kế `feature/MATCH-002-match-flow-b-pairing` đã merge — không dùng, không xoá.
 
 ## Thiết kế liên quan
-- `docs/agent/design/MATCH-001/` v3.0 — `API_Spec.md`, `Component_Class_Design.md` (§1.1 hai đợt — chỉ đợt 1), `Processing_Flow.md` (bảng số truy vấn §3, guard §1.1, race §5).
-- `docs/agent/design/SYSTEM-002/Component_Class_Design.md` §2 (quy ước thời gian), §2.2 (`AppTime`, `ClockConfig`), §2.5 (query param `LocalDateTime` từ chối offset — "áp khi code MATCH-001"), §6.3 (`VenueSelectionService.markSelected` → `LocalDateTime`).
-- `docs/agent/convention-backend.md` §1, §2.4 (comment tiếng Việt, không trỏ tài liệu), §2.5 (import), §6.1, §6.2 (giờ VN), §12.
-- `docs/agent/non-functional-standards.md` — N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush.
-- ADR-0003, 0008, 0011, 0012, 0013, 0014, 0017.
-- Thiết kế mã sau (chỉ để biết ranh giới, không code): MATCH-002 (nhánh luồng B), MERCENARY-001 (ngữ cảnh đơn ứng tuyển), NOTIFICATION-001 (`UserRealtimeGateway`, `/user/queue/notifications`, job xoá chat).
+- `docs/agent/design/MATCH-002/` — `API_Spec.md`, `Component_Class_Design.md`, `Processing_Flow.md` (v3.0), `CHANGELOG.md`.
+- `docs/agent/design/MATCH-001/Component_Class_Design.md` §1.1 (hai đợt), §4.1, §4.5–§4.7, §4.9, §4.13–§4.15, §5.2, §5.3, §6, §7; `Processing_Flow.md` §1.1, §3.1–§3.5, §3.11, §3.13 (v3.0).
+- `docs/agent/design/SYSTEM-002/Component_Class_Design.md` §2.2 (`AppTime`, `ClockConfig`), §5.1; `docs/agent/convention-backend.md` §6.2 (giờ VN, `LocalDateTime`, `Clock`/`AppTime`).
+- ADR-0003 (+ Sửa đổi 2026-11-10: CAS `pairing` bằng `status` + `revision`), ADR-0008, ADR-0011, ADR-0012, ADR-0014, ADR-0017.
+- `docs/agent/non-functional-standards.md` — N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush (2.1 `saveAndFlush` pairing = ngoại lệ 1, comment tại chỗ).
 
 ## Definition of Done
-- [x] Mọi thành phần đợt 1 trong `Component_Class_Design.md` §1.1–§9 được code theo TDD (Red → Green → Refactor).
-- [x] Unit test thuần (không Spring context/DB) PASS với `-Duser.timezone=Asia/Ho_Chi_Minh` — dán output.
-- [x] Test cần DB / Spring context / migration / NFS / race: **đã viết và chạy PASS trên DB dev (PostgreSQL 18.7, Flyway V7)**.
-- [x] Không vượt ngưỡng N_DETAIL/N_LIST/N_WRITE theo `Processing_Flow.md` §3 (đo bằng `MatchNfsQueryCountTest` 2/2 PASS).
-- [x] Bảng "Phụ thuộc tạm" đã gộp với bản chính thức từ `main` (`SYSTEM-002`).
-- [x] `code-reviewer` không còn CRITICAL/MAJOR trước commit có code (lượt 2: **0 CRITICAL / 0 MAJOR / 0 MINOR**).
-- [x] Lệch thiết kế cập nhật design một lần sau khi code + test PASS (`MATCH-001` v3.1, `USER-001` v5.3, `VENUE-001` v6.2, `docs/database/*`), `architect-reviewer` review phần sửa (**0 CRITICAL / 0 MAJOR / 0 MINOR**, không ảnh hưởng SRS).
+- [ ] V8 áp dụng được trên DB dev sau V6 + V7; `ddl-auto=validate` PASS (giai đoạn tích hợp).
+- [ ] 7 endpoint MATCH-002 (2.1–2.7) + frame `PAIRING_UPDATED` + phần luồng B của chat đúng `API_Spec.md` / `Processing_Flow.md`.
+- [ ] Nhánh luồng B trong thành phần MATCH-001 (bảng "Điểm cắm vào MATCH-001") xong; bỏ chặn `MATCH_016` cho `type = NEED_VENUE` ở MATCH-001 2.1.
+- [ ] Cổng chặn `[cần xác nhận #4]` (`INSERT/UPDATE … RETURNING` không `@Modifying`), `#2` (bind mảng `unnest`), `#5` (retrier bắt `ConcurrencyConflictException`) đã kiểm chứng.
+- [ ] Unit test PASS ở giai đoạn 2; mọi test ở mục "Test để giai đoạn tích hợp" PASS ở giai đoạn tích hợp (`-Duser.timezone=Asia/Ho_Chi_Minh`, dán output).
+- [ ] `NfsQueryCountTest`: 2.1 = 6 (5 khi cuộc trò chuyện đã có), 2.2/2.3 = 3, 2.4 = 2, 2.5 = 3 (2), 2.6 = 5 (3), 2.7 một phía = 2, hoàn tất = 5.
+- [ ] Phụ thuộc tạm đã thay bằng bản của mã sở hữu khi tích hợp; không còn stub.
+- [ ] `code-reviewer` không còn CRITICAL/MAJOR; lệch thiết kế cập nhật một lần + `architect-reviewer` ĐẠT; tài liệu ở CCD §11 đồng bộ.
 
 ## Các bước thực hiện (tổng quan)
-- [x] 1. Đối chiếu & phân tích ảnh hưởng (design / SYSTEM-002 / NFS / convention / code hiện có trên `main`)
-- [x] 2. Quét tái sử dụng + lập kế hoạch chi tiết — file cần tạo/sửa (chờ user duyệt)
-- [x] 3. Triển khai code + test theo phase (TDD) — Phase 0–9 xong 2026-11-21
-- [x] 4. Chạy unit test & integration test (DB dev V7) & xác nhận PASS (common, domain, application: 320 test PASS; api integration: `MatchFlowAMigrationTest` 7/7, `SportControllerTest` 3/3, `MatchControllerTest` 6/6, `ConversationControllerTest` 3/3, `MatchNfsQueryCountTest` 2/2, `MatchFlowCommittedTest` 3/3, `StompChatIntegrationTest` 4/4, `SecurityConfigIntegrationTest` 14/14, `VietnamLocalDatetimeMigrationTest` 3/3 PASS)
-- [x] 5. `code-reviewer` trên phần chưa review → sửa CRITICAL/MAJOR, test lại (lượt 2: 0C/0M/0m)
-- [x] 6. Đối chiếu code với design → cập nhật design theo bảng "Lệch thiết kế" (`MATCH-001` v3.1, `USER-001` v5.3, `VENUE-001` v6.2, `docs/database/*`) → `architect-reviewer` review phần sửa (0C/0M/0m)
-- [x] 7. Commit → push → PR → merge (user yêu cầu 2026-11-25)
+- [x] 1. Đối chiếu & phân tích ảnh hưởng (design MATCH-002/MATCH-001/SYSTEM-002, convention §6.2, NFS, ADR) — 2026-11-21
+- [x] 2. Quét tái sử dụng + lập kế hoạch chi tiết — 2026-11-21 (chờ user duyệt)
+- [x] 3. Giai đoạn 2 — triển khai TDD P0–P6 (unit test chạy ngay; test tích hợp chỉ viết) — 2026-11-21, user duyệt kế hoạch cùng ngày; unit 105/105 PASS, `test-compile` toàn repo PASS; dừng trước `code-reviewer` theo chỉ đạo coordinator
+- [x] 4. Giai đoạn tích hợp — rebase lên `main` có V6 + V7, thay phụ thuộc tạm, P7 (nhánh luồng B trong MATCH-001), chạy toàn bộ test tích hợp — **rebase + gộp 25 conflict xong 2026-11-25** (lên `bb6fc49`; phụ thuộc tạm đã thay bằng bản MATCH-001); user duyệt P7 2026-11-25; P7.1–P7.10 xong 2026-11-25 (P7.11 tài liệu làm ở bước 7)
+- [x] 5. Chạy test & xác nhận PASS (dán output) — 2026-11-25: 796 test, 0 fail (progress.md P7.10)
+- [x] 6. `code-reviewer` trên phần chưa review → sửa CRITICAL/MAJOR, test lại — 2026-11-25: lượt 2 (0C/1M/2m) đã sửa M1, m1; lượt 3 0C/0M/1m (chấp nhận)
+- [x] 7. Đối chiếu code với design → cập nhật design theo bảng "Lệch thiết kế" + tài liệu CCD §11 → `architect-reviewer` — vòng design khép lại 2026-11-26
+  - [x] 7a. Đối chiếu + cập nhật design một lần — 2026-11-25: MATCH-002 v3.1, MATCH-001 v3.2, `docs/database/schema-design.md`, `data-model.md` (V8); `schema.dbml` đã khớp V8; SRS `SYSTEM-001` chưa sửa (coordinator quyết với user)
+  - [x] 7b. `architect-reviewer` phần sửa — lượt 1: 0C/0M/6m (user chọn sửa cả 6); lượt 2: 0C/0M/0m (2026-11-26)
+- [ ] 8. Bước 7 có sửa code → test lại + `code-reviewer` phần sửa → commit (khi user yêu cầu)
 
 ## Lệch thiết kế
 _Ghi ngay khi code khác design; KHÔNG sửa design giữa chừng — cập nhật một lần ở bước cuối (`CLAUDE.md` §8). Trống = code khớp design._
 
-| # | Phase | Design | Code thực tế | Lý do | Sửa ở |
-|---|---|---|---|---|---|
-| 1 | 8, 9 | CCD §4.14 `send` gọi `userRealtimeGateway` (`CONVERSATION_ACTIVITY`); §4.15 `WebSocketConfig` `/queue` + `setUserDestinationPrefix`, interceptor nhận `/user/queue/notifications`; §4.10 scheduler gọi `MercenaryLifecycleJobService`, `NotificationJobService` | Không code ở đợt 1 | **LỆCH TẠM THỜI** — user chốt 2026-11-21 (B): thuộc NOTIFICATION-001 / MERCENARY-001, cắm khi tích hợp; hết lệch khi NOTIFICATION-001 merge | Không sửa design |
-| 2 | 2 | CCD §4.13 `cancelConfirmed(match, cancellingTeamId, reason, now)`; §5.2 `withdrawAccepted(...)` trả `int` | `cancelConfirmed(match, cancellingTeamId, reason, MatchCancelledEvent.Cause cause, now)`; `withdrawAccepted` = `UPDATE … RETURNING id` (không `@Modifying`) trả `List<UUID>` | Event `MatchCancelledEvent` cần `cause` + `withdrawnRequestId` và `ReliabilityReason` theo nguồn thao tác — chữ ký cũ không có dữ liệu này; RETURNING lấy id không thêm truy vấn (số câu không đổi) | CCD §4.13, §5.2 |
-| 3 | 2 | CCD §2 không có `GeoBoundingBox` (VENUE-001 tính hộp inline) | `application/support/GeoBoundingBox` (record + `around`), `VenueServiceImpl` gọi lại | Reuse: một nơi tính hộp cho venue + kèo (MERCENARY-001 dùng lại) — user chốt 2026-11-21 | CCD §2, §4.1; VENUE-001 CCD (ghi chú) |
-| 4 | 4 | CCD §7 `@ValidMatchSearch` kiểm cặp `lat`/`lng`, `radiusKm` cần toạ độ, `startsAtFrom ≤ startsAtTo` | `@ValidGeoQuery` tổng quát qua interface `GeoQueryRequest` (`SearchVenueRequest`, `SearchMatchRequest` implement) kiểm toạ độ; `@ValidMatchSearch` chỉ kiểm `skillLevel` ∈ 9 nhãn + `startsAtFrom ≤ startsAtTo` (lỗi gắn `startsAtTo`) | Reuse (CCD §7 giao developer xem xét) — user chốt 2026-11-21; không đổi API | CCD §2, §7 |
-| 5 | 4 | CCD §2/§7 không nêu kiểu phần tử `timeOptions` của `MatchResponse` | Record mới `MatchTimeOptionResponse(timeOptionId, startsAt, endsAt)`; `venueOptions` dùng `MatchVenueResponse` | Cần kiểu cho field `timeOptions` (đợt 1 luôn `[]`); đúng hình dạng API_Spec §4.2 | CCD §2 (dto/response), §7 |
-| 6 | 4 | SYSTEM-002 §2.5: query param `LocalDateTime` "`@DateTimeFormat(iso = DATE_TIME)` và từ chối chuỗi có offset (constraint/converter)" | `api/config/LocalDateTimeParamConverter` (ISO_LOCAL_DATE_TIME) đăng ký trong `WebMvcConfig#addFormatters` cho mọi tham số `LocalDateTime`; không dùng `@DateTimeFormat` trên `SearchMatchRequest` | Một chỗ, unit test được; `@DateTimeFormat(ISO.DATE_TIME)` nhận offset rồi bỏ (user chốt 2026-11-25: A) | CCD §2 (`api/config`), §7 |
-| 7 | 9 | CCD §8: `spring.task.scheduling.pool.size` (Boot tự tạo scheduler cho job); `wsHeartbeatScheduler` là bean riêng | `SchedulingConfig` thêm bean `taskScheduler` dựng từ `ThreadPoolTaskSchedulerBuilder` (vẫn theo `spring.task.scheduling.*`) | Boot chỉ tạo scheduler khi KHÔNG có bean `TaskScheduler` nào; STOMP thêm bean broker/heartbeat → không khai báo thì `@Scheduled` mất pool 5 luồng (user chốt 2026-11-25: A) | CCD §8 |
-| 8 | 9 | CCD §4.15: đích SUBSCRIBE sai mẫu / `SEND` → "frame ERROR" (không nêu mã) | Header `message` = `SYS_004` (đích sai mẫu, gồm UUID viết hoa) / `SYS_002` (`SEND`); lỗi không rõ → `SYS_005`; ngoại lệ mang mã `StompRealtimeException`, bộ xử lý lỗi `StompErrorHandler` | Cần một mã cho frame ERROR; dùng mã hệ thống có sẵn, không thêm mã mới (user chốt 2026-11-24: A) | CCD §4.15; API_Spec §1.7 |
-| 9 | 9 | CCD §4.15 `StompAuthChannelInterceptor` phụ thuộc `ConversationService` | Constructor nhận `@Lazy ConversationService` | Cắt vòng phụ thuộc lúc khởi động: dịch vụ chat → gateway → `SimpMessagingTemplate` → cấu hình STOMP → interceptor | CCD §4.15 |
-| 10 | 7 | CCD §5.3 `DueMatchView` có `type` | Đợt 1 không có `type` (claim không trả) | CCD §1.1 ghi `type` trong claim thuộc đợt MATCH-002 | Không sửa (MATCH-002 thêm) |
-| 11 | 10 | CCD §6 `Team`, `User` chỉ ghi `reliabilityScore: thêm updatable = false` | `Team` và `User` khoá `updatable = false` đủ 6 cột: `reliability_score`, `clean_streak`, `report_count_noshow`, `report_count_bad_play`, `report_count_bad_communication`, `report_count_skill_mismatch` | `adjustReliability` đặt `clean_streak = 0` không tăng `version`; khoá cả 6 cột uy tín/bộ đếm để dirty checking khi sửa/giải tán đội hoặc sửa hồ sơ không ghi đè (user chốt Q2 / M1: A) | CCD §6 |
-| 12 | 10 | CCD §6 `ConversationMessage.senderParty` (`@Enumerated(STRING)`, `length = 1`) | Thêm `@JdbcTypeCode(SqlTypes.VARCHAR)` trên `ConversationMessage.senderParty` | Hibernate 7 suy enum 1 ký tự với `length = 1` thành `CHAR(1)` trong khi cột V7 là `VARCHAR(1)` (`ddl-auto=validate`) | CCD §6 |
-| 13 | 10 | CCD §4.10 `MatchLifecycleScheduler` `@Scheduled(..., zone = AppTime.ZONE_ID)`; §8 `Clock.fixed(..., AppTime.ZONE)` | Bỏ `zone = AppTime.ZONE_ID` trên `@Scheduled`; test dùng `ZoneId.systemDefault()` | Theo ADR-0018 (Accepted ở SYSTEM-002): JVM chạy `Asia/Ho_Chi_Minh` là nguồn múi giờ duy nhất, không đặt zone tường minh trong code | CCD §4.10, §8 |
-| 14 | 10 | CCD §5.1 V7 `DROP TABLE chat_message;` trần (yêu cầu đếm thủ công trước khi chạy) | V7 thêm khối `DO $$ BEGIN IF EXISTS (SELECT 1 FROM chat_message LIMIT 1) THEN RAISE EXCEPTION ... END IF; END $$;` ngay trước `DROP TABLE chat_message;` | Tự động dừng migration nếu `chat_message` khác 0 dòng trên bất kỳ môi trường nào (user chốt #16 / m6: A) | CCD §5.1 |
+| # | Phase | Design | Code thực tế | Lý do | Sửa ở | Trạng thái |
+|---|---|---|---|---|---|---|
+| 1 | P4 | `PairingMapper.toCreatedResponse(Pairing, Match, TeamCaptainContextView, MatchAvailabilityView)` | + tham số `UUID conversationId` | Response 2.1 cần id cuộc trò chuyện vừa `save` hoặc `existingConversationId`; 4 tham số design không có nguồn | MATCH-002 CCD §7 | Đã cập nhật design 2026-11-25 (MATCH-002 CCD §7) |
+| 2 | P5 | Deps `PairingService` gồm `MatchVenueOptionRepository`, `MatchTimeOptionRepository` | Không inject hai repository này | Không thao tác nào của pairing dùng tới (2.5 đọc lựa chọn qua `PairingRepository.findProposalCandidate`) | MATCH-002 CCD §4.1 | Đã cập nhật design 2026-11-25 (MATCH-002 CCD §4.1) |
+| 3 | P3 | `PairingContextView` (CCD §5.3) không liệt kê `updatedAt` | + `updatedAt` (cùng câu `findContext`) | 2.5 chốt lại đúng phương án hiện tại trả `updatedAt` hiện tại mà không ghi | MATCH-002 CCD §5.3 | Đã cập nhật design 2026-11-25 (MATCH-002 CCD §5.3) |
+| 4 | P3 | `findOptionRows`: mapper tách theo `kind` rồi sắp | SQL `ORDER BY kind, displayOrder, startsAt` | Sắp ở DB, mapper (P7) chỉ tách theo `kind` | MATCH-002 CCD §5.2 | Đã cập nhật design 2026-11-25 (MATCH-002 CCD §5.2) |
+| 5 | P4 | `@ValidDeposit`: `depositHolder` khác null mà `depositAmount` null → lỗi | `depositHolder` rỗng / chỉ khoảng trắng = không nhập (không lỗi; service lưu `null`) | Quy ước `""` ở field tuỳ chọn = không nhập (MATCH-001 `API_Spec.md` §1.1) | MATCH-002 CCD §7 (ghi rõ) | Đã cập nhật design 2026-11-25 (MATCH-002 CCD §7, API_Spec 2.6) |
+| 6 | P2 | Pairing/Match… thời gian `LocalDateTime` | Đúng design; 5 entity đổi tạm `OffsetDateTime` → `LocalDateTime` trước khi SYSTEM-002 vào `main` | Phụ thuộc tạm (không phải lệch) | — | — (không phải lệch) |
+| 7 | P7.4 | `finalizeConfirmation`: `final_confirmed_at = CASE WHEN id = :pairingId THEN :now END` | `CAST(:now AS timestamp)` trong nhánh `CASE` | `CASE` một nhánh không cho PostgreSQL suy kiểu tham số → `text` → lỗi (test DB bắt) | MATCH-002 CCD §5.2 (ghi chú SQL) | Đã cập nhật design 2026-11-25 (MATCH-002 CCD §5.2) |
+| 8 | P7.5 | MATCH-001 `API_Spec.md` 2.1 message `expiresAt`: A "Thời hạn phải trong khoảng tối đa 7 ngày trước giờ đá đến giờ bắt đầu"; B muộn "Thời hạn không được muộn hơn giờ bắt đầu trận sớm nhất"; B quá sớm: không quy định | A "Thời hạn phải nằm trong 7 ngày trước giờ bắt đầu trận"; B quá sớm "Thời hạn phải nằm trong 7 ngày trước khung giờ sớm nhất"; B muộn "Thời hạn không được sau khung giờ sớm nhất" | **User chốt 2026-11-25** (message cũ khó hiểu; B quá sớm cần message riêng) — đổi chuỗi trả FE | MATCH-001 `API_Spec.md` 2.1 dòng 206 + CHANGELOG | Đã cập nhật design 2026-11-25 (MATCH-001 API_Spec 2.1, CHANGELOG v3.2) |
+
+Không có lệch API contract / DB schema / nghiệp vụ.
+
+## Tái sử dụng
+_Reuse Report — skill `reuse-scan`, 2026-11-21._
+
+**Nguồn quét:** `common/src/main`, `domain/src/main`, `application/src/main`, `api/src/main` (Grep text + đọc file ứng viên) trên `6fe6285`; nhánh `feature/*-impl` của các mã chạy song song (cùng commit `6fe6285`, chưa có code — chỉ đọc được qua git). **Từ khoá:** `Pairing`, `revision`, `CostAgreement`, `[Dd]eposit`, `ConcurrencyConflict`, `Realtime|Stomp|WebSocket`, `Rules`, `StatusFilter`, `RoleFilter`, `Side`, `Conversation`, `AppTime|ClockConfig`, `MatchGuard|MatchExpiry|MatchWriteOutcome`, `@Constraint`, `ApplicationEventPublisher`, `RETURNING`, `unnest|CAST(:`, `afterCommit`, `maskName`, `DataIntegrityViolations`, `PageRequestFactory`.
+**Vùng mù:** code đang viết (chưa commit) trong worktree của SYSTEM-002 / MATCH-001 / REPUTATION-001 / MERCENARY-001 — tên/chữ ký lấy theo thiết kế của mã sở hữu; khi tích hợp, bản của mã sở hữu thắng.
+
+| Thành phần | Kết luận | Nguồn / cách dùng |
+|---|---|---|
+| Che tên / ảnh người đã xoá (`captainName`) | DÙNG LẠI | `application/mapper/MapperSupport#maskName`, `#maskAvatar` (`uses = MapperSupport.class`) |
+| Phân trang 2.2, 2.3 | DÙNG LẠI | `application/support/PageRequestFactory#create(page, pageSize)`; `dto/response/PageResponse`, `PaginationMeta` |
+| Đổi vi phạm `idx_pairing_active` → `PAIRING_003` | DÙNG LẠI | `application/support/DataIntegrityViolations#violates(ex, "idx_pairing_active")` |
+| Retrier `MATCH_014` | MỞ RỘNG | `application/support/ConcurrencyConflictRetrier#execute(ErrorCode, Supplier)` — thêm `catch (ConcurrencyConflictException)` thử lại như `ObjectOptimisticLockingFailureException` (`[cần xác nhận #5]` MATCH-002, mã này sở hữu thay đổi) |
+| Exception "CAS 0 dòng, thử lại" | VIẾT MỚI | `application/support/ConcurrencyConflictException` (RuntimeException). Không có loại tương đương (grep `ConcurrencyConflict` chỉ ra retrier + service dùng retrier). Package chưa ghi trong thiết kế → `[cần xác nhận]` |
+| Enum filter 2.2/2.3 (`toQueryValue()` → `null` = ALL) | DÙNG LẠI mẫu | Mẫu `application/service/VenueStatusFilter`; viết `PairingStatusFilter`, `PairingRoleFilter` theo cùng mẫu (thiết kế yêu cầu enum riêng) |
+| `MapperSupport.toUtc(Instant)` | KHÔNG dùng | Projection/DTO `LocalDateTime` gán thẳng (convention §6.2) |
+| Validator mức lớp | DÙNG LẠI mẫu | `application/validation/ValidGeoQuery(+Validator)` (lỗi gắn field qua property node); viết `@ValidDeposit` mới |
+| `@ValidCostAgreement` | MỞ RỘNG (sở hữu MATCH-001) | Thiết kế MATCH-002 §7: áp cho interface `CostAgreementFields` (mới — mã này) để `UpdateCostAgreementRequest` và `UpdatePairingCostAgreementRequest` dùng chung một validator. Logic quy tắc thuộc MATCH-001 → giai đoạn 2 chỉ có bản tạm |
+| Native `UPDATE … RETURNING` không `@Modifying` | DÙNG LẠI mẫu | `domain/repository/VenueRepository#markStaleAlerted` (đã kiểm `VenueStaleAlertRepositoryTest`, VENUE-001 #11) — áp cho `confirmSide`, `finalizeConfirmation` |
+| Native `INSERT … RETURNING`, bind mảng `unnest(CAST(:x AS uuid[]))` | VIẾT MỚI (chưa có tiền lệ) | Grep `unnest`/`INSERT … RETURNING` = 0 kết quả → `[cần xác nhận #2/#4]`, kiểm ở giai đoạn tích hợp |
+| Đăng ký `afterCommit` | DÙNG LẠI (gián tiếp) | Frame đi qua port `ChatRealtimeGateway.publishAfterCommit` (MATCH-001); không viết `TransactionSynchronization` riêng |
+| `VenueSelectionService#markSelected` | DÙNG LẠI | Gọi `markSelected({proposedVenueId}, now)` lúc hoàn tất 2.7 (chữ ký `LocalDateTime` — SYSTEM-002) |
+| Event record (payload id + thời điểm) | DÙNG LẠI mẫu | `application/event/venue/VenueAdminAlertEvent`; `PairingCreatedEvent` mới trong `application/event/match` |
+| `PairingRules.MAX_DEPOSIT_HOLDER = 100` | VIẾT MỚI | Grep `Rules` = 0 kết quả; `MatchRules` (MATCH-001) giữ `MAX_CUSTOM_ITEMS`, `MAX_AMOUNT` |
+| `PairingGuard`, `PairingSide` | VIẾT MỚI | Không có guard pairing; mẫu `TeamGuard`, `VenueGuard` |
+| Hằng chat, policy, port realtime, `MatchGuard`, `MatchExpiry`, `MatchWriteOutcome`, `TeamGuard.requireActiveCaptain` | DÙNG LẠI (sở hữu MATCH-001) | Chưa có trên `main` → phụ thuộc tạm |
+| `AppTime`, `Clock` bean | DÙNG LẠI (sở hữu SYSTEM-002) | Chưa có trên `main` (grep = 0) → phụ thuộc tạm |
+
+## Kế hoạch chi tiết
+
+### Ước tính số truy vấn (NFS §3 — đọc trước khi lập kế hoạch)
+Theo `Processing_Flow.md` §3 (MATCH-002) và MATCH-001 `Processing_Flow.md` §3 — mọi endpoint trong ngưỡng, **không** phải dừng:
+
+| Endpoint | Một lần thử | Ngưỡng |
+|---|---|---|
+| 2.1 `POST /matches/{id}/pairings` | 6 (5 khi cuộc trò chuyện đã có) · [lazy] 4 | W6 ✅ (= ngưỡng) |
+| 2.2 / 2.3 | 3 | L4 ✅ |
+| 2.4 | 2 | D3 ✅ |
+| 2.5 | 3 (2 khi không đổi / `VENUE_002`) | W6 ✅ |
+| 2.6 | 5 (3 khi rỗng) | W6 ✅ |
+| 2.7 một phía / hoàn tất / race | 2 / 5 / 2 + 5 (mỗi lần thử ≤ 5) | W6 ✅ |
+| MATCH-001 2.1 kèo B · 2.3 kèo B · 2.5 `OPEN` kèo B · job hết hạn | 6 · 2–3 · 4 · 3–4/lô | W6 / D3 / W6 ✅ |
+
+[Inference] Số trên lấy từ thiết kế, chưa đo; đo bằng `NfsQueryCountTest` ở giai đoạn tích hợp. Rủi ro: nếu `#4` không chạy được (dự phòng `@Modifying` + đọc lại) → MATCH-001 2.1 kèo B = 7 > W6 → **dừng, hỏi user**.
+
+### Phase (giai đoạn 2 = P0–P6; giai đoạn tích hợp = P7)
+
+**P0 — Phụ thuộc tạm (chỉ để biên dịch / unit test).** Danh sách: mục "Phụ thuộc tạm". Không test (không phải logic của mã này). Thân method thuộc mã khác = `throw new UnsupportedOperationException(...)`; unit test của mã này mock các bean đó.
+
+**P1 — Cổng chặn `#5` + chuẩn bị `#2/#4`.**
+- Red → Green: `application/src/test/.../support/ConcurrencyConflictRetrierTest` (sửa) — ném `ConcurrencyConflictException` lần 1 → thử lại, lần 2 thành công trả giá trị; ném cả 3 lần → `BusinessException(MATCH_014)`; mỗi lần thử một transaction mới.
+- Tạo: `application/support/ConcurrencyConflictException.java`. Sửa: `application/support/ConcurrencyConflictRetrier.java`.
+- Viết (chạy ở tích hợp): `api/src/test/.../migration/PairingReturningSpikeTest` — một `INSERT … RETURNING` (`insertAllReturning`) + một `UPDATE … RETURNING` (`confirmSide`) không `@Modifying`, bind `uuid[]`/`timestamp[]`.
+
+**P2 — V8 + entity + mã lỗi.**
+- Test viết trước (unit): `common/.../ErrorCodeTest` (sửa: 8 mã `PAIRING_001..008` — HTTP + message theo `API_Spec.md` §5); `domain/.../entity/match/PairingEntityTest` (mới: builder `revision = 0`, `status`; `@PrePersist` gán `createdAt = updatedAt = AppTime.now()`; `@PreUpdate` đổi `updatedAt`; field chi phí/cọc/phương án); `domain/.../entity/match/MatchFlowBEntityTest` (mới: `Match` không còn `confirmedVenueId`/`confirmedMatchTime`, có `costDepositAmount`; `CostCustomItem.matchId` nullable + `pairingId`; `MatchVenueOption.displayOrder`) — kiểm bằng builder/getter + annotation `@Column(nullable)` qua reflection.
+- Tạo: `api/src/main/resources/db/migration/V8__match_flow_b_pairing.sql` (đúng CCD §5.1).
+- Sửa: `common/exception/ErrorCode.java` (+`PAIRING_001..008`); `domain/entity/match/Pairing.java`, `Match.java`, `MatchVenueOption.java`, `CostCustomItem.java` (CCD §6; thời gian `LocalDateTime`, callback `AppTime.now()`).
+- Viết (chạy ở tích hợp): `api/src/test/.../migration/MatchFlowBPairingMigrationTest`.
+
+**P3 — Repository + projection.** (SQL chỉ kiểm được với DB → test viết trước nhưng chạy ở tích hợp; Red không xác nhận được ở giai đoạn 2 — xem Blockers.)
+- Tạo projection (`domain/projection`): `PairingContextView`, `PairingDetailView`, `PairingSummaryView`, `ProposalCandidateView`, `ConfirmSideResult`, `TimeOptionView`, `MatchOptionRowView`.
+- Tạo repository: `PairingRepository` (`findContext`, `findDetailById`, `findByMatch`, `findByTeam` + `countQuery`, `findProposalCandidate`, `updateProposal`, `updateCost`, `confirmSide` — hai câu cố định theo `side`, không nối chuỗi, `finalizeConfirmation`, `supersedeNegotiating`, `expireNegotiatingByMatchIds`), `MatchVenueOptionRepository` (`insertAll`, `findOptionRows`), `MatchTimeOptionRepository` (`insertAllReturning`).
+- Sửa: `CostCustomItemRepository` (+`findByPairingIdOrderByDisplayOrderAsc`, `deleteByPairingIdBulk`, `insertAllForPairing`, `copyPairingItemsToMatch`), `MatchRepository` (+`confirmPairing`). Mọi `:now` truyền từ Java; không `now()` trần.
+- Viết (chạy ở tích hợp): `PairingRepositoryTest`, `MatchOptionRepositoryTest`, `CostCustomItemPairingRepositoryTest`, `MatchConfirmPairingRepositoryTest` (chi tiết ở mục test tích hợp).
+
+**P4 — Support, validation, DTO, mapper, event, frame.**
+- Test viết trước (unit): `application/.../support/PairingGuardTest` (`requireSide` → `PAIRING_002`; `requireCaptain` DISBANDED → `TEAM_016`, INACTIVE && !allowInactive → `TEAM_015`, không captain → `TEAM_002`; `requireNegotiating` → `PAIRING_005`; `requireRevision` → `PAIRING_006`; `requireVenueActive("INACTIVE")` → `VENUE_002`); `application/.../dto/request/PairingRequestValidationTest` (`teamId`, `revision ≥ 0`, `venueId`, `timeOptionId` bắt buộc; `depositAmount` 1..1 000 000 000; `depositHolder` ≤ 100; `@ValidDeposit` holder khác null mà amount null → lỗi gắn `depositHolder`; ≤ 10 `customItems`); `application/.../mapper/PairingMapperTest` (`captainName` che "Người dùng đã xóa" / `null` khi đội giải tán; `proposal = null` khi chưa chốt; `customItems` đúng thứ tự; `confirmedAt` ↔ `finalConfirmedAt`; response 2.1 có `conversationId`, chi phí `null`, `customItems = []`); `PairingFilterTest` (`toQueryValue`).
+- Tạo: `application/service/PairingStatusFilter`, `PairingRoleFilter`, `PairingSide`; `application/support/match/PairingGuard`, `PairingRules`; `application/validation/CostAgreementFields`, `ValidDeposit`, `ValidDepositValidator`; `application/dto/request/CreatePairingRequest`, `UpdateProposalRequest`, `UpdatePairingCostAgreementRequest`, `ConfirmPairingRequest`; `application/dto/response/PairingResponse`, `PairingTeamResponse`, `ProposalResponse`, `PairingCostAgreementResponse`, `PairingSummaryResponse`, `ProposalUpdateResponse`, `PairingCostUpdateResponse`, `PairingConfirmationResponse`; `application/mapper/PairingMapper` (`unmappedTargetPolicy = ERROR`, `uses = MapperSupport.class`); `application/event/match/PairingCreatedEvent`; `application/support/chat/PairingChange` (enum) + `RealtimeFrame.PairingUpdated` (thêm vào bản tạm — xem Phụ thuộc tạm).
+- Sửa: `application/validation/ValidCostAgreement` (bản tạm) → `@Target` áp cho `CostAgreementFields`.
+
+**P5 — `PairingService` + `PairingServiceImpl`.**
+- Test viết trước (unit, Mockito, `Clock.fixed(…, AppTime.ZONE)`, retrier thật + `TransactionTemplate` giả chạy callback): `application/.../service/PairingServiceImplTest`:
+  - Thứ tự guard từng endpoint đúng `Processing_Flow.md` §1.1 (mỗi mã lỗi một ca, kiểm không ghi).
+  - 2.1: `PAIRING_004`, `MATCH_016`, [lazy] → commit + `MATCH_004` (qua `MatchWriteOutcome`), `MATCH_013`, `SPORT_002`; `saveAndFlush` vi phạm `idx_pairing_active` → `PAIRING_003`; vi phạm khác → ném lại; `existingConversationId` có → không `save` cuộc trò chuyện; `null` → `save` `Conversation` `TEAM_MATCH` (A = đội tác giả, B = đội nhận); `forceIncrementVersion` + `PairingCreatedEvent` (payload); response `conversationId`.
+  - 2.2: `MATCH_001`, `TEAM_016`/`TEAM_002`, `MATCH_016`; truyền `status.toQueryValue()`, `now`. 2.3: `requireCaptainAllowInactive` + `role`/`status`.
+  - 2.4: `PAIRING_001`, cả hai cờ false → `PAIRING_002`; đọc khoản tự nhập theo pairing.
+  - 2.5: `revision` cũ → `PAIRING_006` kể cả cùng phương án; `PAIRING_008`; `VENUE_002`; cùng phương án → không ghi, không frame; `updateProposal` 0 dòng → thử lại; thành công → frame `PROPOSAL` (`revision + 1`, xác nhận `null`).
+  - 2.6: rỗng → bỏ `insertAllForPairing` + đọc lại; có khoản → `trim`, `""` → `null`; frame `COST`; 0 dòng → thử lại.
+  - 2.7: `PAIRING_007`, `VENUE_002`, `MATCH_013`, `SPORT_002`; phía mình đã xác nhận → trả ctx, không ghi; một phía → `confirmSide` → frame `CONFIRMATION`, `NEGOTIATING`; `confirmSide` thấy phía kia khác `null` → `ConcurrencyConflictException` → lần thử sau đi nhánh hoàn tất; hoàn tất: `confirmPairing` 0 dòng → thử lại; `finalizeConfirmation` thiếu `pairingId` → thử lại; `copyPairingItemsToMatch` + `markSelected({proposedVenueId}, now)` + `MatchConfirmedEvent(acceptedRequestId = null, pairingId)` + frame `CONFIRMED`; hết 3 lần → `MATCH_014`; `conversationId = null` trong ctx → `IllegalStateException`.
+- Tạo: `application/service/PairingService`, `application/service/impl/PairingServiceImpl` (không `@Transactional` mức class; đọc `readOnly`; ghi qua retrier trả `MatchWriteOutcome`; `now = LocalDateTime.now(clock)` một lần đầu mỗi lần thử).
+
+**P6 — Controller.**
+- Tạo: `api/pairing/MatchPairingController` (2.1 → 201 không `Location`, 2.2), `TeamPairingController` (2.3), `PairingController` (2.4–2.7); `@Validated`, `@CurrentUser UUID`, `@RequestParam` enum (sai → 400).
+- Test (repo dùng `ApiIntegrationTest` cho controller — cần DB): viết `api/src/test/.../api/pairing/PairingControllerTest` (mã thành công, envelope, 400 path/enum/body, 401), chạy ở tích hợp.
+
+**P7 — Giai đoạn tích hợp (cần user chốt cách làm — Blockers #1).** Sau khi SYSTEM-002 và MATCH-001 đợt 1 merge `main`: rebase, bỏ phụ thuộc tạm (lấy bản mã sở hữu), áp lại delta MATCH-002 lên `Match`/`CostCustomItem`/`Pairing`/`MatchVenueOption`, rồi TDD các điểm cắm bảng dưới, chạy toàn bộ test tích hợp.
+
+**Điểm cắm vào MATCH-001 (nhánh luồng B — làm ở P7):**
+
+| # | Thành phần MATCH-001 | Việc | Test (viết trước) |
+|---|---|---|---|
+| 1 | `CreateMatchRequest`, `@ValidMatchSchedule` | Nhánh B: field A phải `null`, 1..5 địa điểm không trùng, 1..5 khung giờ không trùng `startsAt`, `MIN_LEAD_TIME`/`MAX_DURATION`, `expiresAt` ∈ [sớm nhất − 7 ngày, sớm nhất] | Unit validator |
+| 2 | `MatchServiceImpl.createMatch` | Bỏ chặn `MATCH_016`; nhánh `NEED_VENUE`: `requireSelectable` → `save` (giờ = khung sớm nhất) → `insertAll` → `insertAllReturning` → `MatchMapper.toCreatedNeedVenue` (không `markSelected`, không event) | Unit + `NfsQueryCountTest` 2.1 kèo B = 6 |
+| 3 | `MatchRepository.searchOpen` / `searchOpenNearby` / `findTeamMatches` | `venueOptionCount`/`timeOptionCount`, `EXISTS` khung giờ, nearby `LATERAL` trên `match_venue_option` | Integration |
+| 4 | `findDetailById`, `getMatch`, `MatchMapper` | `LEFT JOIN pairing` (`confirmedPairingId`), `cost_deposit_amount`; `findOptionRows`; overload `toResponse(…, List<MatchOptionRowView>)` | Unit mapper + integration |
+| 5 | `cancelMatch` `OPEN` | Kèo B: bỏ `MATCH_010`, sau CAS → `supersedeNegotiating` | Unit + race integration |
+| 6 | `MatchExpiry.expireIfDue`, job `claimDueForExpiry` | `NEED_VENUE` → `expireNegotiatingByMatchIds`; claim trả `type`, tách lô | Unit + integration |
+| 7 | `MatchCancellation.cancelConfirmed` | Kèo B: không `withdrawAccepted`; trừ điểm theo khung giờ đã chốt | Unit + integration |
+| 8 | `TeamMatchConversationPolicy`, `ConversationSql`, `ConversationContextView`, `ConversationMapper` | Nhánh `NEED_VENUE` (`waiting` = pairing `NEGOTIATING`); join `pairing`; `pairingId`, `pairingStatus`, `pairingEffectiveStatus`; 2.19 trả `pairingId`, `pairingStatus` | Unit policy + integration chat B |
+| 9 | `UpdateCostAgreementRequest` | `implements CostAgreementFields` | Unit validation cả hai request |
+| 10 | `StompChatRealtimeGateway` | Tuần tự hoá `type = PAIRING_UPDATED` | Integration STOMP |
+| 11 | Tài liệu (CCD §11, `[cần xác nhận #16]`) | MATCH-001 `API_Spec.md` gỡ `MATCH_016` của 2.1 + CHANGELOG; `docs/database/*`; SRS SYSTEM-001 18 dòng (coordinator → business-analyst) | — |
+
+### P7 chi tiết — giai đoạn tích hợp (lập 2026-11-25, CHỜ USER DUYỆT)
+
+**Trạng thái đầu vào (P7.0 — xong 2026-11-25):** nhánh đã rebase lên `origin/main` `bb6fc49` (MATCH-001 #87, V7), code vẫn chưa commit. User cho agent tự gộp conflict: 18 file bản tạm → lấy bản MATCH-001; ghép phần luồng B vào `RealtimeFrame` (`PairingUpdated`), `CostCustomItemRepository` (4 hàm pairing), `MatchRepository` (`confirmPairing`), `ErrorCode` + `ErrorCodeTest` (`PAIRING_001..008`); `ValidCostAgreementValidator` = logic MATCH-001 nhận `CostAgreementFields` (bản tạm luôn `true`), `UpdateCostAgreementRequest implements CostAgreementFields` (điểm cắm #9); `Match` bỏ `@Version` trùng do git gộp. Unit `common`/`domain`/`application` PASS (16 / 86 / 377); module `api` chưa biên dịch (`StompChatRealtimeGateway` thiếu case `PairingUpdated`).
+
+**NFS (đã đọc `non-functional-standards.md` 2026-11-25):** số truy vấn giữ như bảng "Ước tính số truy vấn" ở trên (mọi endpoint ≤ ngưỡng). Điểm cắm MATCH-001 chỉ thêm cột / `LEFT JOIN` / `LATERAL` vào câu đã có, không thêm câu, trừ: MATCH-001 2.1 kèo B = 6 (= W6, phụ thuộc `#4`), huỷ `OPEN` kèo B = 4, job hết hạn + 1 câu/lô (`expireNegotiatingByMatchIds`). Đo bằng NFS test; vượt → **dừng, hỏi user**.
+
+**Câu review lượt 1 đã chốt (user 2026-11-25, chi tiết `pending-review-questions.md` repo chính):** M1 A, m1 A, m2 A, m3 A, m4 A, m5 A — áp ở các phase dưới.
+
+**Chạy test cần DB:** theo `CLAUDE.md` §8, nạp `.env.dev` (repo chính, copy đường dẫn — worktree không có file) → test áp **V8 lên DB dev chung** (đang V7). Rủi ro: sửa V8 sau khi đã áp → lệch checksum Flyway trên DB dev (MATCH-001 đã làm cùng cách). Agent không sửa V8 sau lần chạy đầu trừ khi user đồng ý.
+
+| Phase | Việc (TDD: Red → Green → Refactor) | Test viết trước / chạy | Điểm cắm / câu review |
+|---|---|---|---|
+| P7.1 | Biên dịch `api`: `StompChatRealtimeGateway` tuần tự hoá `PairingUpdated` → `type = "PAIRING_UPDATED"` + payload theo MATCH-002 `API_Spec.md` §1.6 | `StompChatRealtimeGatewayTest` (unit, + ca `PairingUpdated`) | #10 |
+| P7.2 | **Cổng chặn**: chạy `PairingReturningSpikeTest` (`#2` bind mảng, `#4` `INSERT/UPDATE … RETURNING` không `@Modifying`) + `MatchFlowBPairingMigrationTest` (V8 sau V7, `ddl-auto=validate`) | integration (DB dev) | fail → **dừng, hỏi user** |
+| P7.3 | `""`/khoảng trắng → `null` cho `costType`, `costSplit` trong compact constructor 2 request (`UpdateCostAgreementRequest`, `UpdatePairingCostAgreementRequest`); quy tắc chi phí thật trên request pairing | unit: `PairingRequestValidationTest` + test validation request luồng A (`""` → hợp lệ, `null`; quan hệ field 400 khi sai) | m1, #9, chốt #6 |
+| P7.4 | `MatchExpiry.expireIfDue`: `NEED_VENUE` → `pairingRepository.expireNegotiatingByMatchIds(List.of(matchId), now)`; job `expireDueMatches`: + `expireNegotiatingByMatchIds(ids, now)` (claim trả `type` nếu cần tách lô) | unit `MatchExpiryTest`, `MatchLifecycleJobServiceImplTest`; repository test `List.of()` → quyết chốt chặn rỗng | #6, m5 |
+| P7.5 | Tạo kèo `NEED_VENUE`: `@ValidMatchSchedule` nhánh B; `createMatch` bỏ `MATCH_016` → `requireSelectable` → `save` → `insertAll` → `insertAllReturning` → `MatchMapper.toCreatedNeedVenue` | unit validator + `MatchServiceImplTest` + mapper; NFS 2.1 kèo B = 6 | #1, #2 |
+| P7.6 | Tìm / xem / kèo của đội cho kèo B: `venueOptionCount`/`timeOptionCount` (đang `CAST(NULL …)`), `EXISTS` khung giờ, nearby `LATERAL`; `findDetailById` `LEFT JOIN pairing` (`confirmedPairingId`, đang `NULL`), `cost_deposit_amount`; `findOptionRows` + overload `toResponse`; bỏ `MATCH_016` ở `getMatch` (MatchServiceImpl dòng 141) nếu thuộc đọc kèo B | unit mapper + integration repository/NFS | #3, #4 |
+| P7.7 | Huỷ kèo B: `OPEN` → bỏ `MATCH_010`, sau CAS `supersedeNegotiating`; `CONFIRMED` (`MatchCancellation`) → không `withdrawAccepted`, trừ điểm theo khung giờ đã chốt | unit `MatchServiceImplTest`, `MatchCancellationTest` + race integration | #5, #7 |
+| P7.8 | Chat luồng B: `ConversationSql` `LEFT JOIN pairing` (cột `pairing_id`, `pairing_status`, trạng thái hiệu lực), `ConversationContextView` +3 getter, `TeamMatchConversationPolicy` nhánh `NEED_VENUE` (`waiting` = pairing `NEGOTIATING`), `ConversationMapper` 2.19 `pairingId`/`pairingStatus` | unit `TeamMatchConversationPolicyTest` + integration chat B | #8 |
+| P7.9 | Sửa test theo review: M1 (`pageSize` 1), m2 (tách 2 test `finalizeConfirmation`), m3 (stub gán `PAIRING_ID` — unit chạy ngay), m4 (listener `AFTER_COMMIT` đếm `MatchConfirmedEvent` + kết quả X–P/X–Q) | m3 unit; M1/m2/m4 integration | M1, m2, m3, m4 |
+| P7.10 | Chạy **toàn bộ** test: unit mọi module + mọi test tích hợp ở mục "Test để giai đoạn tích hợp" + test MATCH-001 có sẵn (hồi quy luồng A) — dán output | integration (DB dev) | DoD |
+| P7.11 | Tài liệu điểm cắm #11 (MATCH-001 `API_Spec.md` gỡ `MATCH_016` 2.1 + CHANGELOG; `docs/database/*` V8) — làm ở bước 7 (cập nhật design một lần), commit riêng `docs(MATCH-002): …` | — | #11 |
+
+Sau P7.10: `code-reviewer` (phần chưa review = toàn bộ thay đổi chưa commit) → đối chiếu design + bảng "Lệch thiết kế" → cập nhật design một lần → `architect-reviewer` → (sửa code → test + `code-reviewer` phần sửa) → commit / push / PR / merge **khi user yêu cầu**. Mỗi phase xong → `progress-tracker`. Lệch API contract / DB schema / nghiệp vụ so với design → dừng, hỏi user.
+
+## Phụ thuộc tạm (thuộc mã khác)
+Bản tối thiểu, đúng package / tên / chữ ký theo thiết kế của mã sở hữu, **không** logic nghiệp vụ của mã đó. Khi tích hợp: bản của mã sở hữu thắng, rồi áp lại delta MATCH-002 (cột "Delta MATCH-002 cần giữ").
+
+| File | Mã sở hữu | Phần tạo (tạm) | Delta MATCH-002 cần giữ khi tích hợp |
+|---|---|---|---|
+| `common/.../common/time/AppTime.java` | SYSTEM-002 | `ZONE_ID`, `ZONE`, `now()`, `today()` | — |
+| `api/.../api/config/ClockConfig.java` | SYSTEM-002 | Bean `Clock` zone VN, tick 1 µs | — |
+| `domain/.../entity/match/{Match, Pairing, MatchVenueOption, MatchTimeOption, CostCustomItem}.java` | SYSTEM-002 (thời gian) · MATCH-001 (`Match.version`, `CostType`, `CostSplit`; `CostCustomItem.displayOrder`) | `OffsetDateTime` → `LocalDateTime` + `AppTime.now()` trên 5 entity này; `@Version Long version`, enum `CostType`/`CostSplit` (+ `costType`/`costSplit` kiểu enum), `CostCustomItem.displayOrder` | CCD §6: `Pairing` (+revision, updatedAt, phương án, chi phí/cọc), `Match` (− 2 cột chốt, + `costDepositAmount`), `MatchVenueOption.displayOrder`, `CostCustomItem` (`matchId` nullable, + `pairingId`) |
+| `application/.../service/VenueSelectionService.java`, `impl/VenueSelectionServiceImpl.java`, `domain/.../repository/VenueRepository#markSelected` | SYSTEM-002 | Tham số `selectedAt` `OffsetDateTime` → `LocalDateTime` (đổi kiểu, không đổi logic — user chốt #3 2026-11-21); test đi kèm: `VenueSelectionServiceImplTest`, `VenueSelectionIntegrationTest`, `VenueStaleAlertRaceTest` (chỉ đổi kiểu) | — |
+| `api/.../api/config/ClockConfig.java` + `PairingServiceImpl` | SYSTEM-002 | `PairingServiceImpl` inject `Clock` bean (có ở bản tạm) | — |
+| `common/.../exception/ErrorCode.java` | MATCH-001 | `MATCH_001`, `MATCH_003`, `MATCH_004`, `MATCH_005`, `MATCH_013`, `MATCH_014`, `MATCH_016`, `SPORT_002` (message theo MATCH-001 `API_Spec.md` §5) | `PAIRING_001..008` |
+| `domain/.../entity/chat/Conversation.java` | MATCH-001 | Entity theo MATCH-001 CCD §6 (`ContextType { TEAM_MATCH }`, `PartyType`, `Party`, id v7, `createdAt`) | — |
+| `domain/.../repository/ConversationRepository.java` | MATCH-001 | `extends JpaRepository<Conversation, UUID>` | — |
+| `domain/.../repository/MatchRepository.java` (+ `MatchRepositoryCustom`, `MatchRepositoryImpl`) | MATCH-001 | `forceIncrementVersion(Match)` (Impl: `entityManager.lock(OPTIMISTIC_FORCE_INCREMENT)`); `findAvailability`, `findAuthorAccess` đặt tạm trên fragment `MatchRepositoryCustom` (Impl ném `UnsupportedOperationException`) để Spring Data không suy query từ tên — bản MATCH-001 khai báo trên `MatchRepository` | `confirmPairing` (trên `MatchRepository`) |
+| `domain/.../repository/CostCustomItemRepository.java` | MATCH-001 | `extends JpaRepository<CostCustomItem, UUID>` | 4 method pairing (P3) |
+| `domain/.../projection/{TeamCaptainContextView, MatchAvailabilityView, MatchAuthorAccessView}.java` | MATCH-001 | Getter theo MATCH-001 CCD §5.3 | — |
+| `application/.../support/{MatchGuard, MatchExpiry, MatchWriteOutcome}.java` | MATCH-001 | Chữ ký §4.5–§4.7; thân method guard/expiry = `UnsupportedOperationException`; `MatchWriteOutcome` (sealed, `Done`/`Expired`, `valueOrThrowExpired`) | — |
+| `application/.../support/TeamGuard.java` | MATCH-001 | + `requireActiveCaptain(teamId, userId): TeamCaptainContextView`, `requireCaptainAllowInactive(teamId, userId)` (thân `UnsupportedOperationException`) | — |
+| `application/.../support/chat/{ChatRealtimeGateway, RealtimeFrame}.java` | MATCH-001 | Port `publishAfterCommit(UUID, RealtimeFrame)`; `sealed interface RealtimeFrame` (không kèm `MessageCreated` — phụ thuộc DTO chat MATCH-001) | `RealtimeFrame.PairingUpdated`, `PairingChange` |
+| `application/.../event/match/MatchConfirmedEvent.java` | MATCH-001 | Record `matchId, acceptedRequestId, pairingId, authorTeamId, opponentTeamId, occurredAt` | — |
+| `application/.../support/match/MatchRules.java` | MATCH-001 | `MAX_CUSTOM_ITEMS = 10`, `MAX_AMOUNT = 1_000_000_000` | — |
+| `application/.../validation/{ValidCostAgreement, ValidCostAgreementValidator}.java` | MATCH-001 | Annotation + validator **không** kiểm quy tắc (luôn hợp lệ) | `@Target` cho `CostAgreementFields` |
+| `application/.../dto/request/CostCustomItemRequest.java`, `dto/response/CostCustomItemResponse.java` | MATCH-001 | Record theo MATCH-001 `API_Spec.md` 2.4 (`itemName`, `amount` + ràng buộc; `itemId, itemName, amount`) | — |
+
+## Test để giai đoạn tích hợp
+Viết ở giai đoạn 2, **chỉ chạy** ở giai đoạn tích hợp (cần DB dev / Spring context / Flyway V6+V7+V8). Lệnh: `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Duser.timezone=Asia/Ho_Chi_Minh -Dtest=<Test> test`.
+
+Đã viết (biên dịch được, **chưa chạy**) — file ở `api/src/test/java/com/phananh/arenaflow/`; fixture chung `fixture/PairingFixtures` (có `deleteAll()` cho test commit thật):
+
+| Test (đã viết) | Nội dung |
+|---|---|
+| `domain/repository/PairingReturningSpikeTest` | `#2` bind `uuid[]`/`timestamp[]` vào `unnest`; `#4` `INSERT … RETURNING` + `UPDATE … RETURNING` không `@Modifying` trả projection — **chạy đầu tiên**; fail → dừng, hỏi user |
+| `migration/MatchFlowBPairingMigrationTest` | V8 sau V7; `ddl-auto=validate` khi khởi động; cột/index; CHECK kèo B ↔ địa điểm, cọc, phương án đủ cặp; FK hai cột; một CONFIRMED mỗi kèo; chủ khoản tự nhập (savepoint mỗi câu vi phạm) |
+| `domain/repository/PairingRepositoryTest` | `findContext` (1 câu), `findDetailById` (đội trưởng hiện tại, đã xoá, đội không còn đội trưởng), trạng thái hiệu lực EXPIRED không ghi DB, `findByMatch`/`findByTeam` (role, status, thứ tự, count), `findProposalCandidate`, CAS `updateProposal`/`updateCost`, `finalizeConfirmation`, `supersedeNegotiating`, `expireNegotiatingByMatchIds` |
+| `domain/repository/MatchFlowBRepositoryTest` (gộp 3 file dự kiến) | `findOptionRows`; `insertAllForPairing`/`deleteByPairingIdBulk`/`copyPairingItemsToMatch` (thứ tự, id mới, `pairing_id = NULL`, 0 dòng khi rỗng); `confirmPairing` CAS + ghi gói + `version + 1` |
+| `application/service/PairingConfirmRaceTest` (commit thật) | Hai phía xác nhận song song (5 vòng); X–P và X–Q cùng xác nhận (5 vòng, không `40P01`, không `MATCH_014`, đúng một CONFIRMED); `revision` cũ sau sửa gói → `PAIRING_006` + xác nhận bị xoá; hoàn tất ghi kèo + chép khoản + `markSelected`; lazy 2.7 → `MATCH_004` + kèo/pairing EXPIRED |
+| `application/service/PairingNfsQueryCountTest` (commit thật, file mới thay vì sửa `NfsQueryCountTest`) | 2.1 = 6 (5 khi cuộc trò chuyện đã có), 2.4 = 2, 2.2/2.3 = 3, 2.5 = 3 (2), 2.6 = 5 (3), 2.7 = 2 / 5 |
+| `api/pairing/PairingControllerTest` (`ApiIntegrationTest`) | 201 không `Location`; 200 + envelope 2.2–2.7; 400 (UUID path, enum query, body); 403 `PAIRING_002`; 409 `PAIRING_006`; 401 |
+
+Còn phải viết ở giai đoạn tích hợp (cần code MATCH-001 thật):
+
+| Test (chưa viết) | Nội dung |
+|---|---|
+| Race bổ sung | Hai pairing hoàn tất song song; hoàn tất vs sửa gói chen giữa; tạo pairing vs hoàn tất; huỷ `OPEN` khi có NEGOTIATING / vs hoàn tất; `VENUE_002` ở 2.5/2.7 (kèo vẫn `OPEN`, `last_selected_at` không đổi); 1 `MatchExpiredEvent` khi lazy |
+| Quy tắc chi phí của pairing (chốt #6) | `@ValidCostAgreement` thật trên `UpdatePairingCostAgreementRequest` |
+| Chat luồng B (MATCH-001 2.16, 2.19) | Nhắn được / chỉ xem theo pairing; gửi tin trên kèo quá hạn → `MATCH_004` + EXPIRED; 2.19 `pairingId`, `pairingStatus` |
+| Realtime STOMP | Frame `PAIRING_UPDATED` tới topic cuộc trò chuyện (2.5, 2.6, 2.7) |
+| Luồng B trong MATCH-001 (P7) | Tạo / tìm / xem / huỷ / hết hạn kèo `NEED_VENUE`; NFS MATCH-001 2.1 kèo B = 6, 2.3 kèo B = 2–3, 2.5 `OPEN` kèo B = 4 |
+
+Unit test đã chạy ở giai đoạn 2 (PASS 2026-11-21, 105/105): `ErrorCodeTest` 5, `PairingEntityTest` 4, `MatchFlowBEntityTest` 3, `EntityIdGenerationTest` 1, `ConcurrencyConflictRetrierTest` 12, `PairingGuardTest` 5, `PairingRequestValidationTest` 9, `PairingFilterTest` 1, `PairingMapperTest` 4, `PairingServiceImplTest` 36, `VenueSelectionServiceImplTest` 5, `TeamGuardTest` 6, `MapperTest` 11, `VenueMapperTest` 3.
 
 ## Câu hỏi chờ duyệt
-_Chặn → ghi rồi dừng; không chặn → ghi và làm tiếp._
+_Quy tắc user 2026-11-21: câu hỏi chặn (lệch API/DB/nghiệp vụ, thiếu thông tin) → ghi `file:line` · vấn đề · phương án rồi DỪNG; câu hỏi không chặn → ghi rồi làm tiếp._
 
 | # | Chặn? | Vị trí | Vấn đề | Phương án |
 |---|---|---|---|---|
-| 1 | Không | `api/.../realtime/StompAuthChannelInterceptor.java` (nhánh SUBSCRIBE/SEND) | Mã trong frame ERROR khi đích sai mẫu / client SEND chưa có trong API_Spec | Đang dùng `SYS_004` / `SYS_002` (lệch #8); user chốt giữ hay đổi khi cập nhật design |
-| 2 | Không | `api/.../config/SchedulingConfig.java` | Bean `taskScheduler` thêm vào để job giữ pool 5 luồng khi có STOMP | Kiểm ở tích hợp: log tên luồng `scheduling-1..5` khi app chạy (lệch #7) |
 
-## Tái sử dụng
-**Reuse Report 2026-11-21 — MATCH-001 đợt 1.**
-**Nguồn và cách quét:** `git ls-files`/`find` toàn bộ `*/src/main/java` của `common`, `domain`, `application`, `api` (đọc danh sách lớp đầy đủ); `grep` nội dung `src/main` (không gồm test) với từ khoá: `clock`, `AppTime`, `ZoneId`, `MATCH_`, `SPORT_`, `CHAT_`, `websocket`, `stomp`, `Reputation`, `reliability`, `Haversine`/`6371`/`minLat`/`111.32`, `forceIncrement`/`OPTIMISTIC_FORCE`, `sealed interface`, `TransactionSynchronization`/`afterCommit`, `HALF_UP`, `escapeLike`; đọc sâu `TeamGuard`, `ConcurrencyConflictRetrier`, `AdminAuditLog`, `MapperSupport`, `DeletedUserMasking`, `PageRequestFactory`, `DataIntegrityViolations`, `VenueSelectionService`, `ValidGeoQueryValidator`, `TeamRepository`, `UserRepository`, `SecurityConfig`, `ErrorCode`, entity `match/*`, `team/Team`, `user/User`, `api/pom.xml`. Cache Maven local: không có artifact websocket/messaging. Không vùng mù trong 4 module.
-
-- **DÙNG LẠI:**
-  - `application/.../support/ConcurrencyConflictRetrier#execute(ErrorCode, Supplier)` — mọi thao tác ghi kèo + `send` chat với `ErrorCode.MATCH_014`.
-  - `application/.../support/PageRequestFactory#create(page, pageSize)` + `dto/response/PageResponse#from` — 2.2, 2.7, 2.11–2.14, 2.20.
-  - `application/.../mapper/MapperSupport#maskName`, `#maskAvatar`, `#skillLevels(String json)` — `MatchMapper`, `ConversationMapper` (không dùng `toUtc` — SYSTEM-002 xoá).
-  - `domain/.../entity/converter/SkillLevelsConverter` — cột `match.skill_levels` (như `team.skill_levels`).
-  - `application/.../validation/OneOf`, `ValidSkillLevels` — enum chuỗi + `skillLevels` request.
-  - `application/.../service/VenueSelectionService#requireSelectable`, `#markSelected` — 2.1 kèo A (xem Phụ thuộc tạm về kiểu `selectedAt`).
-  - `application/.../support/DataIntegrityViolations#violates(ex, constraint)` — `idx_match_request_active` → `MATCH_006`, `idx_match_request_accepted` → `MATCH_003`.
-  - `api/.../security/CurrentUser` + `CurrentUserArgumentResolver` (`@CurrentUser UUID`), `AccessTokenTypeValidator` + bean `JwtDecoder` hiện có — controller mới và STOMP `CONNECT`.
-  - `api/.../config/SchedulingConfig` (`@EnableScheduling`) — `MatchLifecycleScheduler`.
-  - `common/.../exception/BusinessException`, `GlobalExceptionHandler` (envelope lỗi, `MethodArgumentTypeMismatchException` → 400).
-  - Tiền lệ `TeamRepository#findForInviteById` (`OPTIMISTIC_FORCE_INCREMENT`) cho `MatchRepositoryImpl#forceIncrementVersion`; khuôn test `TeamGuardTest`, `VenueSelectionServiceImplTest`, `AdminAuditLogTest`, `ConcurrencyConflictRetrierTest`, `MapperTest`, `CustomValidatorsTest`, `NfsQueryCountTest`, `*RaceTest`, `*MigrationTest`.
-- **MỞ RỘNG:**
-  - `common/.../exception/ErrorCode` + `MATCH_001..MATCH_016`, `SPORT_001..SPORT_002`, `CHAT_001..CHAT_004` (+ `ErrorCodeTest`).
-  - `application/.../support/TeamGuard` + `requireActiveCaptain(teamId, userId)` → `TeamCaptainContextView`, `requireCaptainAllowInactive(teamId, userId)`; `domain/.../repository/TeamRepository` + `findCaptainContext`, `adjustReliability`; `UserRepository` + `adjustReliability`. Method cũ giữ nguyên.
-  - `application/.../support/AdminAuditLog` + overload `afterCommit(String action, UUID adminId, String targetType, UUID targetId)` (bản VENUE-001 giữ nguyên).
-  - `application/.../validation/ValidGeoQuery(Validator)`: hiện gắn cứng `SearchVenueRequest` → tổng quát qua interface `GeoQueryRequest { lat(); lng(); radiusKm(); }` (`SearchVenueRequest`, `SearchMatchRequest` cùng implement); `@ValidMatchSearch` chỉ còn kiểm `startsAtFrom ≤ startsAtTo` → **ghi "Lệch thiết kế"** khi code (CCD §7 giao developer quyết; không đổi API).
-  - Hộp giới hạn toạ độ đang là code private trong `VenueServiceImpl` (dòng 114–115) → tách `application/.../support/GeoBoundingBox` (record + `around(lat, lng, radiusKm)`), `VenueServiceImpl` gọi lại (refactor không đổi hành vi; chạy lại `VenueServiceImplTest`) — `MatchServiceImpl#searchMatches` dùng chung.
-  - Entity `Match`, `MatchRequest`, `CostCustomItem` (delta V7), `Team`, `User` (`reliabilityScore` `updatable = false`).
-  - `api/.../config/SecurityConfig`: `/ws/**` `permitAll` + resolver Bearer bỏ qua `/ws/**` (mở rộng `publicAuthIgnoringBearerTokenResolver`).
-  - `api/pom.xml` + `spring-boot-starter-websocket` (chờ duyệt — `[cần xác nhận #12]`); `application.properties` + `arenaflow.match.lifecycle.*`, `spring.task.scheduling.pool.size`, `arenaflow.websocket.*`; `.env.example` + `MATCH_LIFECYCLE_CRON`, `WS_ALLOWED_ORIGIN_PATTERNS`.
-- **VIẾT MỚI** (đã quét, không có tương đương): `MatchGuard`, `MatchExpiry`, `MatchCancellation`, `MatchWriteOutcome` (chưa có `sealed interface` nào), `ReputationService(Impl)` + `ReliabilityChange`/`ReliabilityReason` (chưa có ghi `reliability_score`), `TimeBandPenaltyPolicy`, `MatchRules`, `MatchLifecycleProperties`, `ConversationRules`, `ChatRealtimeGateway` + `RealtimeFrame`, `ConversationAccessPolicy` + `ConversationAccess` + `TeamMatchConversationPolicy`, `ConversationSql`; validator `@ValidMatchSchedule`, `@ValidCostAgreement`, `@ValidChatCursor` (chưa có validator con trỏ — NOTIFICATION-001 sẽ tổng quát hoá từ bản này); bộ đọc query param `LocalDateTime` từ chối offset (SYSTEM-002 §2.5, chưa có); mapper `MatchMapper`, `SportMapper`, `ConversationMapper`; repository/projection/DTO/event/controller/realtime của miền kèo, bộ môn, chat (chưa có repository nào cho `match*`, `sport`, chat). `AppTime`, `ClockConfig`: chưa có trên `main` (thuộc SYSTEM-002 → Phụ thuộc tạm).
-
-## Kế hoạch chi tiết
-Nguyên tắc: mỗi phase Red (test trước, fail đúng lý do) → Green → Refactor → `progress-tracker`. Unit test thuần chạy ngay; test cần DB/Spring context **viết** trong phase tương ứng nhưng chỉ **chạy** ở giai đoạn tích hợp (mục "Test để giai đoạn tích hợp"). Mọi thời gian `LocalDateTime` giờ VN; "bây giờ" = `LocalDateTime.now(clock)` một lần đầu mỗi lần thử; entity callback `AppTime.now()`; SQL truyền `:now`. Comment tiếng Việt, không trỏ tài liệu.
-
-**Số truy vấn mỗi API (so ngưỡng — `Processing_Flow.md` §3, đợt 1):** 2.1 A = 6/W6 (= ngưỡng), 2.1 `NEED_VENUE` = 0; 2.2 = 2/L4; 2.3 = 2/D3; 2.4 = 6/W6 (4 khi rỗng; lazy 4); 2.5 `OPEN` = 4, `CONFIRMED` = 4–5/W6; 2.6 = 6 lần đầu / 5 gửi lại /W6; 2.7 = 3/L4; 2.8 = 6/W6; 2.9 = 3; 2.10 `PENDING` 3, `ACCEPTED` 6/W6; 2.11, 2.12 = 3/L4; 2.13, 2.14 = 2/L4; 2.15 = 1–2; 2.16 = 2 (lazy 3); 2.17 = 2–3/L4; 2.18 = 2; 2.19 = 1/D3; 2.20 = 2/L4; job hết hạn 3/lô, `ARCHIVED` 2/lô; STOMP `SUBSCRIBE` = 1. **Tất cả trong ngưỡng — không cần dừng.** 5 endpoint chạm đúng W6 → không thêm truy vấn nào ngoài thiết kế; đo thật ở giai đoạn tích hợp.
-
-### Phase 0 — Nền tạm thuộc SYSTEM-002 (chờ chốt `[cần xác nhận A]`)
-- Tạo `common/.../time/AppTime` (đúng chữ ký SYSTEM-002 §2.2) — test trước `AppTimeTest` (zone, cắt micro giây).
-- Tạo `api/.../config/ClockConfig` (`Clock.tick(Clock.system(AppTime.ZONE), 1µs)`).
-- Đổi kiểu thời gian `OffsetDateTime` → `LocalDateTime` + callback `AppTime.now()` ở entity `Match`, `MatchRequest`, `CostCustomItem`, `Sport` (đúng SYSTEM-002 §5.1, chỉ các entity mã này đọc/ghi).
-- `VenueSelectionService#markSelected(Collection<UUID>, LocalDateTime)` + `VenueSelectionServiceImpl` + tham số `VenueRepository#markSelected` + `VenueSelectionServiceImplTest` (đúng SYSTEM-002 §6.3) — theo phương án user chốt.
-
-### Phase 1 — Migration V7, entity, mã lỗi
-- **Red:** `ErrorCodeTest` (mã mới, HTTP status theo `API_Spec.md` §5); `EntityIdGenerationTest` thêm `Conversation`, `ConversationMessage`; unit test builder default (`Match.skillLevels = []`, `ConversationMessage.isRead = false`), enum `Match.Format/CostType/CostSplit`, `Conversation.ContextType/PartyType/Party`. Viết (chưa chạy) `MatchFlowAMigrationTest` (schema/CHECK/index V7, bỏ `chat_message`, `ddl-auto=validate`).
-- **Green:** `api/src/main/resources/db/migration/V7__match_flow_a_lifecycle.sql` (nguyên văn CCD §5.1); entity `Match` (+`@Version`, `skillLevels`, `cancelReason`, enum, `updatedAt` có setter), `MatchRequest` (+`reason`), `CostCustomItem` (+`displayOrder`), `Team`/`User` (`reliabilityScore` `updatable = false`), mới `chat/Conversation`, `chat/ConversationMessage`; **xoá** `chat/ChatMessage`; `ErrorCode` mới.
-
-### Phase 2 — Lõi dùng chung kèo + uy tín
-- **Red (unit):** `TimeBandPenaltyPolicyTest` (biên 24h, 24h−1s, 4h, 4h−1s), `MatchWriteOutcomeTest`, `MatchGuardTest` (`MATCH_001/003/004/005`, `isExpiryDue`), `TeamGuardTest` (+2 method, thứ tự `TEAM_001→016→015→002`), `ReputationServiceImplTest` (delta 0 không truy vấn, 0 dòng → `IllegalStateException`, phát `ReliabilityScoreChangedEvent`), `AdminAuditLogTest` (overload), `MatchExpiryTest`, `MatchCancellationTest` (đội đã ghép kèo A → `withdrawAccepted` = 1 dòng, penalty, `breaksCleanStreak`, một `MatchCancelledEvent`), `GeoBoundingBoxTest`; chạy lại `VenueServiceImplTest`.
-- **Green:** `MatchRules`, `TimeBandPenaltyPolicy`, `MatchWriteOutcome`, `MatchGuard`, `MatchExpiry`, `MatchCancellation` (+`CancellationResult`), `ReputationService(Impl)`, `ReliabilityChange`, `ReliabilityReason`, event `application/event/match/*` (7) + `event/reputation/{ReliabilityScoreChangedEvent, ReputationSubjectType}`, `TeamCaptainContextView`, `TeamRepository#findCaptainContext/#adjustReliability`, `UserRepository#adjustReliability`, `AdminAuditLog` overload, `GeoBoundingBox` (+ refactor `VenueServiceImpl`).
-
-### Phase 3 — Bộ môn (2.13–2.15)
-- **Red (unit):** `SportServiceImplTest` (`SPORT_001`, cùng giá trị không ghi/không audit, audit sau commit), `SportMapperTest`. Viết controller test (`SportControllerTest`, `AdminSportControllerTest`) — chạy tích hợp.
-- **Green:** `SportRepository`, `SportService(Impl)`, `SportMapper`, `SportResponse`, `UpdateSportRequest`, `api/sport/{SportController, AdminSportController}`.
-
-### Phase 4 — Kèo: tạo / tìm / xem / kèo của đội (2.1, 2.2, 2.3, 2.11)
-- **Red (unit):** `CustomValidatorsTest` (+`@ValidMatchSchedule` nhánh A, bỏ qua `NEED_VENUE`; `@ValidMatchSearch`; `@ValidGeoQuery` tổng quát; query param có offset bị từ chối), DTO compact constructor (`type` mặc định `HAS_VENUE`, mặc định trang/`radiusKm`), `MatchMapperTest` (`venueOptions/timeOptions = []`, `distanceKm` HALF_UP, `costAgreement` 5 field, `skillLevels`), `MatchServiceImplTest` (2.1 guard order, `NEED_VENUE` → `MATCH_016` **0 lần gọi mock**, `markSelected(now)`, đọc lại detail; 2.2 chọn `searchOpen`/`searchOpenNearby` + hộp; 2.3 `MATCH_001` + khoản tự nhập; 2.11 `TEAM_001`).
-- **Green:** projection `MatchDetailView`, `MatchSummaryView`, `DueMatchView`; `MatchRepository` (`findDetailById`, `searchOpen`, `searchOpenNearby`, `findTeamMatches`; cột luồng B trả `NULL`), `MatchRepositoryCustom` + `MatchRepositoryImpl`, `CostCustomItemRepository`; DTO `CreateMatchRequest` (+`TimeOptionRequest`), `SearchMatchRequest`, response `MatchResponse` (+`MatchTeamResponse`, `MatchVenueResponse`, `MatchCostAgreementResponse`, `CostCustomItemResponse`), `MatchSummaryResponse`; filter `MatchStatusFilter`, `MatchRoleFilter`; validator; `MatchMapper`; `MatchService(Impl)` (4 method); `api/match/MatchController` (2.1–2.3), `TeamMatchController` (2.11).
-
-### Phase 5 — Kèo: chi phí, huỷ (2.4, 2.5)
-- **Red (unit):** `@ValidCostAgreement` (quan hệ `costType`↔số tiền↔`costSplit`, ≤10 khoản, ≤1 tỷ, `LOSER_PAYS_DRINKS`); `MatchServiceImplTest` 2.4 (setter + `setUpdatedAt`, bỏ insert/đọc khi rỗng, lazy → `Expired` → `MATCH_004` ngoài retrier), 2.5 (`MATCH_009`, `MATCH_015` mọi lần thử, `MATCH_010`, `MATCH_011`, `MATCH_012`, `OPEN` phát `MatchCancelledEvent` previousStatus `OPEN`).
-- **Green:** `UpdateCostAgreementRequest`, `CostCustomItemRequest`, `CancelMatchRequest`, `CostAgreementResponse`, `MatchCancellationResponse`; `CostCustomItemRepository#deleteByMatchIdBulk/#insertAll` (unnest + `uuidv7()`); `MatchRepository#expireIfDue`; `MatchRequestRepository#existsByMatchIdAndStatus/#withdrawAccepted/#expirePendingByMatchIds`; service + controller.
-
-### Phase 6 — Yêu cầu ghép kèo (2.6–2.10, 2.12)
-- **Red (unit):** `MatchRequestServiceImplTest`: 2.6 guard order, `saveAndFlush` + `DataIntegrityViolationException(idx_match_request_active)` → `MATCH_006`, tạo `Conversation` chỉ khi `existingConversationId == null`, dùng lại khi gửi lại, `forceIncrementVersion` chỉ nhánh thành công, `MatchRequestSentEvent`; 2.7 `TEAM_016`/`TEAM_002`; 2.8 thứ tự CAS → `acceptIfPending` 0 dòng → `MATCH_008`, `supersedePending`, `MatchConfirmedEvent(pairingId = null)`; 2.9 lazy → `MATCH_004` trước `MATCH_008`; 2.10 `PENDING` 0 dòng → `MATCH_015`, `ACCEPTED` qua `MatchCancellation` (một event, không `MatchRequestWithdrawnEvent`); 2.12. `MatchMapperTest` (+`toRequest`, `toCreatedRequest`, `toAccept`, `toWithdrawal`).
-- **Green:** projection `MatchRequestView`, `MatchRequestContextView`, `MatchAuthorAccessView`, `MatchAvailabilityView`; `MatchRequestRepository` (đủ method CCD §5.2), `MatchRepository#findAuthorAccess/#findAvailability`, `ConversationRepository` (chỉ `save` ở phase này); DTO `SendMatchRequestRequest`, `RejectMatchRequestRequest`, `WithdrawMatchRequestRequest`, `MatchRequestResponse` (+`conversationId`), `AcceptMatchRequestResponse`, `MatchRequestWithdrawalResponse`; `MatchRequestStatusFilter`; `MatchRequestService(Impl)`; `api/match/MatchRequestController`; 2.6/2.7 vào `MatchController`, 2.12 vào `TeamMatchController`.
-
-### Phase 7 — Job vòng đời (UC-M09, AC-M08)
-- **Red (unit):** `MatchLifecycleJobServiceImplTest` (lô < `batch-size` dừng, `max-batches-per-run`, lô lỗi log + dừng tác vụ đó, event mỗi dòng, bỏ câu khi rỗng), `MatchLifecyclePropertiesTest`.
-- **Green:** `MatchRepository#claimDueForExpiry/#claimDueForArchive/#markExpired/#markArchived`; `MatchLifecycleJobService(Impl)` (mỗi lô `TransactionTemplate`), `MatchLifecycleProperties`, `api/scheduler/MatchLifecycleScheduler` (`zone = AppTime.ZONE_ID`; chỉ gọi 2 tác vụ của mã này — `[cần xác nhận B]`); `application.properties` (`arenaflow.match.lifecycle.*`, `spring.task.scheduling.pool.size=5`); surefire `api` đặt cron `-`.
-
-### Phase 8 — Lõi chat (2.16–2.20)
-- **Red (unit):** `TeamMatchConversationPolicyTest` (bảng `API_Spec.md` §1.6 đủ dòng: `PENDING`, `ACCEPTED`, `WITHDRAWN` sau `ACCEPTED`, `REJECTED`, `SUPERSEDED`, `EXPIRED`, gửi lại; đội trưởng cả hai đội → `A`; người đã giải tán → chỉ xem; `expiryDue` không áp người chỉ xem), `ConversationServiceImplTest` (thứ tự `CHAT_002→USER_001→CHAT_003→[lazy MATCH_004]→CHAT_004`; `publishAfterCommit` một lần; history `limit+1`/`hasMore`/`CHAT_001`; markRead; 2.20 `total = 0` bỏ câu trang, `hasUnread` theo bên, dòng `viewerParty = null` bị bỏ + `WARN`; thiếu policy cho một `ContextType` → lỗi khởi tạo), `ConversationMapperTest` (che người đã xoá, `senderPartyId`), `@ValidChatCursor`, `ChatHistoryQuery`/`SendConversationMessageRequest` (trim, ≤1000).
-- **Green:** `ConversationSql` (`CONTEXT_COLUMNS`/`CONTEXT_JOINS` viết một lần), `ConversationRepository#findContext/#findMine/#countMine`, `ConversationMessageRepository`; projection `ConversationContextView`, `ConversationMessageView`, `ChatCursorView`, `ConversationListRowView`, `MineCountView`; `support/chat/{ChatRealtimeGateway, RealtimeFrame, ConversationAccessPolicy, ConversationAccess, TeamMatchConversationPolicy, ConversationRules}`; DTO + `ConversationMapper`; `ConversationService(Impl)`; `api/chat/{ConversationController, ProfileConversationController}`. Bean `ChatRealtimeGateway` tạm (no-op) chỉ khi Phase 9 bị chặn — ghi "Lệch thiết kế" nếu dùng.
-
-### Phase 9 — Kênh realtime STOMP (cổng `[cần xác nhận #12]` ở bước đầu)
-- **Bước đầu (chặn):** user duyệt thêm `spring-boot-starter-websocket` vào `api/pom.xml`; `./mvnw -Duser.timezone=Asia/Ho_Chi_Minh -pl api dependency:tree` xác nhận artifact cho Boot 4.0.9; kiểm `.withSockJS()` và `setSelectorHeaderName(null)` tồn tại trên Spring Framework 7 (biên dịch thử). Không đạt → dừng, hỏi user.
-- **Red (unit):** `StompAuthChannelInterceptorTest` (CONNECT token sai/refresh → `AUTH_001`; SUBSCRIBE sai mẫu/wildcard/`/topic/pairings/{id}` → ERROR; `exp ≤ now` → `AUTH_001`; `requireSubscribable` lỗi → frame lỗi; `SEND` → ERROR), `StompChatRealtimeGatewayTest` (chỉ gửi sau commit; rollback không gửi; lỗi gửi → `WARN`, không ném), `WebSocketPropertiesTest`, error handler (header `message` = mã lỗi, không stacktrace/token).
-- **Green:** `api/realtime/{WebSocketConfig, StompAuthChannelInterceptor, StompChatRealtimeGateway, WebSocketProperties}` + `StompSubProtocolErrorHandler` tuỳ biến; `SecurityConfig` `/ws/**`; `application.properties` `arenaflow.websocket.*`; `.env.example`.
-
-### Phase 10 — Kiểm chứng & đồng bộ
-- Chạy toàn bộ unit test (`./mvnw -Duser.timezone=Asia/Ho_Chi_Minh test` giới hạn unit) → dán output. `code-reviewer` → sửa CRITICAL/MAJOR (hỏi user từng finding) → đối chiếu design + bảng "Lệch thiết kế" → cập nhật design một lần → `architect-reviewer`. Tài liệu CCD §11: `docs/database/*`, USER-001/VENUE-001 design + CHANGELOG trên nhánh này; `api-convention.md`, `convention-backend.md`, `docs/agent/CLAUDE.md` → nhánh `chore/agent-framework-*` riêng.
-
-**Ước lượng:** ~145 file main (tạo ~125, sửa ~20, xoá 1) + ~45 file test (≈30 unit, ≈15 tích hợp) ≈ 190 file.
-
-## Phụ thuộc tạm (thuộc mã khác)
-_Bản tối thiểu, đúng package/tên/chữ ký thiết kế của mã sở hữu, không logic nghiệp vụ của mã đó. Khi tích hợp, bản của mã sở hữu thắng._
-
-| File | Mã sở hữu | Phần tạo/sửa tạm |
-|---|---|---|
-| `common/src/main/java/com/phananh/arenaflow/common/time/AppTime.java` (+ `common/src/test/.../time/AppTimeTest.java`) | SYSTEM-002 (CCD §2.2) | Toàn bộ lớp: `ZONE_ID`, `ZONE`, `now()`, `today()` |
-| `api/src/main/java/com/phananh/arenaflow/api/config/ClockConfig.java` (+ `ClockConfigTest`) | SYSTEM-002 (CCD §2.2) | Bean `Clock` zone VN, tick 1 µs |
-| `domain/.../entity/match/{Match, MatchRequest, CostCustomItem, Sport}.java` — chỉ field thời gian + callback | SYSTEM-002 (CCD §5.1) | `OffsetDateTime` → `LocalDateTime`, `AppTime.now()` (A1, user chốt) |
-| `application/.../service/VenueSelectionService.java`, `impl/VenueSelectionServiceImpl.java`, `domain/.../repository/VenueRepository.java#markSelected` | SYSTEM-002 (CCD §6.3) | `selectedAt` `OffsetDateTime` → `LocalDateTime` (A1) |
-| Test theo chữ ký trên: `VenueSelectionServiceImplTest`, `VenueSelectionIntegrationTest`, `VenueStaleAlertRaceTest` (chỉ dòng gọi `markSelected`) | SYSTEM-002 (CCD §8 #8) | Đổi fixture `selectedAt` sang `LocalDateTime` |
-
-## Test để giai đoạn tích hợp
-_Đã viết, biên dịch được; CHỈ CHẠY khi tích hợp (cần SYSTEM-002 V6 trên DB + `.env.dev`). Không ghi PASS trước khi chạy._
-
-| Test (api/src/test) | Kiểm |
-|---|---|
-| `migration/MatchFlowAMigrationTest` | V7: cột/index/CHECK, bỏ `chat_message`, `conversation(_message)` `TIMESTAMP`, unique cuộc trò chuyện, FK `RESTRICT` người gửi. **Trước khi chạy:** đếm `chat_message` Neon dev (#16), khác 0 → dừng |
-| `api/sport/SportControllerTest` | 2.13–2.15, `AUTH_004`, `SPORT_001` |
-| `api/match/MatchControllerTest` | 2.1–2.12 qua HTTP: tạo / tìm (lọc + toạ độ) / xem (giờ không offset), `MATCH_016`, query param có `Z` → 400, chi phí giữ thứ tự, gửi yêu cầu + `conversationId`, `MATCH_006`, chấp nhận, `MATCH_015`, rút ACCEPTED trừ điểm (80 → 78), từ chối không body |
-| `api/chat/ConversationControllerTest` | 2.16–2.20: gửi / lịch sử / đọc / đầu phòng / "Tin nhắn của tôi", `CHAT_003`, `CHAT_004` sau từ chối, `CHAT_001`, `CHAT_002`, cursor `before`+`after` → 400 `after` |
-| `application/service/MatchNfsQueryCountTest` | Số câu SQL thật: 2.1 = 6, 2.3 = 2, 2.4 = 6 (unnest + `uuidv7()` — #1), 2.6 ≤ 6, 2.7/2.11 ≤ 4, 2.8 = 6, 2.16 = 2, 2.17 = 2, 2.18 = 2, 2.19 = 1, 2.20 = 2 |
-| `application/service/MatchFlowCommittedTest` | Commit thật: 2 chấp nhận song song → đúng 1 ACCEPTED + `MATCH_003`; gửi yêu cầu vào kèo quá hạn → DB `EXPIRED` + `MATCH_004`; job `SKIP LOCKED` bỏ dòng đang khoá (#7) |
-| `api/realtime/StompChatIntegrationTest` | Cổng thật: CONNECT bằng refresh token bị từ chối, SUBSCRIBE `/topic/**` → `SYS_004`, người ngoài → `CHAT_003`, frame `MESSAGE_CREATED` sau khi gửi (kèm `selector` bị bỏ qua) |
-| `api/config/SecurityConfigIntegrationTest` (+1 ca) | `/ws/info` không 401 dù Bearer sai |
-| Chưa viết (đề xuất bổ sung khi tích hợp) | race huỷ vs chấp nhận / rút vs chấp nhận, lô job lỗi không phát event, `reliability_score` không bị `updateTeam` ghi đè, double-submit 2.8 với `open-in-view` (#9), luồng scheduler dùng pool `scheduling-*` (câu hỏi #2) |
+Giai đoạn 2 (P0–P6): không có câu hỏi mở. Các điểm #1–#6 của kế hoạch đã được user chốt 2026-11-21.
 
 ## Blockers / Ghi chú
-- **`[cần xác nhận A]` — phụ thuộc kiểu thời gian SYSTEM-002 (chặn Phase 0):** `main` còn `OffsetDateTime`. Đề xuất: (A1, khuyến nghị) đổi tạm entity `Match`/`MatchRequest`/`CostCustomItem`/`Sport` + `VenueSelectionService#markSelected` sang `LocalDateTime` đúng SYSTEM-002 §5.1/§6.3 (bảng Phụ thuộc tạm); (A2) giữ `main`, đổi kiểu tại chỗ gọi `markSelected` (adapter tạm, phải gỡ khi tích hợp). Chờ user chọn.
-- **`[cần xác nhận B]` — phần NOTIFICATION-001/MERCENARY-001 viết sẵn trong design MATCH-001 (mã đứng sau):** `ConversationService.send` gọi `userRealtimeGateway` (`CONVERSATION_ACTIVITY`); `WebSocketConfig` `/queue` + `setUserDestinationPrefix`; interceptor nhận `/user/queue/notifications`; `MatchLifecycleScheduler` gọi `MercenaryLifecycleJobService`, `NotificationJobService`. Đề xuất đợt 1 **không** code các phần này (NOTIFICATION-001 CCD §2 ghi tự sửa `WebSocketConfig`/`StompAuthChannelInterceptor`). Hệ quả FE thấy được tới khi NOTIFICATION-001 vào: `SUBSCRIBE /user/queue/notifications` → `ERROR` (khác `API_Spec.md` §1.7 v2.5). Chờ user chốt.
-- **`[cần xác nhận #12]` (chặn bước đầu Phase 9):** thêm dependency `spring-boot-starter-websocket` (chưa có trong cache Maven local) — cần user duyệt; kiểm `.withSockJS()`, `setSelectorHeaderName(null)` trên Boot 4.0.9.
-- **`[cần xác nhận #16]` (chặn chạy V7, giai đoạn tích hợp):** đếm `chat_message` trên Neon dev trước khi chạy V7. DB dev đang V5 → V7 chỉ chạy sau V6 (SYSTEM-002).
-- **Rủi ro tích hợp:** xung đột với SYSTEM-002 ở `Match`/`MatchRequest`/`CostCustomItem`/`Sport`/`Team`/`User`/`VenueSelectionService` và **`ChatMessage` (SYSTEM-002 sửa, MATCH-001 xoá)**; MATCH-002/MERCENARY-001/NOTIFICATION-001 tạo bản tạm các lớp của mã này (`Match`, `MatchService`, `ConversationService`, `WebSocketConfig`…) → bản của mã này thắng, cần đối chiếu chữ ký; native SQL lớn (`findMine`, `findContext`, `insertAll` unnest, SKIP LOCKED) chưa được kiểm tới giai đoạn tích hợp — unit test không phủ SQL; 5 endpoint chạm đúng W6.
-- `[cần xác nhận]` không chặn còn lại theo design: #1, #2, #4, #7–#11, #13–#15.
+Điểm cần user chốt trước khi code (không tự quyết):
+1. **Cách làm nhánh luồng B trong thành phần MATCH-001** — đề xuất: giai đoạn 2 chỉ làm phần MATCH-002 sở hữu (P0–P6) + phụ thuộc tạm; mọi điểm cắm vào MATCH-001 (bảng P7) làm ở giai đoạn tích hợp trên nhánh này, sau khi MATCH-001 đợt 1 vào `main`. Phương án khác: (b) viết luôn nhánh B vào bản tạm của class MATCH-001 → nhân đôi logic MATCH-001, xung đột lớn khi tích hợp (không khuyến nghị); (c) chồng nhánh lên `feature/MATCH-001-match-flow-a-impl` khi nhánh đó có commit.
+2. **5 entity dùng chung** (`Match`, `Pairing`, `MatchVenueOption`, `MatchTimeOption`, `CostCustomItem`) bị SYSTEM-002, MATCH-001 và MATCH-002 cùng sửa → đề xuất đổi tạm toàn bộ 5 file sang `LocalDateTime` + delta MATCH-001 cần biên dịch, giải xung đột khi tích hợp theo cột "Delta MATCH-002 cần giữ".
+3. **`VenueSelectionService.markSelected`** đang nhận `OffsetDateTime` trên `main`; thiết kế gọi với `LocalDateTime` (SYSTEM-002 đổi) → đề xuất đổi kiểu tạm ở interface + impl + `VenueRepository#markSelected` (không đổi logic).
+4. **`[cần xác nhận #4]` / `#2` là "chặn code — bước đầu phase 1"** nhưng worktree không có `.env.dev` → không kiểm được ở giai đoạn 2. `UPDATE … RETURNING` không `@Modifying` đã kiểm ở VENUE-001 (#11); `INSERT … RETURNING` và bind mảng `unnest` **chưa** có tiền lệ. Đề xuất: code theo thiết kế, kiểm `PairingReturningSpikeTest` đầu tiên ở tích hợp; fail → dừng, hỏi user (dự phòng làm MATCH-001 2.1 kèo B = 7 > W6).
+5. **Package `ConcurrencyConflictException`** chưa có trong thiết kế → đề xuất `application/support/ConcurrencyConflictException` (cạnh retrier). REPUTATION-001, MERCENARY-001 (chạy song song) cũng dùng → coordinator báo cùng FQN cho các agent đó; thay đổi retrier do MATCH-002 sở hữu.
+6. **`@ValidCostAgreement`** thuộc MATCH-001 → bản tạm không kiểm quy tắc; test quy tắc chi phí cho `UpdatePairingCostAgreementRequest` dời sang tích hợp.
+
+Rủi ro / ghi chú:
+- TDD ở P3 (SQL native) và P6 (controller — mẫu repo là `ApiIntegrationTest`): test viết trước nhưng **không** xác nhận được Red/Green ở giai đoạn 2.
+- V8 phụ thuộc cột / index của V7 (`cost_custom_item.display_order`) → nhánh này một mình không khởi động được Spring context (Flyway fail) cho tới khi rebase lên `main` có V6 + V7.
+- Unit test `PairingServiceImplTest` mock chữ ký MATCH-001 theo thiết kế → chạy lại sau khi thay bản tạm.
+- Không sửa tài liệu thiết kế ở giai đoạn 2; SRS SYSTEM-001 (CCD §11, 18 dòng) do coordinator giao business-analyst.

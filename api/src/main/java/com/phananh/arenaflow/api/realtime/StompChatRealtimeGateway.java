@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -48,12 +49,28 @@ public class StompChatRealtimeGateway implements ChatRealtimeGateway {
     private static String frameType(RealtimeFrame frame) {
         return switch (frame) {
             case RealtimeFrame.MessageCreated ignored -> "MESSAGE_CREATED";
+            case RealtimeFrame.PairingUpdated ignored -> "PAIRING_UPDATED";
         };
     }
 
     private static Map<String, Object> payload(RealtimeFrame frame) {
         return switch (frame) {
             case RealtimeFrame.MessageCreated created -> Map.of("type", frameType(frame), "message", created.message());
+            case RealtimeFrame.PairingUpdated updated -> pairingPayload(updated);
         };
+    }
+
+    /** Frame thương lượng: các mốc xác nhận có thể {@code null} nên dùng map chấp nhận giá trị null, giữ thứ tự field. */
+    private static Map<String, Object> pairingPayload(RealtimeFrame.PairingUpdated updated) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("type", frameType(updated));
+        payload.put("pairingId", updated.pairingId());
+        payload.put("status", updated.status().name());
+        payload.put("revision", updated.revision());
+        payload.put("authorConfirmedAt", updated.authorConfirmedAt());
+        payload.put("interestedConfirmedAt", updated.interestedConfirmedAt());
+        payload.put("confirmedAt", updated.confirmedAt());
+        payload.put("change", updated.change().name());
+        return payload;
     }
 }

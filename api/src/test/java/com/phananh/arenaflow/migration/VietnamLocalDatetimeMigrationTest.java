@@ -26,8 +26,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class VietnamLocalDatetimeMigrationTest {
 
     private static final String VIETNAM_DEFAULT = "AT TIME ZONE 'Asia/Ho_Chi_Minh'";
-    /** Bảng chat_message của V1 đã bị V7 xoá (thay bằng conversation / conversation_message). */
-    private static final Set<String> DROPPED_AFTER_V6 = Set.of("chat_message.created_at");
+    /**
+     * Cột bị migration sau xoá: bảng chat_message (thay bằng conversation / conversation_message), cột chốt giờ cũ
+     * của match.
+     */
+    private static final Set<String> DROPPED_AFTER_V6 = Set.of("chat_message.created_at", "match.confirmed_match_time");
     /** 22 bảng V6 đổi; loại flyway_schema_history (installed_on do Flyway quản lý). */
     private static final String V6_TABLES = V6TimestampColumns.COLUMNS.keySet().stream()
             .map(table -> "'" + table + "'")

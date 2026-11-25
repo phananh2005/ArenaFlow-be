@@ -8,20 +8,26 @@ import com.phananh.arenaflow.application.dto.response.MatchRequestResponse;
 import com.phananh.arenaflow.application.dto.response.MatchResponse;
 import com.phananh.arenaflow.application.dto.response.MatchSummaryResponse;
 import com.phananh.arenaflow.application.dto.response.MatchTeamResponse;
+import com.phananh.arenaflow.application.dto.response.MatchTimeOptionResponse;
 import com.phananh.arenaflow.application.dto.response.MatchVenueResponse;
 import com.phananh.arenaflow.domain.entity.match.CostCustomItem;
 import com.phananh.arenaflow.domain.entity.match.Match;
 import com.phananh.arenaflow.domain.entity.match.MatchRequest;
+import com.phananh.arenaflow.domain.entity.match.Sport;
 import com.phananh.arenaflow.domain.projection.MatchDetailView;
+import com.phananh.arenaflow.domain.projection.MatchOptionRowView;
 import com.phananh.arenaflow.domain.projection.MatchRequestView;
 import com.phananh.arenaflow.domain.projection.MatchSummaryView;
+import com.phananh.arenaflow.domain.projection.SelectableVenueView;
 import com.phananh.arenaflow.domain.projection.TeamCaptainContextView;
+import com.phananh.arenaflow.domain.projection.TimeOptionView;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,11 +35,23 @@ import java.util.UUID;
         unmappedTargetPolicy = ReportingPolicy.ERROR)
 public interface MatchMapper {
 
+    /** Giá trị {@code kind} của dòng lựa chọn địa điểm. */
+    String VENUE_OPTION = "VENUE";
+    /** Giá trị {@code kind} của dòng khung giờ. */
+    String TIME_OPTION = "TIME";
+
+    /** Kèo luồng A (không có lựa chọn): như {@link #toResponse(MatchDetailView, List, List)} với lựa chọn rỗng. */
+    default MatchResponse toResponse(MatchDetailView view, List<CostCustomItem> customItems) {
+        return toResponse(view, customItems, List.of());
+    }
+
     /**
-     * Kèo chi tiết từ projection + khoản tự nhập đã nạp. Đợt luồng A: {@code venueOptions}, {@code timeOptions} rỗng;
+     * Kèo chi tiết từ projection + khoản tự nhập + dòng lựa chọn đã nạp. Dòng lựa chọn tách theo {@code kind} và giữ
+     * thứ tự đọc từ DB (địa điểm theo thứ tự nhập, khung giờ theo giờ bắt đầu); kèo luồng A: hai danh sách rỗng.
      * {@code opponentTeam}, {@code venue} null khi chưa có.
      */
-    default MatchResponse toResponse(MatchDetailView view, List<CostCustomItem> customItems) {
+    default MatchResponse toResponse(MatchDetailView view, List<CostCustomItem> customItems,
+                                     List<MatchOptionRowView> optionRows) {
         MatchTeamResponse opponent = view.getOpponentTeamId() == null ? null
                 : new MatchTeamResponse(view.getOpponentTeamId(), view.getOpponentTeamName(),
                 view.getOpponentTeamAvatarUrl(), view.getOpponentTeamReliabilityScore());
@@ -48,9 +66,54 @@ public interface MatchMapper {
                 view.getMatchNature(), view.getMatchStartTime(), view.getMatchEndTime(), view.getExpiresAt(),
                 new MatchTeamResponse(view.getAuthorTeamId(), view.getAuthorTeamName(), view.getAuthorTeamAvatarUrl(),
                         view.getAuthorTeamReliabilityScore()),
-                opponent, venue, List.of(), List.of(), view.getConfirmedPairingId(), costAgreement,
+                opponent, venue, toVenueOptions(optionRows), toTimeOptions(optionRows), view.getConfirmedPairingId(),
+                costAgreement,
                 view.getCancelledByTeamId(), view.getCancelledAt(), view.getCancelReason(), view.getCreatedAt(),
                 view.getUpdatedAt());
+    }
+
+    /**
+     * Kèo luồng B vừa tạo, dựng từ dữ liệu đã nạp khi kiểm quyền / bộ môn / địa điểm và id khung giờ trả về lúc ghi
+     * (không đọc lại): {@code venue}, {@code opponentTeam} null; lựa chọn địa điểm theo thứ tự nhập, khung giờ theo giờ
+     * bắt đầu; thoả thuận chi phí rỗng.
+     */
+    default MatchResponse toCreatedNeedVenue(Match match, TeamCaptainContextView author, Sport sport,
+                                             List<SelectableVenueView> venueOptions, List<TimeOptionView> timeOptions) {
+        List<MatchVenueResponse> venues = venueOptions.stream()
+                .map(venue -> new MatchVenueResponse(venue.getId(), venue.getName(), venue.getAddress(),
+                        venue.getLatitude(), venue.getLongitude(), venue.getStatus(), venue.getPrimaryImageUrl()))
+                .toList();
+        List<MatchTimeOptionResponse> times = timeOptions.stream()
+                .sorted(Comparator.comparing(TimeOptionView::getProposedStartTime))
+                .map(option -> new MatchTimeOptionResponse(option.getId(), option.getProposedStartTime(),
+                        option.getProposedEndTime()))
+                .toList();
+        MatchCostAgreementResponse emptyAgreement = new MatchCostAgreementResponse(null, null, null, null, null, null,
+                List.of());
+        return new MatchResponse(match.getId(), match.getType().name(), match.getStatus().name(), match.getSportId(),
+                sport.getName(), match.getFormat().name(), match.getSkillLevels(), match.getAgeNote(),
+                match.getMatchNature(), match.getMatchStartTime(), match.getMatchEndTime(), match.getExpiresAt(),
+                new MatchTeamResponse(match.getAuthorTeamId(), author.getName(), author.getAvatarUrl(),
+                        author.getReliabilityScore()),
+                null, null, venues, times, null, emptyAgreement, null, null, null, match.getCreatedAt(),
+                match.getUpdatedAt());
+    }
+
+    /** Dòng {@code kind = VENUE} → lựa chọn địa điểm, giữ thứ tự. */
+    private static List<MatchVenueResponse> toVenueOptions(List<MatchOptionRowView> optionRows) {
+        return optionRows.stream()
+                .filter(row -> VENUE_OPTION.equals(row.getKind()))
+                .map(row -> new MatchVenueResponse(row.getVenueId(), row.getVenueName(), row.getAddress(),
+                        row.getLatitude(), row.getLongitude(), row.getVenueStatus(), row.getPrimaryImageUrl()))
+                .toList();
+    }
+
+    /** Dòng {@code kind = TIME} → khung giờ, giữ thứ tự. */
+    private static List<MatchTimeOptionResponse> toTimeOptions(List<MatchOptionRowView> optionRows) {
+        return optionRows.stream()
+                .filter(row -> TIME_OPTION.equals(row.getKind()))
+                .map(row -> new MatchTimeOptionResponse(row.getTimeOptionId(), row.getStartsAt(), row.getEndsAt()))
+                .toList();
     }
 
     @Mapping(target = "itemId", source = "id")

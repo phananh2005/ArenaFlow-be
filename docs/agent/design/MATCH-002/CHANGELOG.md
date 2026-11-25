@@ -1,5 +1,21 @@
 # CHANGELOG — MATCH-002 Thương lượng ghép kèo luồng B (pairing) & chat
 
+## [v3.1] — 2026-11-25
+
+**Type:** MINOR (không đổi endpoint, field, shape response, mã thành công, mã lỗi, frame; 2.6 ghi rõ cách xử lý chuỗi rỗng và phần tử `null`) · **Tóm tắt:** Đồng bộ thiết kế với code sau khi triển khai; 2.6 trả `400` thay vì lỗi hệ thống khi `customItems` có phần tử `null`.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | `API_Spec.md` 2.6 — request, bảng lỗi | Ghi rõ / Sửa hành vi | `customItems` có phần tử `null` → lỗi hệ thống (`500`) → `400 VALIDATION_ERROR` gắn `customItems`; `costType`, `costSplit` gửi `""` / chỉ khoảng trắng → coi như `null` (trước đó bị từ chối như sai giá trị enum) — theo MATCH-001 `API_Spec.md` 2.4 (v3.2) | Lỗi do dữ liệu client trả `400`; quy ước `""` = không nhập (MATCH-001 §1.1) — user chốt 2026-11-25 | Không bắt buộc |
+| 2 | `API_Spec.md` 2.6 — `depositHolder` | Ghi rõ | "phải `null` khi `depositAmount` = `null`" → `""` / chỉ khoảng trắng = không nhập (lưu `null`, không lỗi); chỉ lỗi `400` khi có nội dung mà không có `depositAmount` | Quy ước `""` = không nhập (MATCH-001 §1.1) | Không bắt buộc |
+| 3 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE theo code đã triển khai, không ảnh hưởng FE | Đối chiếu code ↔ thiết kế sau khi code | Không |
+| 4 | Header 3 tài liệu thiết kế MATCH-002 | Ghi nhận | v3.0 → v3.1 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- API contract: không đổi. Cùng đợt: MATCH-001 v3.2 (2.1 nhận kèo luồng B).
+
 ## [v3.0] — 2026-11-21
 
 **Type:** MAJOR (đổi định dạng mọi giá trị thời gian: bỏ `Z`/offset, giá trị theo giờ Việt Nam) · **Tóm tắt:** Thời gian theo giờ Việt Nam, không kèm múi giờ (SYSTEM-002).

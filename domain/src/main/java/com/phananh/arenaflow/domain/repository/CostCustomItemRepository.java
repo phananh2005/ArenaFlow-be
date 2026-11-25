@@ -30,4 +30,33 @@ public interface CostCustomItemRepository extends JpaRepository<CostCustomItem, 
             """, nativeQuery = true)
     int insertAll(@Param("matchId") UUID matchId, @Param("names") String[] names, @Param("amounts") Long[] amounts,
                   @Param("now") LocalDateTime now);
+
+    List<CostCustomItem> findByPairingIdOrderByDisplayOrderAsc(UUID pairingId);
+
+    @Modifying
+    @Query(value = "DELETE FROM cost_custom_item WHERE pairing_id = :pairingId", nativeQuery = true)
+    int deleteByPairingIdBulk(@Param("pairingId") UUID pairingId);
+
+    /** Ghi mọi khoản tự nhập của thương lượng trong một câu; thứ tự mảng = {@code display_order}; id do DB sinh. */
+    @Modifying
+    @Query(value = """
+            INSERT INTO cost_custom_item (id, pairing_id, item_name, amount, display_order, created_at)
+            SELECT uuidv7(), :pairingId, t.name, t.amount, t.ord, :now
+            FROM unnest(CAST(:names AS text[]), CAST(:amounts AS bigint[])) WITH ORDINALITY AS t(name, amount, ord)
+            """, nativeQuery = true)
+    int insertAllForPairing(@Param("pairingId") UUID pairingId, @Param("names") String[] names,
+                            @Param("amounts") Long[] amounts, @Param("now") LocalDateTime now);
+
+    /**
+     * Khi ghép kèo luồng B: chép khoản tự nhập của thương lượng đã chốt thành khoản của kèo (id mới, giữ thứ tự,
+     * {@code pairing_id = NULL}); khoản của thương lượng giữ nguyên. 0 dòng khi thương lượng không có khoản.
+     */
+    @Modifying
+    @Query(value = """
+            INSERT INTO cost_custom_item (id, match_id, item_name, amount, display_order, created_at)
+            SELECT uuidv7(), :matchId, item_name, amount, display_order, :now
+            FROM cost_custom_item WHERE pairing_id = :pairingId
+            """, nativeQuery = true)
+    int copyPairingItemsToMatch(@Param("pairingId") UUID pairingId, @Param("matchId") UUID matchId,
+                                @Param("now") LocalDateTime now);
 }

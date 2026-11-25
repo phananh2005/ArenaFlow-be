@@ -2,7 +2,7 @@
 
 > Thiết kế schema PostgreSQL chi tiết từ đặc tả nghiệp vụ trong `data-model.md`
 
-> Cập nhật: 2026-11-25 — đồng bộ V7 (MATCH-001: `match`, `match_request`, `cost_custom_item`, bỏ `chat_message`, thêm `conversation` + `conversation_message`, `idx_team_disbanded_by`). 2026-11-21 — kiểu mọi cột thời gian theo V6 (SYSTEM-002). 2026-11-05 — bảng `team`, `team_member` đồng bộ tới V4 (USER-002)
+> Cập nhật: 2026-11-25 — đồng bộ V8 (MATCH-002: `match`, `match_venue_option`, `match_time_option`, `cost_custom_item`, `pairing`). 2026-11-25 — đồng bộ V7 (MATCH-001: `match`, `match_request`, `cost_custom_item`, bỏ `chat_message`, thêm `conversation` + `conversation_message`, `idx_team_disbanded_by`). 2026-11-21 — kiểu mọi cột thời gian theo V6 (SYSTEM-002). 2026-11-05 — bảng `team`, `team_member` đồng bộ tới V4 (USER-002)
 
 ## Conventions
 
@@ -250,21 +250,20 @@ Bài đăng ghép kèo (luồng A hoặc B).
 | skill_levels | TEXT | NOT NULL | JSON array nhãn trình độ mong muốn, default `'[]'` (V7) |
 | age_note | TEXT | NULL | Ghi chú tuổi (văn bản tự do) |
 | match_nature | TEXT | NULL | Tính chất trận (văn bản tự do) |
-| venue_id | UUID | NULL | FK → venue (chỉ cho luồng A) |
-| match_start_time | TIMESTAMP | NOT NULL | Giờ bắt đầu trận |
-| match_end_time | TIMESTAMP | NOT NULL | Giờ kết thúc dự kiến (để ARCHIVED/notification) |
+| venue_id | UUID | NULL | FK → venue. HAS_VENUE: bắt buộc; NEED_VENUE: NULL khi chưa ghép, = địa điểm đã chốt khi ghép (V8) |
+| match_start_time | TIMESTAMP | NOT NULL | Giờ bắt đầu trận (NEED_VENUE chưa ghép: khung giờ sớm nhất; khi ghép: khung đã chốt) |
+| match_end_time | TIMESTAMP | NOT NULL | Giờ kết thúc dự kiến (để ARCHIVED/notification); NEED_VENUE như `match_start_time` |
 | expires_at | TIMESTAMP | NOT NULL | Thời hạn bài đăng, ≤ match_start_time |
-| search_lat | DECIMAL(10,7) | NULL | Vĩ độ gốc cho gợi ý (luồng B) |
-| search_lng | DECIMAL(10,7) | NULL | Kinh độ gốc cho gợi ý (luồng B) |
-| search_radius_km | DECIMAL(5,2) | NULL | Bán kính tìm kiếm (default 3 km, luồng B) |
+| search_lat | DECIMAL(10,7) | NULL | Không dùng (V8 bỏ index GPS; kèo B tìm theo lựa chọn địa điểm) |
+| search_lng | DECIMAL(10,7) | NULL | Không dùng |
+| search_radius_km | DECIMAL(5,2) | NULL | Không dùng |
 | cost_type | VARCHAR(50) | NULL | `VENUE_ONLY`, `DRINKS_ONLY`, `BOTH` (V7: bỏ `CUSTOM`) |
 | cost_split | VARCHAR(50) | NULL | `FIFTY_FIFTY`, `SEVENTY_THIRTY_HOME`, `SEVENTY_THIRTY_LOSER`, `LOSER_PAYS_DRINKS` |
 | cost_venue_amount | BIGINT | NULL | Tiền sân (VND, > 0) |
 | cost_drinks_amount | BIGINT | NULL | Tiền nước (VND, > 0) |
-| cost_deposit_holder | VARCHAR(100) | NULL | Ai giữ tiền cọc (luồng B, văn bản tự do) |
+| cost_deposit_amount | BIGINT | NULL | Tiền cọc đã chốt (VND, > 0; chỉ NEED_VENUE, chép từ pairing khi ghép — V8) |
+| cost_deposit_holder | VARCHAR(100) | NULL | Ai giữ tiền cọc (văn bản tự do; chỉ khi có `cost_deposit_amount` — V8) |
 | confirmed_opponent_team_id | UUID | NULL | FK → team, đội đã ghép (khi CONFIRMED) |
-| confirmed_venue_id | UUID | NULL | FK → venue, sân đã chốt (luồng B khi CONFIRMED) |
-| confirmed_match_time | TIMESTAMP | NULL | Giờ trận đã chốt (luồng B khi CONFIRMED) |
 | cancelled_by_team_id | UUID | NULL | FK → team, đội hủy (khi CANCELLED) |
 | cancelled_at | TIMESTAMP | NULL | Thời gian hủy |
 | cancel_reason | VARCHAR(500) | NULL | Lý do hủy kèo (V7) |
@@ -280,14 +279,13 @@ Bài đăng ghép kèo (luồng A hoặc B).
 - INDEX (status, match_end_time) -- scheduled job chuyển ARCHIVED
 - INDEX (sport_id, status, match_start_time) -- tìm kèo theo môn
 - `idx_match_open_start` INDEX (match_start_time, id) WHERE status = 'OPEN' (V7) -- tìm kèo đang mở không lọc môn
-- INDEX (search_lat, search_lng) WHERE type = 'NEED_VENUE' AND status = 'OPEN' -- tìm kiếm theo GPS
+- (V8 bỏ `idx_match_search_gps` (search_lat, search_lng) — không dùng)
 
 **Foreign Keys:**
 - FOREIGN KEY (author_team_id) REFERENCES team(id) ON DELETE RESTRICT
 - FOREIGN KEY (sport_id) REFERENCES sport(id) ON DELETE RESTRICT
 - FOREIGN KEY (venue_id) REFERENCES venue(id) ON DELETE RESTRICT
 - FOREIGN KEY (confirmed_opponent_team_id) REFERENCES team(id) ON DELETE RESTRICT
-- FOREIGN KEY (confirmed_venue_id) REFERENCES venue(id) ON DELETE RESTRICT
 - FOREIGN KEY (cancelled_by_team_id) REFERENCES team(id) ON DELETE RESTRICT
 
 **Constraints:**
@@ -295,7 +293,7 @@ Bài đăng ghép kèo (luồng A hoặc B).
 - CHECK (status IN ('OPEN', 'CONFIRMED', 'ARCHIVED', 'COMPLETED', 'EXPIRED', 'CANCELLED'))
 - CHECK (expires_at <= match_start_time)
 - CHECK (match_end_time > match_start_time)
-- CHECK ((type = 'HAS_VENUE' AND venue_id IS NOT NULL) OR (type = 'NEED_VENUE' AND venue_id IS NULL))
+- `match_type_venue_check` (V8, thay `match_check2` của V1): CHECK ((type = 'HAS_VENUE' AND venue_id IS NOT NULL) OR (type = 'NEED_VENUE' AND (venue_id IS NULL) = (confirmed_opponent_team_id IS NULL)))
 - CHECK ((status = 'CONFIRMED' AND confirmed_opponent_team_id IS NOT NULL) OR (status != 'CONFIRMED'))
 - CHECK ((status = 'CANCELLED' AND cancelled_by_team_id IS NOT NULL AND cancelled_at IS NOT NULL) OR (status != 'CANCELLED'))
 - `match_format_check` (V7): CHECK (format IS NULL OR format IN ('FIVE_A_SIDE', 'SEVEN_A_SIDE', 'ELEVEN_A_SIDE'))
@@ -303,33 +301,42 @@ Bài đăng ghép kèo (luồng A hoặc B).
 - `match_cost_type_check` (V7): CHECK (cost_type IS NULL OR cost_type IN ('VENUE_ONLY', 'DRINKS_ONLY', 'BOTH'))
 - `match_cost_split_check` (V7): CHECK (cost_split IS NULL OR cost_split IN ('FIFTY_FIFTY', 'SEVENTY_THIRTY_HOME', 'SEVENTY_THIRTY_LOSER', 'LOSER_PAYS_DRINKS'))
 - `match_cost_amount_check` (V7): CHECK ((cost_venue_amount IS NULL OR cost_venue_amount > 0) AND (cost_drinks_amount IS NULL OR cost_drinks_amount > 0))
+- `match_deposit_check` (V8): CHECK ((cost_deposit_amount IS NULL OR cost_deposit_amount > 0) AND (cost_deposit_amount IS NOT NULL OR cost_deposit_holder IS NULL) AND (type = 'NEED_VENUE' OR cost_deposit_amount IS NULL))
+
+V8 bỏ `confirmed_venue_id`, `confirmed_match_time` (V1, không dùng): kèo B khi ghép ghi thẳng `venue_id`, `match_start_time`, `match_end_time`, chi phí + cọc.
 
 ### 3.2 Bảng: match_venue_option
 
-Nhiều lựa chọn địa điểm cho luồng B.
+Nhiều lựa chọn địa điểm cho luồng B (1–5 mỗi kèo).
 
 | Cột | Kiểu | Nullable | Mô tả |
 |---|---|---|---|
-| id | UUID | NOT NULL | PK |
+| id | UUID | NOT NULL | PK (sinh bằng `uuidv7()` trong câu INSERT gom lô) |
 | match_id | UUID | NOT NULL | FK → match |
 | venue_id | UUID | NOT NULL | FK → venue |
+| display_order | INTEGER | NOT NULL | Thứ tự nhập 1..5 (V8) |
 | created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
-- INDEX (match_id)
+- `match_venue_option_match_venue_key` UNIQUE (match_id, venue_id) (V8) -- không trùng địa điểm; đích FK phương án của pairing
+- `match_venue_option_match_order_key` UNIQUE (match_id, display_order) (V8)
+- `idx_match_venue_option_venue` INDEX (venue_id) (V8, thay `idx_match_venue_option_match`)
 
 **Foreign Keys:**
 - FOREIGN KEY (match_id) REFERENCES match(id) ON DELETE CASCADE
 - FOREIGN KEY (venue_id) REFERENCES venue(id) ON DELETE RESTRICT
 
+**Constraints:**
+- `match_venue_option_order_check` (V8): CHECK (display_order BETWEEN 1 AND 5)
+
 ### 3.3 Bảng: match_time_option
 
-Nhiều lựa chọn giờ hẹn cho luồng B.
+Nhiều lựa chọn giờ hẹn cho luồng B (1–5 mỗi kèo).
 
 | Cột | Kiểu | Nullable | Mô tả |
 |---|---|---|---|
-| id | UUID | NOT NULL | PK |
+| id | UUID | NOT NULL | PK (sinh bằng `uuidv7()` trong câu INSERT gom lô) |
 | match_id | UUID | NOT NULL | FK → match |
 | proposed_start_time | TIMESTAMP | NOT NULL | Giờ bắt đầu đề xuất |
 | proposed_end_time | TIMESTAMP | NOT NULL | Giờ kết thúc đề xuất |
@@ -337,19 +344,24 @@ Nhiều lựa chọn giờ hẹn cho luồng B.
 
 **Indexes:**
 - PRIMARY KEY (id)
-- INDEX (match_id)
+- `match_time_option_match_id_key` UNIQUE (match_id, id) (V8) -- đích FK phương án của pairing
+- `match_time_option_match_start_key` UNIQUE (match_id, proposed_start_time) (V8, thay `idx_match_time_option_match`) -- không trùng giờ bắt đầu
 
 **Foreign Keys:**
 - FOREIGN KEY (match_id) REFERENCES match(id) ON DELETE CASCADE
 
+**Constraints:**
+- `match_time_option_range_check` (V8): CHECK (proposed_end_time > proposed_start_time)
+
 ### 3.4 Bảng: cost_custom_item
 
-Các khoản tự nhập (tiền trọng tài, phí áo đấu, ...).
+Các khoản tự nhập (tiền trọng tài, phí áo đấu, ...) — thuộc kèo (luồng A; luồng B sau khi ghép, chép từ pairing) hoặc thuộc pairing (luồng B đang thương lượng) (V8).
 
 | Cột | Kiểu | Nullable | Mô tả |
 |---|---|---|---|
 | id | UUID | NOT NULL | PK (sinh bằng `uuidv7()` của PostgreSQL ≥ 18 trong câu INSERT gom lô) |
-| match_id | UUID | NOT NULL | FK → match |
+| match_id | UUID | NULL | FK → match (V8: bỏ NOT NULL) |
+| pairing_id | UUID | NULL | FK → pairing (V8) |
 | item_name | VARCHAR(100) | NOT NULL | Tên khoản phí |
 | amount | BIGINT | NOT NULL | Số tiền (VND, > 0) |
 | display_order | INTEGER | NOT NULL | Thứ tự hiển thị (> 0, V7) |
@@ -358,13 +370,16 @@ Các khoản tự nhập (tiền trọng tài, phí áo đấu, ...).
 **Indexes:**
 - PRIMARY KEY (id)
 - `idx_cost_custom_item_order` UNIQUE (match_id, display_order) (V7, thay `idx_cost_custom_item_match`)
+- `idx_cost_custom_item_pairing_order` UNIQUE (pairing_id, display_order) (V8)
 
 **Foreign Keys:**
 - FOREIGN KEY (match_id) REFERENCES match(id) ON DELETE CASCADE
+- `cost_custom_item_pairing_fkey` FOREIGN KEY (pairing_id) REFERENCES pairing(id) ON DELETE CASCADE (V8)
 
 **Constraints:**
 - `cost_custom_item_display_order_check` (V7): CHECK (display_order > 0)
 - `cost_custom_item_amount_check` (V7): CHECK (amount > 0)
+- `cost_custom_item_owner_check` (V8): CHECK ((match_id IS NULL) <> (pairing_id IS NULL)) -- đúng một chủ sở hữu
 
 ### 3.5 Bảng: match_request
 
@@ -399,7 +414,7 @@ Yêu cầu bắt đối (luồng A).
 
 ### 3.6 Bảng: pairing
 
-Pairing cho luồng B (nhiều đội thương lượng đồng thời).
+Pairing cho luồng B (nhiều đội thương lượng đồng thời). Mỗi pairing mang một **gói**: phương án (1 lựa chọn địa điểm + 1 khung giờ của kèo) + chi phí + cọc; `revision` tăng mỗi lần sửa gói (V8). CAS bằng `status` + `revision`, không có cột `version`.
 
 | Cột | Kiểu | Nullable | Mô tả |
 |---|---|---|---|
@@ -407,25 +422,42 @@ Pairing cho luồng B (nhiều đội thương lượng đồng thời).
 | match_id | UUID | NOT NULL | FK → match |
 | interested_team_id | UUID | NOT NULL | FK → team, đội nhận bài |
 | status | VARCHAR(20) | NOT NULL | NEGOTIATING, CONFIRMED, EXPIRED, SUPERSEDED |
-| author_confirmed_at | TIMESTAMP | NULL | Author xác nhận |
-| interested_confirmed_at | TIMESTAMP | NULL | Đội nhận xác nhận |
-| final_confirmed_at | TIMESTAMP | NULL | Timestamp xác nhận cuối (để xử lý race condition) |
+| revision | INTEGER | NOT NULL | Phiên bản gói, default 0, ≥ 0 (V8) |
+| proposed_venue_id | UUID | NULL | Phương án: địa điểm (thuộc lựa chọn của kèo) (V8) |
+| proposed_time_option_id | UUID | NULL | Phương án: khung giờ của kèo (V8) |
+| cost_type | VARCHAR(50) | NULL | `VENUE_ONLY`, `DRINKS_ONLY`, `BOTH` (V8) |
+| cost_split | VARCHAR(50) | NULL | `FIFTY_FIFTY`, `SEVENTY_THIRTY_HOME`, `SEVENTY_THIRTY_LOSER`, `LOSER_PAYS_DRINKS` (V8) |
+| cost_venue_amount | BIGINT | NULL | Tiền sân (VND, > 0) (V8) |
+| cost_drinks_amount | BIGINT | NULL | Tiền nước (VND, > 0) (V8) |
+| cost_deposit_amount | BIGINT | NULL | Tiền cọc (VND, > 0) (V8) |
+| cost_deposit_holder | VARCHAR(100) | NULL | Ai giữ tiền cọc; chỉ khi có `cost_deposit_amount` (V8) |
+| author_confirmed_at | TIMESTAMP | NULL | Đội tạo kèo xác nhận gói (xoá khi gói đổi) |
+| interested_confirmed_at | TIMESTAMP | NULL | Đội nhận kèo xác nhận gói (xoá khi gói đổi) |
+| final_confirmed_at | TIMESTAMP | NULL | Thời điểm hoàn tất (pairing CONFIRMED) |
 | created_at | TIMESTAMP | NOT NULL | |
+| updated_at | TIMESTAMP | NOT NULL | (V8) |
 
 **Indexes:**
 - PRIMARY KEY (id)
-- UNIQUE (match_id, interested_team_id) WHERE status NOT IN ('EXPIRED', 'SUPERSEDED') -- một đội chỉ một pairing active
-- INDEX (match_id, status)
-- INDEX (interested_team_id, status)
-- INDEX (match_id, final_confirmed_at) WHERE status = 'CONFIRMED' -- tìm pairing thắng race condition
+- `idx_pairing_active` UNIQUE (match_id, interested_team_id) WHERE status NOT IN ('EXPIRED', 'SUPERSEDED') -- một đội chỉ một pairing active
+- `idx_pairing_match` INDEX (match_id, status)
+- `idx_pairing_team` INDEX (interested_team_id, status)
+- `idx_pairing_confirmed` UNIQUE (match_id) WHERE status = 'CONFIRMED' (V8, thay `idx_pairing_race`) -- tối đa một pairing CONFIRMED mỗi kèo
 
 **Foreign Keys:**
 - FOREIGN KEY (match_id) REFERENCES match(id) ON DELETE CASCADE
 - FOREIGN KEY (interested_team_id) REFERENCES team(id) ON DELETE RESTRICT
+- `pairing_proposed_venue_fkey` FOREIGN KEY (match_id, proposed_venue_id) REFERENCES match_venue_option(match_id, venue_id) (V8)
+- `pairing_proposed_time_fkey` FOREIGN KEY (match_id, proposed_time_option_id) REFERENCES match_time_option(match_id, id) (V8)
 
 **Constraints:**
 - CHECK (status IN ('NEGOTIATING', 'CONFIRMED', 'EXPIRED', 'SUPERSEDED'))
 - CHECK ((status = 'CONFIRMED' AND author_confirmed_at IS NOT NULL AND interested_confirmed_at IS NOT NULL AND final_confirmed_at IS NOT NULL) OR (status != 'CONFIRMED'))
+- `pairing_proposal_pair_check` (V8): CHECK ((proposed_venue_id IS NULL) = (proposed_time_option_id IS NULL))
+- `pairing_confirmed_proposal_check` (V8): CHECK (status <> 'CONFIRMED' OR proposed_venue_id IS NOT NULL)
+- `pairing_revision_check` (V8): CHECK (revision >= 0)
+- `pairing_cost_type_check`, `pairing_cost_split_check` (V8): giá trị như `match`
+- `pairing_cost_amount_check` (V8): các số tiền NULL hoặc > 0; `cost_deposit_holder` chỉ khi có `cost_deposit_amount`
 
 ### 3.7 Bảng: sport
 
@@ -794,7 +826,7 @@ Thông báo in-app.
 ### 8.2 Indexes quan trọng cho hiệu năng
 
 Các indexes đã được thiết kế để hỗ trợ:
-- Tìm kiếm Match theo GPS (lat/lng)
+- Tìm kèo gần vị trí (toạ độ địa điểm của kèo A / lựa chọn địa điểm của kèo B) — hiện câu tìm chưa dùng index toạ độ (đọc mọi kèo OPEN rồi lọc hộp); tech-debt ở MATCH-001 `Processing_Flow.md` §9
 - Scheduled jobs xử lý expiry, ARCHIVED, retention
 - Query Match/Request/Pairing theo status
 - Aggregate rating/report cho team/user
@@ -803,7 +835,7 @@ Các indexes đã được thiết kế để hỗ trợ:
 ### 8.3 Ràng buộc nghiệp vụ
 
 - Tối đa một request ACCEPTED mỗi Match (unique index `idx_match_request_accepted WHERE status = 'ACCEPTED'`, V7)
-- Tối đa một pairing CONFIRMED mỗi Match (race condition xử lý bằng final_confirmed_at)
+- Tối đa một pairing CONFIRMED mỗi Match (unique index `idx_pairing_confirmed WHERE status = 'CONFIRMED'`, V8; thắng race = lần hoàn tất commit trước)
 - Một đội chỉ một captain ACTIVE (unique constraint trên team_member)
 - Tối đa 5 ảnh mỗi venue (xử lý ở application layer)
 - Một venue chỉ một ảnh primary (unique constraint WHERE is_primary)

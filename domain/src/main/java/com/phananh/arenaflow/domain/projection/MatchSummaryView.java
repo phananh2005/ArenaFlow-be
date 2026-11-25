@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Kèo rút gọn cho danh sách. {@code venueOptionCount}, {@code timeOptionCount} null ở đợt luồng A;
+ * Kèo rút gọn cho danh sách. {@code venueOptionCount}, {@code timeOptionCount} null ở kèo luồng A;
  * {@code distanceKm} chỉ có khi tìm theo toạ độ.
  */
 public interface MatchSummaryView {

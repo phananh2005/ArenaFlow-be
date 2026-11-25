@@ -10,10 +10,11 @@ import java.util.UUID;
 
 import static com.phananh.arenaflow.application.support.chat.ConversationFixtures.NOW;
 import static com.phananh.arenaflow.application.support.chat.ConversationFixtures.context;
+import static com.phananh.arenaflow.application.support.chat.ConversationFixtures.needVenueRow;
 import static com.phananh.arenaflow.application.support.chat.ConversationFixtures.teamMatchRow;
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Bảng nhắn được / chỉ xem của chat hai đội luồng A. */
+/** Bảng nhắn được / chỉ xem của chat hai đội luồng A và luồng B. */
 class TeamMatchConversationPolicyTest {
 
     private final TeamMatchConversationPolicy policy = new TeamMatchConversationPolicy();
@@ -53,6 +54,48 @@ class TeamMatchConversationPolicyTest {
         assertThat(access.viewerParty()).isEqualTo(Conversation.Party.A);
         assertThat(access.canSend()).isEqualTo(canSend);
         assertThat(access.expiryDue()).isFalse();
+    }
+
+    @ParameterizedTest(name = "kèo B: thương lượng {0}, đã ghép {1} → gửi được {2}")
+    @CsvSource({
+            "NEGOTIATING, false, true",
+            "CONFIRMED, true, true",
+            "SUPERSEDED, false, false",
+            "EXPIRED, false, false"
+    })
+    void needVenueCanSendFollowsPairingAndMatchedTeam(String pairingStatus, boolean matched, boolean canSend) {
+        Map<String, Object> row = needVenueRow(UUID.randomUUID(), teamA, teamB);
+        row.put("pairingStatus", pairingStatus);
+        if (matched) {
+            row.put("matchOpponentTeamId", teamB);
+            row.put("matchStatus", "CANCELLED");
+        }
+
+        ConversationAccess access = policy.resolve(context(row), callerId, NOW);
+
+        assertThat(access.viewerParty()).isEqualTo(Conversation.Party.A);
+        assertThat(access.canSend()).isEqualTo(canSend);
+        assertThat(access.expiryDue()).isFalse();
+    }
+
+    @Test
+    void needVenueNegotiatingOnExpiredOpenMatchIsExpiryDueAndCannotSend() {
+        Map<String, Object> row = needVenueRow(UUID.randomUUID(), teamA, teamB);
+        row.put("expiresAt", NOW);
+
+        ConversationAccess access = policy.resolve(context(row), callerId, NOW);
+
+        assertThat(access.expiryDue()).isTrue();
+        assertThat(access.canSend()).isFalse();
+    }
+
+    @Test
+    void needVenueIgnoresRequestColumns() {
+        Map<String, Object> row = needVenueRow(UUID.randomUUID(), teamA, teamB);
+        row.put("pairingStatus", "SUPERSEDED");
+        row.put("requestStatus", "PENDING");
+
+        assertThat(policy.resolve(context(row), callerId, NOW).canSend()).isFalse();
     }
 
     @Test

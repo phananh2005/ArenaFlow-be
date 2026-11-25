@@ -11,6 +11,7 @@ import com.phananh.arenaflow.application.event.match.MatchCancelledEvent;
 import com.phananh.arenaflow.application.support.CancellationResult;
 import com.phananh.arenaflow.domain.entity.match.MatchRequest;
 import com.phananh.arenaflow.application.dto.request.SearchMatchRequest;
+import com.phananh.arenaflow.application.dto.request.TimeOptionRequest;
 import com.phananh.arenaflow.application.dto.response.MatchResponse;
 import com.phananh.arenaflow.application.mapper.MatchMapper;
 import com.phananh.arenaflow.application.service.impl.MatchServiceImpl;
@@ -27,10 +28,17 @@ import com.phananh.arenaflow.domain.entity.match.CostCustomItem;
 import com.phananh.arenaflow.domain.entity.match.Match;
 import com.phananh.arenaflow.domain.entity.match.Sport;
 import com.phananh.arenaflow.domain.projection.MatchDetailView;
+import com.phananh.arenaflow.domain.projection.MatchOptionRowView;
 import com.phananh.arenaflow.domain.projection.MatchSummaryView;
+import com.phananh.arenaflow.domain.projection.SelectableVenueView;
+import com.phananh.arenaflow.domain.projection.TeamCaptainContextView;
+import com.phananh.arenaflow.domain.projection.TimeOptionView;
 import com.phananh.arenaflow.domain.repository.CostCustomItemRepository;
 import com.phananh.arenaflow.domain.repository.MatchRepository;
 import com.phananh.arenaflow.domain.repository.MatchRequestRepository;
+import com.phananh.arenaflow.domain.repository.MatchTimeOptionRepository;
+import com.phananh.arenaflow.domain.repository.MatchVenueOptionRepository;
+import com.phananh.arenaflow.domain.repository.PairingRepository;
 import com.phananh.arenaflow.domain.repository.SportRepository;
 import com.phananh.arenaflow.domain.repository.TeamRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -67,7 +75,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/** Phần tạo / tìm / xem kèo và kèo của đội. */
+/** Tạo / tìm / xem kèo, kèo của đội, thoả thuận chi phí và huỷ kèo (luồng A, luồng B). */
 class MatchServiceImplTest {
 
     static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 21, 10, 0);
@@ -77,6 +85,9 @@ class MatchServiceImplTest {
     final SportRepository sportRepository = mock(SportRepository.class);
     final TeamRepository teamRepository = mock(TeamRepository.class);
     final MatchRequestRepository requestRepository = mock(MatchRequestRepository.class);
+    final MatchVenueOptionRepository venueOptionRepository = mock(MatchVenueOptionRepository.class);
+    final MatchTimeOptionRepository timeOptionRepository = mock(MatchTimeOptionRepository.class);
+    final PairingRepository pairingRepository = mock(PairingRepository.class);
     final MatchGuard matchGuard = new MatchGuard(matchRepository);
     final TeamGuard teamGuard = mock(TeamGuard.class);
     final MatchExpiry matchExpiry = mock(MatchExpiry.class);
@@ -96,7 +107,7 @@ class MatchServiceImplTest {
     @SuppressWarnings("unchecked")
     void setUp() {
         service = new MatchServiceImpl(matchRepository, costItemRepository, sportRepository, teamRepository,
-                requestRepository, matchGuard, teamGuard, matchExpiry, matchCancellation, venueSelectionService, retrier,
+                requestRepository, venueOptionRepository, timeOptionRepository, pairingRepository, matchGuard, teamGuard, matchExpiry, matchCancellation, venueSelectionService, retrier,
                 Mappers.getMapper(MatchMapper.class), new PageRequestFactory(), publisher, clock);
         when(retrier.execute(eq(ErrorCode.MATCH_014), any()))
                 .thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(1)).get());
@@ -125,10 +136,85 @@ class MatchServiceImplTest {
                 null, start.minusHours(5), null, "  U23 ", "  ");
     }
 
+    private CreateMatchRequest needVenueRequest(List<UUID> venueOptionIds, LocalDateTime earliest) {
+        return new CreateMatchRequest("NEED_VENUE", teamId, sportId, null, venueOptionIds, "SEVEN_A_SIDE", null, null,
+                List.of(new TimeOptionRequest(earliest.plusHours(2), earliest.plusHours(4)),
+                        new TimeOptionRequest(earliest, earliest.plusHours(2))),
+                earliest.minusHours(5), null, " Giao hữu ", null);
+    }
+
+    private <T> T projection(Class<T> type, Map<String, Object> row) {
+        return projections.createProjection(type, row);
+    }
+
     @Test
-    void createNeedVenueIsMatch016BeforeAnyQuery() {
-        assertError(() -> service.createMatch(callerId, createRequest("NEED_VENUE")), ErrorCode.MATCH_016);
-        verifyNoInteractions(teamGuard, sportRepository, venueSelectionService, matchRepository);
+    void createNeedVenueSavesEarliestSlotInsertsOptionsAndBuildsResponseWithoutReadBack() {
+        UUID matchId = UUID.randomUUID();
+        UUID venueY = UUID.randomUUID();
+        UUID venueZ = UUID.randomUUID();
+        LocalDateTime earliest = NOW.plusDays(1);
+        when(teamGuard.requireActiveCaptain(teamId, callerId)).thenReturn(projection(TeamCaptainContextView.class,
+                Map.of("name", "Team Alpha", "reliabilityScore", 80)));
+        when(sportRepository.findById(sportId))
+                .thenReturn(Optional.of(Sport.builder().id(sportId).name("Bóng đá").isActive(true).build()));
+        when(venueSelectionService.requireSelectable(List.of(venueY, venueZ))).thenReturn(List.of(
+                projection(SelectableVenueView.class, Map.of("id", venueY, "name", "Sân Y", "status", "ACTIVE")),
+                projection(SelectableVenueView.class, Map.of("id", venueZ, "name", "Sân Z", "status", "ACTIVE"))));
+        when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> {
+            Match match = invocation.getArgument(0);
+            match.setId(matchId);
+            return match;
+        });
+        UUID earlyOption = UUID.randomUUID();
+        UUID lateOption = UUID.randomUUID();
+        when(timeOptionRepository.insertAllReturning(eq(matchId), any(), any(), eq(NOW))).thenReturn(List.of(
+                projection(TimeOptionView.class, Map.of("id", lateOption, "proposedStartTime", earliest.plusHours(2),
+                        "proposedEndTime", earliest.plusHours(4))),
+                projection(TimeOptionView.class, Map.of("id", earlyOption, "proposedStartTime", earliest,
+                        "proposedEndTime", earliest.plusHours(2)))));
+
+        MatchResponse response = service.createMatch(callerId, needVenueRequest(List.of(venueY, venueZ), earliest));
+
+        ArgumentCaptor<Match> saved = ArgumentCaptor.forClass(Match.class);
+        var order = inOrder(teamGuard, sportRepository, venueSelectionService, matchRepository, venueOptionRepository,
+                timeOptionRepository);
+        order.verify(teamGuard).requireActiveCaptain(teamId, callerId);
+        order.verify(sportRepository).findById(sportId);
+        order.verify(venueSelectionService).requireSelectable(List.of(venueY, venueZ));
+        order.verify(matchRepository).save(saved.capture());
+        order.verify(venueOptionRepository).insertAll(matchId, new UUID[]{venueY, venueZ}, NOW);
+        order.verify(timeOptionRepository).insertAllReturning(matchId,
+                new LocalDateTime[]{earliest.plusHours(2), earliest},
+                new LocalDateTime[]{earliest.plusHours(4), earliest.plusHours(2)}, NOW);
+        Match match = saved.getValue();
+        assertThat(match.getType()).isEqualTo(Match.Type.NEED_VENUE);
+        assertThat(match.getStatus()).isEqualTo(Match.Status.OPEN);
+        assertThat(match.getVenueId()).isNull();
+        assertThat(match.getMatchStartTime()).isEqualTo(earliest);
+        assertThat(match.getMatchEndTime()).isEqualTo(earliest.plusHours(2));
+        assertThat(match.getExpiresAt()).isEqualTo(earliest.minusHours(5));
+        assertThat(match.getAgeNote()).isEqualTo("Giao hữu");
+        verify(venueSelectionService, never()).markSelected(any(), any());
+        verify(matchRepository, never()).findDetailById(any(), any());
+        verifyNoInteractions(publisher, costItemRepository);
+        assertThat(response.matchId()).isEqualTo(matchId);
+        assertThat(response.type()).isEqualTo("NEED_VENUE");
+        assertThat(response.venue()).isNull();
+        assertThat(response.sportName()).isEqualTo("Bóng đá");
+        assertThat(response.authorTeam().teamName()).isEqualTo("Team Alpha");
+        assertThat(response.venueOptions()).extracting("venueId").containsExactly(venueY, venueZ);
+        assertThat(response.timeOptions()).extracting("timeOptionId").containsExactly(earlyOption, lateOption);
+    }
+
+    @Test
+    void createNeedVenueChecksEveryVenueOptionBeforeSaving() {
+        UUID venueY = UUID.randomUUID();
+        when(sportRepository.findById(sportId)).thenReturn(Optional.of(Sport.builder().isActive(true).build()));
+        when(venueSelectionService.requireSelectable(List.of(venueY))).thenThrow(new BusinessException(ErrorCode.VENUE_002));
+
+        assertError(() -> service.createMatch(callerId, needVenueRequest(List.of(venueY), NOW.plusDays(1))),
+                ErrorCode.VENUE_002);
+        verifyNoInteractions(matchRepository, venueOptionRepository, timeOptionRepository);
     }
 
     @Test
@@ -214,6 +300,49 @@ class MatchServiceImplTest {
                 CostCustomItem.builder().id(UUID.randomUUID()).itemName("Nước").amount(5L).displayOrder(1).build()));
 
         assertThat(service.getMatch(matchId).costAgreement().customItems()).hasSize(1);
+        verifyNoInteractions(venueOptionRepository);
+    }
+
+    MatchOptionRowView timeRow(LocalDateTime startsAt) {
+        Map<String, Object> row = new HashMap<>();
+        row.put("kind", "TIME");
+        row.put("timeOptionId", UUID.randomUUID());
+        row.put("startsAt", startsAt);
+        row.put("endsAt", startsAt.plusHours(2));
+        return projections.createProjection(MatchOptionRowView.class, row);
+    }
+
+    @Test
+    void getMatchOfOpenNeedVenueReadsOptionsButNoCustomItems() {
+        UUID matchId = UUID.randomUUID();
+        when(matchRepository.findDetailById(matchId, NOW)).thenReturn(Optional.of(detailView(matchId, "NEED_VENUE")));
+        when(venueOptionRepository.findOptionRows(matchId)).thenReturn(List.of(timeRow(NOW.plusDays(1))));
+
+        MatchResponse response = service.getMatch(matchId);
+
+        assertThat(response.timeOptions()).hasSize(1);
+        verify(costItemRepository, never()).findByMatchIdOrderByDisplayOrderAsc(any());
+    }
+
+    @Test
+    void getMatchOfConfirmedNeedVenueReadsCopiedItemsAndOptions() {
+        UUID matchId = UUID.randomUUID();
+        Map<String, Object> row = new HashMap<>();
+        row.put("matchId", matchId);
+        row.put("type", "NEED_VENUE");
+        row.put("effectiveStatus", "CONFIRMED");
+        row.put("skillLevels", "[]");
+        row.put("confirmedPairingId", UUID.randomUUID());
+        when(matchRepository.findDetailById(matchId, NOW))
+                .thenReturn(Optional.of(projections.createProjection(MatchDetailView.class, row)));
+        when(costItemRepository.findByMatchIdOrderByDisplayOrderAsc(matchId)).thenReturn(List.of(
+                CostCustomItem.builder().id(UUID.randomUUID()).itemName("Nước").amount(5L).displayOrder(1).build()));
+        when(venueOptionRepository.findOptionRows(matchId)).thenReturn(List.of(timeRow(NOW.plusDays(1))));
+
+        MatchResponse response = service.getMatch(matchId);
+
+        assertThat(response.costAgreement().customItems()).hasSize(1);
+        assertThat(response.timeOptions()).hasSize(1);
     }
 
     @Test
@@ -334,6 +463,35 @@ class MatchServiceImplTest {
         verify(publisher).publishEvent(new MatchCancelledEvent(matchId, teamId, null, Match.Status.OPEN,
                 MatchCancelledEvent.Cause.CANCEL, null, NOW));
         verifyNoInteractions(matchCancellation);
+    }
+
+    @Test
+    void cancelOpenNeedVenueSkipsPendingCheckAndSupersedesNegotiatingPairings() {
+        UUID matchId = UUID.randomUUID();
+        Match match = openMatch(matchId);
+        match.setType(Match.Type.NEED_VENUE);
+        when(matchRepository.findById(matchId)).thenReturn(Optional.of(match));
+
+        MatchCancellationResponse response = service.cancelMatch(matchId, callerId,
+                new CancelMatchRequest(teamId, "OPEN", " Đổi lịch "));
+
+        assertThat(match.getStatus()).isEqualTo(Match.Status.CANCELLED);
+        assertThat(response.reliabilityPenalty()).isZero();
+        assertThat(response.cancelReason()).isEqualTo("Đổi lịch");
+        verify(pairingRepository).supersedeNegotiating(matchId, NOW);
+        verifyNoInteractions(requestRepository, matchCancellation);
+        verify(publisher).publishEvent(new MatchCancelledEvent(matchId, teamId, null, Match.Status.OPEN,
+                MatchCancelledEvent.Cause.CANCEL, null, NOW));
+    }
+
+    @Test
+    void cancelOpenHasVenueNeverTouchesPairings() {
+        UUID matchId = UUID.randomUUID();
+        when(matchRepository.findById(matchId)).thenReturn(Optional.of(openMatch(matchId)));
+
+        service.cancelMatch(matchId, callerId, new CancelMatchRequest(teamId, "OPEN", null));
+
+        verifyNoInteractions(pairingRepository);
     }
 
     @Test

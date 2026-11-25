@@ -276,7 +276,7 @@
 **Exception Flows:**
 
 **4a. Thời hạn không hợp lệ:**
-- 4a1. Hệ thống hiển thị "Thời hạn phải trong khoảng tối đa 7 ngày trước giờ đá đến giờ bắt đầu"
+- 4a1. Hệ thống hiển thị "Thời hạn phải nằm trong 7 ngày trước giờ bắt đầu trận"
 - 4a2. Quay về bước 3
 
 **4b. Giờ trận không hợp lệ (BR-M01, BR-M16):** giờ đá chưa đủ 1 giờ sau hiện tại, giờ kết thúc không sau giờ bắt đầu, hoặc trận dài quá 12 giờ
@@ -312,8 +312,10 @@
 **Exception Flows:**
 
 **4a. Thời hạn không hợp lệ (BR-M03):** không sau thời điểm hiện tại, muộn hơn giờ bắt đầu sớm nhất, hoặc sớm hơn giờ bắt đầu sớm nhất quá 7 ngày
-- 4a1. Hệ thống hiển thị "Thời hạn không được muộn hơn giờ bắt đầu trận sớm nhất" (hoặc lỗi tương ứng)
-- 4a2. Quay về bước 3
+- 4a1. Thời hạn muộn hơn khung giờ sớm nhất: Hệ thống hiển thị "Thời hạn không được sau khung giờ sớm nhất"
+- 4a2. Thời hạn sớm hơn khung giờ sớm nhất quá 7 ngày: Hệ thống hiển thị "Thời hạn phải nằm trong 7 ngày trước khung giờ sớm nhất"
+- 4a3. Thời hạn không sau thời điểm hiện tại: Hệ thống hiển thị lỗi tại trường thời hạn
+- 4a4. Quay về bước 3
 
 ---
 
