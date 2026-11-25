@@ -4,6 +4,7 @@ import com.phananh.arenaflow.domain.entity.team.Team;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
+import com.phananh.arenaflow.domain.projection.TeamCaptainContextView;
 import com.phananh.arenaflow.domain.repository.TeamMemberRepository;
 import com.phananh.arenaflow.domain.repository.TeamRepository;
 import lombok.RequiredArgsConstructor;
@@ -91,5 +92,18 @@ public class TeamGuard {
                 .findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE)
                 .filter(captain -> captain.getUserId().equals(userId))
                 .orElseThrow(() -> disbandedOr(teamId, ErrorCode.TEAM_002));
+    }
+
+    /**
+     * TEAM_001 → TEAM_016 → TEAM_015 → TEAM_002 trong một truy vấn; trả dữ liệu đã đọc (tên/ảnh/điểm đội, tên người
+     * gọi) để caller dựng response không cần đọc lại.
+     */
+    public TeamCaptainContextView requireActiveCaptain(UUID teamId, UUID userId) {
+        throw new UnsupportedOperationException("Bản tạm — thuộc guard đội của kèo");
+    }
+
+    /** TEAM_001 → TEAM_016 → TEAM_002 (đội INACTIVE vẫn được) trong một truy vấn. */
+    public void requireCaptainAllowInactive(UUID teamId, UUID userId) {
+        throw new UnsupportedOperationException("Bản tạm — thuộc guard đội của kèo");
     }
 }

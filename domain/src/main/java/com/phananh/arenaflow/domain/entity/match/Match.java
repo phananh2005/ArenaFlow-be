@@ -15,7 +15,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Entity đại diện cho match (bài đăng ghép kèo)
+ * Entity đại diện cho match (bài đăng ghép kèo). Kèo luồng B ghi thẳng địa điểm, giờ và thoả thuận chi phí + cọc
+ * đã chốt vào chính các cột của kèo khi ghép (không có cột "đã chốt" riêng).
  */
 @Entity
 @Table(name = "match")
@@ -30,6 +31,10 @@ public class Match {
     @GeneratedValue
     @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false, length = 20)
@@ -75,11 +80,13 @@ public class Match {
     @Column(name = "search_radius_km", precision = 5, scale = 2)
     private BigDecimal searchRadiusKm;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "cost_type", length = 50)
-    private String costType;
+    private CostType costType;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "cost_split", length = 50)
-    private String costSplit;
+    private CostSplit costSplit;
 
     @Column(name = "cost_venue_amount")
     private Long costVenueAmount;
@@ -87,17 +94,15 @@ public class Match {
     @Column(name = "cost_drinks_amount")
     private Long costDrinksAmount;
 
+    /** Tiền cọc thoả thuận (chỉ kèo luồng B); {@code null} = không cọc. */
+    @Column(name = "cost_deposit_amount")
+    private Long costDepositAmount;
+
     @Column(name = "cost_deposit_holder", length = 100)
     private String costDepositHolder;
 
     @Column(name = "confirmed_opponent_team_id")
     private UUID confirmedOpponentTeamId;
-
-    @Column(name = "confirmed_venue_id")
-    private UUID confirmedVenueId;
-
-    @Column(name = "confirmed_match_time")
-    private LocalDateTime confirmedMatchTime;
 
     @Column(name = "cancelled_by_team_id")
     private UUID cancelledByTeamId;
@@ -117,7 +122,7 @@ public class Match {
     @PrePersist
     protected void onCreate() {
         createdAt = AppTime.now();
-        updatedAt = AppTime.now();
+        updatedAt = createdAt;
     }
 
     /** Cập nhật {@code updatedAt} = giờ hiện tại ({@link AppTime#now()}) mỗi lần entity được sửa. */
@@ -132,5 +137,13 @@ public class Match {
 
     public enum Status {
         OPEN, CONFIRMED, ARCHIVED, COMPLETED, EXPIRED, CANCELLED
+    }
+
+    public enum CostType {
+        VENUE_ONLY, DRINKS_ONLY, BOTH
+    }
+
+    public enum CostSplit {
+        FIFTY_FIFTY, SEVENTY_THIRTY_HOME, SEVENTY_THIRTY_LOSER, LOSER_PAYS_DRINKS
     }
 }

@@ -14,7 +14,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Entity đại diện cho match_venue_option (lựa chọn địa điểm cho luồng B)
+ * Entity đại diện cho match_venue_option (lựa chọn địa điểm cho luồng B). Ghi bằng câu native {@code insertAll}
+ * (thứ tự nhập = {@code display_order}); entity dùng để đọc.
  */
 @Entity
 @Table(name = "match_venue_option")
@@ -35,6 +36,9 @@ public class MatchVenueOption {
 
     @Column(name = "venue_id", nullable = false)
     private UUID venueId;
+
+    @Column(name = "display_order", nullable = false)
+    private Integer displayOrder;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Setter(AccessLevel.NONE)

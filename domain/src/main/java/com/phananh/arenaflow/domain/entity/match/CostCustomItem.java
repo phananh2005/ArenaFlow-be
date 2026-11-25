@@ -14,7 +14,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Entity đại diện cho cost_custom_item (khoản phí tự nhập)
+ * Entity đại diện cho cost_custom_item (khoản phí tự nhập). Thuộc đúng một chủ: kèo (luồng A, kèo B đã ghép) hoặc
+ * thương lượng luồng B. Ghi bằng câu native trong repository (id do DB sinh); entity dùng để đọc.
  */
 @Entity
 @Table(name = "cost_custom_item")
@@ -30,14 +31,20 @@ public class CostCustomItem {
     @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
 
-    @Column(name = "match_id", nullable = false)
+    @Column(name = "match_id", nullable = true)
     private UUID matchId;
+
+    @Column(name = "pairing_id")
+    private UUID pairingId;
 
     @Column(name = "item_name", nullable = false, length = 100)
     private String itemName;
 
     @Column(name = "amount", nullable = false)
     private Long amount;
+
+    @Column(name = "display_order", nullable = false)
+    private Integer displayOrder;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Setter(AccessLevel.NONE)
