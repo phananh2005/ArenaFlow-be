@@ -4,9 +4,11 @@ import com.phananh.arenaflow.application.event.match.MatchArchivedEvent;
 import com.phananh.arenaflow.application.event.match.MatchExpiredEvent;
 import com.phananh.arenaflow.application.service.MatchLifecycleJobService;
 import com.phananh.arenaflow.application.support.match.MatchLifecycleProperties;
+import com.phananh.arenaflow.domain.entity.match.Match;
 import com.phananh.arenaflow.domain.projection.DueMatchView;
 import com.phananh.arenaflow.domain.repository.MatchRepository;
 import com.phananh.arenaflow.domain.repository.MatchRequestRepository;
+import com.phananh.arenaflow.domain.repository.PairingRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -31,6 +33,7 @@ public class MatchLifecycleJobServiceImpl implements MatchLifecycleJobService {
 
     private final MatchRepository matchRepository;
     private final MatchRequestRepository matchRequestRepository;
+    private final PairingRepository pairingRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionTemplate transactionTemplate;
     private final MatchLifecycleProperties properties;
@@ -41,7 +44,14 @@ public class MatchLifecycleJobServiceImpl implements MatchLifecycleJobService {
         LocalDateTime now = LocalDateTime.now(clock);
         int expired = runBatches("expire", now, matchRepository::claimDueForExpiry, (claimed, ids) -> {
             matchRepository.markExpired(ids, now);
-            matchRequestRepository.expirePendingByMatchIds(ids);
+            List<UUID> flowA = idsOfType(claimed, Match.Type.HAS_VENUE);
+            List<UUID> flowB = idsOfType(claimed, Match.Type.NEED_VENUE);
+            if (!flowA.isEmpty()) {
+                matchRequestRepository.expirePendingByMatchIds(flowA);
+            }
+            if (!flowB.isEmpty()) {
+                pairingRepository.expireNegotiatingByMatchIds(flowB, now);
+            }
             claimed.forEach(match -> eventPublisher.publishEvent(
                     new MatchExpiredEvent(match.getId(), match.getAuthorTeamId(), now)));
             return null;
@@ -61,6 +71,11 @@ public class MatchLifecycleJobServiceImpl implements MatchLifecycleJobService {
         });
         log.info("Match archive run finished: {} matches archived", archived);
         return archived;
+    }
+
+    /** Id các kèo trong lô thuộc một loại (luồng A: yêu cầu ghép; luồng B: thương lượng). */
+    private static List<UUID> idsOfType(List<DueMatchView> claimed, Match.Type type) {
+        return claimed.stream().filter(match -> type.name().equals(match.getType())).map(DueMatchView::getId).toList();
     }
 
     private int runBatches(String task, LocalDateTime now, BiFunction<LocalDateTime, Integer, List<DueMatchView>> claim,

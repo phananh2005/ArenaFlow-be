@@ -19,7 +19,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(OutputCaptureExtension.class)
 class ConcurrencyConflictRetrierTest {
@@ -68,6 +72,42 @@ class ConcurrencyConflictRetrierTest {
 
         assertThat(result).isEqualTo("success");
         assertThat(attempts).hasValue(3);
+    }
+
+    @Test
+    void retriesConcurrencyConflictExceptionAndReturnsValueOfLaterAttempt() {
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
+        AtomicInteger attempts = new AtomicInteger();
+
+        String result = retrier.execute(ErrorCode.MATCH_014, () -> {
+            if (attempts.incrementAndGet() < 2) {
+                throw new ConcurrencyConflictException("pairing CAS 0 dòng");
+            }
+            return "success";
+        });
+
+        assertThat(result).isEqualTo("success");
+        assertThat(attempts).hasValue(2);
+    }
+
+    @Test
+    void throwsCallerProvidedErrorCodeAfterThreeConcurrencyConflicts() {
+        PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
+        TransactionStatus transactionStatus = mock(TransactionStatus.class);
+        when(transactionManager.getTransaction(any())).thenReturn(transactionStatus);
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(new TransactionTemplate(transactionManager));
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertThatThrownBy(() -> retrier.execute(ErrorCode.MATCH_014, () -> {
+            attempts.incrementAndGet();
+            throw new ConcurrencyConflictException("pairing CAS 0 dòng");
+        }))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MATCH_014));
+        assertThat(attempts).hasValue(3);
+        // Mỗi lần thử một transaction riêng và bị rollback (không commit phần ghi của lần thử lỗi).
+        verify(transactionManager, times(3)).getTransaction(any());
+        verify(transactionManager, times(3)).rollback(transactionStatus);
     }
 
     @Test

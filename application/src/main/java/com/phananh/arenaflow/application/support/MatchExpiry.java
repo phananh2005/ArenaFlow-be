@@ -4,6 +4,7 @@ import com.phananh.arenaflow.application.event.match.MatchExpiredEvent;
 import com.phananh.arenaflow.domain.entity.match.Match;
 import com.phananh.arenaflow.domain.repository.MatchRepository;
 import com.phananh.arenaflow.domain.repository.MatchRequestRepository;
+import com.phananh.arenaflow.domain.repository.PairingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
@@ -21,12 +22,13 @@ public class MatchExpiry {
 
     private final MatchRepository matchRepository;
     private final MatchRequestRepository matchRequestRepository;
+    private final PairingRepository pairingRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     /**
      * Bắt buộc trong transaction của caller (lần thử phải COMMIT việc chuyển trạng thái). Kèo được chuyển → yêu cầu
-     * PENDING của kèo luồng A → EXPIRED, phát đúng một {@link MatchExpiredEvent}; trả true nếu chính lời gọi này
-     * chuyển. 0 dòng → job / request khác đã chuyển, không làm gì thêm.
+     * PENDING của kèo luồng A / thương lượng NEGOTIATING của kèo luồng B → EXPIRED, phát đúng một
+     * {@link MatchExpiredEvent}; trả true nếu chính lời gọi này chuyển. 0 dòng → job / request khác đã chuyển, không làm gì thêm.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public boolean expireIfDue(UUID matchId, UUID authorTeamId, Match.Type type, LocalDateTime now) {
@@ -35,6 +37,8 @@ public class MatchExpiry {
         }
         if (type == Match.Type.HAS_VENUE) {
             matchRequestRepository.expirePendingByMatchIds(List.of(matchId));
+        } else {
+            pairingRepository.expireNegotiatingByMatchIds(List.of(matchId), now);
         }
         eventPublisher.publishEvent(new MatchExpiredEvent(matchId, authorTeamId, now));
         return true;

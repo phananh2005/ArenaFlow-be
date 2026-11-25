@@ -20,6 +20,8 @@ import java.util.UUID;
  * Entity đại diện cho match (bài đăng ghép kèo).
  * {@code version}: optimistic lock — mọi thao tác ghi kèo của người dùng là CAS theo version và được thử lại ở tầng
  * service; câu bulk (hết hạn, lưu trữ) tự tăng version.
+ * Kèo luồng B ghi thẳng địa điểm, giờ và thoả thuận chi phí + cọc
+ * đã chốt vào chính các cột của kèo khi ghép (không có cột "đã chốt" riêng).
  */
 @Entity
 @Table(name = "match")
@@ -99,17 +101,15 @@ public class Match {
     @Column(name = "cost_drinks_amount")
     private Long costDrinksAmount;
 
+    /** Tiền cọc thoả thuận (chỉ kèo luồng B); {@code null} = không cọc. */
+    @Column(name = "cost_deposit_amount")
+    private Long costDepositAmount;
+
     @Column(name = "cost_deposit_holder", length = 100)
     private String costDepositHolder;
 
     @Column(name = "confirmed_opponent_team_id")
     private UUID confirmedOpponentTeamId;
-
-    @Column(name = "confirmed_venue_id")
-    private UUID confirmedVenueId;
-
-    @Column(name = "confirmed_match_time")
-    private LocalDateTime confirmedMatchTime;
 
     @Column(name = "cancelled_by_team_id")
     private UUID cancelledByTeamId;

@@ -13,9 +13,11 @@ import java.util.UUID;
 import static com.phananh.arenaflow.application.support.chat.ConversationFixtures.NOW;
 import static com.phananh.arenaflow.application.support.chat.ConversationFixtures.context;
 import static com.phananh.arenaflow.application.support.chat.ConversationFixtures.listRow;
+import static com.phananh.arenaflow.application.support.chat.ConversationFixtures.needVenueRow;
 import static com.phananh.arenaflow.application.support.chat.ConversationFixtures.teamMatchRow;
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Đầu phòng chat, tin nhắn và dòng "Tin nhắn của tôi" dựng từ ngữ cảnh đã nạp (luồng A, luồng B). */
 class ConversationMapperTest {
 
     private final ConversationMapper mapper = Mappers.getMapper(ConversationMapper.class);
@@ -42,6 +44,26 @@ class ConversationMapperTest {
         assertThat(response.source()).isEqualTo("SYSTEM");
         assertThat(response.pairingId()).isNull();
         assertThat(response.applicationId()).isNull();
+    }
+
+    @Test
+    void needVenueHeaderAndSummaryCarryPairingWithEffectiveStatus() {
+        Map<String, Object> row = needVenueRow(UUID.randomUUID(), teamA, teamB);
+        row.put("pairingEffectiveStatus", "EXPIRED");
+        row.put("lastActivityAt", NOW);
+        row.put("startsAt", NOW.plusDays(1));
+        ConversationAccess access = new ConversationAccess(Conversation.Party.A, false, false, false);
+
+        ConversationResponse response = mapper.toResponse(context(row), access);
+        ConversationSummaryResponse summary = mapper.toSummary(listRow(row), access);
+
+        assertThat(response.matchType()).isEqualTo("NEED_VENUE");
+        assertThat(response.pairingId()).isEqualTo(row.get("pairingId"));
+        assertThat(response.pairingStatus()).isEqualTo("EXPIRED");
+        assertThat(response.requestId()).isNull();
+        assertThat(response.requestStatus()).isNull();
+        assertThat(summary.pairingId()).isEqualTo(row.get("pairingId"));
+        assertThat(summary.requestId()).isNull();
     }
 
     @Test

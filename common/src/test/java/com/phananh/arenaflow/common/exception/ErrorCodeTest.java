@@ -76,6 +76,25 @@ class ErrorCodeTest {
     }
 
     @Test
+    void pairingErrorsHaveContractStatusesAndMessages() {
+        assertPairing(ErrorCode.PAIRING_001, HttpStatus.NOT_FOUND, "Không tìm thấy thương lượng ghép kèo");
+        assertPairing(ErrorCode.PAIRING_002, HttpStatus.FORBIDDEN, "Đội không tham gia thương lượng này");
+        assertPairing(ErrorCode.PAIRING_003, HttpStatus.CONFLICT, "Đội đã nhận kèo này");
+        assertPairing(ErrorCode.PAIRING_004, HttpStatus.UNPROCESSABLE_ENTITY, "Không thể nhận kèo của đội mình");
+        assertPairing(ErrorCode.PAIRING_005, HttpStatus.CONFLICT, "Thương lượng đã kết thúc");
+        assertPairing(ErrorCode.PAIRING_006, HttpStatus.CONFLICT, "Phương án đã thay đổi, vui lòng tải lại");
+        assertPairing(ErrorCode.PAIRING_007, HttpStatus.UNPROCESSABLE_ENTITY, "Chưa chốt địa điểm và giờ");
+        assertPairing(ErrorCode.PAIRING_008, HttpStatus.UNPROCESSABLE_ENTITY,
+                "Địa điểm hoặc giờ không thuộc lựa chọn của kèo");
+    }
+
+    private static void assertPairing(ErrorCode errorCode, HttpStatus status, String message) {
+        assertThat(errorCode.getCode()).isEqualTo(errorCode.name());
+        assertThat(errorCode.getHttpStatus()).isEqualTo(status);
+        assertThat(errorCode.getMessage()).isEqualTo(message);
+    }
+
+    @Test
     void disbandedTeamAndCaptainAccountDeletionErrors() {
         assertThat(ErrorCode.TEAM_016.getCode()).isEqualTo("TEAM_016");
         assertThat(ErrorCode.TEAM_016.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);

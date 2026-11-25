@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,7 +24,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Kèo luồng A qua HTTP thật (DB dev, rollback mỗi test): tạo, tìm, xem, chi phí, yêu cầu, chấp nhận, huỷ. */
+/**
+ * Kèo qua HTTP thật (DB dev, rollback mỗi test): luồng A tạo, tìm, xem, chi phí, yêu cầu, chấp nhận, huỷ; luồng B tạo,
+ * tìm, xem, huỷ.
+ */
 class MatchControllerTest extends ApiIntegrationTest {
 
     private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
@@ -99,13 +103,59 @@ class MatchControllerTest extends ApiIntegrationTest {
                 .andExpect(jsonPath("$.data[0].matchId").value(matchId));
     }
 
-    @Test
-    void needVenueIsMatch016AndOffsetTimeQueryIsValidationError() throws Exception {
-        mockMvc.perform(as(alphaCaptain, post("/api/v1/matches")).content(createBody("NEED_VENUE")
-                        .replace("\"venueId\":\"" + venueId + "\",", "")))
-                .andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.error.code").value("MATCH_016"));
+    private String needVenueBody() {
+        return """
+                {"type":"NEED_VENUE","teamId":"%s","sportId":"%s","venueOptionIds":["%s"],"format":"SEVEN_A_SIDE",
+                 "timeOptions":[{"startsAt":"%s","endsAt":"%s"},{"startsAt":"%s","endsAt":"%s"}],
+                 "expiresAt":"%s","skillLevels":[]}
+                """.formatted(alpha.getId(), sportId, venueId, start.plusHours(3).format(ISO),
+                start.plusHours(5).format(ISO), start.format(ISO), start.plusHours(2).format(ISO),
+                start.minusHours(6).format(ISO));
+    }
 
+    @Test
+    void needVenueCreatesMatchWithOptionsAndRejectsFlowAFields() throws Exception {
+        String created = mockMvc.perform(as(alphaCaptain, post("/api/v1/matches")).content(needVenueBody()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.type").value("NEED_VENUE"))
+                .andExpect(jsonPath("$.data.status").value("OPEN"))
+                .andExpect(jsonPath("$.data.venue").doesNotExist())
+                .andExpect(jsonPath("$.data.startsAt").value(start.format(ISO)))
+                .andExpect(jsonPath("$.data.venueOptions[0].venueId").value(venueId.toString()))
+                .andExpect(jsonPath("$.data.timeOptions.length()").value(2))
+                .andExpect(jsonPath("$.data.timeOptions[0].startsAt").value(start.format(ISO)))
+                .andExpect(jsonPath("$.data.timeOptions[0].timeOptionId").isNotEmpty())
+                .andExpect(jsonPath("$.data.costAgreement.customItems").isEmpty())
+                .andReturn().getResponse().getContentAsString();
+        String matchId = JsonPath.read(created, "$.data.matchId");
+
+        mockMvc.perform(as(betaCaptain, get("/api/v1/matches/" + matchId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.venue").doesNotExist())
+                .andExpect(jsonPath("$.data.venueOptions[0].venueName").value("Sân Hoa Lư"))
+                .andExpect(jsonPath("$.data.timeOptions.length()").value(2))
+                .andExpect(jsonPath("$.data.timeOptions[1].startsAt").value(start.plusHours(3).format(ISO)))
+                .andExpect(jsonPath("$.data.confirmedPairingId").doesNotExist());
+
+        String search = mockMvc.perform(as(betaCaptain, get("/api/v1/matches").param("type", "NEED_VENUE")
+                        .param("startsAtFrom", start.plusHours(2).format(ISO)).param("lat", "10.7881234")
+                        .param("lng", "106.6991234").param("radiusKm", "1").param("pageSize", "100")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(JsonPath.<List<Integer>>read(search, "$.data[?(@.matchId == '" + matchId + "')].venueOptionCount"))
+                .containsExactly(1);
+        assertThat(JsonPath.<List<Integer>>read(search, "$.data[?(@.matchId == '" + matchId + "')].timeOptionCount"))
+                .containsExactly(2);
+
+        mockMvc.perform(as(alphaCaptain, post("/api/v1/matches")).content(needVenueBody()
+                        .replace("\"venueOptionIds\"", "\"venueId\":\"" + venueId + "\",\"venueOptionIds\"")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.error.validationErrors[0].field").value("venueId"));
+    }
+
+    @Test
+    void offsetTimeQueryIsValidationError() throws Exception {
         mockMvc.perform(as(betaCaptain, get("/api/v1/matches").param("startsAtFrom", "2026-11-12T00:00:00Z")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))

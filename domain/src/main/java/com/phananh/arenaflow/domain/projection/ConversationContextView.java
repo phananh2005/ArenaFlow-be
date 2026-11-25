@@ -5,8 +5,11 @@ import java.util.UUID;
 
 /**
  * Ngữ cảnh cuộc trò chuyện đọc trong một câu: cột chung + cờ / tên / ảnh người gọi + khối của loại TEAM_MATCH (kèo, hai
- * đội, đội trưởng hiện tại, người đã giải tán, yêu cầu gần nhất của đội tham gia). Khối của loại khác null.
+ * đội, đội trưởng hiện tại, người đã giải tán, yêu cầu gần nhất / thương lượng của đội tham gia). Khối của loại khác
+ * null.
  * {@code requestStatus} là trạng thái DB (chính sách quyền dùng), {@code requestEffectiveStatus} là trạng thái hiển thị.
+ * Kèo luồng B: thương lượng của đội tham gia thay cho yêu cầu — {@code pairingStatus} (DB) và
+ * {@code pairingEffectiveStatus} (hiển thị: NEGOTIATING của kèo OPEN đã tới hạn → EXPIRED); kèo luồng A null.
  */
 public interface ConversationContextView {
     UUID getId();
@@ -49,4 +52,8 @@ public interface ConversationContextView {
     UUID getRequestId();
     String getRequestStatus();
     String getRequestEffectiveStatus();
+
+    UUID getPairingId();
+    String getPairingStatus();
+    String getPairingEffectiveStatus();
 }

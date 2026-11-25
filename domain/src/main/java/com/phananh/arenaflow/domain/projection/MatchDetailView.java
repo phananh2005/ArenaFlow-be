@@ -7,7 +7,7 @@ import java.util.UUID;
 /**
  * Chi tiết kèo trong một câu: bộ môn, đội tạo kèo, đội đã ghép, địa điểm (thông tin mới nhất + ảnh chính).
  * {@code effectiveStatus}: kèo OPEN đã tới hạn trả EXPIRED dù DB chưa đổi. {@code skillLevels} là JSON thô.
- * {@code costDepositAmount}, {@code confirmedPairingId} luôn null ở đợt luồng A.
+ * {@code costDepositAmount}, {@code confirmedPairingId} chỉ có ở kèo luồng B đã ghép (null ở kèo luồng A).
  */
 public interface MatchDetailView {
     UUID getMatchId();

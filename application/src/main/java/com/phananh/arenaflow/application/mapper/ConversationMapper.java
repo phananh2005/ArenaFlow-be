@@ -19,14 +19,19 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Response chat dựng từ ngữ cảnh đã nạp (không đọc lại). Che người đã xoá tài khoản ở đây (SQL không che). Đợt luồng A
- * chỉ có loại TEAM_MATCH: field của thương lượng / đơn ứng tuyển = null, {@code source} = SYSTEM.
+ * Response chat dựng từ ngữ cảnh đã nạp (không đọc lại). Che người đã xoá tài khoản ở đây (SQL không che). Loại
+ * TEAM_MATCH: yêu cầu (luồng A) hoặc thương lượng (luồng B) của đội tham gia, field của loại kia / đơn ứng tuyển = null,
+ * {@code source} = SYSTEM.
  */
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.ERROR)
 public interface ConversationMapper {
 
     String SOURCE_SYSTEM = "SYSTEM";
 
+    /**
+     * Đầu phòng chat: hai bên (bên A — đội tạo kèo — trước), trạng thái hiển thị của yêu cầu (luồng A) hoặc thương
+     * lượng (luồng B), bên của người gọi và quyền gửi theo chính sách đã tính.
+     */
     default ConversationResponse toResponse(ConversationContextView context, ConversationAccess access) {
         List<PartyResponse> parties = List.of(
                 new PartyResponse(context.getPartyAType(), context.getPartyAId(), context.getPartyAName(),
@@ -34,8 +39,9 @@ public interface ConversationMapper {
                 new PartyResponse(context.getPartyBType(), context.getPartyBId(), context.getPartyBName(),
                         context.getPartyBAvatarUrl(), captainName(context.getPartyBCaptainName(), context.getPartyBCaptainDeleted())));
         return new ConversationResponse(context.getId(), context.getContextType(), context.getMatchId(),
-                context.getMatchType(), context.getRequestId(), context.getRequestEffectiveStatus(), null, null, null,
-                null, SOURCE_SYSTEM, null, parties, partyId(context, access.viewerParty()), access.canSend());
+                context.getMatchType(), context.getRequestId(), context.getRequestEffectiveStatus(),
+                context.getPairingId(), context.getPairingEffectiveStatus(), null, null, SOURCE_SYSTEM, null, parties,
+                partyId(context, access.viewerParty()), access.canSend());
     }
 
     /** Tin vừa gửi: người gửi là người gọi (cột caller của ngữ cảnh). */
@@ -66,7 +72,8 @@ public interface ConversationMapper {
                 MapperSupport.maskName(row.getLastSenderName(), row.getLastSenderDeleted()), row.getLastMessageCreatedAt());
         boolean hasUnread = Boolean.TRUE.equals(viewer == Conversation.Party.A ? row.getUnreadFromB() : row.getUnreadFromA());
         return new ConversationSummaryResponse(row.getId(), row.getContextType(), row.getMatchId(), null,
-                row.getStartsAt(), row.getRequestId(), null, null, brief(row, viewer), brief(row, other), lastMessage,
+                row.getStartsAt(), row.getRequestId(), row.getPairingId(), null, brief(row, viewer), brief(row, other),
+                lastMessage,
                 row.getLastActivityAt(), hasUnread, access.canSend());
     }
 

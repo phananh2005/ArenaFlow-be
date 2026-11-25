@@ -22,6 +22,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/** Huỷ kèo đã ghép (huỷ CONFIRMED, rút ACCEPTED) của luồng A và luồng B. */
 class MatchCancellationTest {
 
     private static final LocalDateTime START = LocalDateTime.of(2026, 11, 22, 18, 0);
@@ -74,6 +75,24 @@ class MatchCancellationTest {
                 new ReliabilityChange(-5, ReliabilityReason.MATCH_REQUEST_WITHDRAWN_AFTER_ACCEPTED, matchId, true));
         verify(publisher).publishEvent(new MatchCancelledEvent(matchId, opponentTeamId, authorTeamId,
                 Match.Status.CONFIRMED, MatchCancelledEvent.Cause.REQUEST_WITHDRAWN, requestId, NOW));
+    }
+
+    @Test
+    void needVenueOpponentCancelHasNoRequestAndPenalisesByConfirmedStart() {
+        Match match = confirmedMatch();
+        match.setType(Match.Type.NEED_VENUE);
+        match.setMatchStartTime(NOW.plusHours(3));
+
+        CancellationResult result = cancellation.cancelConfirmed(match, opponentTeamId, "Mưa to",
+                MatchCancelledEvent.Cause.CANCEL, NOW);
+
+        assertThat(result.reliabilityPenalty()).isEqualTo(-10);
+        assertThat(match.getStatus()).isEqualTo(Match.Status.CANCELLED);
+        verifyNoInteractions(requestRepository);
+        verify(reputationService).adjustTeamReliability(opponentTeamId,
+                new ReliabilityChange(-10, ReliabilityReason.MATCH_CANCELLED_AFTER_CONFIRMED, matchId, true));
+        verify(publisher).publishEvent(new MatchCancelledEvent(matchId, opponentTeamId, authorTeamId,
+                Match.Status.CONFIRMED, MatchCancelledEvent.Cause.CANCEL, null, NOW));
     }
 
     @Test
