@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); quy ước chung USER-001 `API_Spec.md` §1; mã lỗi `TEAM_*` dùng lại từ USER-001/USER-002 `API_Spec.md`, `VENUE_*` từ VENUE-001 `API_Spec.md`; ghép kèo luồng B (thương lượng), frame `PAIRING_UPDATED` và mã `MATCH_016`: MATCH-002 `API_Spec.md`; chat dùng chung (§1.6, §1.7, 2.16–2.20) — cuộc trò chuyện theo đơn ứng tuyển: MERCENARY-001 `API_Spec.md` §1.7; kênh cá nhân `/user/queue/notifications` (thông báo, tín hiệu tin nhắn mới): NOTIFICATION-001 `API_Spec.md` §1.4; [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (kênh realtime) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10) — UC-M01, M02, M03, M04, M08, M09, UC-C01, C02; BR-M01..M06, BR-M09..M18, BR-C01..C05, BR-N01, BR-N03..BR-N06 (chat giữa hai đội, danh sách tin nhắn); UC-N01, UC-N04; Business_Rules §2.1, §2.2, §3.1, §4 (BC-M01..M07), §5.2, §5.4, §7.3; AC-M01..M03, M06..M12, AC-C01, AC-N01, AC-N03, AC-N04; Scenario 1, 2 (tạo kèo), 4, 5, 6, 10, 11, 12 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.1** (developer · 2026-11-25) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -123,12 +123,12 @@ Gọi 2.17 trước khi `SUBSCRIBE` có thể lỡ tin gửi giữa hai bước.
 
 | Bước | Cách làm |
 |---|---|
-| Kết nối | SockJS tới `/ws` (cùng host với API, không có tiền tố `/api/v1`) `[cần xác nhận #12]`, rồi STOMP `CONNECT` với header `Authorization: Bearer <access token>`. Heartbeat `10000,10000` |
-| Lỗi kết nối | Token thiếu / sai / hết hạn / là refresh token → frame `ERROR` header `message: AUTH_001` rồi đóng. FE refresh token (USER-001) rồi kết nối lại |
-| Đăng ký | `SUBSCRIBE` `/topic/conversations/{conversationId}` cho từng cuộc trò chuyện đang mở trên màn hình (`conversationId` từ §4.4, §4.9, MATCH-002 §4.2/§4.3, đơn ứng tuyển MERCENARY-001). Destination phải đúng mẫu này (không wildcard, vd `/topic/**` → `ERROR`). Header `selector` không được hỗ trợ (bị bỏ qua) — FE tự lọc frame theo `type` |
-| Lỗi đăng ký | Destination không khớp `/topic/conversations/{conversationId}` hay `/user/queue/notifications` → `ERROR`; token đã hết hạn → `ERROR` `message: AUTH_001`. Riêng `/topic/conversations/{conversationId}`: không có cuộc trò chuyện → `ERROR` `message: CHAT_002`; tài khoản đã xoá → `ERROR` `message: USER_001`; không tham gia cuộc trò chuyện (§1.6) → `ERROR` `message: CHAT_003` (kênh cá nhân không có 3 lỗi này). Server đóng kết nối sau frame `ERROR` → FE xử lý rồi kết nối lại |
-| Kênh cá nhân | `SUBSCRIBE` đúng nguyên văn `/user/queue/notifications` (một lần mỗi kết nối, không phụ thuộc màn hình) — nhận frame `NOTIFICATION_CREATED` và `CONVERSATION_ACTIVITY` (tin mới trong mọi cuộc trò chuyện người dùng xem được, trừ tin của chính mình — để cập nhật chấm đỏ "Tin nhắn" / 2.20). Hợp đồng frame và cách bù khi kết nối lại: NOTIFICATION-001 `API_Spec.md` §1.4 |
-| Gửi | `SEND` bị từ chối (frame `ERROR`) |
+| Kết nối | SockJS tới `/ws` (cùng host với API, không có tiền tố `/api/v1`; WebSocket thuần tại `/ws/websocket`), rồi STOMP `CONNECT` với header `Authorization: Bearer <access token>`. Heartbeat `10000,10000` |
+| Lỗi kết nối | Token thiếu / sai / hết hạn / là refresh token → frame `ERROR` header `message: AUTH_001` (body JSON `{"code":"AUTH_001","message":"..."}`) rồi đóng. FE refresh token (USER-001) rồi kết nối lại |
+| Đăng ký | `SUBSCRIBE` `/topic/conversations/{conversationId}` cho từng cuộc trò chuyện đang mở trên màn hình (`conversationId` từ §4.4, §4.9, MATCH-002 §4.2/§4.3, đơn ứng tuyển MERCENARY-001). Destination phải đúng mẫu này với `{conversationId}` là UUID chữ thường (`[0-9a-f]`, khớp nguyên văn ID mà các API trả về; không wildcard, vd `/topic/**` hay UUID viết hoa → `ERROR` `message: SYS_004`). Header `selector` không được hỗ trợ (bị bỏ qua) — FE tự lọc frame theo `type` |
+| Lỗi đăng ký | Destination không khớp `/topic/conversations/{conversationId}` hay `/user/queue/notifications` (hoặc UUID viết hoa) → `ERROR` `message: SYS_004`; token đã hết hạn → `ERROR` `message: AUTH_001`. Riêng `/topic/conversations/{conversationId}`: không có cuộc trò chuyện → `ERROR` `message: CHAT_002`; tài khoản đã xoá → `ERROR` `message: USER_001`; không tham gia cuộc trò chuyện (§1.6) → `ERROR` `message: CHAT_003` (kênh cá nhân không có 3 lỗi này). Mọi frame `ERROR` có header `message: <mã lỗi>` và body JSON `{"code":"<mã lỗi>","message":"<thông báo tiếng Việt>"}` (lỗi bất ngờ khác → `SYS_005`). Server đóng kết nối sau frame `ERROR` → FE xử lý rồi kết nối lại |
+| Kênh cá nhân | `SUBSCRIBE` đúng nguyên văn `/user/queue/notifications` (một lần mỗi kết nối, không phụ thuộc màn hình) — nhận frame `NOTIFICATION_CREATED` và `CONVERSATION_ACTIVITY` (tin mới trong mọi cuộc trò chuyện người dùng xem được, trừ tin của chính mình — để cập nhật chấm đỏ "Tin nhắn" / 2.20). Hợp đồng frame và cách bù khi kết nối lại: NOTIFICATION-001 `API_Spec.md` §1.4. *(Lưu ý thứ tự phát hành: kênh cá nhân `/user/queue/notifications` mở cùng bản phát hành NOTIFICATION-001; trước đó `SUBSCRIBE /user/queue/notifications` trả `ERROR` `message: SYS_004`)* |
+| Gửi | `SEND` bị từ chối → frame `ERROR` `message: SYS_002` (body JSON `{"code":"SYS_002","message":"Phương thức không được hỗ trợ"}`) |
 | Thời gian sống | Kết nối không tự hết hạn theo token; quyền chỉ kiểm lúc `CONNECT` và `SUBSCRIBE` — đội trưởng vừa chuyển quyền vẫn nhận frame của cuộc trò chuyện đã đăng ký tới khi ngắt kết nối. FE kết nối lại sau mỗi lần refresh token |
 
 **Frame server gửi** (body JSON):
@@ -1645,14 +1645,17 @@ Mã dùng lại (message theo `API_Spec.md` của mã gốc):
 | `VENUE_001` | 404 | "Không tìm thấy địa điểm" | VENUE-001 | 2.1 |
 | `VENUE_002` | 422 | "Địa điểm đã ngừng hoạt động" | VENUE-001 | 2.1 |
 | `MATCH_016` | 422 | "Thao tác không áp dụng cho loại kèo này" | MATCH-002 | 2.4, 2.6, 2.7 (gọi trên kèo luồng B); 2.1 (`type = NEED_VENUE` khi luồng B chưa được phát hành — §1) |
+| `SYS_002` | — (STOMP `ERROR`) | "Phương thức không được hỗ trợ" | `api-convention.md` §6 | Kênh realtime: client gửi frame `SEND` (§1.7) |
+| `SYS_004` | — (STOMP `ERROR`) | "Yêu cầu không hợp lệ" | `api-convention.md` §6 | Kênh realtime: `SUBSCRIBE` sai destination hoặc UUID viết hoa (§1.7) |
+| `SYS_005` | — (STOMP `ERROR`) | "Đã xảy ra lỗi hệ thống" | `api-convention.md` §6 | Kênh realtime: lỗi bất ngờ khi xử lý frame (§1.7) |
 
-Lỗi hệ thống `SYS_*` theo `api-convention.md` §6. `MATCH_009` (403 nghiệp vụ: đội không liên quan tới kèo) khác `AUTH_004` (403 không phải admin).
+Lỗi hệ thống `SYS_*` cho HTTP REST theo `api-convention.md` §6. `MATCH_009` (403 nghiệp vụ: đội không liên quan tới kèo) khác `AUTH_004` (403 không phải admin).
 
 ## 6. Danh sách [cần xác nhận]
 
 Mở (đánh số chung toàn thiết kế MATCH-001, số không dùng lại; các số khác ở tài liệu nội bộ BE):
 
-12. Đường dẫn và hỗ trợ SockJS của kênh realtime (`/ws`): phụ thuộc phiên bản framework BE — sẽ chốt khi cài đặt; nếu không còn SockJS, FE kết nối WebSocket thuần tới `/ws` và dùng 2.17 (`after`) khi không mở được WebSocket (ADR-0014). (Chuyển từ MATCH-002.)
+12. ~~Đường dẫn và hỗ trợ SockJS của kênh realtime (`/ws`)~~ — **Đã đóng v3.1 (2026-11-25):** kênh realtime hỗ trợ SockJS tại `/ws` (WebSocket thuần tại `/ws/websocket`) và không hỗ trợ lọc theo header `selector` (§1.7).
 18. ~~Không có frame khi yêu cầu ghép kèo luồng A đổi trạng thái / kèo bị huỷ~~ — **user chốt 2026-11-15:** giữ không có frame ở bản này (§1.7). Nếu FE cần cập nhật tức thời `canSend` → bổ sung frame ở bản sau.
 
 Các mục trước: Không còn mục mở. Quyết định nghiệp vụ chốt 2026-11-09 đã đồng bộ vào SRS `SYSTEM-001` v1.3 (BR-M09..BR-M18, BR-C03..BR-C04; AC-M06, AC-M09..AC-M12). `costAgreement` lồng trong Kèo (chi tiết): 5 field (user chốt 2026-11-10), từ v2.0 thêm `depositAmount`, `depositHolder` cho kèo luồng B (§4.2). Luồng B chốt 2026-11-10 (MATCH-002); các câu SRS liên quan sẽ được cập nhật sau.

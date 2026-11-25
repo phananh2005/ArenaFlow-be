@@ -2,6 +2,7 @@ package com.phananh.arenaflow.api.config;
 
 import com.phananh.arenaflow.api.security.CurrentUserArgumentResolver;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.format.FormatterRegistry;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -13,5 +14,11 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
         resolvers.add(new CurrentUserArgumentResolver());
+    }
+
+    /** Thêm sau bộ định dạng mặc định nên được ưu tiên cho mọi tham số {@code LocalDateTime} không chú thích. */
+    @Override
+    public void addFormatters(FormatterRegistry registry) {
+        registry.addConverter(new LocalDateTimeParamConverter());
     }
 }

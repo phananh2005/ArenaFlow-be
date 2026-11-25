@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway · Cloudinary (ký/xác minh cục bộ trong request; Admin API chỉ trong job dọn asset) |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md`, `docs/agent/non-functional-standards.md` · kế thừa USER-001 `Component_Class_Design.md` §4.6, §10 · ADR-0002, ADR-0003 (+ Sửa đổi 2026-11-09), ADR-0006, ADR-0008, [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) |
 | Ràng buộc dữ liệu | V1 + `V5__venue_management.sql` (§5.1); entity hiện có `domain/.../entity/venue/{Venue,VenueImage,VenueReport}` |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v6.1** (developer · 2026-11-23) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v6.2** (developer · 2026-11-25) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -37,13 +37,14 @@ application/   com.phananh.arenaflow.application
 │   │                VenueAlertService, VenueImageCleanupService, VenueStatusFilter, VenueReportStatusFilter
 │   └── impl/        *ServiceImpl
 ├── event/venue/     VenueAdminAlertEvent, VenueAlertType (package mới) — v4.2: bỏ VenueReportedEvent
-├── support/         VenueGuard, AdminAuditLog (mới), ConcurrencyConflictRetrier (sửa — §4.9), LikePatterns (mới v6.0 — §4.15)
+├── support/         VenueGuard, AdminAuditLog (mới), ConcurrencyConflictRetrier (sửa — §4.9), LikePatterns (mới v6.0 — §4.15),
+│   │                GeoBoundingBox (v6.2 — tách từ VenueServiceImpl, dùng chung với MATCH-001)
 │   ├── security/    CurrentActor (mới)
 │   ├── storage/     ImageUploadSigner, UploadSignature, SignedPublicId, CloudinaryImageUploadSigner,
 │   │                ImageAssetAdmin, AssetPage, AssetAdminRateLimitedException,
 │   │                CloudinaryImageAssetAdmin, CloudinaryProperties (package mới)
 │   └── venue/       VenueAlertProperties, VenueImageCleanupProperties (mới)
-├── validation/      ValidGeoQuery + ValidGeoQueryValidator (mới); OneOf (tái dùng)
+├── validation/      ValidGeoQuery + ValidGeoQueryValidator + GeoQueryRequest (mới; v6.2: tổng quát hoá qua GeoQueryRequest cho SearchVenueRequest, SearchMatchRequest); OneOf (tái dùng)
 ├── dto/request/     CreateVenueRequest, UpdateVenueRequest, SearchVenueRequest, AddVenueImageRequest,
 │                    ReportVenueRequest, ResolveVenueReportRequest, AdminSearchVenueRequest (v6.0)
 ├── dto/response/    VenueResponse, AdminVenueResponse, VenueSummaryResponse, VenueImageResponse,
@@ -236,7 +237,7 @@ public record AssetPage(List<String> publicIds, String nextCursor) {}
 - Luồng, lý do tham số, lỗi: `Processing_Flow.md` §3.16.
 
 ### 4.13. Audit log thao tác Admin (`security-backend.md` §11)
-`AdminAuditLog` (`application/support`, `@Component`): `void afterCommit(String action, UUID adminId, UUID venueId, UUID reportId)` — đăng ký `TransactionSynchronizationManager.registerSynchronization(…)` và chỉ ghi `log.info("Admin action: action={}, adminId={}, venueId={}, reportId={}", …)` trong `afterCommit()`. Gọi **bên trong** transaction của thao tác (trong lambda retrier hoặc method `@Transactional`): lần thử bị rollback không ghi, lần thử commit ghi đúng một lần. Một cơ chế cho mọi audit log admin của VENUE-001 (không ghi ở tầng gọi ngoài transaction — `@Transactional` method như 2.13 không có tầng như vậy). Thiếu transaction đang hoạt động → `IllegalStateException` (lỗi lập trình). Áp cho: `MARK_INACTIVE`, `REACTIVATE`, `RESOLVE_REPORT` (không ghi trạng thái chốt — tra qua `reportId`; user chốt 2026-11-19), và 2.12/2.13 khi `actor.admin()` và không phải người tạo (`ADMIN_UPDATE_VENUE`, `ADMIN_DELETE_IMAGE`). Chỉ id, không tên/PII/body.
+`AdminAuditLog` (`application/support`, `@Component`): `void afterCommit(String action, UUID adminId, UUID venueId, UUID reportId)` (+ **v6.2, MATCH-001 §4.11:** overload trung tính `void afterCommit(String action, UUID adminId, String targetType, UUID targetId)` ghi `log.info("Admin action: action={}, adminId={}, targetType={}, targetId={}", …)`) — đăng ký `TransactionSynchronizationManager.registerSynchronization(…)` và chỉ ghi `log.info("Admin action: action={}, adminId={}, venueId={}, reportId={}", …)` trong `afterCommit()`. Gọi **bên trong** transaction của thao tác (trong lambda retrier hoặc method `@Transactional`): lần thử bị rollback không ghi, lần thử commit ghi đúng một lần. Một cơ chế cho mọi audit log admin của VENUE-001 (không ghi ở tầng gọi ngoài transaction — `@Transactional` method như 2.13 không có tầng như vậy). Thiếu transaction đang hoạt động → `IllegalStateException` (lỗi lập trình). Áp cho: `MARK_INACTIVE`, `REACTIVATE`, `RESOLVE_REPORT` (không ghi trạng thái chốt — tra qua `reportId`; user chốt 2026-11-19), và 2.12/2.13 khi `actor.admin()` và không phải người tạo (`ADMIN_UPDATE_VENUE`, `ADMIN_DELETE_IMAGE`). Chỉ id, không tên/PII/body.
 
 ### 4.14. DataIntegrityViolations (dùng chung, `application/support`)
 Lớp tiện ích tĩnh: `constraintName(DataIntegrityViolationException)` — tên constraint từ cause Hibernate, `null` nếu không có (không đọc message SQL vì có thể chứa giá trị dòng); `violates(exception, constraint)`. Dùng ở `reportVenue`, `addImage` để chỉ đổi đúng vi phạm unique thành mã nghiệp vụ; `GlobalExceptionHandler` dùng `constraintName` để log.
@@ -414,7 +415,7 @@ arenaflow.venue.image-cleanup.read-timeout=30s
 | `page-size` 500, lô xoá 100 | Tối đa theo tài liệu Admin API → ít request nhất |
 | `max-admin-calls-per-run` 100 | Gói free 500 request/giờ; chừa ≥400 cho việc khác |
 
-Tắt job trong test: `api/pom.xml` (surefire `systemPropertyVariables`) đặt `arenaflow.venue.stale-alert.cron=-`; job dọn mặc định đã `-`. Không dùng `src/test/resources/application.properties` vì file đó che file của `src/main`.
+Tắt job trong test: `api/pom.xml` (surefire `systemPropertyVariables`) đặt `arenaflow.venue.stale-alert.cron=-`; job dọn mặc định đã `-`. Không dùng `src/test/resources/application.properties` vì file đó che file của `src/main`. **v6.2 (MATCH-001 §8):** hai job VENUE-001 chạy trên pool scheduling chung toàn ứng dụng (`spring.task.scheduling.pool.size=5`, bean `taskScheduler` khai báo trong `SchedulingConfig` từ `ThreadPoolTaskSchedulerBuilder`) để job dọn asset gọi HTTP Cloudinary không chặn các job định kỳ khác.
 
 `.env.example`: thêm `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER` (placeholder, ghi chú "khác nhau mỗi môi trường"). **NEVER** commit giá trị thật.
 

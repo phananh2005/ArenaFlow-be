@@ -1,13 +1,13 @@
 package com.phananh.arenaflow.application.validation;
 
-import com.phananh.arenaflow.application.dto.request.SearchVenueRequest;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
-public class ValidGeoQueryValidator implements ConstraintValidator<ValidGeoQuery, SearchVenueRequest> {
+/** Áp cho mọi request tìm theo toạ độ (địa điểm, kèo…) qua {@link GeoQueryRequest}. */
+public class ValidGeoQueryValidator implements ConstraintValidator<ValidGeoQuery, GeoQueryRequest> {
 
     @Override
-    public boolean isValid(SearchVenueRequest request, ConstraintValidatorContext context) {
+    public boolean isValid(GeoQueryRequest request, ConstraintValidatorContext context) {
         if (request == null) {
             return true;
         }

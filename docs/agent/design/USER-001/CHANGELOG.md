@@ -1,5 +1,20 @@
 # CHANGELOG — USER-001 User & Team Management
 
+## [v5.3] — 2026-11-25
+
+**Type:** MINOR (không đổi endpoint, field, mã lỗi, message của USER-001) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE cho MATCH-001, không ảnh hưởng FE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Đồng bộ với MATCH-001 | Không |
+| 2 | Header 3 tài liệu thiết kế | Ghi nhận | v5.2 → v5.3 | Phiên bản ở header khớp entry mới nhất | Không |
+
+### Ảnh hưởng
+- API contract USER-001: không đổi.
+- Nghiệp vụ / SRS: không đổi.
+
 ## [v5.2] — 2026-11-23
 
 **Type:** MINOR (không đổi endpoint, field, mã lỗi, message) · **Tóm tắt:** Ghi rõ probe health liveness / readiness có sẵn cho hạ tầng; cập nhật tài liệu nội bộ BE, không ảnh hưởng FE.

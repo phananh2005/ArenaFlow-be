@@ -1,11 +1,14 @@
 package com.phananh.arenaflow.domain.entity.user;
 
+import com.phananh.arenaflow.domain.entity.ColumnMapping;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** Entity người dùng: kiểu id, phường/xã và khoá các cột điểm/chuỗi trận sạch/bộ đếm report trước dirty checking. */
 class UserEntityTest {
 
     @Test
@@ -23,6 +26,14 @@ class UserEntityTest {
         user.setId(testId);
 
         assertThat(user.getId()).isEqualTo(testId);
+    }
+
+    @Test
+    void reputationColumnsAreNeverWrittenByDirtyChecking() {
+        for (String field : List.of("reliabilityScore", "cleanStreak", "reportCountNoshow", "reportCountBadPlay",
+                "reportCountBadCommunication", "reportCountSkillMismatch")) {
+            assertThat(ColumnMapping.column(User.class, field).updatable()).as(field).isFalse();
+        }
     }
 
     @Test

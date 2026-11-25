@@ -4,6 +4,7 @@ import com.phananh.arenaflow.domain.entity.team.Team;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
+import com.phananh.arenaflow.domain.projection.TeamCaptainContextView;
 import com.phananh.arenaflow.domain.repository.TeamMemberRepository;
 import com.phananh.arenaflow.domain.repository.TeamRepository;
 import lombok.RequiredArgsConstructor;
@@ -91,5 +92,39 @@ public class TeamGuard {
                 .findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE)
                 .filter(captain -> captain.getUserId().equals(userId))
                 .orElseThrow(() -> disbandedOr(teamId, ErrorCode.TEAM_002));
+    }
+
+    /**
+     * Một truy vấn: TEAM_001 → TEAM_016 → TEAM_015 → TEAM_002. Trả dữ liệu đã đọc (tên/ảnh/điểm đội, tên người gọi)
+     * để caller dựng response không cần đọc lại.
+     */
+    public TeamCaptainContextView requireActiveCaptain(UUID teamId, UUID userId) {
+        TeamCaptainContextView context = captainContext(teamId, userId);
+        if (Team.TeamStatus.INACTIVE.name().equals(context.getStatus())) {
+            throw new BusinessException(ErrorCode.TEAM_015);
+        }
+        requireCaptainFlag(context);
+        return context;
+    }
+
+    /** Một truy vấn: TEAM_001 → TEAM_016 → TEAM_002; đội INACTIVE vẫn được (huỷ, từ chối, rút, xem). */
+    public void requireCaptainAllowInactive(UUID teamId, UUID userId) {
+        requireCaptainFlag(captainContext(teamId, userId));
+    }
+
+    /** Đội tồn tại và chưa giải tán; đội đã giải tán không còn đội trưởng ACTIVE nên TEAM_016 luôn trước TEAM_002. */
+    private TeamCaptainContextView captainContext(UUID teamId, UUID userId) {
+        TeamCaptainContextView context = teamRepository.findCaptainContext(teamId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_001));
+        if (Team.TeamStatus.DISBANDED.name().equals(context.getStatus())) {
+            throw new BusinessException(ErrorCode.TEAM_016);
+        }
+        return context;
+    }
+
+    private static void requireCaptainFlag(TeamCaptainContextView context) {
+        if (!Boolean.TRUE.equals(context.getCaptain())) {
+            throw new BusinessException(ErrorCode.TEAM_002);
+        }
     }
 }

@@ -2,13 +2,13 @@
 
 > Thiết kế schema PostgreSQL chi tiết từ đặc tả nghiệp vụ trong `data-model.md`
 
-> Cập nhật: 2026-11-21 — kiểu mọi cột thời gian theo V6 (SYSTEM-002). 2026-11-05 — bảng `team`, `team_member` đồng bộ tới V4 (USER-002); các bảng khác vẫn theo V1 (vd. `user.role`/`ward_id`, bỏ `team_tag` ở V2 chưa phản ánh)
+> Cập nhật: 2026-11-25 — đồng bộ V7 (MATCH-001: `match`, `match_request`, `cost_custom_item`, bỏ `chat_message`, thêm `conversation` + `conversation_message`, `idx_team_disbanded_by`). 2026-11-21 — kiểu mọi cột thời gian theo V6 (SYSTEM-002). 2026-11-05 — bảng `team`, `team_member` đồng bộ tới V4 (USER-002)
 
 ## Conventions
 
 - **Tên bảng:** snake_case số ít (user, team, match)
 - **Tên cột:** snake_case
-- **ID:** UUID (Hibernate generates UUID v7 từ Java, không cần DEFAULT trong DB)
+- **ID:** UUID (Hibernate generates UUID v7 từ Java, không cần DEFAULT trong DB; ngoại lệ duy nhất: câu INSERT gom lô viết tay như `cost_custom_item` dùng hàm `uuidv7()` của PostgreSQL ≥ 18 — ADR-0008 Sửa đổi 2026-11-09)
 - **Timestamp:** TIMESTAMP (không múi giờ), giá trị là **giờ Việt Nam** (`Asia/Ho_Chi_Minh`) — V6 (SYSTEM-002) đổi mọi cột TIMESTAMPTZ của V1–V5 sang TIMESTAMP, giữ đúng thời điểm. DEFAULT của cột `*_at` = `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'` (không phụ thuộc TimeZone phiên); ứng dụng luôn tự truyền giá trị. Có `created_at`, `updated_at`
 - **Soft delete:** `deleted_at` TIMESTAMP NULL
 - **Enum:** VARCHAR với CHECK constraint
@@ -141,6 +141,7 @@ Danh mục hành chính Việt Nam (tỉnh/quận/phường).
 - PRIMARY KEY (id)
 - INDEX (created_by)
 - `idx_team_status_created` INDEX (status, created_at DESC) (V2, thay `idx_team_status`) -- danh sách đội lọc status, sort mới nhất
+- `idx_team_disbanded_by` INDEX (disbanded_by) WHERE disbanded_by IS NOT NULL (V7) -- tìm đội người gọi đã giải tán ("Tin nhắn của tôi")
 
 **Foreign Keys:**
 - FOREIGN KEY (created_by) REFERENCES user(id) ON DELETE RESTRICT
@@ -245,7 +246,8 @@ Bài đăng ghép kèo (luồng A hoặc B).
 | author_team_id | UUID | NOT NULL | FK → team, đội đăng bài |
 | status | VARCHAR(20) | NOT NULL | OPEN, CONFIRMED, ARCHIVED, COMPLETED, EXPIRED, CANCELLED |
 | sport_id | UUID | NOT NULL | FK → sport, bộ môn (bóng đá trong MVP) |
-| format | VARCHAR(10) | NULL | 5v5, 7v7, 11v11 (chỉ hiển thị) |
+| format | VARCHAR(20) | NULL | `FIVE_A_SIDE`, `SEVEN_A_SIDE`, `ELEVEN_A_SIDE` (V7: VARCHAR(10) → VARCHAR(20); bắt buộc khi `type = HAS_VENUE`) |
+| skill_levels | TEXT | NOT NULL | JSON array nhãn trình độ mong muốn, default `'[]'` (V7) |
 | age_note | TEXT | NULL | Ghi chú tuổi (văn bản tự do) |
 | match_nature | TEXT | NULL | Tính chất trận (văn bản tự do) |
 | venue_id | UUID | NULL | FK → venue (chỉ cho luồng A) |
@@ -255,25 +257,29 @@ Bài đăng ghép kèo (luồng A hoặc B).
 | search_lat | DECIMAL(10,7) | NULL | Vĩ độ gốc cho gợi ý (luồng B) |
 | search_lng | DECIMAL(10,7) | NULL | Kinh độ gốc cho gợi ý (luồng B) |
 | search_radius_km | DECIMAL(5,2) | NULL | Bán kính tìm kiếm (default 3 km, luồng B) |
-| cost_type | VARCHAR(50) | NULL | VENUE_ONLY, DRINKS_ONLY, BOTH, CUSTOM |
-| cost_split | VARCHAR(50) | NULL | FIFTY_FIFTY, SEVENTY_THIRTY_HOME, SEVENTY_THIRTY_LOSER, LOSER_PAYS_DRINKS |
-| cost_venue_amount | BIGINT | NULL | Tiền sân (VND, chỉ hiển thị) |
-| cost_drinks_amount | BIGINT | NULL | Tiền nước (VND) |
+| cost_type | VARCHAR(50) | NULL | `VENUE_ONLY`, `DRINKS_ONLY`, `BOTH` (V7: bỏ `CUSTOM`) |
+| cost_split | VARCHAR(50) | NULL | `FIFTY_FIFTY`, `SEVENTY_THIRTY_HOME`, `SEVENTY_THIRTY_LOSER`, `LOSER_PAYS_DRINKS` |
+| cost_venue_amount | BIGINT | NULL | Tiền sân (VND, > 0) |
+| cost_drinks_amount | BIGINT | NULL | Tiền nước (VND, > 0) |
 | cost_deposit_holder | VARCHAR(100) | NULL | Ai giữ tiền cọc (luồng B, văn bản tự do) |
 | confirmed_opponent_team_id | UUID | NULL | FK → team, đội đã ghép (khi CONFIRMED) |
 | confirmed_venue_id | UUID | NULL | FK → venue, sân đã chốt (luồng B khi CONFIRMED) |
 | confirmed_match_time | TIMESTAMP | NULL | Giờ trận đã chốt (luồng B khi CONFIRMED) |
 | cancelled_by_team_id | UUID | NULL | FK → team, đội hủy (khi CANCELLED) |
 | cancelled_at | TIMESTAMP | NULL | Thời gian hủy |
+| cancel_reason | VARCHAR(500) | NULL | Lý do hủy kèo (V7) |
+| version | BIGINT | NOT NULL | Optimistic lock, default 0 (V7) |
 | created_at | TIMESTAMP | NOT NULL | |
 | updated_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
-- INDEX (author_team_id, status) -- query Match của đội
+- INDEX (author_team_id, status) -- query Match của đội (vai trò tác giả)
+- `idx_match_opponent_status` INDEX (confirmed_opponent_team_id, status) (V7) -- query Match của đội (vai trò đối thủ)
 - INDEX (status, expires_at) -- scheduled job xử lý expiry
 - INDEX (status, match_end_time) -- scheduled job chuyển ARCHIVED
 - INDEX (sport_id, status, match_start_time) -- tìm kèo theo môn
+- `idx_match_open_start` INDEX (match_start_time, id) WHERE status = 'OPEN' (V7) -- tìm kèo đang mở không lọc môn
 - INDEX (search_lat, search_lng) WHERE type = 'NEED_VENUE' AND status = 'OPEN' -- tìm kiếm theo GPS
 
 **Foreign Keys:**
@@ -292,6 +298,11 @@ Bài đăng ghép kèo (luồng A hoặc B).
 - CHECK ((type = 'HAS_VENUE' AND venue_id IS NOT NULL) OR (type = 'NEED_VENUE' AND venue_id IS NULL))
 - CHECK ((status = 'CONFIRMED' AND confirmed_opponent_team_id IS NOT NULL) OR (status != 'CONFIRMED'))
 - CHECK ((status = 'CANCELLED' AND cancelled_by_team_id IS NOT NULL AND cancelled_at IS NOT NULL) OR (status != 'CANCELLED'))
+- `match_format_check` (V7): CHECK (format IS NULL OR format IN ('FIVE_A_SIDE', 'SEVEN_A_SIDE', 'ELEVEN_A_SIDE'))
+- `match_has_venue_format_check` (V7): CHECK (type <> 'HAS_VENUE' OR format IS NOT NULL)
+- `match_cost_type_check` (V7): CHECK (cost_type IS NULL OR cost_type IN ('VENUE_ONLY', 'DRINKS_ONLY', 'BOTH'))
+- `match_cost_split_check` (V7): CHECK (cost_split IS NULL OR cost_split IN ('FIFTY_FIFTY', 'SEVENTY_THIRTY_HOME', 'SEVENTY_THIRTY_LOSER', 'LOSER_PAYS_DRINKS'))
+- `match_cost_amount_check` (V7): CHECK ((cost_venue_amount IS NULL OR cost_venue_amount > 0) AND (cost_drinks_amount IS NULL OR cost_drinks_amount > 0))
 
 ### 3.2 Bảng: match_venue_option
 
@@ -337,18 +348,23 @@ Các khoản tự nhập (tiền trọng tài, phí áo đấu, ...).
 
 | Cột | Kiểu | Nullable | Mô tả |
 |---|---|---|---|
-| id | UUID | NOT NULL | PK |
+| id | UUID | NOT NULL | PK (sinh bằng `uuidv7()` của PostgreSQL ≥ 18 trong câu INSERT gom lô) |
 | match_id | UUID | NOT NULL | FK → match |
 | item_name | VARCHAR(100) | NOT NULL | Tên khoản phí |
-| amount | BIGINT | NOT NULL | Số tiền (VND) |
+| amount | BIGINT | NOT NULL | Số tiền (VND, > 0) |
+| display_order | INTEGER | NOT NULL | Thứ tự hiển thị (> 0, V7) |
 | created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
-- INDEX (match_id)
+- `idx_cost_custom_item_order` UNIQUE (match_id, display_order) (V7, thay `idx_cost_custom_item_match`)
 
 **Foreign Keys:**
 - FOREIGN KEY (match_id) REFERENCES match(id) ON DELETE CASCADE
+
+**Constraints:**
+- `cost_custom_item_display_order_check` (V7): CHECK (display_order > 0)
+- `cost_custom_item_amount_check` (V7): CHECK (amount > 0)
 
 ### 3.5 Bảng: match_request
 
@@ -360,6 +376,7 @@ Yêu cầu bắt đối (luồng A).
 | match_id | UUID | NOT NULL | FK → match |
 | requester_team_id | UUID | NOT NULL | FK → team, đội gửi yêu cầu |
 | status | VARCHAR(20) | NOT NULL | PENDING, ACCEPTED, REJECTED, WITHDRAWN, SUPERSEDED, EXPIRED |
+| reason | VARCHAR(500) | NULL | Lý do từ chối hoặc rút yêu cầu (V7) |
 | requested_at | TIMESTAMP | NOT NULL | |
 | responded_at | TIMESTAMP | NULL | Thời gian author phản hồi |
 | withdrawn_at | TIMESTAMP | NULL | Thời gian requester rút |
@@ -367,6 +384,7 @@ Yêu cầu bắt đối (luồng A).
 **Indexes:**
 - PRIMARY KEY (id)
 - UNIQUE (match_id, requester_team_id) WHERE status NOT IN ('WITHDRAWN', 'EXPIRED') -- một đội chỉ một request active
+- `idx_match_request_accepted` UNIQUE (match_id) WHERE status = 'ACCEPTED' (V7) -- tối đa 1 ACCEPTED mỗi kèo
 - INDEX (match_id, status) -- query requests của Match
 - INDEX (requester_team_id, status) -- query requests của đội
 
@@ -676,28 +694,59 @@ Tin tuyển mercenary.
 
 ## 7. Chat & Notification
 
-### 7.1 Bảng: chat_message
+### 7.1 Bảng: conversation & conversation_message (V7 — thay chat_message của V1)
 
-Chat giữa hai đội trưởng (luồng B pairing).
+Cuộc trò chuyện tổng quát giữa hai bên (`TEAM` hoặc `USER`) và tin nhắn của cuộc trò chuyện đó.
+
+#### Bảng: `conversation`
 
 | Cột | Kiểu | Nullable | Mô tả |
 |---|---|---|---|
 | id | UUID | NOT NULL | PK |
-| pairing_id | UUID | NOT NULL | FK → pairing |
-| sender_user_id | UUID | NOT NULL | FK → user, đội trưởng gửi |
-| message | TEXT | NOT NULL | Nội dung tin nhắn |
+| context_type | VARCHAR(30) | NOT NULL | `TEAM_MATCH` ở V7 (V10 thêm `MERCENARY_APPLICATION`) |
+| match_id | UUID | NULL | FK → match (`ON DELETE RESTRICT`); NOT NULL khi `context_type = 'TEAM_MATCH'` |
+| party_a_type | VARCHAR(10) | NOT NULL | `TEAM`, `USER` |
+| party_a_id | UUID | NOT NULL | Bên A (đội tạo kèo ở `TEAM_MATCH`) |
+| party_b_type | VARCHAR(10) | NOT NULL | `TEAM`, `USER` |
+| party_b_id | UUID | NOT NULL | Bên B (đội tham gia ở `TEAM_MATCH`) |
 | created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
-- INDEX (pairing_id, created_at) -- query chat theo thời gian
-- INDEX (created_at) -- scheduled job xóa sau 90 ngày
+- `idx_conversation_team_match` UNIQUE (match_id, party_b_id) WHERE context_type = 'TEAM_MATCH'
+- `idx_conversation_party_a` INDEX (party_a_id)
+- `idx_conversation_party_b` INDEX (party_b_id)
 
 **Foreign Keys:**
-- FOREIGN KEY (pairing_id) REFERENCES pairing(id) ON DELETE CASCADE
-- FOREIGN KEY (sender_user_id) REFERENCES user(id) ON DELETE SET NULL
+- FOREIGN KEY (match_id) REFERENCES match(id) ON DELETE RESTRICT
 
-**Retention:** Xóa sau 90 ngày kể từ khi Match chuyển COMPLETED, ARCHIVED hoặc CANCELLED.
+**Constraints:**
+- `conversation_context_type_check`: CHECK (context_type IN ('TEAM_MATCH'))
+- `conversation_team_match_check`: CHECK (context_type <> 'TEAM_MATCH' OR (match_id IS NOT NULL AND party_a_type = 'TEAM' AND party_b_type = 'TEAM'))
+- `conversation_parties_check`: CHECK (NOT (party_a_type = party_b_type AND party_a_id = party_b_id))
+
+#### Bảng: `conversation_message`
+
+| Cột | Kiểu | Nullable | Mô tả |
+|---|---|---|---|
+| id | UUID | NOT NULL | PK |
+| conversation_id | UUID | NOT NULL | FK → conversation (`ON DELETE CASCADE`) |
+| sender_party | VARCHAR(1) | NOT NULL | `A` hoặc `B` |
+| sender_user_id | UUID | NOT NULL | FK → user (`ON DELETE RESTRICT`), người thực sự gửi |
+| message | TEXT | NOT NULL | Nội dung tin nhắn (1..1000 ký tự) |
+| is_read | BOOLEAN | NOT NULL | Đã đọc, default FALSE |
+| created_at | TIMESTAMP | NOT NULL | |
+
+**Indexes:**
+- PRIMARY KEY (id)
+- `idx_conversation_message_time` INDEX (conversation_id, created_at, id) -- phân trang cursor
+- `idx_conversation_message_unread` INDEX (conversation_id, sender_party) WHERE NOT is_read -- đánh dấu đã đọc & kiểm chưa đọc
+
+**Foreign Keys:**
+- FOREIGN KEY (conversation_id) REFERENCES conversation(id) ON DELETE CASCADE
+- FOREIGN KEY (sender_user_id) REFERENCES "user"(id) ON DELETE RESTRICT
+
+**Retention:** Xóa sau 90 ngày kể từ khi trận kết thúc (`COMPLETED`, `ARCHIVED`, `CANCELLED`, `EXPIRED`).
 
 ### 7.2 Bảng: notification
 
@@ -740,7 +789,7 @@ Thông báo in-app.
 **Rating & Report (2):** rating, report  
 **Venue (3):** venue, venue_image, venue_report  
 **Mercenary (2):** mercenary_recruitment, mercenary_application  
-**Chat & Notification (2):** chat_message, notification
+**Chat & Notification (3):** conversation, conversation_message, notification
 
 ### 8.2 Indexes quan trọng cho hiệu năng
 
@@ -753,7 +802,7 @@ Các indexes đã được thiết kế để hỗ trợ:
 
 ### 8.3 Ràng buộc nghiệp vụ
 
-- Tối đa một request ACCEPTED mỗi Match (xử lý ở application layer)
+- Tối đa một request ACCEPTED mỗi Match (unique index `idx_match_request_accepted WHERE status = 'ACCEPTED'`, V7)
 - Tối đa một pairing CONFIRMED mỗi Match (race condition xử lý bằng final_confirmed_at)
 - Một đội chỉ một captain ACTIVE (unique constraint trên team_member)
 - Tối đa 5 ảnh mỗi venue (xử lý ở application layer)

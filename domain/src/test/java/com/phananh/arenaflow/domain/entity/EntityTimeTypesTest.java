@@ -1,6 +1,7 @@
 package com.phananh.arenaflow.domain.entity;
 
-import com.phananh.arenaflow.domain.entity.chat.ChatMessage;
+import com.phananh.arenaflow.domain.entity.chat.Conversation;
+import com.phananh.arenaflow.domain.entity.chat.ConversationMessage;
 import com.phananh.arenaflow.domain.entity.chat.Notification;
 import com.phananh.arenaflow.domain.entity.match.CostCustomItem;
 import com.phananh.arenaflow.domain.entity.match.Match;
@@ -63,7 +64,7 @@ class EntityTimeTypesTest {
                 TeamCaptainHistory.class, Sport.class, MatchVenueOption.class, CostCustomItem.class, Match.class,
                 MatchTimeOption.class, MatchRequest.class, Pairing.class, Venue.class, VenueImage.class,
                 VenueReport.class, Rating.class, Report.class, MercenaryRecruitment.class,
-                MercenaryApplication.class, ChatMessage.class, Notification.class);
+                MercenaryApplication.class, Conversation.class, ConversationMessage.class, Notification.class);
     }
 
     static Stream<Class<?>> projections() {

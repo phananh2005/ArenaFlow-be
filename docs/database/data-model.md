@@ -92,7 +92,7 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
 **Trạng thái Match_Request:** `PENDING`, `ACCEPTED`, `REJECTED`, `WITHDRAWN`, `SUPERSEDED`, `EXPIRED`.
 
 - Request hết hạn theo bài đăng, không có timeout riêng 2 giờ. Khi Match hết hạn, các request còn `PENDING` hết hạn theo.
-- Đội gửi có thể rút request. Rút khi `PENDING` không bị trừ uy tín; rút sau khi `ACCEPTED` bị trừ Reliability Score theo khoảng cách tới giờ trận như hủy Match xác nhận.
+- Đội gửi có thể rút request (kèm lý do tuỳ chọn khi còn `PENDING`, lý do bắt buộc ≤ 500 ký tự khi đã `ACCEPTED`). Rút khi `PENDING` không bị trừ uy tín; rút sau khi `ACCEPTED` tương đương huỷ kèo đã ghép (chuyển Match sang `CANCELLED`, lưu lý do huỷ, chỉ đội rút bị trừ Reliability Score và mất chuỗi trận sạch theo khoảng cách tới giờ trận như hủy Match xác nhận). Từ chối request cũng lưu lý do tuỳ chọn ≤ 500 ký tự.
 - Các trạng thái request cạnh tranh được chuyển sang `SUPERSEDED` khi một request được chấp nhận ở luồng A.
 
 **Cập nhật trạng thái hết hạn:** người dùng đồng ý cơ chế kết hợp scheduled job mỗi 5 phút và lazy check khi API được gọi. Job phục vụ cập nhật bền vững/cascade và thông báo; lazy check để phản hồi trạng thái hiện thời cho người truy cập. Cơ chế gửi push/in-app cụ thể **[cần xác nhận]**.
@@ -182,16 +182,16 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
 - **Report địa điểm:** Mỗi report lưu người report, lý do (`CLOSED` đã đóng cửa, `WRONG_INFO` sai thông tin, `OTHER`), mô tả thêm, thời gian, trạng thái (`PENDING` → `VERIFIED` / `REJECTED`), admin xử lý và thời điểm xử lý. Mỗi user chỉ có tối đa một report đang chờ cho mỗi cặp (địa điểm, lý do); sau khi admin xử lý thì report lại được. Admin không gửi report (sửa hoặc đánh dấu ngừng hoạt động trực tiếp). Admin thấy chi tiết từng report. Report không tự ẩn địa điểm; admin xác minh rồi đánh dấu ngừng hoạt động — khi đó các report `CLOSED` đang chờ của địa điểm tự chuyển `VERIFIED`. Địa điểm ngừng hoạt động không hiện trong danh sách địa điểm của người dùng (chỉ Admin xem trong danh sách quản trị), nhưng Match cũ giữ tham chiếu.
 - **Cảnh báo admin (mỗi đợt một lần):** report `CLOSED` đầu tiên của một đợt và địa điểm không được chọn 180 ngày mỗi loại chỉ cảnh báo một lần; đợt mới bắt đầu — với report `CLOSED`: khi hết report `CLOSED` đang chờ hoặc khi địa điểm được kích hoạt lại; với 180 ngày: khi địa điểm được chọn lại hoặc được kích hoạt lại.
 - Google Maps chỉ dùng hiển thị bản đồ/chỉ đường, không làm nguồn danh sách/master data sân. Availability sân không được ArenaFlow xác minh. Tích hợp Maps/API cụ thể cần chốt trước khi triển khai.
-- **Thỏa thuận chi phí:** ArenaFlow chỉ lưu thỏa thuận để hiển thị trên bảng tin; không thu/giữ tiền hay xử lý thanh toán. Hai đội thỏa thuận và thanh toán bên ngoài.
-- Các loại chi phí: tiền sân, tiền nước, hoặc cả hai.
+- **Thỏa thuận chi phí:** ArenaFlow chỉ lưu thỏa thuận để hiển thị trên bảng tin (chỉ đội tạo kèo sửa được khi kèo luồng A còn `OPEN`); không thu/giữ tiền hay xử lý thanh toán. Hai đội thỏa thuận và thanh toán bên ngoài.
+- Các loại chi phí: tiền sân (`VENUE_ONLY`), tiền nước (`DRINKS_ONLY`), hoặc cả hai (`BOTH`).
 - Cách chia: 50-50, 70-30 (đội chủ nhà bao 70%, hoặc ai thua bao 70%), đội thua trả toàn bộ tiền nước.
 - Lưu số tiền cụ thể (ví dụ: 500000) chỉ để hiển thị; tiền tệ mặc định VND trong MVP.
-- Khoản tự nhập: danh sách các khoản phí khác (tên + số tiền), ví dụ: "Tiền trọng tài 200000", "Phí áo đấu 50000".
+- Khoản tự nhập: danh sách các khoản phí khác (tên + số tiền + thứ tự hiển thị `display_order`, tối đa 10 khoản), ví dụ: "Tiền trọng tài 200000", "Phí áo đấu 50000".
 - Luồng B có thể có thỏa thuận chia đôi tiền cọc; cọc do thỏa thuận bên ngoài, có trường "ai giữ tiền cọc" để hiển thị.
 
 **Chat và Notification:**
 
-- Chat giữa hai đội trưởng ở luồng B lưu trong DB 90 ngày sau khi Match kết thúc. Thời điểm bắt đầu retention: khi Match chuyển sang `COMPLETED`, `ARCHIVED`, hoặc `CANCELLED` (tính từ lúc hủy). Chưa cần tìm kiếm/xuất chat trong MVP.
+- Mọi cuộc trò chuyện (chat giữa hai đội ở luồng A từ khi gửi yêu cầu ghép kèo, luồng B từ khi nhận kèo, và chat theo đơn ứng tuyển mercenary) dùng chung hai bảng `conversation` + `conversation_message` (V7 bỏ `chat_message` cũ). Mỗi cặp (kèo, đội tham gia) có tối đa một cuộc trò chuyện; gửi lại yêu cầu sau khi rút/hết hạn dùng tiếp cuộc trò chuyện cũ; trạng thái nhắn được / chỉ xem suy ra từ trạng thái hiện hành của yêu cầu / thương lượng (BR-N04, BR-N05). Cuộc trò chuyện và tin nhắn lưu trong DB 90 ngày sau khi trận kết thúc (`COMPLETED`, `ARCHIVED`, `CANCELLED`, `EXPIRED`). Chưa cần tìm kiếm/xuất chat trong MVP.
 - Notification lưu trong DB 30 ngày. Loại notification bao gồm:
   - Match request nhận được
   - Request được chấp nhận/từ chối

@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · Java 21 · Spring Data JPA · Flyway |
 | Quy ước áp dụng | `docs/agent/convention-backend.md`, `docs/agent/security-backend.md` (lệch có chủ đích: §10) |
 | Ràng buộc dữ liệu | `V1__initial_schema.sql`, entity hiện có `com.phananh.arenaflow.domain.entity.*`, ADR-0001/0002/0003/0004 · v4.1: xoá tài khoản (2.7) cần bảng mercenary của V10 (MERCENARY-001 `Component_Class_Design.md` §5.1) — implement sau MERCENARY-001 phần dữ liệu |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v5.2** (developer · 2026-11-23) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-02 · v1.0 (baseline) · hiện tại **v5.3** (developer · 2026-11-25) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan kiến trúc
 
@@ -99,6 +99,8 @@ Team findTeam(UUID teamId);                          // private từ USER-002; k
 Team activeTeam(UUID teamId);                        // findTeam + DISBANDED → TEAM_016 + INACTIVE → TEAM_015 (USER-002)
 void requireTeam(UUID teamId);                       // không có → TEAM_001 (chỉ thao tác đọc; rời đội dùng notDisbandedTeam từ USER-002)
 TeamMember requireCaptain(UUID teamId, UUID userId); // captain ACTIVE ≠ userId → TEAM_002 (đội vừa giải tán → TEAM_016, USER-002 disbandedOr)
+TeamCaptainContextView requireActiveCaptain(UUID teamId, UUID userId); // v5.3 (MATCH-001 §4.5): 1 truy vấn findCaptainContext; TEAM_001 → TEAM_016 → TEAM_015 → TEAM_002
+void requireCaptainAllowInactive(UUID teamId, UUID userId);            // v5.3 (MATCH-001 §4.5): 1 truy vấn findCaptainContext; TEAM_001 → TEAM_016 → TEAM_002
 ```
 
 `AdminTeamServiceImpl` dùng `TeamGuard.notDisbandedTeam` (USER-002: admin thao tác cả đội INACTIVE nhưng đội DISBANDED → `TEAM_016`; quy tắc riêng TEAM_011/012/013 giữ nguyên). Guard mới của USER-002: USER-002 `Component_Class_Design.md` §4.1.
@@ -227,9 +229,9 @@ public interface TeamCaptainHistoryRepository extends JpaRepository<TeamCaptainH
 
 | Entity | Thay đổi | Cột DB (V2) |
 |---|---|---|
-| `user.User` | + `role` (`enum Role { USER, ADMIN }`, `@Enumerated(STRING)`, mặc định `USER`) · `districtId` → `wardId` | `role VARCHAR(20) NOT NULL DEFAULT 'USER' CHECK (role IN ('USER','ADMIN'))` · rename `district_id` → `ward_id`, index `idx_user_ward` |
+| `user.User` | + `role` (`enum Role { USER, ADMIN }`, `@Enumerated(STRING)`, mặc định `USER`) · `districtId` → `wardId` · **v5.3 (MATCH-001, ADR-0013):** 6 cột uy tín / bộ đếm report (`reliabilityScore`, `cleanStreak`, `reportCountNoshow`, `reportCountBadPlay`, `reportCountBadCommunication`, `reportCountSkillMismatch`) đặt `updatable = false` (chỉ cập nhật qua câu `UPDATE` nguyên tử) | `role VARCHAR(20) NOT NULL DEFAULT 'USER' CHECK (role IN ('USER','ADMIN'))` · rename `district_id` → `ward_id`, index `idx_user_ward` |
 | `user.AdministrativeUnit` | `enum Level { province, ward }` (bỏ `district`) | CHECK `level IN ('province','ward')` · CHECK ward phải có `parent_id` |
-| `team.Team` | + `skillLevels` (`List<String>`, `@Convert(SkillLevelsConverter)`, `columnDefinition = "TEXT"`) · + `inactiveReason` · + `@Version Long version` | `skill_levels TEXT NOT NULL DEFAULT '[]'` · `inactive_reason VARCHAR(500)` · `version BIGINT NOT NULL DEFAULT 0` |
+| `team.Team` | + `skillLevels` (`List<String>`, `@Convert(SkillLevelsConverter)`, `columnDefinition = "TEXT"`) · + `inactiveReason` · + `@Version Long version` · **v5.3 (MATCH-001, ADR-0013):** 6 cột uy tín / bộ đếm report (`reliabilityScore`, `cleanStreak`, `reportCountNoshow`, `reportCountBadPlay`, `reportCountBadCommunication`, `reportCountSkillMismatch`) đặt `updatable = false` | `skill_levels TEXT NOT NULL DEFAULT '[]'` · `inactive_reason VARCHAR(500)` · `version BIGINT NOT NULL DEFAULT 0` |
 | `team.TeamMember` | `enum Status { PENDING, ACTIVE, LEFT, REJECTED }` · + `@Version Long version` | CHECK status thêm `'REJECTED'` · `version BIGINT NOT NULL DEFAULT 0` · thay `idx_team_member_active` bằng unique `(team_id, user_id) WHERE status IN ('PENDING','ACTIVE')` |
 | `team.TeamCaptainHistory` | + `reason` | `reason VARCHAR(500)` |
 | `team.TeamTag` | **Xoá** entity (+ test liên quan) | `DROP TABLE team_tag` |
@@ -275,14 +277,15 @@ static String maskAvatar(String avatarUrl, Boolean deleted);   // qua DeletedUse
 ### 9.1. SecurityConfig
 - Stateless, `csrf` tắt, `oauth2ResourceServer(jwt)` với bean `JwtDecoder` HS256 (`NimbusJwtDecoder.withSecretKey`), validator = `JwtValidators.createDefault()` + `AccessTokenTypeValidator` (§9.2).
 - Chuyển claim → quyền: **bean `JwtAuthenticationConverter` của Spring** khai báo trong `SecurityConfig`, dùng `JwtGrantedAuthoritiesConverter` (claim `roles`, prefix `ROLE_`). Không viết class converter riêng.
-- **`BearerTokenResolver` bỏ qua header trên `/api/v1/auth/**`** (hợp đồng ngoài: `API_Spec.md` §1.1): bộ lọc Bearer của Spring xác thực token ngay khi có header `Authorization: Bearer`, kể cả trên đường dẫn `permitAll` — token sai làm endpoint public trả 401 (client tự gắn access token hết hạn khi gọi `/auth/refresh` → không refresh được). Test: token sai định dạng (`AuthControllerTest.publicAuthEndpointIgnoresInvalidBearerHeader`); token hết hạn đi cùng cơ chế, chưa có test riêng. Resolver dùng chung hằng `PUBLIC_AUTH_PATH` với `permitAll`: khớp → trả `null` (không xác thực), còn lại → `DefaultBearerTokenResolver`.
-  - Chỉ áp cho `/api/v1/auth/**`. Health và API docs giữ hành vi mặc định có chủ đích (Bearer sai → 401 theo cơ chế mặc định; chưa có test); đưa vào matcher khi có client gọi các đường dẫn này kèm token.
+- **`BearerTokenResolver` bỏ qua header trên `/api/v1/auth/**` và `/ws/**`** (hợp đồng ngoài: `API_Spec.md` §1.1, MATCH-001 `Component_Class_Design.md` §9): bộ lọc Bearer của Spring xác thực token ngay khi có header `Authorization: Bearer`, kể cả trên đường dẫn `permitAll` — token sai làm endpoint public trả 401 (client tự gắn access token hết hạn khi gọi `/auth/refresh` → không refresh được; handshake HTTP `/ws/**` của WebSocket/SockJS xác thực ở frame STOMP `CONNECT`). Test: token sai định dạng (`AuthControllerTest.publicAuthEndpointIgnoresInvalidBearerHeader`, `SecurityConfigIntegrationTest.realtimeHandshakePathIsPublicAndIgnoresStaleBearerHeader`). Resolver dùng chung hằng `PUBLIC_AUTH_PATH` và `REALTIME_PATH` với `permitAll`: khớp → trả `null` (không xác thực), còn lại → `DefaultBearerTokenResolver`.
+  - Chỉ áp cho `/api/v1/auth/**` và `/ws/**`. Health và API docs giữ hành vi mặc định có chủ đích (Bearer sai → 401 theo cơ chế mặc định; chưa có test); đưa vào matcher khi có client gọi các đường dẫn này kèm token.
   - **NEVER** đặt endpoint cần xác thực dưới `/api/v1/auth/**`: SecurityContext ở đó luôn anonymous, `CurrentUserArgumentResolver` ném `AUTH_001` dù token hợp lệ. Cần endpoint như vậy (vd logout) → thu hẹp `PUBLIC_AUTH_PATH` (dùng cho cả `permitAll` và resolver) thành danh sách endpoint public cụ thể, để endpoint mới rơi vào `authenticated()`.
 - Phân quyền theo đường dẫn:
 
 | Đường dẫn | Quy tắc |
 |---|---|
 | `/api/v1/auth/**` | `permitAll` |
+| `/ws/**` (v5.3 — MATCH-001) | `permitAll` — handshake HTTP WebSocket/SockJS (`BearerTokenResolver` bỏ qua; xác thực JWT ở frame STOMP `CONNECT`) |
 | `GET /actuator/health`, `GET /actuator/health/**` | `permitAll` — health check cho hạ tầng. `/actuator/health` trả `{"status":"UP","groups":["liveness","readiness"]}` (tên nhóm probe, không có `components`); đường dẫn thành phần (vd `/health/db`) trả 404 vì Spring Boot mặc định ẩn thành phần. `/**` cho probe: `/actuator/health/liveness` (chỉ `livenessState`, **không** kiểm DB — dùng cho ping giữ app thức / UptimeRobot) và `/actuator/health/readiness` (chỉ `readinessState`) trả `{"status":"UP"}`; Spring Boot 4 bật sẵn (`management.endpoint.health.probes.enabled` mặc định `true`), repo không cấu hình thêm |
 | `GET /v3/api-docs/**`, `GET /swagger-ui/**`, `GET /swagger-ui.html` | `permitAll` — tài liệu API cho dev FE; **mặc định tắt** (404), bật khi `SPRINGDOC_ENABLED=true` |
 | `/api/v1/admin/**` | `hasRole('ADMIN')` |

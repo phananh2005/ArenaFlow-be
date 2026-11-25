@@ -56,6 +56,11 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 		<dependency>
+			<!-- Kênh realtime STOMP over WebSocket (chat); version theo BOM của Spring Boot. -->
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-websocket</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-database-postgresql</artifactId>
 		</dependency>
@@ -118,6 +123,7 @@
 					<!-- Scheduled jobs stay off in tests so they never touch the shared dev database on their own. -->
 					<systemPropertyVariables>
 						<arenaflow.venue.stale-alert.cron>-</arenaflow.venue.stale-alert.cron>
+						<arenaflow.match.lifecycle.cron>-</arenaflow.match.lifecycle.cron>
 					</systemPropertyVariables>
 				</configuration>
 			</plugin>

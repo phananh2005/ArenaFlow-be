@@ -10,8 +10,10 @@ import java.sql.ResultSet;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -24,6 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class VietnamLocalDatetimeMigrationTest {
 
     private static final String VIETNAM_DEFAULT = "AT TIME ZONE 'Asia/Ho_Chi_Minh'";
+    /** Bảng chat_message của V1 đã bị V7 xoá (thay bằng conversation / conversation_message). */
+    private static final Set<String> DROPPED_AFTER_V6 = Set.of("chat_message.created_at");
     /** 22 bảng V6 đổi; loại flyway_schema_history (installed_on do Flyway quản lý). */
     private static final String V6_TABLES = V6TimestampColumns.COLUMNS.keySet().stream()
             .map(table -> "'" + table + "'")
@@ -45,7 +49,7 @@ class VietnamLocalDatetimeMigrationTest {
 
         assertThat(withTimeZone).isZero();
         // containsAll: migration sau thêm cột TIMESTAMP vào các bảng này không làm test đỏ.
-        assertThat(localTimestamps).containsAll(V6TimestampColumns.pairs(V6TimestampColumns.COLUMNS));
+        assertThat(localTimestamps).containsAll(remainingPairs(V6TimestampColumns.COLUMNS));
     }
 
     @Test
@@ -63,8 +67,14 @@ class VietnamLocalDatetimeMigrationTest {
                 });
 
         // Thiếu cột → V6 làm mất DEFAULT; biểu thức sai → DEFAULT theo TimeZone phiên (lệch 7 giờ).
-        assertThat(defaults).containsKeys(V6TimestampColumns.pairs(V6TimestampColumns.DEFAULTS).toArray(String[]::new));
+        assertThat(defaults).containsKeys(remainingPairs(V6TimestampColumns.DEFAULTS).toArray(String[]::new));
         assertThat(defaults.values()).allSatisfy(value -> assertThat(value).contains(VIETNAM_DEFAULT));
+    }
+
+    private static Set<String> remainingPairs(Map<String, List<String>> byTable) {
+        Set<String> pairs = new HashSet<>(V6TimestampColumns.pairs(byTable));
+        pairs.removeAll(DROPPED_AFTER_V6);
+        return pairs;
     }
 
     @Test

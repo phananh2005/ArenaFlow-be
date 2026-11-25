@@ -12,7 +12,7 @@
 | Quy ước áp dụng | `api-convention.md` (envelope, phân trang, định dạng lỗi, kiểu dữ liệu); USER-001 `API_Spec.md` §1.1 "Quy ước chung" và §1.2 "Lỗi chung" |
 | Quyết định liên quan | [ADR-0009](../../decisions/0009-cloudinary-signed-direct-upload.md) — ảnh lưu trên Cloudinary, FE upload thẳng lên Cloudinary bằng chữ ký backend cấp |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.14) — UC-V01..V07, BR-V01..V13 (BR-V12, BR-V13 thêm 2026-11-22), BC-V01..V07 (BC-V05 sửa 2026-11-14 — trận ngoài hệ thống; BC-V04 sửa 2026-11-22), BC-U02, Business_Rules §2.6, §5.1/§5.4, AC-V01..V06 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v6.1** (developer · 2026-11-23) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v6.2** (developer · 2026-11-25) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 

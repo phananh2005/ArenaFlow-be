@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + VENUE-001 `Component_Class_Design.md` §4.9 · ADR-0011, ADR-0012, ADR-0013 |
 | Ràng buộc dữ liệu | V1 + V5 + `V7__match_flow_a_lifecycle.sql` (`Component_Class_Design.md` §5.1) · đợt MATCH-002 (nhánh luồng B — `Component_Class_Design.md` §1.1): + `V8__match_flow_b_pairing.sql` (MATCH-002 `Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.1** (developer · 2026-11-25) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -37,7 +37,7 @@ Chuyển từ `API_Spec.md` v1.0 §2.0 (nội bộ BE; `API_Spec.md` chỉ giữ
 | 2.17 | Bean Validation (cursor) → `CHAT_002` → `USER_001` → `CHAT_003` → `CHAT_001` |
 | 2.18, 2.19 | `CHAT_002` → `USER_001` → `CHAT_003` (người đã giải tán đội của mình: được, chỉ xem) |
 | 2.20 | Bean Validation (`page`, `pageSize`) → `USER_001` (cột của câu đếm). Danh sách rỗng khi người gọi không tham gia cuộc trò chuyện nào |
-| STOMP `SUBSCRIBE` | destination không khớp một trong hai mẫu (`/topic/conversations/{UUID}`, `/user/queue/notifications`) → `ERROR` → `AUTH_001` (token hết hạn) → (chỉ `/topic/conversations/{UUID}`) `CHAT_002` → `USER_001` → `CHAT_003` |
+| STOMP `SUBSCRIBE` | destination không khớp một trong hai mẫu (`/topic/conversations/{UUID}` với UUID chữ thường, `/user/queue/notifications`) → `ERROR SYS_004` → `AUTH_001` (token hết hạn) → (chỉ `/topic/conversations/{UUID}`) `CHAT_002` → `USER_001` → `CHAT_003` |
 
 Chat (v2.4): quyền (`CHAT_003`) đứng trước nhánh lazy của 2.16 để người không tham gia không kích hoạt chuyển `EXPIRED`. Đội đã giải tán: người đã bấm giải tán → bên của đội đó, chỉ xem (2.16 → `CHAT_004`); thành viên khác → `CHAT_003` (user chốt 2026-11-15).
 
@@ -258,9 +258,10 @@ Q1 `findContext` → `CHAT_002` → `USER_001` → policy → `CHAT_003` → `co
 Bean Validation → Q1 `countMine(callerId)` → `callerDeleted` → `USER_001`; `total = 0` → trang rỗng → Q2 `findMine(callerId, now, limit, offset)` → mỗi dòng: policy của loại ngữ cảnh (`resolve` trong bộ nhớ) → `viewerParty`, `canSend` → `hasUnread` theo bên → mapper (che người đã xoá) → `PageResponse`. Không truy vấn trong vòng lặp. Test: người gọi là đội trưởng nhiều đội (cả hai bên của một cuộc trò chuyện → một dòng, `viewerParty` = đội tạo kèo); đội trưởng mới thấy cuộc trò chuyện cũ của đội, đội trưởng cũ không thấy; người đã giải tán đội thấy cuộc trò chuyện của đội đó với `canSend = false`, thành viên khác không thấy; ứng viên thấy chat theo đơn; cuộc trò chuyện chỉ xem có trong danh sách; chưa có tin → `lastMessage = null`; thứ tự: tin cuối, chưa có tin → luồng A theo lần gửi yêu cầu gần nhất (gửi lại sau khi rút đẩy cuộc trò chuyện lên), luồng B / chat theo đơn theo lúc mở, cùng thời điểm theo id; `hasUnread` chỉ tính tin của bên kia; `contentPreview` ≤ 100 ký tự; người gửi / bên kia đã xoá tài khoản → "Người dùng đã xóa", ảnh `null`; người gọi đã xoá tài khoản → `USER_001`; `NfsQueryCountTest` 2.20 = 2 (1 khi đếm = 0).
 
 ### 3.20. STOMP
-- `CONNECT`: giải mã JWT (không DB) → lưu user + `exp`.
-- `SUBSCRIBE /user/queue/notifications` (v2.5 — NOTIFICATION-001): đúng nguyên văn → `exp ≤ now` → `AUTH_001` → chấp nhận, không truy vấn (hàng đợi gắn principal của phiên).
-- `SUBSCRIBE /topic/conversations/{id}`: destination khác hai mẫu (gồm `/queue/**` thô, `/user/…` khác mẫu, wildcard `/topic/**`, mẫu cũ `/topic/pairings/{id}`) → `ERROR`; header `selector` (nếu client gửi) bị bỏ qua (broker tắt selector); `exp ≤ now` → `AUTH_001`; Q1 `conversationService.requireSubscribable` (ctx + policy, mọi trạng thái) → `CHAT_002`/`USER_001`/`CHAT_003`.
+- `CONNECT` / `STOMP`: giải mã JWT (không DB) → lưu user + `exp`; lỗi → `ERROR AUTH_001`.
+- `SUBSCRIBE /user/queue/notifications` (v2.5 — NOTIFICATION-001, mở ở đợt tích hợp NOTIFICATION-001): đúng nguyên văn → `exp ≤ now` → `AUTH_001` → chấp nhận, không truy vấn (hàng đợi gắn principal của phiên).
+- `SUBSCRIBE /topic/conversations/{id}`: destination khác hai mẫu (gồm `/queue/**` thô, `/user/…` khác mẫu, wildcard `/topic/**`, mẫu cũ `/topic/pairings/{id}`, UUID viết hoa) → `ERROR SYS_004`; header `selector` (nếu client gửi) bị bỏ qua (broker tắt selector); `exp ≤ now` → `AUTH_001`; Q1 `conversationService.requireSubscribable` (ctx + policy, mọi trạng thái) → `CHAT_002`/`USER_001`/`CHAT_003`.
+- `SEND`: bị từ chối → `ERROR SYS_002`; lỗi không rõ khác → `ERROR SYS_005`.
 - Đẩy: `afterCommit` của 2.16 (và MATCH-002 2.5–2.7, MERCENARY-001 2.11–2.13) → `convertAndSend("/topic/conversations/" + id)`. Lỗi gửi → log `WARN` (`conversationId`, loại frame), không ảnh hưởng response.
 
 ## 4. Transaction Boundary
@@ -271,7 +272,7 @@ Bảng theo method: `Component_Class_Design.md` §4.12. `READ_COMMITTED`. Event 
 
 - `@Version` mới trên `Match`. Mọi ghi `match` bởi người dùng là CAS qua entity + retrier (`MATCH_014`); ghi bulk (lazy, job) tự `version + 1`. Tạo yêu cầu (2.6) tăng `match.version` lúc commit (`OPTIMISTIC_FORCE_INCREMENT` qua `MatchRepository.forceIncrementVersion`, tiền lệ invite USER-002); sửa chi phí (2.4) luôn `UPDATE match` CAS (gán `updatedAt`) — cả hai tuần tự hoá với chấp nhận / huỷ.
 - `MatchRequest` không version: chuyển trạng thái bằng `UPDATE … WHERE status = '<nguồn>'` (0 dòng = đã bị đổi); bất biến "≤ 1 `ACCEPTED`" giữ bằng CAS `match` + unique `idx_match_request_accepted`.
-- `reliability_score`: `UPDATE` nguyên tử, không version (ADR-0013).
+- `reliability_score`, `clean_streak`, `report_count_*`: `UPDATE` nguyên tử, không version, cả 6 cột đều `updatable = false` trên entity `Team` và `User` (ADR-0013).
 - Job: `FOR NO KEY UPDATE SKIP LOCKED` (ADR-0012) — tương thích `FOR KEY SHARE` do INSERT yêu cầu lấy qua FK; dòng đang bị người dùng giữ khoá được bỏ qua, lần sau xử lý.
 
 | Race | Kết quả bất biến |
@@ -294,7 +295,7 @@ Bảng theo method: `Component_Class_Design.md` §4.12. `READ_COMMITTED`. Event 
 | Sửa chi phí vs chấp nhận | Cả hai CAS `match`: chi phí thua → `MATCH_003`; chấp nhận thua → retry, ghép với chi phí mới |
 | Hai lần sửa chi phí | Bên thua retry, áp toàn bộ bản của mình (PUT thay toàn bộ) |
 | Từ chối vs chấp nhận yêu cầu khác | `supersedePending` và `rejectIfPending` cùng điều kiện `PENDING`: bên sau 0 dòng → từ chối nhận `MATCH_008` hoặc supersede bỏ qua dòng đã `REJECTED` |
-| Trừ điểm vs sửa đội / giải tán đội | `UPDATE` nguyên tử không đổi version; entity `Team` không ghi cột điểm → không mất cập nhật; chỉ chờ khoá dòng ngắn |
+| Trừ điểm vs sửa đội / giải tán đội | `UPDATE` nguyên tử không đổi version; entity `Team` khoá `updatable = false` cả 6 cột (`reliability_score`, `clean_streak`, 4 `report_count_*`) → dirty checking không ghi đè điểm hay chuỗi trận sạch; chỉ chờ khoá dòng ngắn |
 | Hai kèo khác nhau cùng trừ điểm một đội | `UPDATE` nguyên tử tuần tự trên dòng `team`; cộng dồn đúng, chặn [0,100] |
 | Admin tắt bộ môn vs tạo kèo / gửi / chấp nhận | Thao tác đã đọc `isActive = true` trước khi tắt commit → vẫn thành công (cửa sổ ngắn, chấp nhận; `sport` không khoá) |
 
@@ -382,8 +383,8 @@ Index cho lựa chọn kèo B (`match_venue_option`, `match_time_option`) và `p
 | # | Nội dung | Loại |
 |---|---|---|
 | 6 | Thông báo hết hạn / thay thế: event chỉ mang id kèo; NOTIFICATION-001 tự truy vấn yêu cầu `EXPIRED`/`SUPERSEDED` để tìm đội cần báo (giữ W6 cho 2.8) | Không chặn |
-| 7 | Native `SELECT … FOR NO KEY UPDATE SKIP LOCKED` trả interface projection qua Spring Data (không `@Lock`) chạy đúng trên PostgreSQL/Hibernate 7.2 [Inference] | Không chặn — kiểm bằng integration test job đầu tiên |
+| 7 | ~~Native `SELECT … FOR NO KEY UPDATE SKIP LOCKED` trả interface projection qua Spring Data (không `@Lock`) chạy đúng trên PostgreSQL/Hibernate 7.2~~ — **Đóng v3.1 (2026-11-25):** đã kiểm chứng trên PostgreSQL 18.7 / Hibernate 7.2.25 (`MatchFlowCommittedTest` PASS) | Đã đóng |
 | 8 | Deadlock giữa job và luồng người dùng / USER-002 chưa tái hiện (§5) | Không chặn |
-| 9 | Retry + nhánh commit-rồi-báo-lỗi trên đường HTTP với `open-in-view` bật (USER-002 §5 đã nêu cho disband) | Không chặn — test MockMvc |
-| 14 | (v2.4 — chuyển từ MATCH-002 #7) `TransactionSynchronization.afterCommit` của `ChatRealtimeGateway` trong lambda retrier (mỗi lần thử một transaction qua `TransactionTemplate`): synchronization chỉ chạy cho lần thử commit [Inference — theo cơ chế Spring, chưa chạy] | Không chặn — test "rollback không phát frame" |
+| 9 | ~~Retry + nhánh commit-rồi-báo-lỗi trên đường HTTP với `open-in-view` bật~~ — **Đóng v3.1 (2026-11-25):** đã kiểm chứng qua MockMvc và commit thật (`MatchControllerTest`, `MatchFlowCommittedTest` PASS) | Đã đóng |
+| 14 | ~~(v2.4 — chuyển từ MATCH-002 #7) `TransactionSynchronization.afterCommit` của `ChatRealtimeGateway` trong lambda retrier~~ — **Đóng v3.1 (2026-11-25):** đã kiểm chứng chỉ chạy cho lần thử commit (`StompChatRealtimeGatewayTest`, `StompChatIntegrationTest` PASS) | Đã đóng |
 | 15 | (v2.4 — chuyển từ MATCH-002 #8) `SimpMessagingTemplate.convertAndSend` từ luồng request sau commit không chặn lâu khi có nhiều subscriber [Inference] | Không chặn — đo khi load test |

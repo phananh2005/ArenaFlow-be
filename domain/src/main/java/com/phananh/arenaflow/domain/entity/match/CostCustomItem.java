@@ -39,6 +39,9 @@ public class CostCustomItem {
     @Column(name = "amount", nullable = false)
     private Long amount;
 
+    @Column(name = "display_order", nullable = false)
+    private Integer displayOrder;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Setter(AccessLevel.NONE)
     private LocalDateTime createdAt;
