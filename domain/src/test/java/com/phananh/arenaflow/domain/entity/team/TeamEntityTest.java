@@ -1,13 +1,15 @@
 package com.phananh.arenaflow.domain.entity.team;
 
+import com.phananh.arenaflow.domain.entity.ColumnMapping;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Entity đội: kiểu id, người tạo, trạng thái giải tán và metadata giải tán. */
+/** Entity đội: kiểu id, người tạo, khoá cột uy tín, trạng thái giải tán và metadata giải tán. */
 class TeamEntityTest {
 
     @Test
@@ -35,6 +37,14 @@ class TeamEntityTest {
         team.setCreatedBy(creatorId);
 
         assertThat(team.getCreatedBy()).isEqualTo(creatorId);
+    }
+
+    @Test
+    void reputationColumnsAreNeverWrittenByDirtyChecking() {
+        for (String field : List.of("reliabilityScore", "cleanStreak", "reportCountNoshow", "reportCountBadPlay",
+                "reportCountBadCommunication", "reportCountSkillMismatch")) {
+            assertThat(ColumnMapping.column(Team.class, field).updatable()).as(field).isFalse();
+        }
     }
 
     @Test

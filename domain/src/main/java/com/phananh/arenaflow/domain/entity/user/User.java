@@ -62,7 +62,8 @@ public class User {
     @Column(name = "phone_number", length = 20)
     private String phoneNumber;
 
-    @Column(name = "reliability_score", nullable = false)
+    /** Chỉ ghi bằng câu UPDATE nguyên tử (cộng/trừ, chặn [0,100]) để dirty checking không ghi đè điểm. */
+    @Column(name = "reliability_score", nullable = false, updatable = false)
     @Builder.Default
     private Integer reliabilityScore = 80;
 
@@ -77,23 +78,23 @@ public class User {
     @Column(name = "average_rating", precision = 3, scale = 2)
     private BigDecimal averageRating;
 
-    @Column(name = "report_count_noshow", nullable = false)
+    @Column(name = "report_count_noshow", nullable = false, updatable = false)
     @Builder.Default
     private Integer reportCountNoshow = 0;
 
-    @Column(name = "report_count_bad_play", nullable = false)
+    @Column(name = "report_count_bad_play", nullable = false, updatable = false)
     @Builder.Default
     private Integer reportCountBadPlay = 0;
 
-    @Column(name = "report_count_bad_communication", nullable = false)
+    @Column(name = "report_count_bad_communication", nullable = false, updatable = false)
     @Builder.Default
     private Integer reportCountBadCommunication = 0;
 
-    @Column(name = "report_count_skill_mismatch", nullable = false)
+    @Column(name = "report_count_skill_mismatch", nullable = false, updatable = false)
     @Builder.Default
     private Integer reportCountSkillMismatch = 0;
 
-    @Column(name = "clean_streak", nullable = false)
+    @Column(name = "clean_streak", nullable = false, updatable = false)
     @Builder.Default
     private Integer cleanStreak = 0;
 

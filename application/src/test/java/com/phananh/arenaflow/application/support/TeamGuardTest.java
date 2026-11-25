@@ -6,8 +6,11 @@ import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
 import com.phananh.arenaflow.domain.repository.TeamMemberRepository;
 import com.phananh.arenaflow.domain.repository.TeamRepository;
+import com.phananh.arenaflow.domain.projection.TeamCaptainContextView;
+import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -118,5 +121,48 @@ class TeamGuardTest {
 
         when(teamRepository.findCurrentStatusById(teamId)).thenReturn(Optional.of("DISBANDED"));
         assertError(() -> guard.requireCaptain(teamId, callerId), ErrorCode.TEAM_016);
+    }
+
+    private TeamCaptainContextView captainContext(String status, boolean captain) {
+        return new SpelAwareProxyProjectionFactory().createProjection(TeamCaptainContextView.class, Map.of(
+                "status", status, "captain", captain, "name", "Team Alpha", "reliabilityScore", 80,
+                "userDisplayName", "Minh", "userDeleted", false));
+    }
+
+    @Test
+    void requireActiveCaptainChecksExistenceThenDisbandedThenInactiveThenCaptainInOneQuery() {
+        UUID callerId = UUID.randomUUID();
+        when(teamRepository.findCaptainContext(teamId, callerId)).thenReturn(Optional.empty());
+        assertError(() -> guard.requireActiveCaptain(teamId, callerId), ErrorCode.TEAM_001);
+
+        when(teamRepository.findCaptainContext(teamId, callerId)).thenReturn(Optional.of(captainContext("DISBANDED", false)));
+        assertError(() -> guard.requireActiveCaptain(teamId, callerId), ErrorCode.TEAM_016);
+
+        when(teamRepository.findCaptainContext(teamId, callerId)).thenReturn(Optional.of(captainContext("INACTIVE", true)));
+        assertError(() -> guard.requireActiveCaptain(teamId, callerId), ErrorCode.TEAM_015);
+
+        when(teamRepository.findCaptainContext(teamId, callerId)).thenReturn(Optional.of(captainContext("ACTIVE", false)));
+        assertError(() -> guard.requireActiveCaptain(teamId, callerId), ErrorCode.TEAM_002);
+
+        TeamCaptainContextView ok = captainContext("ACTIVE", true);
+        when(teamRepository.findCaptainContext(teamId, callerId)).thenReturn(Optional.of(ok));
+        assertThat(guard.requireActiveCaptain(teamId, callerId).getName()).isEqualTo("Team Alpha");
+        verify(teamRepository, never()).findById(any());
+    }
+
+    @Test
+    void requireCaptainAllowInactiveAcceptsInactiveTeam() {
+        UUID callerId = UUID.randomUUID();
+        when(teamRepository.findCaptainContext(teamId, callerId)).thenReturn(Optional.empty());
+        assertError(() -> guard.requireCaptainAllowInactive(teamId, callerId), ErrorCode.TEAM_001);
+
+        when(teamRepository.findCaptainContext(teamId, callerId)).thenReturn(Optional.of(captainContext("DISBANDED", false)));
+        assertError(() -> guard.requireCaptainAllowInactive(teamId, callerId), ErrorCode.TEAM_016);
+
+        when(teamRepository.findCaptainContext(teamId, callerId)).thenReturn(Optional.of(captainContext("INACTIVE", false)));
+        assertError(() -> guard.requireCaptainAllowInactive(teamId, callerId), ErrorCode.TEAM_002);
+
+        when(teamRepository.findCaptainContext(teamId, callerId)).thenReturn(Optional.of(captainContext("INACTIVE", true)));
+        guard.requireCaptainAllowInactive(teamId, callerId);
     }
 }

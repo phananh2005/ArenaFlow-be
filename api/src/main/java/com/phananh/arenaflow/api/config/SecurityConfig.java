@@ -32,6 +32,8 @@ import javax.crypto.spec.SecretKeySpec;
 public class SecurityConfig {
 
     private static final String PUBLIC_AUTH_PATH = "/api/v1/auth/**";
+    /** Handshake WebSocket/SockJS: xác thực ở frame STOMP CONNECT, không ở HTTP. */
+    private static final String REALTIME_PATH = "/ws/**";
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
@@ -43,6 +45,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_AUTH_PATH).permitAll()
+                        .requestMatchers(REALTIME_PATH).permitAll()
                         // Health cho hạ tầng; tài liệu API cho dev (springdoc mặc định tắt, bật bằng
                         // SPRINGDOC_ENABLED=true). Actuator khác (metrics, prometheus…) vẫn cần token.
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
@@ -62,12 +65,14 @@ public class SecurityConfig {
 
     /**
      * Bộ lọc Bearer xác thực token ngay khi có header, kể cả trên đường dẫn permitAll → token hết hạn/sai
-     * làm endpoint public trả 401. Trên /api/v1/auth/** bỏ qua header để client vẫn refresh được.
+     * làm endpoint public trả 401. Trên /api/v1/auth/** bỏ qua header để client vẫn refresh được; trên /ws/** bỏ qua
+     * vì kênh realtime xác thực ở frame STOMP CONNECT (header Bearer cũ trên handshake không gây 401).
      */
     private static BearerTokenResolver publicAuthIgnoringBearerTokenResolver() {
         DefaultBearerTokenResolver delegate = new DefaultBearerTokenResolver();
         RequestMatcher publicAuth = PathPatternRequestMatcher.withDefaults().matcher(PUBLIC_AUTH_PATH);
-        return request -> publicAuth.matches(request) ? null : delegate.resolve(request);
+        RequestMatcher realtime = PathPatternRequestMatcher.withDefaults().matcher(REALTIME_PATH);
+        return request -> publicAuth.matches(request) || realtime.matches(request) ? null : delegate.resolve(request);
     }
 
     /** Decoder HS256 dùng secret ứng dụng và chỉ chấp nhận access token theo validator bổ sung. */

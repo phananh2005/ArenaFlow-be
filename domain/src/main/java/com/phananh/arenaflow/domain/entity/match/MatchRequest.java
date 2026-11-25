@@ -49,6 +49,9 @@ public class MatchRequest {
     @Column(name = "withdrawn_at")
     private LocalDateTime withdrawnAt;
 
+    @Column(name = "reason", length = 500)
+    private String reason;
+
     /** Gán {@code requestedAt} = giờ hiện tại ({@link AppTime#now()}) khi lưu lần đầu, chỉ khi service chưa gán sẵn. */
     @PrePersist
     protected void onCreate() {

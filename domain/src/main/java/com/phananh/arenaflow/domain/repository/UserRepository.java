@@ -40,4 +40,14 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             WHERE id = :id AND deleted_at IS NULL
             """, nativeQuery = true)
     int softDelete(@Param("id") UUID id, @Param("now") LocalDateTime now);
+
+    /** Như cộng/trừ điểm của đội cho điểm cá nhân: một câu nguyên tử, chặn [0, 100]. */
+    @Modifying
+    @Query(value = """
+            UPDATE "user" SET reliability_score = LEAST(100, GREATEST(0, reliability_score + :delta)),
+                   clean_streak = CASE WHEN :breaksCleanStreak THEN 0 ELSE clean_streak END
+            WHERE id = :id
+            """, nativeQuery = true)
+    int adjustReliability(@Param("id") UUID id, @Param("delta") int delta,
+                          @Param("breaksCleanStreak") boolean breaksCleanStreak);
 }

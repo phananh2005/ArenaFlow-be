@@ -6,10 +6,12 @@ import com.phananh.arenaflow.application.support.security.JwtTokenService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.health.actuate.endpoint.HealthEndpointGroup;
 import org.springframework.boot.health.actuate.endpoint.HealthEndpointGroups;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,6 +41,10 @@ class SecurityConfigIntegrationTest {
 
     @Autowired
     private HealthEndpointGroups healthGroups;
+
+    @Autowired
+    @Qualifier("taskScheduler")
+    private ThreadPoolTaskScheduler taskScheduler;
 
     private MockMvc mockMvc;
 
@@ -71,6 +77,15 @@ class SecurityConfigIntegrationTest {
         mockMvc.perform(get("/api/v1/probe/me").header("Authorization", "Bearer " + access))
                 .andExpect(status().isOk())
                 .andExpect(content().string(userId.toString()));
+    }
+
+    @Test
+    void realtimeHandshakePathIsPublicAndIgnoresStaleBearerHeader() throws Exception {
+        String refresh = tokenService.issueRefreshToken(UUID.randomUUID());
+
+        // SockJS info endpoint của /ws: không 401 dù header Bearer không hợp lệ (xác thực ở STOMP CONNECT).
+        mockMvc.perform(get("/ws/info").header("Authorization", "Bearer " + refresh))
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -147,6 +162,12 @@ class SecurityConfigIntegrationTest {
         mockMvc.perform(get("/actuator/metrics"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error.code").value("AUTH_001"));
+    }
+
+    @Test
+    void jobTaskSchedulerKeepsConfiguredPoolOfFiveThreadsAlongsideWebSocketSchedulers() {
+        assertThat(taskScheduler.getScheduledThreadPoolExecutor().getCorePoolSize()).isEqualTo(5);
+        assertThat(taskScheduler.getThreadNamePrefix()).isEqualTo("scheduling-");
     }
 
     @RestController

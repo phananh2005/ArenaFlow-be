@@ -47,6 +47,35 @@ class ErrorCodeTest {
     }
 
     @Test
+    void matchSportAndChatErrorsUseContractStatusesAndMessages() {
+        assertThat(ErrorCode.MATCH_001.getHttpStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(ErrorCode.MATCH_002.getHttpStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(ErrorCode.MATCH_003.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(ErrorCode.MATCH_004.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(ErrorCode.MATCH_005.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(ErrorCode.MATCH_006.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(ErrorCode.MATCH_007.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(ErrorCode.MATCH_008.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(ErrorCode.MATCH_009.getHttpStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(ErrorCode.MATCH_010.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(ErrorCode.MATCH_011.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(ErrorCode.MATCH_012.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(ErrorCode.MATCH_013.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(ErrorCode.MATCH_014.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(ErrorCode.MATCH_015.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(ErrorCode.MATCH_016.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(ErrorCode.SPORT_001.getHttpStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(ErrorCode.SPORT_002.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(ErrorCode.CHAT_001.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(ErrorCode.CHAT_002.getHttpStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(ErrorCode.CHAT_003.getHttpStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(ErrorCode.CHAT_004.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(ErrorCode.MATCH_004.getMessage()).isEqualTo("Kèo đã hết hạn");
+        assertThat(ErrorCode.MATCH_016.getMessage()).isEqualTo("Thao tác không áp dụng cho loại kèo này");
+        assertThat(ErrorCode.CHAT_004.getMessage()).isEqualTo("Cuộc trò chuyện chỉ còn xem");
+    }
+
+    @Test
     void disbandedTeamAndCaptainAccountDeletionErrors() {
         assertThat(ErrorCode.TEAM_016.getCode()).isEqualTo("TEAM_016");
         assertThat(ErrorCode.TEAM_016.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
