@@ -2,7 +2,7 @@
 
 > Trạng thái: **Đặc tả nghiệp vụ hoàn chỉnh; sẵn sàng thiết kế schema**
 
-> Cập nhật: 2026-11-01 (nội dung nghiệp vụ) · 2026-11-05 (ghi chú đường dẫn multi-module, §2) · 2026-11-12 (uy tín đội — quyết định user chốt cho REPUTATION-001, §3.4)
+> Cập nhật: 2026-11-01 (nội dung nghiệp vụ) · 2026-11-05 (ghi chú đường dẫn multi-module, §2) · 2026-11-12 (uy tín đội — quyết định user chốt cho REPUTATION-001, §3.4) · 2026-11-25 (luồng B: phương án, cọc, race, huỷ kèo — đồng bộ thiết kế MATCH-002 đã duyệt, §3.3, §3.5, §6)
 
 > **Phạm vi cốt lõi:** tạo kèo / ghép người chơi. Sân là địa điểm tham chiếu; ArenaFlow không quản lý vận hành, đặt sân hoặc thanh toán.
 
@@ -76,9 +76,9 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
 **Luồng B — chưa có sân:**
 
 - Một bài đăng có thể nêu nhiều lựa chọn địa điểm và nhiều giờ hẹn. Tác giả tự chọn hạn bài đăng (`expires_at`), không muộn hơn giờ bắt đầu trận sớm nhất trong các lựa chọn.
-- Vị trí gốc để gợi ý có thể chọn bằng GPS hiện tại, tìm kiếm địa chỉ, hoặc chọn khu vực dạng văn bản. Dữ liệu GPS/địa chỉ đã lưu được giữ; không cần làm mờ. Không lưu consent riêng trong DB; truy cập GPS dựa trên quyền hệ điều hành.
+- Vị trí gốc để gợi ý (GPS hiện tại, tìm kiếm địa chỉ, hoặc khu vực dạng văn bản) chỉ dùng phía FE để gợi ý địa điểm lúc tạo bài (tìm địa điểm VENUE-001), không lưu trên Match (cột `search_*` luôn `null` từ V8). Không lưu consent riêng trong DB; truy cập GPS dựa trên quyền hệ điều hành.
 - Nhiều đội có thể nhận cùng bài đăng và tạo pairing đồng thời. Match vẫn `OPEN` trong lúc trao đổi.
-- **Trao đổi và xác nhận:** Hai đội trưởng trao đổi qua chat để thống nhất địa điểm/giờ. MVP chỉ lưu tin nhắn chat; không có cấu trúc đề xuất riêng. Chỉ khi cả hai xác nhận (qua UI riêng, không phải tin nhắn) thì Match thành `CONFIRMED`. Pairing không chốt được thì Match vẫn `OPEN` để tiếp tục nhận đội khác.
+- **Trao đổi và xác nhận:** Hai đội trưởng trao đổi qua chat. **Phương án** (một địa điểm + một khung giờ, lấy từ danh sách lựa chọn của bài đăng), thỏa thuận chi phí và tiền cọc được lưu có cấu trúc trên pairing (một **gói**, có phiên bản); ai trong hai đội trưởng cũng sửa được; sửa gói xoá xác nhận của cả hai bên; chưa có phương án thì không xác nhận được. Chỉ khi cả hai xác nhận gói (qua UI riêng, không phải tin nhắn) thì Match thành `CONFIRMED` với địa điểm, giờ, chi phí, cọc của gói. Pairing không chốt được thì Match vẫn `OPEN` để tiếp tục nhận đội khác. (Quyết định 2026-11-10, MATCH-002.)
 - **Thời gian:** Mọi thời điểm theo **giờ Việt Nam** (UTC+7), lưu không kèm múi giờ; hiển thị nguyên giá trị, không đổi theo múi giờ thiết bị; mốc nghiệp vụ tính theo giờ Việt Nam (SRS BC-M05, SYSTEM-002 — user chốt 2026-11-21).
 - Pairing hết hạn theo `expires_at` của bài đăng.
 
@@ -86,8 +86,8 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
 
 - Pairing bắt đầu ở `NEGOTIATING` khi đội nhận bài đăng luồng B.
 - Khi cả hai đội trưởng xác nhận → pairing thành `CONFIRMED`, Match thành `CONFIRMED`.
-- Nếu hai pairing cùng được xác nhận gần đồng thời (race condition), pairing có timestamp xác nhận cuối sớm hơn thắng; pairing kia chuyển `SUPERSEDED`.
-- Khi Match chuyển `CONFIRMED` hoặc `CANCELLED`: mọi pairing đang `NEGOTIATING` và mọi Match_Request `PENDING` tự chuyển `SUPERSEDED` (nếu Match `CONFIRMED`) hoặc `CANCELLED` (nếu Match `CANCELLED`).
+- Nếu hai pairing của cùng Match cùng hoàn tất gần đồng thời (race condition), pairing **hoàn tất trước** (lần xác nhận của bên thứ hai được ghi nhận trước) thắng; pairing kia chuyển `SUPERSEDED`. (MATCH-002 — thay quy tắc "timestamp xác nhận cuối sớm hơn thắng".)
+- Khi Match chuyển `CONFIRMED`: mọi pairing `NEGOTIATING` khác và mọi Match_Request `PENDING` tự chuyển `SUPERSEDED`. Khi Match bị huỷ lúc `OPEN` (luồng B): mọi pairing `NEGOTIATING` tự chuyển `SUPERSEDED`, không cần đóng pairing trước; luồng A không còn Match_Request `PENDING` khi huỷ (phải từ chối hết trước — BR-M05). Pairing và Match_Request không có trạng thái `CANCELLED` (BC-M04; quyết định 2026-11-10, MATCH-002).
 
 **Trạng thái Match_Request:** `PENDING`, `ACCEPTED`, `REJECTED`, `WITHDRAWN`, `SUPERSEDED`, `EXPIRED`.
 
@@ -187,7 +187,7 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
 - Cách chia: 50-50, 70-30 (đội chủ nhà bao 70%, hoặc ai thua bao 70%), đội thua trả toàn bộ tiền nước.
 - Lưu số tiền cụ thể (ví dụ: 500000) chỉ để hiển thị; tiền tệ mặc định VND trong MVP.
 - Khoản tự nhập: danh sách các khoản phí khác (tên + số tiền + thứ tự hiển thị `display_order`, tối đa 10 khoản), ví dụ: "Tiền trọng tài 200000", "Phí áo đấu 50000".
-- Luồng B có thể có thỏa thuận chia đôi tiền cọc; cọc do thỏa thuận bên ngoài, có trường "ai giữ tiền cọc" để hiển thị.
+- Luồng B có thể có tiền cọc: số tiền cọc (không có = không cọc) + "ai giữ tiền cọc" (văn bản, chỉ khi có số tiền); không chia cọc; cọc do thỏa thuận bên ngoài, chỉ lưu để hiển thị. Luồng B: chi phí + cọc + khoản tự nhập thuộc pairing trong lúc thương lượng; khi ghép được chép sang Match. (Quyết định 2026-11-10, 2026-11-11, MATCH-002.)
 
 **Chat và Notification:**
 
@@ -279,7 +279,7 @@ Tất cả các quy tắc nghiệp vụ đã được làm rõ và xác nhận v
 - Venue: ảnh lưu bảng riêng tối đa 5, report chi tiết, không lưu tiện ích MVP
 - Chat/Notification: retention 90/30 ngày, 11 loại notification, push để sau
 - Bộ môn: admin bật/tắt, quy tắc dùng chung MVP
-- Pairing luồng B: chỉ lưu chat, giờ Việt Nam, `expires_at` ≤ giờ trận
+- Pairing luồng B: chat + gói (phương án, chi phí, cọc) có cấu trúc trên pairing (MATCH-002), giờ Việt Nam, `expires_at` ≤ giờ trận
 - Rating/Report mercenary: đôi bên đánh giá nhau, cấu trúc `rating` table với rater/ratee type
 
 **Bước tiếp theo:** Lập mô hình bảng/thuộc tính/khóa, thiết kế migration Flyway, rà soát với `docs/agent/non-functional-standards.md`.

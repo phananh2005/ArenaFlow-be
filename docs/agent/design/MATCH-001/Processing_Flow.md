@@ -7,7 +7,7 @@
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL · Flyway |
 | Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush; §5 tác vụ dài) · ADR-0003 (+ Sửa đổi 2026-11-09) · retrier: USER-001 `Processing_Flow.md` §5 + VENUE-001 `Component_Class_Design.md` §4.9 · ADR-0011, ADR-0012, ADR-0013 |
 | Ràng buộc dữ liệu | V1 + V5 + `V7__match_flow_a_lifecycle.sql` (`Component_Class_Design.md` §5.1) · đợt MATCH-002 (nhánh luồng B — `Component_Class_Design.md` §1.1): + `V8__match_flow_b_pairing.sql` (MATCH-002 `Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.1** (developer · 2026-11-25) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-09 · v1.0 (baseline) · hiện tại **v3.2** (developer · 2026-11-25) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -21,7 +21,7 @@ Chuyển từ `API_Spec.md` v1.0 §2.0 (nội bộ BE; `API_Spec.md` chỉ giữ
 
 | Endpoint | Thứ tự guard |
 |---|---|
-| 2.1 | `TEAM_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` → `SPORT_001` → `SPORT_002` → `VENUE_001` → `VENUE_002` (kèo B: trên toàn bộ `venueOptionIds`). Đợt 1 (`Component_Class_Design.md` §1.1): `type = NEED_VENUE` → `MATCH_016` sau Bean Validation, trước `TEAM_001` |
+| 2.1 | `TEAM_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` → `SPORT_001` → `SPORT_002` → `VENUE_001` → `VENUE_002` (kèo B: trên toàn bộ `venueOptionIds`). Đợt 1 (`Component_Class_Design.md` §1.1 — đã gỡ ở đợt MATCH-002, 2026-11-25): `type = NEED_VENUE` → `MATCH_016` sau Bean Validation, trước `TEAM_001` |
 | 2.3 | `MATCH_001` |
 | 2.4 | `MATCH_001` → `TEAM_016` → `TEAM_015` → `TEAM_002` (đội tác giả) → `MATCH_016` (kèo B) → `MATCH_004` → `MATCH_003` → `MATCH_005` |
 | 2.5 | `MATCH_001` → `TEAM_001` → `TEAM_016` → `TEAM_002` (đội `teamId`) → `MATCH_009` → `MATCH_004` → `MATCH_005` (`CANCELLED`/`ARCHIVED`/`COMPLETED`) → `MATCH_015` (≠ `expectedStatus`) → `OPEN`: `MATCH_010` (chỉ kèo A) · `CONFIRMED`: `MATCH_011` → `MATCH_012` |
@@ -160,13 +160,13 @@ sequenceDiagram
 | # | Endpoint | Truy vấn (một lần thử) | Tổng / Ngưỡng |
 |---|---|---|---|
 | 2.1 | `POST /matches` (kèo A) | S captain ctx, S sport, S venue status (port), I match, U venue `markSelected` (port), S detail | 6 / W6 ✅ (= ngưỡng) |
-| 2.1 | `POST /matches` (kèo B, đợt 1 — chặn) | Không truy vấn → `MATCH_016` | 0 / W6 ✅ |
-| 2.1 | `POST /matches` (kèo B, đợt MATCH-002) | S captain ctx (+ tên/ảnh/điểm đội), S sport, S lựa chọn địa điểm (port, thông tin hiển thị), I match, I lựa chọn địa điểm (1 câu `unnest`), I khung giờ (1 câu `unnest … RETURNING`) | 6 / W6 ✅ (= ngưỡng) |
+| 2.1 | `POST /matches` (kèo B, đợt 1 — chặn; đã gỡ 2026-11-25) | Không truy vấn → `MATCH_016` | 0 / W6 ✅ |
+| 2.1 | `POST /matches` (kèo B, đợt MATCH-002) | S captain ctx (+ tên/ảnh/điểm đội), S sport, S lựa chọn địa điểm (port, thông tin hiển thị), I match, I lựa chọn địa điểm (1 câu `unnest`), I khung giờ (1 câu `unnest … RETURNING`) | 6 / W6 ✅ (= ngưỡng; đo NFS test 2026-11-25: 6) |
 | 2.2 | `GET /matches` | S trang, S count | 2 / L4 ✅ |
-| 2.3 | `GET /matches/{id}` | S detail, S khoản tự nhập theo `match_id` (kèo B `confirmedPairingId = null`: bỏ) · kèo B (đợt MATCH-002): + S lựa chọn (1 câu `UNION ALL`) | 2 / D3 ✅ · kèo B chưa ghép 2, đã ghép 3 / D3 ✅ |
+| 2.3 | `GET /matches/{id}` | S detail, S khoản tự nhập theo `match_id` (kèo B `confirmedPairingId = null`: bỏ) · kèo B (đợt MATCH-002): + S lựa chọn (1 câu `UNION ALL`) | 2 / D3 ✅ · kèo B chưa ghép 2, đã ghép 3 / D3 ✅ (đo NFS test 2026-11-25: kèo B chưa ghép 2) |
 | 2.4 | `PUT …/cost-agreement` | S match, S captain ctx, U match (CAS + version), D khoản tự nhập, I khoản tự nhập (1 câu `unnest`, id DB sinh), S khoản tự nhập (lấy `itemId`); bỏ I + S khi rỗng · [lazy] S, S, U, U | 6 / W6 ✅ (= ngưỡng; 4 khi rỗng) · [lazy] 4 |
 | 2.5 | `POST …/cancel` `OPEN` | S match, S captain ctx, S tồn tại `PENDING`, U match CAS · [lazy] S, S, U, U | 4 / W6 ✅ |
-| 2.5 | `POST …/cancel` `OPEN` kèo B (đợt MATCH-002) | S match, S captain ctx, U match CAS, U pairing `NEGOTIATING` → `SUPERSEDED` | 4 / W6 ✅ |
+| 2.5 | `POST …/cancel` `OPEN` kèo B (đợt MATCH-002) | S match, S captain ctx, U match CAS, U pairing `NEGOTIATING` → `SUPERSEDED` | 4 / W6 ✅ (đo NFS test 2026-11-25: 4) |
 | 2.5 | `POST …/cancel` `CONFIRMED` | S match, S captain ctx, U match CAS, (U request → `WITHDRAWN` khi đội đã ghép kèo A huỷ), U team điểm | 4–5 / W6 ✅ |
 | 2.6 | `POST …/requests` | S match, S captain ctx, S trạng thái đội tác giả + bộ môn + cuộc trò chuyện đã có (cùng câu), I request, I cuộc trò chuyện (lúc commit — chỉ lần gửi đầu của đội cho kèo), U match version (lúc commit) · [lazy] S, S, U, U | **lần đầu 6 / W6 ✅ (= ngưỡng; v2.3: 5)** · gửi lại 5 / W6 ✅ · [lazy] 4 |
 | 2.7 | `GET …/requests` | S quyền tác giả, S trang (+ `conversationId`, `LEFT JOIN`), S count | 3 / L4 ✅ (không đổi) |
@@ -192,7 +192,7 @@ sequenceDiagram
 ### 3.1. `POST /matches` (`@Transactional`)
 Bean Validation (`@ValidMatchSchedule`, `@ValidSkillLevels`, `@OneOf`) → Q1 `teamGuard.requireActiveCaptain(teamId, callerId)` → Q2 `sportRepository.findById` → `SPORT_001`; `!isActive` → `SPORT_002` → Q3 `venueSelectionService.requireSelectable({venueId})` (`VENUE_001`, `VENUE_002`) → Q4 `Match.builder()` (`HAS_VENUE`, `OPEN`, `skillLevels` rỗng nếu vắng) → `save` → Q5 `markSelected({venueId}, now)` (bulk native — Hibernate tự flush INSERT trước) → Q6 `findDetailById(id, now)` → `toResponse(view, List.of())`. Một địa điểm → không có vấn đề thứ tự khoá nhiều dòng `venue` (VENUE-001 §3.15). Không phát event (spec không có thông báo khi tạo kèo).
 
-**Kèo B (`type = NEED_VENUE`)** — đợt 1: Bean Validation (nhánh A bỏ qua) → `MATCH_016`, không truy vấn, không ghi (test). Đợt MATCH-002 (`Component_Class_Design.md` §1.1): Bean Validation (`@ValidMatchSchedule` nhánh B) → Q1 `requireActiveCaptain` (trả tên/ảnh/điểm) → Q2 sport (`SPORT_001`/`SPORT_002`) → Q3 `venueSelectionService.requireSelectable(venueOptionIds)` (`VENUE_001`/`VENUE_002`, trả `SelectableVenueView`) → Q4 `Match.builder()` (`NEED_VENUE`, `OPEN`, `venueId = null`, `matchStartTime`/`matchEndTime` = khung giờ có `startsAt` nhỏ nhất, `expiresAt`) `save` → Q5 `matchVenueOptionRepository.insertAll(matchId, venueOptionIds, now)` (Hibernate tự flush INSERT `match` trước câu native — comment tại chỗ) → Q6 `matchTimeOptionRepository.insertAllReturning(matchId, starts, ends, now)` → `toCreatedNeedVenue(…)`. Không `markSelected` (MATCH-002 §4.4), không đọc lại. CHECK `expires_at <= match_start_time` thực thi BR-M03 ở DB.
+**Kèo B (`type = NEED_VENUE`)** — đợt 1 (đã gỡ 2026-11-25): Bean Validation (nhánh A bỏ qua) → `MATCH_016`, không truy vấn, không ghi (test). Đợt MATCH-002 (`Component_Class_Design.md` §1.1): Bean Validation (`@ValidMatchSchedule` nhánh B) → Q1 `requireActiveCaptain` (trả tên/ảnh/điểm) → Q2 sport (`SPORT_001`/`SPORT_002`) → Q3 `venueSelectionService.requireSelectable(venueOptionIds)` (`VENUE_001`/`VENUE_002`, trả `SelectableVenueView`) → Q4 `Match.builder()` (`NEED_VENUE`, `OPEN`, `venueId = null`, `matchStartTime`/`matchEndTime` = khung giờ có `startsAt` nhỏ nhất, `expiresAt`) `save` → Q5 `matchVenueOptionRepository.insertAll(matchId, venueOptionIds, now)` (Hibernate tự flush INSERT `match` trước câu native — comment tại chỗ) → Q6 `matchTimeOptionRepository.insertAllReturning(matchId, starts, ends, now)` → `toCreatedNeedVenue(…)`. Không `markSelected` (MATCH-002 §4.4), không đọc lại. CHECK `expires_at <= match_start_time` thực thi BR-M03 ở DB.
 
 ### 3.2. `GET /matches` (readOnly)
 Bean Validation (`SearchMatchRequest` + mặc định, `@ValidMatchSearch`, `type` tuỳ chọn) → không toạ độ: `searchOpen`; có toạ độ: tính hộp giới hạn → `searchOpenNearby` (`Component_Class_Design.md` §5.2: kèo B lọc giờ bằng `EXISTS` khung giờ, khoảng cách = lựa chọn địa điểm gần nhất). Q1 trang + Q2 count.
@@ -374,6 +374,7 @@ Index cho lựa chọn kèo B (`match_venue_option`, `match_time_option`) và `p
 | **Quyền realtime chỉ kiểm lúc `SUBSCRIBE`** (ưu tiên cao — review 2026-11-15) | Đội trưởng cũ (sau chuyển quyền) hoặc token đã hết hạn vẫn nhận frame của cuộc trò chuyện đã đăng ký tới khi ngắt kết nối. Phạm vi lớn hơn bản trước: cuộc trò chuyện sống tới 90 ngày sau khi kèo kết thúc (gồm chat của đội đã ghép sau trận), có cả người chỉ xem (người đã giải tán đội) — một kết nối mở lâu có thể nhận tin trong thời gian dài | Chấp nhận MVP (ADR-0014). **Việc cần làm trước khi mở rộng người dùng** (theo dõi ở ADR-0014 §Cần theo dõi): ngắt phiên / huỷ đăng ký theo user khi chuyển quyền đội trưởng, giải tán đội, xoá tài khoản (registry phiên STOMP), hoặc kiểm lại quyền định kỳ / khi gửi frame |
 | Kết nối WebSocket nhiều | Bộ nhớ / luồng | Theo dõi số phiên; heartbeat ngắt kết nối chết |
 | Spam tin nhắn | DB tăng | Ngoài phạm vi; rate limit chung khi có (`security-backend.md` §7) |
+| Tìm kèo theo toạ độ (2.2 `searchOpenNearby`, cả kèo A lẫn kèo B — tech-debt, review 2026-11-25) | Câu đọc mọi kèo `OPEN` rồi mới lọc hộp toạ độ. `EXPLAIN` 2026-11-25 trên DB dev rỗng: cả bản trước luồng B và bản hiện tại đi `idx_match_open_start`, không dùng `idx_venue_location` (không hồi quy so với bản trước; chưa đo khi có dữ liệu) | Đo `EXPLAIN ANALYZE` khi có dữ liệu lớn; chậm → tách `UNION ALL` hai nhánh A / B hoặc thêm index |
 | 2.20 tăng theo số cuộc trò chuyện của một người | LATERAL tin cuối cho mọi cuộc trò chuyện của người gọi để sắp xếp — dự kiến vài trăm trong 90 ngày lưu [Inference — chưa đo] | Đo `EXPLAIN ANALYZE` khi một người > 1 000 cuộc trò chuyện; khi đó cân nhắc cột `last_message_at` trên `conversation` (thêm một câu ghi vào 2.16) |
 
 ## 10. Danh sách [cần xác nhận]

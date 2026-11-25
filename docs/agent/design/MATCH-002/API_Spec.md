@@ -11,7 +11,7 @@
 | Repo | ArenaFlow-be |
 | Quy ước áp dụng | `api-convention.md` (envelope, định dạng lỗi, kiểu dữ liệu); quy ước chung và lỗi chung USER-001 `API_Spec.md` §1.1, §1.2; kèo, trạng thái kèo, yêu cầu ghép kèo luồng A, thoả thuận chi phí, mã `MATCH_*`/`SPORT_*`: MATCH-001 `API_Spec.md`; mã `TEAM_*`: USER-001/USER-002 `API_Spec.md`; mã `VENUE_002`: VENUE-001 `API_Spec.md`; chat dùng chung (cuộc trò chuyện, endpoint, kênh realtime, mã `CHAT_*`): MATCH-001 `API_Spec.md` §1.6, §1.7, 2.16–2.20; report "giao tiếp tệ" qua chat: REPUTATION-001 `API_Spec.md` 2.10; [ADR-0014](../../decisions/0014-realtime-chat-stomp-websocket.md) (kênh realtime) |
 | Spec nghiệp vụ | `docs/agent/business-spec/SYSTEM-001/` (v1.10) — UC-M05, M06, M07, M09, UC-N01, UC-C01, C02 (luồng B); UC-M03, M04 (mở chat luồng A); BR-M07, BR-M08, BR-M13..BR-M15, BR-M17..BR-M21, BR-C01..C05, BR-N01, BR-N03..BR-N05, BC-N04; Business_Rules §2.3; AC-M04, AC-M05, AC-C01, AC-N01, AC-N03; Scenario 2, 3, 12 |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v3.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-10 · v1.0 (baseline) · hiện tại **v3.1** (developer · 2026-11-25) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -460,14 +460,14 @@ Thay phương án cũ. Kiểm theo thứ tự: `revision` (khác giá trị hi�
 
 Mỗi lần gửi **thay toàn bộ** thoả thuận cũ (kể cả khoản tự nhập), `revision + 1`, xoá xác nhận của cả hai bên (§1.4) — kể cả khi nội dung giống bản cũ. ArenaFlow không thu/giữ/hoàn tiền (kể cả tiền cọc); hai đội tự thanh toán bên ngoài.
 
-**Request body** — quy tắc `costType`, `costSplit`, `venueAmount`, `drinksAmount`, `customItems` **giống** MATCH-001 `API_Spec.md` 2.4; thêm:
+**Request body** — quy tắc `costType`, `costSplit`, `venueAmount`, `drinksAmount`, `customItems` **giống** MATCH-001 `API_Spec.md` 2.4 (gồm: `costType`, `costSplit` gửi `""` = không nhập; `customItems` có phần tử `null` → `400` gắn `customItems`); thêm:
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Ví dụ |
 |---|---|---|---|---|
 | `teamId` | string (UUID) | Có | Đội của mình trong thương lượng | `"01932f00-1a2b-7c3d-8e4f-5a6b7c8d9e01"` |
 | `revision` | integer | Có | ≥ 0; giá trị đang hiển thị (§1.4) | `2` |
 | `depositAmount` | integer \| null | Không | 1..1 000 000 000; `null` = không có tiền cọc | `200000` |
-| `depositHolder` | string \| null | Không | ≤ 100 ký tự; phải `null` khi `depositAmount` = `null` | `"Đội chủ nhà"` |
+| `depositHolder` | string \| null | Không | ≤ 100 ký tự; `""` / chỉ khoảng trắng = không nhập (lưu `null`); có nội dung mà `depositAmount` = `null` → `400` gắn `depositHolder` | `"Đội chủ nhà"` |
 
 ```json
 {
@@ -514,7 +514,7 @@ Mỗi lần gửi **thay toàn bộ** thoả thuận cũ (kể cả khoản tự
 
 | HTTP | Mã | Khi nào | FE nên làm gì |
 |---|---|---|---|
-| 400 | `VALIDATION_ERROR` | Sai field; quan hệ `costType` ↔ số tiền ↔ `costSplit`; > 10 khoản; `depositHolder` khi không có `depositAmount` | Hiện lỗi cạnh field |
+| 400 | `VALIDATION_ERROR` | Sai field; quan hệ `costType` ↔ số tiền ↔ `costSplit`; > 10 khoản; phần tử `null` trong `customItems`; `depositHolder` có nội dung khi không có `depositAmount` | Hiện lỗi cạnh field |
 | 403 | `PAIRING_002` | `teamId` không phải một trong hai đội | Gửi đúng `teamId` |
 | 403 | `TEAM_002` | Không phải đội trưởng của `teamId` | Ẩn nút sửa chi phí |
 | 404 | `PAIRING_001` | Không có thương lượng | Quay lại danh sách (2.3) |

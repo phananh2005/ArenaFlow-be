@@ -988,7 +988,7 @@
 
 1. User A tạo kèo luồng A (giờ trận: ngày mai 18:00)
 2. User A chọn thời hạn: 10 ngày trước trận (>7 ngày)
-3. → Hệ thống hiển thị lỗi "Thời hạn phải trong khoảng tối đa 7 ngày trước giờ đá đến giờ bắt đầu"
+3. → Hệ thống hiển thị lỗi "Thời hạn phải nằm trong 7 ngày trước giờ bắt đầu trận"
 4. → Match KHÔNG được tạo
 
 **Expected:**
