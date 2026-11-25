@@ -1,5 +1,20 @@
 # CHANGELOG — VENUE-001 Quản lý địa điểm sân
 
+## [v6.2] — 2026-11-25
+
+**Type:** MINOR (không đổi endpoint, field, mã lỗi, message của VENUE-001) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE cho MATCH-001, không ảnh hưởng FE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Đồng bộ với MATCH-001 | Không |
+| 2 | Header 3 tài liệu | Ghi nhận | v6.1 → v6.2 | Đánh phiên bản theo entry này | Không |
+
+### Ảnh hưởng
+- API contract VENUE-001: không đổi.
+- Nghiệp vụ / SRS: không đổi.
+
 ## [v6.1] — 2026-11-23
 
 **Type:** MINOR (không đổi endpoint, field, mã lỗi, message; tương thích ngược, trừ: 2.5 `version` gửi dạng chuỗi / có phần thập phân trước được nhận nay `400`) · **Tóm tắt:** 2.5 `version` chỉ nhận số nguyên JSON theo SYSTEM-002 v1.2; cập nhật tài liệu nội bộ BE (nguồn giờ của job và hạn chữ ký upload).

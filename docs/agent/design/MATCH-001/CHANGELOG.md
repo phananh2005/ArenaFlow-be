@@ -1,5 +1,21 @@
 # CHANGELOG — MATCH-001 Kèo (luồng A, luồng B) & vòng đời kèo
 
+## [v3.1] — 2026-11-25
+
+**Type:** MINOR (ghi rõ mã lỗi `SYS_004`/`SYS_002`/`SYS_005` và cấu trúc JSON `{code, message}` của frame `ERROR` trên kênh realtime STOMP, quy định UUID chữ thường ở destination `/topic/conversations/{conversationId}`, đóng `[cần xác nhận #12]`; không đổi bất kỳ endpoint REST, field, mã thành công hay mã lỗi nào của 2.1–2.20) · **Tóm tắt:** Hoàn thiện hợp đồng mã lỗi frame `ERROR` kênh STOMP và cập nhật tài liệu nội bộ BE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | `API_Spec.md` §1.7, §5, §6 | Ghi rõ | Frame `ERROR` khi `SUBSCRIBE` sai destination (hoặc UUID viết hoa) / client gửi `SEND` / lỗi bất ngờ chưa ghi mã → ghi rõ header `message` và body JSON `{"code","message"}` mang mã `SYS_004` (`SUBSCRIBE` sai mẫu hoặc UUID viết hoa), `SYS_002` (client gửi `SEND`), `SYS_005` (lỗi không rõ); đóng `[cần xác nhận #12]` (hỗ trợ SockJS tại `/ws` và không hỗ trợ lọc `selector`) | Nhất quán cấu trúc mã lỗi mọi frame `ERROR` của STOMP (user chốt 2026-11-24) | Khi `SUBSCRIBE` `/topic/conversations/{conversationId}`, truyền đúng `conversationId` chữ thường như API trả về; có thể đọc `code` từ header `message` hoặc JSON body của frame `ERROR` |
+| 2 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE, không ảnh hưởng FE | Như #1 | Không |
+| 3 | Header 3 tài liệu thiết kế MATCH-001 | Ghi nhận | v3.0 → v3.1 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- API contract REST (2.1–2.20): không đổi.
+- Kênh realtime STOMP (§1.7): làm rõ mã `SYS_004` / `SYS_002` / `SYS_005` trong frame `ERROR` và yêu cầu UUID chữ thường (khớp nguyên văn UUID từ API).
+
 ## [v3.0] — 2026-11-21
 
 **Type:** MAJOR (đổi định dạng mọi giá trị thời gian: bỏ `Z`/offset, giá trị theo giờ Việt Nam) · **Tóm tắt:** Thời gian theo giờ Việt Nam, không kèm múi giờ (SYSTEM-002).

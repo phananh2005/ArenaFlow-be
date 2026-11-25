@@ -102,6 +102,7 @@ Table team {
   indexes {
     created_by
     (status, created_at) [note: 'idx_team_status_created: status, created_at DESC (V2, thay idx_team_status)']
+    disbanded_by [name: 'idx_team_disbanded_by', note: 'V7; WHERE disbanded_by IS NOT NULL']
   }
 }
 
@@ -239,7 +240,8 @@ Table match {
   author_team_id uuid [not null, ref: > team.id]
   status varchar(20) [not null, default: 'OPEN', note: 'OPEN, CONFIRMED, ARCHIVED, COMPLETED, EXPIRED, CANCELLED']
   sport_id uuid [not null, ref: > sport.id]
-  format varchar(10)
+  format varchar(20) [note: 'V7: VARCHAR(10) -> VARCHAR(20); FIVE_A_SIDE, SEVEN_A_SIDE, ELEVEN_A_SIDE; NOT NULL khi type = HAS_VENUE']
+  skill_levels text [not null, default: '[]', note: 'V7; JSON array nhãn trình độ']
   age_note text
   match_nature text
   venue_id uuid [ref: > venue.id]
@@ -249,24 +251,28 @@ Table match {
   search_lat decimal(10,7)
   search_lng decimal(10,7)
   search_radius_km decimal(5,2)
-  cost_type varchar(50)
-  cost_split varchar(50)
-  cost_venue_amount bigint
-  cost_drinks_amount bigint
+  cost_type varchar(50) [note: 'V7 CHECK: VENUE_ONLY, DRINKS_ONLY, BOTH']
+  cost_split varchar(50) [note: 'V7 CHECK: FIFTY_FIFTY, SEVENTY_THIRTY_HOME, SEVENTY_THIRTY_LOSER, LOSER_PAYS_DRINKS']
+  cost_venue_amount bigint [note: 'V7 CHECK: > 0']
+  cost_drinks_amount bigint [note: 'V7 CHECK: > 0']
   cost_deposit_holder varchar(100)
   confirmed_opponent_team_id uuid [ref: > team.id]
   confirmed_venue_id uuid [ref: > venue.id]
   confirmed_match_time timestamp
   cancelled_by_team_id uuid [ref: > team.id]
   cancelled_at timestamp
+  cancel_reason varchar(500) [note: 'V7; lý do huỷ kèo']
+  version bigint [not null, default: 0, note: 'V7; @Version optimistic lock']
   created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
   updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
 
   indexes {
     (author_team_id, status)
+    (confirmed_opponent_team_id, status) [name: 'idx_match_opponent_status', note: 'V7']
     (status, expires_at)
     (status, match_end_time)
     (sport_id, status, match_start_time)
+    (match_start_time, id) [name: 'idx_match_open_start', note: 'V7; WHERE status = OPEN']
     (search_lat, search_lng) [note: 'WHERE type = NEED_VENUE AND status = OPEN']
   }
 }
@@ -298,11 +304,12 @@ Table cost_custom_item {
   id uuid [pk]
   match_id uuid [not null, ref: > match.id]
   item_name varchar(100) [not null]
-  amount bigint [not null]
+  amount bigint [not null, note: 'V7 CHECK: > 0']
+  display_order integer [not null, note: 'V7; > 0']
   created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
 
   indexes {
-    match_id
+    (match_id, display_order) [unique, name: 'idx_cost_custom_item_order', note: 'V7; thay idx_cost_custom_item_match']
   }
 }
 
@@ -311,12 +318,14 @@ Table match_request {
   match_id uuid [not null, ref: > match.id]
   requester_team_id uuid [not null, ref: > team.id]
   status varchar(20) [not null, default: 'PENDING', note: 'PENDING, ACCEPTED, REJECTED, WITHDRAWN, SUPERSEDED, EXPIRED']
+  reason varchar(500) [note: 'V7; lý do từ chối hoặc rút yêu cầu']
   requested_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
   responded_at timestamp
   withdrawn_at timestamp
 
   indexes {
     (match_id, requester_team_id) [unique, note: 'WHERE status NOT IN (WITHDRAWN, EXPIRED)']
+    match_id [unique, name: 'idx_match_request_accepted', note: 'V7; WHERE status = ACCEPTED']
     (match_id, status)
     (requester_team_id, status)
   }
@@ -425,16 +434,37 @@ Table mercenary_application {
 // 8. Chat & Notification
 // ================================================================
 
-Table chat_message {
+Table conversation {
   id uuid [pk]
-  pairing_id uuid [not null, ref: > pairing.id]
-  sender_user_id uuid [not null, ref: > user.id]
-  message text [not null]
+  context_type varchar(30) [not null, note: 'V7: TEAM_MATCH (V10 thêm MERCENARY_APPLICATION)']
+  match_id uuid [ref: > match.id, note: 'ON DELETE RESTRICT; NOT NULL khi context_type = TEAM_MATCH']
+  party_a_type varchar(10) [not null, note: 'TEAM, USER']
+  party_a_id uuid [not null, note: 'Đội tạo kèo (TEAM_MATCH)']
+  party_b_type varchar(10) [not null, note: 'TEAM, USER']
+  party_b_id uuid [not null, note: 'Đội tham gia (TEAM_MATCH) hoặc ứng viên']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  Note: 'V7 (thay chat_message của V1). CHECK conversation_parties_check: hai bên không trùng nhau'
+
+  indexes {
+    (match_id, party_b_id) [unique, name: 'idx_conversation_team_match', note: 'V7; WHERE context_type = TEAM_MATCH']
+    party_a_id [name: 'idx_conversation_party_a', note: 'V7']
+    party_b_id [name: 'idx_conversation_party_b', note: 'V7']
+  }
+}
+
+Table conversation_message {
+  id uuid [pk]
+  conversation_id uuid [not null, ref: > conversation.id, note: 'ON DELETE CASCADE']
+  sender_party varchar(1) [not null, note: 'A, B']
+  sender_user_id uuid [not null, ref: > user.id, note: 'ON DELETE RESTRICT']
+  message text [not null, note: 'char_length 1..1000']
+  is_read boolean [not null, default: false]
   created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
 
   indexes {
-    (pairing_id, created_at)
-    created_at [note: 'For retention cleanup']
+    (conversation_id, created_at, id) [name: 'idx_conversation_message_time', note: 'V7']
+    (conversation_id, sender_party) [name: 'idx_conversation_message_unread', note: 'V7; WHERE NOT is_read']
   }
 }
 
