@@ -10,7 +10,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -67,17 +66,7 @@ public class User {
     @Builder.Default
     private Integer reliabilityScore = 80;
 
-    @Column(name = "total_matches_completed", nullable = false)
-    @Builder.Default
-    private Integer totalMatchesCompleted = 0;
-
-    @Column(name = "total_matches_confirmed", nullable = false)
-    @Builder.Default
-    private Integer totalMatchesConfirmed = 0;
-
-    @Column(name = "average_rating", precision = 3, scale = 2)
-    private BigDecimal averageRating;
-
+    // Chuỗi trận sạch và bộ đếm report chỉ ghi bằng câu UPDATE nguyên tử của service uy tín.
     @Column(name = "report_count_noshow", nullable = false, updatable = false)
     @Builder.Default
     private Integer reportCountNoshow = 0;

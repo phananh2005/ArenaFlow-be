@@ -5,9 +5,9 @@
 | Mã chức năng | `REPUTATION-001` |
 | Phạm vi tầng | Backend (Spring Boot REST API). Frontend: ngoài phạm vi repo này |
 | Repo/stack | ArenaFlow-be · Spring Boot 4.0.9 · PostgreSQL ≥ 18 · Flyway |
-| Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush) · ADR-0003 (+ Sửa đổi 2026-11-10, 2026-11-12) · ADR-0011, ADR-0012, ADR-0013 (+ Sửa đổi 2026-11-12) · retrier: VENUE-001 `Component_Class_Design.md` §4.9 |
+| Quy ước áp dụng | `docs/agent/non-functional-standards.md` (N_DETAIL=3, N_LIST=4, N_WRITE=6; §4.1 flush) · ADR-0003 (+ Sửa đổi 2026-11-10, 2026-11-12, 2026-11-27) · ADR-0011, ADR-0012, ADR-0013 (+ Sửa đổi 2026-11-12, 2026-11-27) · retrier: VENUE-001 `Component_Class_Design.md` §4.9 |
 | Ràng buộc dữ liệu | V1–V8 (v1.2: 2.10 đọc `conversation`, `conversation_message` của V7 — MATCH-001 v2.4) + `V9__reputation_rating_report_dispute.sql` (`Component_Class_Design.md` §5.1) |
-| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v2.0** (solution-architect · 2026-11-21) — lịch sử thay đổi: `CHANGELOG.md` |
+| Tác giả / Ngày / Phiên bản | solution-architect · 2026-11-13 · v1.0 (baseline) · hiện tại **v2.1** (developer · 2026-11-27) — lịch sử thay đổi: `CHANGELOG.md` |
 
 ## 1. Tổng quan
 
@@ -24,7 +24,7 @@ Thao tác ghi (2.1, 2.3, 2.5, 2.8, 2.10) chạy trong `ConcurrencyConflictRetrie
 | 2.5 | Bean Validation → `REPORT_001` → bên bị report `TEAM`: `TEAM_016` (`reportedTeamStatus = DISBANDED`) → `TEAM_015` (`reportedTeamStatus = INACTIVE`) → `TEAM_002` (caller không captain ACTIVE đội bị report) · bên bị report `INDIVIDUAL` (v1.1, MERCENARY-001): `REPORT_009` (caller ≠ người bị report) → `REPORT_006` (≠ `NOSHOW`) → `REPORT_008` (status ≠ `AUTO_ACCEPTED` hoặc đã có tranh chấp) → `REPORT_007` (`now ≥ createdAt + 24h`) |
 | 2.6 | `AUTH_004` (filter) → Bean Validation |
 | 2.7 | `AUTH_004` → `DISPUTE_001` |
-| 2.8 | `AUTH_004` → Bean Validation → CAS 0 dòng: `DISPUTE_001` (không có tranh chấp **đội ↔ đội** với id này — v1.1) / `DISPUTE_002` (đã `RESOLVED`) |
+| 2.8 | `AUTH_004` → Bean Validation → CAS 0 dòng: `DISPUTE_001` (không có tranh chấp với id này — `existsById`; V9 chỉ có tranh chấp đội ↔ đội, MERCENARY-001 đổi sang chỉ đếm tranh chấp đội ↔ đội — `Component_Class_Design.md` §14; v2.1) / `DISPUTE_002` (đã `RESOLVED`) |
 | 2.9 | `TEAM_001` |
 | 2.10 | Bean Validation (`reason`) → `CHAT_002` (không có cuộc trò chuyện) → `USER_001` (cột `callerDeleted`) → `CHAT_003` (policy của loại ngữ cảnh — MATCH-001 `Component_Class_Design.md` §4.14 — trả không bên nào; vd vừa chuyển quyền, thành viên của đội đã giải tán) → `REPORT_011` (`contextType ≠ TEAM_MATCH`) → `TEAM_016` (policy trả bên chỉ xem = người đã giải tán đội của mình, BR-R10) → `TEAM_015` (đội phía caller `INACTIVE`, BR-R10) → `REPORT_005` (captain cả hai bên, BR-R08) → `REPORT_010` (`!hasMessages`) → `REPORT_004` (chiều của caller đã có "giao tiếp tệ" trong kèo — qua 2.3 hoặc 2.10; race → unique index) |
 
@@ -49,7 +49,8 @@ sequenceDiagram
     end
     alt Q3 = 1 dòng (đánh giá này hoàn tất trận)
         S->>RP: applyMatchCompletion(matchId, entries)
-        RP->>DB: Q4 U team (khoá theo id, +2, chuỗi, thưởng mốc, +1 nếu 5 sao) RETURNING
+        RP->>DB: Q4 S team FOR NO KEY UPDATE (lockForReputation, theo id)
+        RP->>DB: Q5 U team (+2, chuỗi, thưởng mốc, +1 nếu 5 sao) RETURNING
     else score = 5
         S->>RP: adjustTeamReliability(ratee, +1)
         RP->>DB: Q4 U team
@@ -58,7 +59,7 @@ sequenceDiagram
     S->>EP: MatchRatedEvent
     S->>VR: refreshAfterCommit(teams)
     S-->>C: 201
-    Note over VR,DB: sau commit — Q5 U team.verified_at RETURNING (REQUIRES_NEW) → TeamVerificationChangedEvent
+    Note over VR,DB: sau commit — Q6 / Q5 / Q4 tuỳ nhánh (§3 Bảng số truy vấn) U team.verified_at RETURNING (REQUIRES_NEW) → TeamVerificationChangedEvent
 ```
 
 ### 2.2. Report (2.3) và tranh chấp (2.5, 2.8)
@@ -98,7 +99,7 @@ sequenceDiagram
 
 | # | Endpoint | Truy vấn (một lần thử) | Tổng / Ngưỡng |
 |---|---|---|---|
-| 2.1 | `POST …/ratings` — hoàn tất trận | S context, I rating, U match `COMPLETED`, U team (2 đội, 1 câu) · sau commit: U `verified_at` | 5 / W6 ✅ (v1.1: không đổi — mercenary được cộng điểm khi đội trưởng chấm sao, MERCENARY-001 2.18) |
+| 2.1 | `POST …/ratings` — hoàn tất trận | S context, I rating, U match `COMPLETED`, S khoá team (2 đội, 1 câu — v2.1), U team (2 đội, 1 câu) · sau commit: U `verified_at` | **6 / W6** ✅ (= ngưỡng; v2.1: 5 → 6, user duyệt 2026-11-26 — §5. v1.1: mercenary được cộng điểm khi đội trưởng chấm sao, MERCENARY-001 2.18) |
 | 2.1 | `POST …/ratings` — trận đã `COMPLETED` | S context, I rating, (U team +1 khi 5 sao) · sau commit: U `verified_at` | 3–4 / W6 ✅ |
 | 2.2 | `GET …/ratings` | S trận + đánh giá, S captain ctx | 2 / D3 ✅ |
 | 2.3 | `POST …/reports` | S context, I report, U team (trừ điểm), U report (`reliability_penalty`) · sau commit: U `verified_at` | 5 / W6 ✅ |
@@ -108,18 +109,18 @@ sequenceDiagram
 | 2.7 | `GET /admin/disputes/{id}` | S chi tiết, S đánh giá của trận | 2 / D3 ✅ |
 | 2.8 | `PATCH …/resolve` — `REJECTED` | U dispute CAS, U report, U team (hoàn), S chi tiết, S đánh giá · sau commit: U `verified_at` | 6 / W6 ✅ (= ngưỡng) |
 | 2.8 | `PATCH …/resolve` — `CONFIRMED` | U dispute CAS, U report, S chi tiết, S đánh giá | 4 / W6 ✅ |
-| 2.8 | CAS 0 dòng | U dispute CAS, S `existsTeamDispute` (v1.1) | 2 |
+| 2.8 | CAS 0 dòng | U dispute CAS, S `existsById` (v2.1; MERCENARY-001: `existsTeamDispute`) | 2 |
 | 2.9 | `GET /teams/{id}/reputation` | S thống kê (1 câu) | 1 / D3 ✅ |
 | 2.10 | `POST /conversations/{id}/reports` | S context (cột ngữ cảnh chung của cuộc trò chuyện + có tin nhắn + đã report, 1 câu), I report, U team (trừ điểm), U report (`reliability_penalty`) · sau commit: U `verified_at` | 5 / W6 ✅ (mới, như 2.3) |
 | Job | huy hiệu (mỗi lô) | S id lô, U `verified_at` RETURNING | 2 / lô |
 
-**NFS gate:** 10/10 endpoint trong ngưỡng; truy vấn sau commit (refresh huy hiệu) **được tính** vào request. **2.8 `REJECTED` chạm đúng W6** — mọi truy vấn thêm phải gộp hoặc xin duyệt. Đã gộp: trận + quyền captain hai phía + đã đánh giá/report thành 1 câu context (2.1, 2.3); report + đội + quyền + tranh chấp thành 1 câu (2.5); điểm hai đội lúc hoàn tất thành 1 câu; refresh huy hiệu gom mọi đội của request thành 1 câu. Retry nhân số truy vấn tối đa 3 (ADR-0003).
+**NFS gate:** 10/10 endpoint trong ngưỡng; truy vấn sau commit (refresh huy hiệu) **được tính** vào request. **2.8 `REJECTED` và 2.1 hoàn tất trận (v2.1) chạm đúng W6** — mọi truy vấn thêm phải gộp hoặc xin duyệt. Đã gộp: trận + quyền captain hai phía + đã đánh giá/report thành 1 câu context (2.1, 2.3); report + đội + quyền + tranh chấp thành 1 câu (2.5); điểm hai đội lúc hoàn tất thành 1 câu; refresh huy hiệu gom mọi đội của request thành 1 câu. Retry nhân số truy vấn tối đa 3 (ADR-0003).
 
 ### 3.1. `POST /matches/{id}/ratings` (retrier `MATCH_014`)
 
 Lần thử: Q1 `findRatingContext` → guard §1.1 → rater = phía `callerXCaptain = true`, ratee = phía còn lại → Q2 `saveAndFlush(Rating)` → `status = ARCHIVED`: Q3 `completeIfArchived` → kết quả:
 
-| Q3 | `isNoShow` | Ghi điểm (Q4) |
+| Q3 | `isNoShow` | Ghi điểm (Q4; `applyMatchCompletion` = Q4 `lockForReputation` + Q5 `applyCompletion` — v2.1) |
 |---|---|---|
 | 1 dòng | `false` | `applyMatchCompletion`: rater `(completes, bonus 0)`, ratee `(completes, bonus = score == 5 ? 1 : 0)` |
 | 1 dòng | `true` | `applyMatchCompletion`: chỉ rater `(completes, bonus 0)`; đội vắng không đổi — điểm và chuỗi (user chốt B) |
@@ -141,6 +142,8 @@ Lần thử: Q1 `findRatingContext` → guard §1.1 → rater = phía `callerXCa
 | 80, 3, 0 | Report qua chat **trước trận** của chính đội đối phương | completes, bonus 0 | 82, **0**, 0 |
 | 99, 4, 0 | Không | completes, bonus 0 | 100 (chặn), 5, 0 |
 
+Race test bắt buộc (v2.1): report bùng của đội đối phương đang giữ khoá đội (đã trừ điểm, chưa commit) khi 2.1 hoàn tất trận → 2.1 chờ ở `lockForReputation`, report commit → `applyCompletion` thấy report → chuỗi đội bị report = 0; và chiều ngược lại (hoàn tất giữ khoá trước → report áp như sau `COMPLETED`) — §5 (a), (b).
+
 ### 3.2. `GET /matches/{id}/ratings` (readOnly)
 Q1 `findMatchRatingRows(matchId)` → rỗng → `MATCH_001` → Q2 `requireActiveCaptain(teamId, caller)` → `MATCH_009` → `given`/`received` theo `Component_Class_Design.md` §4.1.
 
@@ -157,25 +160,25 @@ Lần thử: Q1 `findReportContext(matchId, caller, type)` → guard §1.1 → r
 | 3, 0 | `NOSHOW` | 0, 1 | 3 (chặn 0) |
 | 80, 1 | `BAD_PLAY` | 75, 2 | 5 |
 
-Mọi trường hợp: `clean_streak = 0`.
+Mọi trường hợp: `clean_streak = 0`. Race test bắt buộc (v2.1): hai report cùng loại vào cùng đội đồng thời → bậc liên tiếp (80, 0, `NOSHOW` → 75 rồi 67, `points` 5 rồi 8, bộ đếm 2) — `next_count` đọc trên dòng đã khoá (`Component_Class_Design.md` §5.2).
 
 ### 3.3a. `POST /conversations/{id}/reports` (retrier `MATCH_014`) — v1.2
-Lần thử: Q1 `findChatReportContext(conversationId, callerId)` → guard §1.1 → reporter = bên caller là captain (A = đội tạo kèo, B = đội tham gia), reported = bên còn lại → Q2 `saveAndFlush(Report)` (`match_id` = kèo của cuộc trò chuyện, `BAD_COMMUNICATION`; bắt `idx_report_unique` → `REPORT_004`) → Q3 `applyReportPenalty(reported, BAD_COMMUNICATION, reportId)` → `report.setReliabilityPenalty(points)` → `TeamReportedEvent` → `refreshAfterCommit({reported})` → Q4 `UPDATE report` lúc commit → response (`direction = SENT`, `reliabilityPenalty = null`, `counterpartTeam` từ Q1). Bảng kiểm `applyReportPenalty` như §3.3. Test: tài khoản đã xoá → `USER_001`; người đã giải tán đội của mình → `TEAM_016`; người không tham gia cuộc trò chuyện mercenary → `CHAT_003` (trước `REPORT_011`), ứng viên / đội trưởng của cuộc trò chuyện mercenary → `REPORT_011`; mỗi trạng thái yêu cầu (`PENDING`, `REJECTED`, `SUPERSEDED`, `EXPIRED`, `WITHDRAWN`, `ACCEPTED`) / thương lượng (`NEGOTIATING`, `SUPERSEDED`, `EXPIRED`, `CONFIRMED`) / kèo (`OPEN`, `CONFIRMED` trước trận, `CANCELLED`, `EXPIRED`, `COMPLETED`) với ≥ 1 tin → 201; chưa có tin → `REPORT_010`; report chiều A→B qua 2.10 rồi qua 2.3 sau trận (cùng loại) → `REPORT_004`, chiều B→A vẫn 201; cuộc trò chuyện mercenary → `REPORT_011`; đội trưởng cả hai đội → `REPORT_005`; đội caller `INACTIVE` → `TEAM_015`, đội bị report `DISBANDED` → 201; report xuất hiện ở 2.4 của cả hai đội; `NfsQueryCountTest` 2.10 = 5.
+Lần thử: Q1 `findChatReportContext(conversationId, callerId, now)` (v2.1 — `now` từ `Clock` cho khối cột chung của MATCH-001; giờ trận từ `match` đã join trong khối đó, không join thêm) → guard §1.1 → reporter = bên caller là captain (A = đội tạo kèo, B = đội tham gia), reported = bên còn lại → Q2 `saveAndFlush(Report)` (`match_id` = kèo của cuộc trò chuyện, `BAD_COMMUNICATION`; bắt `idx_report_unique` → `REPORT_004`) → Q3 `applyReportPenalty(reported, BAD_COMMUNICATION, reportId)` → `report.setReliabilityPenalty(points)` → `TeamReportedEvent` → `refreshAfterCommit({reported})` → Q4 `UPDATE report` lúc commit → response (`direction = SENT`, `reliabilityPenalty = null`, `counterpartTeam` từ Q1). Bảng kiểm `applyReportPenalty` như §3.3. Test: tài khoản đã xoá → `USER_001`; người đã giải tán đội của mình → `TEAM_016`; người không tham gia cuộc trò chuyện mercenary → `CHAT_003` (trước `REPORT_011`) *(chạy khi MERCENARY-001 có policy và V10)*, ứng viên / đội trưởng của cuộc trò chuyện mercenary → `REPORT_011` *(chạy khi MERCENARY-001 có policy và V10)*; mỗi trạng thái yêu cầu (`PENDING`, `REJECTED`, `SUPERSEDED`, `EXPIRED`, `WITHDRAWN`, `ACCEPTED`) / thương lượng (`NEGOTIATING`, `SUPERSEDED`, `EXPIRED`, `CONFIRMED`) / kèo (`OPEN`, `CONFIRMED` trước trận, `CANCELLED`, `EXPIRED`, `COMPLETED`) với ≥ 1 tin → 201; chưa có tin → `REPORT_010`; report chiều A→B qua 2.10 rồi qua 2.3 sau trận (cùng loại) → `REPORT_004`, chiều B→A vẫn 201; cuộc trò chuyện mercenary → `REPORT_011` *(chạy khi MERCENARY-001 có policy và V10)*; đội trưởng cả hai đội → `REPORT_005`; đội caller `INACTIVE` → `TEAM_015`, đội bị report `DISBANDED` → 201; report xuất hiện ở 2.4 của cả hai đội; `NfsQueryCountTest` 2.10 = 5. Ba ca mercenary chưa chạy được ở V9: V7 chỉ cho `context_type = 'TEAM_MATCH'`, loại ngữ cảnh chưa có policy → `IllegalStateException` (`Component_Class_Design.md` §4.2).
 
 ### 3.4. `GET /teams/{id}/reports` (readOnly)
-Q1 `requireActiveCaptain(teamId, caller)` → Q2 `findTeamReports(teamId, direction, limit, offset)` → Q3 `countTeamReports` → mapper (trạng thái hiệu lực, `canDispute` — `Component_Class_Design.md` §4.10, `now` từ `Clock`).
+Q1 `requireActiveCaptain(teamId, caller)` → Q2 `findReceivedReports` / `findSentReports(teamId, limit, offset)` theo `direction` → Q3 `countReceivedReports` / `countSentReports` (v2.1) → mapper (trạng thái hiệu lực, `canDispute` — `Component_Class_Design.md` §4.10, `now` từ `Clock`).
 
 ### 3.5. `POST /reports/{id}/dispute` (retrier `MATCH_014`)
 Lần thử: Q1 `findDisputeContext(reportId, caller)` → guard §1.1 → Q2 `markDisputed(reportId, now, now − 24h)` → 0 dòng → `ConcurrencyConflictException` → thử lại (lần sau guard trả `REPORT_008` khi report đã đổi trạng thái, `REPORT_007` khi vừa quá hạn) → Q3 `save(Dispute)` (flush lúc commit) → `ReportDisputedEvent`. Không đổi điểm → không refresh huy hiệu.
 
 ### 3.6. `GET /admin/disputes`, `GET /admin/disputes/{id}` (readOnly)
-2.6: Q1 `findAdminDisputes(status, oldestFirst = status == PENDING, …)` → Q2 `countAdminDisputes`. 2.7: Q1 `findAdminDisputeDetail` → `DISPUTE_001` → Q2 `findByMatchIdAndRaterTypeOrderByCreatedAtAsc(matchId, TEAM)`.
+2.6: Q1 `findAdminDisputesOldestFirst` (`PENDING`) / `findAdminDisputesNewestFirst` (khác) theo `DisputeStatusFilter.oldestFirst()` (v2.1) → Q2 `countAdminDisputes`. 2.7: Q1 `findAdminDisputeDetail` → `DISPUTE_001` → Q2 `findByMatchIdAndRaterTypeOrderByCreatedAtAsc(matchId, TEAM)`.
 
 ### 3.7. `PATCH /admin/disputes/{id}/resolve` (retrier `MATCH_014`)
-Lần thử: Q1 `resolveIfPending(id, decision, note.trim(), adminId, now)` → rỗng → Q1b `existsTeamDispute(id)` (v1.1 — chỉ tranh chấp report `application_id IS NULL`) → `DISPUTE_001`/`DISPUTE_002` (mã trực tiếp, không thử lại — trạng thái nguồn đã đổi là kết luận đủ, ADR-0003 Sửa đổi 2026-11-10) → Q2 `applyDecision(reportId, decision, now)` (rỗng → `IllegalStateException`: dispute `PENDING` luôn đi với report `DISPUTED`) → `REJECTED`: Q3 `refundReportPenalty(reportedTeamId, type, penalty, reportId)` + `refreshAfterCommit({reported})` → `DisputeResolvedEvent` → `adminAuditLog.afterCommit(...)` → Q4 `findAdminDisputeDetail` → Q5 đánh giá của trận → response.
+Lần thử: Q1 `resolveIfPending(id, decision, note.trim(), adminId, now)` → rỗng → Q1b `existsById(id)` (v2.1 — V9 chỉ có tranh chấp đội ↔ đội; MERCENARY-001 đổi sang `existsTeamDispute(id)` chỉ tranh chấp report `application_id IS NULL`, cột có từ V10 — `Component_Class_Design.md` §14) → `DISPUTE_001`/`DISPUTE_002` (mã trực tiếp, không thử lại — trạng thái nguồn đã đổi là kết luận đủ, ADR-0003 Sửa đổi 2026-11-10) → Q2 `applyDecision(reportId, decision, now)` (rỗng → `IllegalStateException`: dispute `PENDING` luôn đi với report `DISPUTED`) → `REJECTED`: Q3 `refundReportPenalty(reportedTeamId, type, penalty, reportId)` + `refreshAfterCommit({reported})` → `DisputeResolvedEvent` → `adminAuditLog.afterCommit(...)` → Q4 `findAdminDisputeDetail` → Q5 đánh giá của trận → response.
 
 ### 3.8. `GET /teams/{id}/reputation` (readOnly)
-Q1 `findReputation(teamId, now)` (thống kê `Component_Class_Design.md` §5.3) → rỗng → `TEAM_001` → mapper.
+Q1 `findReputation(teamId, LATE_CANCEL_WINDOW_HOURS)` (v2.1; thống kê `Component_Class_Design.md` §5.3) → rỗng → `TEAM_001` → mapper.
 
 ### 3.9. Huy hiệu sau commit, job
 - `refreshAfterCommit` → `afterCommit()` → `refreshNow(ids)` (`REQUIRES_NEW`): 1 câu `refreshVerification` → event mỗi đội đổi.
@@ -195,7 +198,8 @@ Như `Component_Class_Design.md` §4.11. Isolation mặc định (READ COMMITTED
 | Hai đội trưởng đánh giá cùng lúc trận `ARCHIVED` | Hai INSERT khác dòng; Q3 của bên sau chờ khoá `match` rồi đánh giá lại `status = 'ARCHIVED'` → 0 dòng → chỉ bên trước cộng điểm hoàn tất; bên sau chỉ cộng +1 (5 sao) |
 | Cùng đội gửi đánh giá hai lần đồng thời | Bên sau đụng `idx_rating_unique` → `RATING_002` |
 | Report trùng đồng thời (kể cả 2.3 và 2.10 cùng "giao tiếp tệ", cùng chiều, cùng kèo) | `idx_report_unique` → `REPORT_004` (bên sau rollback, không trừ điểm) |
-| Report gửi gần như cùng lúc với đánh giá hoàn tất trận | `applyCompletion` khoá `team` rồi kiểm report bằng snapshot đầu câu → có thể chưa thấy report vừa commit → chuỗi +1 thay vì 0 cho trận đó `[cần xác nhận #12]`. Điểm trừ report vẫn đúng (cộng dồn nguyên tử) |
+| Hai report khác nhau cùng loại vào cùng đội đồng thời (v2.1) | `applyReportPenalty` của bên sau chờ khoá đội; bậc tính từ `next_count` đọc trên dòng đã khoá → bậc liên tiếp (5 rồi 8), không trùng bậc |
+| Report gửi gần như cùng lúc với đánh giá hoàn tất trận | v2.1: `applyMatchCompletion` khoá các đội bằng câu riêng (`lockForReputation`) rồi mới chạy `applyCompletion` (ảnh chụp lấy sau khi có khoá). Kết quả theo bên giữ khoá đội trước: **(a)** report đang giữ khoá (đã trừ điểm, chưa commit) → hoàn tất chờ, report commit → `applyCompletion` thấy report → trận không sạch (chuỗi 0, không thưởng mốc, bộ đếm giữ) — tương đương thứ tự report → `COMPLETED`. **(b)** hoàn tất giữ khoá trước → report chưa commit không được thấy → trận tính sạch (+1 chuỗi; chạm mốc → + thưởng, mọi bộ đếm report về 0); report chờ khoá ở `applyReportPenalty`, rồi đưa chuỗi về 0 và trừ theo bộ đếm mới — tương đương thứ tự `COMPLETED` → report. Ví dụ đội B 80 điểm, chuỗi 4, bộ đếm bùng 2, report `NOSHOW`: (a) 80 − 12 + 2 = 70, chuỗi 0, bộ đếm 3; (b) 80 + 2 + 5 = 87 → 87 − 5 = 82, chuỗi 0, bộ đếm 1. Hai trường hợp cho điểm khác nhau; mỗi trường hợp trừ đúng bậc theo bộ đếm tại lúc report ghi, cả hai hợp `API_Spec.md` §1.3 (thưởng chuỗi đã cộng không thu hồi). Race test bắt buộc: (a) `ReputationRaceTest#completionWaitingOnReportPenaltySeesTheReport`, (b) `#reportWaitingOnCompletionIsAppliedAsReportAfterCompletion`. `[cần xác nhận #12]` đóng |
 | Tranh chấp sát hạn 24h | Hạn kiểm trong chính câu CAS (`created_at > now − 24h`) |
 | Hai Admin quyết định cùng tranh chấp | CAS `status = 'PENDING'` → bên sau `DISPUTE_002` |
 | Hoàn điểm khi bộ đếm đã về 0 do mốc chuỗi | `GREATEST(0, count − 1)` |
@@ -226,4 +230,4 @@ Như USER-001 §6. Bổ sung trong service: `DataIntegrityViolationException` c�
 
 | # | Nội dung | Loại |
 |---|---|---|
-| 12 | Race report ↔ hoàn tất trận làm chuỗi trận sạch +1 cho trận đáng lẽ "không sạch" (cửa sổ vài ms). Phương án nếu cần chặt: 2.3 khoá `match` (`FOR KEY SHARE` → đổi thành `FOR NO KEY UPDATE`) trước khi khoá `team` để tuần tự hoá với 2.1 (+0 câu nếu gộp vào context) | Không chặn — đề xuất chấp nhận |
+| 12 | ~~Race report ↔ hoàn tất trận làm chuỗi trận sạch +1 cho trận đáng lẽ "không sạch"~~ — **Đóng v2.1 (user chọn sửa 2026-11-26):** race test tái hiện (đội bị report bùng vẫn +1 chuỗi); sửa bằng `lockForReputation` trước `applyCompletion` (§5, `Component_Class_Design.md` §4.6) — 2.1 hoàn tất 5 → 6/W6. Không khoá `match` ở 2.3 (phương án cũ) | Đã đóng |

@@ -2,7 +2,7 @@
 
 > Trạng thái: **Đặc tả nghiệp vụ hoàn chỉnh; sẵn sàng thiết kế schema**
 
-> Cập nhật: 2026-11-01 (nội dung nghiệp vụ) · 2026-11-05 (ghi chú đường dẫn multi-module, §2) · 2026-11-12 (uy tín đội — quyết định user chốt cho REPUTATION-001, §3.4) · 2026-11-25 (luồng B: phương án, cọc, race, huỷ kèo — đồng bộ thiết kế MATCH-002 đã duyệt, §3.3, §3.5, §6)
+> Cập nhật: 2026-11-01 (nội dung nghiệp vụ) · 2026-11-05 (ghi chú đường dẫn multi-module, §2) · 2026-11-12 (uy tín đội — quyết định user chốt cho REPUTATION-001, §3.4) · 2026-11-25 (luồng B: phương án, cọc, race, huỷ kèo — đồng bộ thiết kế MATCH-002 đã duyệt, §3.3, §3.5, §6) · 2026-11-27 (lưu đánh giá, report, tranh chấp, huy hiệu theo V9 — REPUTATION-001, §3.4, §3.7)
 
 > **Phạm vi cốt lõi:** tạo kèo / ghép người chơi. Sân là địa điểm tham chiếu; ArenaFlow không quản lý vận hành, đặt sân hoặc thanh toán.
 
@@ -121,7 +121,7 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
   - Bị report: xem bảng mức trừ theo loại và số lần bên dưới
 - ~~**Trận sạch:** trận hoàn thành không có hủy, bùng, rút mercenary, hoặc report được xác nhận.~~ — sửa 2026-11-12: xét lúc Match chuyển `COMPLETED` — đội không bị report nào (chưa bị Admin bác) trong trận → chuỗi trận sạch +1, có → về 0; bị report ở bất kỳ trận nào (kể cả sau `COMPLETED`), hủy Match `CONFIRMED` hoặc rút Match_Request `ACCEPTED` → chuỗi về 0 (không thu hồi điểm đã cộng); đánh giá "đội kia không đến" không đổi chuỗi đội vắng; Admin bác report không khôi phục chuỗi; mercenary rút sau khi được duyệt → không phải trận sạch (SRS SYSTEM-001 v1.8 `Business_Rules.md` §3.1).
 - Có Completion Rate, Reliability Score và rating trung bình 1–5 sao. Rating chỉ để hiển thị reputation, không trừ Reliability Score khi thấp; rating 5 sao cộng `+1` (sửa 2026-11-12).
-- ~~Verification Badge yêu cầu: liên kết số điện thoại, hoàn thành >5 trận, rating trung bình >3 sao, và **Reliability Score ≥70**.~~ — sửa 2026-11-12: đủ 4 điều kiện — (1) số điện thoại: đội — đội trưởng hiện tại có số điện thoại; cá nhân — tài khoản có số điện thoại; (2) >5 trận hoàn thành (số trận tính vào tử số Completion Rate); (3) sao trung bình >3 ("đội kia không đến" không tính); (4) **Reliability Score ≥70** (SRS SYSTEM-001 v1.8 `Business_Rules.md` BR-R04).
+- ~~Verification Badge yêu cầu: liên kết số điện thoại, hoàn thành >5 trận, rating trung bình >3 sao, và **Reliability Score ≥70**.~~ — sửa 2026-11-12: đủ 4 điều kiện — (1) số điện thoại: đội — đội trưởng hiện tại có số điện thoại; cá nhân — tài khoản có số điện thoại; (2) >5 trận hoàn thành (số trận tính vào tử số Completion Rate); (3) sao trung bình >3 ("đội kia không đến" không tính); (4) **Reliability Score ≥70** (SRS SYSTEM-001 v1.8 `Business_Rules.md` BR-R04). Huy hiệu đội lưu dạng dẫn xuất ở `team.verified_at` (V9), cập nhật sau thao tác của REPUTATION-001 và job đối soát hằng ngày.
 
 **Completion Rate:**
 
@@ -135,13 +135,13 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
 - Match `CANCELLED` hủy dưới 24 giờ trước trận chỉ tính vào mẫu số của **đội hủy** (hoặc đội rút request đã `ACCEPTED`), không tính cho đội bị hủy kèo (2026-11-12).
 - **Tử số:** Match `COMPLETED` có ít nhất một đội trưởng đánh giá và đội không bị report bùng (report chưa bị Admin bác) — loại khỏi tử số ngay khi report, không chờ hết hạn tranh chấp (sửa 2026-11-12).
 - Match `ARCHIVED` (chưa ai đánh giá) mà đội bị report bùng (chưa bị bác) được tính vào mẫu số của đội đó (2026-11-12).
-- Completion Rate và rating trung bình tính từ dữ liệu trận/đánh giá/report khi hiển thị, không lưu bộ đếm (2026-11-12).
+- Completion Rate và rating trung bình tính từ dữ liệu trận/đánh giá/report khi hiển thị, không lưu bộ đếm (2026-11-12; V9 bỏ cột `total_matches_completed`, `total_matches_confirmed`, `average_rating` của `team`, `user`).
 - Chỉ hiển thị Completion Rate khi có ít nhất 5 trận đã chốt; trước đó hiển thị “Mới tham gia” kèm số trận hiện có, ví dụ `2/5 trận`.
 
 **Đánh giá:**
 
-- Đội trưởng có thể nhập tỷ số (tùy chọn, chỉ để lưu kỷ niệm, không dùng cho logic nghiệp vụ) và/hoặc đánh giá đối phương.
-- Khi đánh giá, đội trưởng có hai lựa chọn: (1) **Đánh giá bình thường 1-5 sao**, hoặc (2) **”Đội kia không đến”**.
+- Đội trưởng có thể nhập tỷ số (tùy chọn, chỉ để lưu kỷ niệm, không dùng cho logic nghiệp vụ) và/hoặc đánh giá đối phương. Tỷ số lưu theo góc nhìn bên đánh giá (tỷ số bên mình / bên kia), hai số cùng có hoặc cùng vắng (V9).
+- Khi đánh giá, đội trưởng có hai lựa chọn: (1) **Đánh giá bình thường 1-5 sao**, hoặc (2) **”Đội kia không đến”** (lưu `is_no_show`, không sao, không tỷ số — V9).
 - Chọn “đội kia không đến” → hệ thống đề xuất người dùng có muốn report bùng không (tách khỏi luồng đánh giá).
 - Rating không hiển thị cho bên được đánh giá trước khi bên đánh giá gửi đánh giá của mình; không cho sửa sau khi gửi.
 - Không hiển thị trạng thái “đối phương đã/chưa đánh giá”. Bên nào đã đánh giá mới được xem rating đối phương dành cho mình; bên không đánh giá mất quyền xem rating đó.
@@ -153,6 +153,7 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
 - Report phải gắn với một trận cụ thể. Mỗi trận, đội trưởng có thể report đối phương nhiều loại đồng thời.
 - **Report bùng:** tự động chấp nhận và trừ Reliability Score. Nếu đội bị report phản hồi trong 24 giờ → tranh chấp chuyển admin xem xét; quyết định của admin là cuối cùng.
 - **Report khác (chơi xấu, giao tiếp tệ, không đúng trình độ):** tự động chấp nhận và trừ Reliability Score.
+- **Lưu trữ (V9):** report có trạng thái `AUTO_ACCEPTED` (khi gửi) → `DISPUTED` (report bùng bị phản hồi trong 24 giờ) → `CONFIRMED` / `REJECTED` (Admin quyết định); lưu số điểm thực trừ (`reliability_penalty`) để hoàn đúng khi Admin bác; mỗi (trận, bên report, bên bị report, loại) tối đa một report. Phản hồi tranh chấp lưu bảng `dispute` (1:1 với report bùng): bằng chứng, quyết định và ghi chú của Admin.
 - Mức trừ tăng dần theo số lần bị report từng loại:
 
 | Loại report | Lần 1 | Lần 2 | Lần 3 | Lần 4+ |
@@ -230,8 +231,11 @@ Một bài đăng Match có một trong hai luồng: **A — đã có sân** ho�
   - `rater_id`: ID của đội hoặc cá nhân đánh giá
   - `ratee_type`: enum `TEAM` hoặc `INDIVIDUAL` (người được đánh giá là đội hay cá nhân)
   - `ratee_id`: ID của đội hoặc cá nhân được đánh giá
-  - `score`: điểm 1-5
-  - `comment`: bình luận (tùy chọn)
+  - `score`: sao nguyên 1-5; trống khi "không đến" (V9)
+  - `is_no_show`: "đội kia không đến" (V9)
+  - `comment`: bình luận (tùy chọn, ≤ 500 ký tự — V9)
+  - `rater_team_score`, `ratee_team_score`: tỷ số theo góc nhìn bên đánh giá (tùy chọn; V9 đổi tên từ `match_score_home`/`match_score_away`)
+  - `created_by_user_id`: người gửi đánh giá (V9)
   - `created_at`: thời gian đánh giá
 - Chống trùng: unique constraint trên (`match_id`, `rater_type`, `rater_id`, `ratee_type`, `ratee_id`).
 

@@ -1,5 +1,21 @@
 # CHANGELOG — REPUTATION-001 Đánh giá, report, tranh chấp & uy tín đội
 
+## [v2.1] — 2026-11-27
+
+**Type:** MINOR (không đổi endpoint, field, mã thành công, mã lỗi, message) · **Tóm tắt:** Cập nhật tài liệu nội bộ BE cho khớp code sau khi triển khai; không ảnh hưởng FE.
+
+### Thay đổi
+
+| # | Vị trí | Loại | Cũ → Mới | Lý do | FE cần làm gì |
+|---|---|---|---|---|---|
+| 1 | Tài liệu nội bộ BE | Sửa | Cập nhật tài liệu nội bộ BE theo code đã triển khai (tên và vị trí thành phần, chi tiết truy vấn, cấu hình job huy hiệu), không ảnh hưởng FE | Đối chiếu code với thiết kế sau khi triển khai | Không |
+| 2 | Hành vi 2.1 / 2.3 / 2.10 (điểm uy tín) | Sửa | Chuỗi trận sạch khi report gửi gần như cùng lúc với đánh giá hoàn tất trận: trước đây chấp nhận trường hợp hiếm đội bị report vẫn được tính trận sạch → report đã gửi xong trước khi trận chuyển `COMPLETED` → trận không tính sạch; report gửi đồng thời mà lần hoàn tất xử lý trước → tính như report sau `COMPLETED` (`API_Spec.md` §1.3); trừ điểm khi hai report cùng loại đến cùng lúc luôn theo bậc liên tiếp | Sửa lỗi xử lý đồng thời để kết quả khớp quy tắc đã công bố (§1.3); user chọn sửa 2026-11-26 | Không — điểm uy tín ở 2.9 theo đúng quy tắc §1.3 sẵn có |
+| 3 | Header 3 tài liệu thiết kế REPUTATION-001 | Ghi nhận | v2.0 → v2.1 | Đồng bộ phiên bản | Không |
+
+### Ảnh hưởng
+- Không đổi endpoint, field, mã thành công, mã lỗi, message, hình dạng response.
+- Nghiệp vụ / SRS: không đổi — thay đổi #2 làm hệ thống khớp quy tắc chuỗi trận sạch hiện có.
+
 ## [v2.0] — 2026-11-21
 
 **Type:** MAJOR (đổi định dạng mọi giá trị thời gian: bỏ `Z`/offset, giá trị theo giờ Việt Nam) · **Tóm tắt:** Thời gian theo giờ Việt Nam, không kèm múi giờ (SYSTEM-002).

@@ -1,6 +1,8 @@
 // ArenaFlow Database Schema
-// Generated from V1__initial_schema.sql — bảng team, team_member cập nhật tới V4 (USER-002); match, match_venue_option,
-// match_time_option, cost_custom_item, pairing cập nhật tới V8 (MATCH-002); phần còn lại theo migration ghi ở note
+// Generated from V1__initial_schema.sql — bảng team cập nhật tới V9 (V4 giải tán — USER-002, V7 idx_team_disbanded_by,
+// V9 uy tín), team_member tới V4 (USER-002), team_tag bị V2 xoá (không còn); match, match_venue_option,
+// match_time_option, cost_custom_item, pairing cập nhật tới V8 (MATCH-002); rating, report, dispute và cột uy tín của
+// user cập nhật tới V9 (REPUTATION-001); phần còn lại theo migration ghi ở note
 // Cột thời gian: timestamp (không múi giờ) giờ Việt Nam theo V6 (SYSTEM-002); DEFAULT now() AT TIME ZONE 'Asia/Ho_Chi_Minh'
 // Use at: https://dbdiagram.io
 
@@ -37,9 +39,6 @@ Table user {
   district_id uuid [ref: > administrative_unit.id]
   phone_number varchar(20)
   reliability_score integer [not null, default: 80, note: '0-100']
-  total_matches_completed integer [not null, default: 0]
-  total_matches_confirmed integer [not null, default: 0]
-  average_rating decimal(3,2) [note: '1.0-5.0']
   report_count_noshow integer [not null, default: 0]
   report_count_bad_play integer [not null, default: 0]
   report_count_bad_communication integer [not null, default: 0]
@@ -48,6 +47,8 @@ Table user {
   created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
   updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
   deleted_at timestamp
+
+  Note: 'V9 bỏ total_matches_completed, total_matches_confirmed, average_rating (Completion Rate, sao trung bình tính khi đọc)'
 
   indexes {
     (phone_number) [unique, note: 'WHERE deleted_at IS NULL']
@@ -87,18 +88,16 @@ Table team {
   disbanded_by uuid [ref: > user.id, note: 'V4; NOT NULL khi DISBANDED; ON DELETE RESTRICT']
   version bigint [not null, default: 0, note: 'Optimistic lock (V2)']
   reliability_score integer [not null, default: 80, note: '0-100']
-  total_matches_completed integer [not null, default: 0]
-  total_matches_confirmed integer [not null, default: 0]
-  average_rating decimal(3,2) [note: '1.0-5.0']
   report_count_noshow integer [not null, default: 0]
   report_count_bad_play integer [not null, default: 0]
   report_count_bad_communication integer [not null, default: 0]
   report_count_skill_mismatch integer [not null, default: 0]
   clean_streak integer [not null, default: 0]
+  verified_at timestamp [note: 'V9; huy hiệu xác minh — dữ liệu dẫn xuất (NULL = chưa xác minh), chỉ ghi bằng câu refresh có điều kiện']
   created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
   updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
 
-  Note: 'CHECK team_disband_consistency_check: DISBANDED ⇔ disband_reason, disbanded_at, disbanded_by đều NOT NULL (V4)'
+  Note: 'CHECK team_disband_consistency_check: DISBANDED ⇔ disband_reason, disbanded_at, disbanded_by đều NOT NULL (V4). V9 bỏ total_matches_completed, total_matches_confirmed, average_rating (Completion Rate, sao trung bình tính khi đọc)'
 
   indexes {
     created_by
@@ -122,18 +121,6 @@ Table team_member {
     (team_id, user_id) [unique, note: 'idx_team_member_pending_or_active WHERE status IN (PENDING, ACTIVE) (V2)']
     (team_id, role, status)
     (user_id, status)
-  }
-}
-
-Table team_tag {
-  id uuid [pk]
-  team_id uuid [not null, ref: > team.id]
-  tag varchar(50) [not null, note: 'Chill, Nhiệt tình, Máu lửa, etc.']
-  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
-
-  indexes {
-    (team_id, tag) [unique]
-    team_id
   }
 }
 
@@ -381,40 +368,69 @@ Ref pairing_proposed_time: pairing.(match_id, proposed_time_option_id) > match_t
 
 Table rating {
   id uuid [pk]
-  match_id uuid [not null, ref: > match.id]
+  match_id uuid [not null, ref: > match.id, note: 'V9 FK rating_match_fk ON DELETE RESTRICT (V1 thiếu)']
   rater_type varchar(20) [not null, note: 'TEAM, INDIVIDUAL']
-  rater_id uuid [not null, note: 'FK to team or user']
+  rater_id uuid [not null, note: 'ID đội hoặc user (đa hình, không FK)']
   ratee_type varchar(20) [not null, note: 'TEAM, INDIVIDUAL']
-  ratee_id uuid [not null, note: 'FK to team or user']
-  score decimal(2,1) [not null, note: '1.0-5.0']
-  comment text
-  match_score_home integer
-  match_score_away integer
+  ratee_id uuid [not null, note: 'ID đội hoặc user (đa hình, không FK)']
+  score smallint [note: 'V9: DECIMAL(2,1) NOT NULL -> SMALLINT nullable; sao nguyên 1..5, NULL khi is_no_show']
+  is_no_show boolean [not null, default: false, note: 'V9; "đội kia không đến"']
+  comment text [note: 'V9 CHECK: ≤ 500 ký tự']
+  rater_team_score integer [note: 'V9: đổi tên từ match_score_home; tỷ số của bên đánh giá, >= 0']
+  ratee_team_score integer [note: 'V9: đổi tên từ match_score_away; tỷ số của bên được đánh giá, >= 0']
+  created_by_user_id uuid [not null, ref: > user.id, note: 'V9; người gửi; ON DELETE RESTRICT']
   created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
 
+  Note: 'V9 CHECK: rating_score_check (NULL hoặc 1..5), rating_no_show_check (không đến ⇔ không sao, không tỷ số), rating_team_scores_pair_check (hai tỷ số cùng có hoặc cùng NULL), rating_comment_length_check, rating_not_self_check (bên đánh giá ≠ bên được đánh giá); đổi tên rating_match_score_home/away_check → rating_rater/ratee_team_score_check'
+
   indexes {
-    (match_id, rater_type, rater_id, ratee_type, ratee_id) [unique]
-    (ratee_type, ratee_id)
+    (match_id, rater_type, rater_id, ratee_type, ratee_id) [unique, name: 'idx_rating_unique']
+    (ratee_type, ratee_id) [name: 'idx_rating_ratee', note: 'Sao trung bình tính khi đọc (V9)']
   }
 }
 
 Table report {
   id uuid [pk]
-  match_id uuid [not null, ref: > match.id]
+  match_id uuid [not null, ref: > match.id, note: 'V9 FK report_match_fk ON DELETE RESTRICT (V1 thiếu)']
   reporter_type varchar(20) [not null, note: 'TEAM, INDIVIDUAL']
-  reporter_id uuid [not null, note: 'FK to team or user']
+  reporter_id uuid [not null, note: 'ID đội hoặc user (đa hình, không FK)']
   reported_type varchar(20) [not null, note: 'TEAM, INDIVIDUAL']
-  reported_id uuid [not null, note: 'FK to team or user']
+  reported_id uuid [not null, note: 'ID đội hoặc user (đa hình, không FK)']
   report_type varchar(50) [not null, note: 'NOSHOW, BAD_PLAY, BAD_COMMUNICATION, SKILL_MISMATCH']
-  reason text
-  status varchar(20) [not null, default: 'PENDING', note: 'PENDING, CONFIRMED, REJECTED']
-  admin_reviewed_at timestamp
+  reason text [not null, note: 'V9: NOT NULL; CHECK report_reason_length_check 1..1000 ký tự']
+  status varchar(20) [not null, default: 'AUTO_ACCEPTED', note: 'V9: AUTO_ACCEPTED, DISPUTED, CONFIRMED, REJECTED (PENDING cũ → AUTO_ACCEPTED)']
+  reliability_penalty integer [not null, default: 0, note: 'V9; điểm Reliability thực trừ khi report (hoàn đúng số này khi Admin bác); CHECK >= 0']
+  created_by_user_id uuid [not null, ref: > user.id, note: 'V9; người gửi; ON DELETE RESTRICT']
   created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`, note: 'V9']
+
+  Note: 'V9 bỏ admin_reviewed_at; bỏ idx_report_match, idx_report_reported, idx_report_status. CHECK report_not_self_check (bên report ≠ bên bị report)'
 
   indexes {
-    match_id
-    (reported_type, reported_id, report_type)
-    (status, created_at)
+    (match_id, reporter_type, reporter_id, reported_type, reported_id, report_type) [unique, name: 'idx_report_unique', note: 'V9; chống trùng + tra report theo trận (tiền tố match_id thay idx_report_match)']
+    (reported_type, reported_id, created_at, id) [name: 'idx_report_reported_created', note: 'V9; created_at DESC, id DESC — report bên bị report nhận']
+    (reporter_type, reporter_id, created_at, id) [name: 'idx_report_reporter_created', note: 'V9; created_at DESC, id DESC — report bên report đã gửi']
+  }
+}
+
+Table dispute {
+  id uuid [pk]
+  report_id uuid [not null, ref: - report.id, note: 'ON DELETE RESTRICT; 1:1 với report bùng']
+  evidence text [not null, note: 'Phản hồi / bằng chứng của bên bị report; char_length 1..1000']
+  created_by_user_id uuid [not null, ref: > user.id, note: 'Người gửi tranh chấp; ON DELETE RESTRICT']
+  status varchar(20) [not null, default: 'PENDING', note: 'PENDING, RESOLVED']
+  decision varchar(20) [note: 'CONFIRMED, REJECTED — quyết định Admin']
+  resolution_note varchar(500) [note: 'Ghi chú Admin; char_length 1..500']
+  resolved_by_user_id uuid [ref: > user.id, note: 'Admin xử lý; ON DELETE RESTRICT']
+  resolved_at timestamp
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  Note: 'V9. CHECK dispute_resolution_check: PENDING ⇔ decision, resolution_note, resolved_by_user_id, resolved_at đều NULL; RESOLVED ⇔ cả bốn NOT NULL'
+
+  indexes {
+    report_id [unique, name: 'idx_dispute_report', note: 'V9; tối đa một tranh chấp mỗi report']
+    (status, created_at, id) [name: 'idx_dispute_status_created', note: 'V9; hàng chờ / lịch sử Admin']
   }
 }
 
