@@ -47,12 +47,12 @@ Người thực thi kỹ thuật có ràng buộc rõ ràng — không phải as
 
 ### Bước 4 — Kiểm chứng & cập nhật tiến độ
 - Chạy `./mvnw test` liên quan lần cuối (kèm `-Duser.timezone=Asia/Ho_Chi_Minh`) → **dán output**, xác nhận TẤT CẢ PASS. Unit test thuần: `./mvnw -Duser.timezone=Asia/Ho_Chi_Minh -Dtest=<Test> test`, không cần `.env.dev`. Integration test: `. ./.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET && ./mvnw -Duser.timezone=Asia/Ho_Chi_Minh -Dtest=<Test> test` (không in giá trị biến). Còn fail → quay lại sửa; không có `.env.dev` hoặc DB dev không kết nối được → báo blocker, không ghi PASS.
-- Mọi phase đã code xong + test PASS → **`code-reviewer`** trên phần chưa review (`git diff HEAD` + file mới chưa track; nhánh còn commit code chưa review → thêm `git diff origin/main...HEAD`); còn CRITICAL/MAJOR → sửa theo TDD, test lại, review lại phần sửa.
+- Mọi phase đã code xong + test PASS → **subagent `code-reviewer`** (`CLAUDE.md` §8) trên phần chưa review (`git diff HEAD` + file mới chưa track; nhánh còn commit code chưa review → thêm `git diff origin/main...HEAD`); còn CRITICAL/MAJOR → sửa theo TDD, test lại, review lại phần sửa.
 - Sau đó **mới** tự đối chiếu code với design (API/DB/luồng/class) + bảng "Lệch thiết kế" → cập nhật design một lần theo bảng → `architect-reviewer` review phần sửa (bước tổng quan cuối của task).
 - Đối chiếu / review design dẫn tới sửa code → test lại → `code-reviewer` phần sửa. `code-reviewer` luôn là bước cuối cùng trước commit có code.
 - **Sửa chức năng đã có** (sau `code-reviewer`): có ảnh hưởng design → chạy xong **vòng lặp design** (cập nhật design → `architect-reviewer` phần sửa → có sửa code → test + `code-reviewer` phần sửa → lặp tới khi không còn finding được chọn sửa) → **sau đó** mới cập nhật SRS nếu có ảnh hưởng nghiệp vụ; SRS kéo theo sửa design/code → quay lại vòng lặp. Tiêu chí ảnh hưởng: `.claude/AGENTS.md` §1.
 - Chỉ khi test xanh **và** design đã cập nhật (nếu có lệch) mới đổi `status: done`.
-- Mỗi commit có code (kể cả commit giữa chừng) → `code-reviewer` ngay trước commit trên phần chưa review; còn CRITICAL/MAJOR → sửa, review lại phần sửa rồi mới commit. Mọi commit đã qua review → trước push / tạo PR không review lại. Không có code → không review (`CLAUDE.md` §8).
+- Mỗi commit có code (kể cả commit giữa chừng) → subagent `code-reviewer` ngay trước commit trên phần chưa review; còn CRITICAL/MAJOR → sửa, review lại phần sửa rồi mới commit. Mọi commit đã qua review → trước push / tạo PR không review lại. Không có code → không review (`CLAUDE.md` §8).
 
 ## Ràng buộc cứng
 - **NEVER** báo "xong" / tick DoD khi test chưa chạy hoặc còn fail.

@@ -44,12 +44,12 @@
 | Sửa chức năng đã triển khai | `developer` → code & test → `code-reviewer` (nếu có code) → kiểm tra ảnh hưởng → (có ảnh hưởng design) **vòng lặp design**: cập nhật design → `architect-reviewer` phần sửa → có sửa code → test + `code-reviewer` phần sửa → lặp tới khi không còn finding được chọn sửa → **sau đó** cập nhật SRS (nếu có ảnh hưởng nghiệp vụ; SRS kéo theo sửa design/code → quay lại vòng lặp) → commit | bỏ qua cập nhật tài liệu khi có ảnh hưởng; đối chiếu ảnh hưởng trước khi qua `code-reviewer`; cập nhật SRS khi vòng lặp design chưa xong |
 | Debug / lỗi | skill `debug` | đoán nguyên nhân khi chưa reproduce |
 | Review thiết kế | procedure `architect-reviewer` | tự sửa thiết kế |
-| Review code / trước commit | procedure `code-reviewer` (code xong + test PASS; ngay trước **mỗi** commit có code) | commit code chưa qua `code-reviewer` |
+| Review code / trước commit | subagent `code-reviewer` (code xong + test PASS; ngay trước **mỗi** commit có code) | commit code chưa qua `code-reviewer` |
 | Agent lệch quy ước repo (lặp lại) | skill `workflow-adapt` | tự nới guardrail |
 | Hỏi đáp / giải thích / tìm kiếm | xử lý trực tiếp | — |
 
 > Decision tree + cách thực thi: `.claude/AGENTS.md`.
-> Coordinator **tự đọc procedure và thực thi inline** — không yêu cầu user chuyển agent thủ công.
+> Coordinator **tự đọc procedure và thực thi inline** — không yêu cầu user chuyển agent thủ công. Ngoại lệ: `code-reviewer` **luôn chạy bằng subagent** (§8).
 
 ---
 
@@ -147,6 +147,7 @@
   - Trước commit: thay đổi thuộc nhóm khác nhánh hiện tại (vd framework trên nhánh `feature/`) → **NEVER** commit lẫn; tách sang nhánh đúng nhóm (tạo từ `origin/main`), không rõ nhóm → hỏi user.
 - **Merge vào `main` chỉ qua merge request (GitHub Pull Request):** (commit có code: `code-reviewer` ngay trước, xem cổng review ở trên) commit → push nhánh → `gh pr create --base main` → user tự merge trên GitHub **hoặc** yêu cầu agent merge bằng `gh pr merge <số> --squash` (chỉ khi user yêu cầu rõ PR nào; mặc định squash, **không** kèm `--delete-branch`). **NEVER** `git merge` / `git rebase` / `git commit` / `git push` trực tiếp lên `main` local hay `origin/main`. Tạo PR vẫn chỉ khi user yêu cầu.
 - Debug → **MUST** reproduce trước khi nêu nguyên nhân.
+- **`code-reviewer` luôn chạy bằng subagent** (user chốt 2026-11-27): gọi tool `Agent` với `subagent_type: "code-reviewer"`, không `isolation: "worktree"`; **NEVER** review inline trong phiên chính. Prompt chỉ nêu phạm vi diff (mục 0 của procedure) + đường dẫn `current-task.md`; **NEVER** đưa kết luận / lý do của người viết code. Kết quả trả về phiên chính → trình CRITICAL/MAJOR/MINOR cho user chọn sửa.
 - **Subagent chạy trên repo thật** (mặc định, không `isolation: "worktree"`): agent đọc/review (`architect-reviewer`, `code-reviewer`, `Explore`) phải thấy diff chưa commit; agent viết code chạy tuần tự với phiên chính. Chỉ dùng worktree khi user yêu cầu nhiều agent ghi code song song trên phần độc lập — worktree tạo từ commit (không có thay đổi chưa commit) và không có `.env.dev` (test cần DB không chạy được nếu chưa copy). Xong việc → gộp kết quả về rồi `git worktree remove` (không xoá nhánh).
 
 ### NEVER

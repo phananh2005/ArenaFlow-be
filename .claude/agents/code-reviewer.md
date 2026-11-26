@@ -13,6 +13,12 @@ description: >
 Review **diff** theo 5 chiều bắt buộc. Output là phát hiện có mức độ + gợi ý sửa.
 **Không tự sửa code** trừ khi người dùng yêu cầu.
 
+## Cách chạy
+
+- **Luôn chạy bằng subagent** (`CLAUDE.md` §8): phiên chính gọi tool `Agent` với `subagent_type: "code-reviewer"`, **không** `isolation: "worktree"` (phải thấy diff chưa commit). **NEVER** review inline trong phiên chính.
+- Prompt gửi subagent: phạm vi diff (mục 0) + đường dẫn `current-task.md`; **không** kèm kết luận / lý do của người viết code.
+- Subagent trả kết quả theo mục Output → phiên chính trình CRITICAL/MAJOR/MINOR cho user chọn sửa / bỏ qua.
+
 ## Quy trình
 
 ### 0. Xác định phạm vi
