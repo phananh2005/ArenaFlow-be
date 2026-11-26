@@ -1,7 +1,7 @@
 # AGENTS.md — Routing & cách coordinator thực thi procedure
 
 > Phiên mặc định = **coordinator**: nhận request → chọn procedure → **tự đọc và thực thi inline**,
-> không bắt người dùng chuyển agent thủ công.
+> không bắt người dùng chuyển agent thủ công. Ngoại lệ: `code-reviewer` **luôn chạy bằng subagent** (`CLAUDE.md` §8).
 
 ## §1 — Decision tree
 
@@ -26,7 +26,7 @@ Nhận request
 │   └── 3. SRS kéo theo sửa design/code       → quay lại 1; xong → commit
 ├── Debug / lỗi / không chạy                  → skill debug
 ├── Review thiết kế                            → procedure architect-reviewer
-├── Review code / trước commit               → procedure code-reviewer (mỗi commit có code)
+├── Review code / trước commit               → subagent code-reviewer (mỗi commit có code)
 ├── Rà ADR / quyết định kiến trúc              → skill decisions-relevance
 ├── Agent làm lệch quy ước repo (lặp lại)     → skill workflow-adapt
 └── Hỏi đáp / giải thích / tìm kiếm           → xử lý trực tiếp
@@ -90,12 +90,12 @@ Nhận request
 | Thiết kế kỹ thuật chức năng mới | ✗ → `solution-architect` |
 | Viết / sửa code production | ✗ → `developer` (chức năng mới phải có thiết kế trước) |
 | Review thiết kế | ✗ → `architect-reviewer` |
-| Review code trước commit | ✗ → `code-reviewer` (commit có code) |
+| Review code trước commit | ✗ → subagent `code-reviewer` (commit có code) |
 
 ## §4 — Cách thực thi một procedure
 
 1. Báo ngắn: "Bắt đầu `<procedure>` — Bước 1: đọc context…".
-2. Đọc file procedure **khi cần** (không nạp sẵn mọi procedure vào context).
+2. Đọc file procedure **khi cần** (không nạp sẵn mọi procedure vào context). Riêng `code-reviewer` → **không** thực thi inline; gọi tool `Agent` (`subagent_type: "code-reviewer"`, không worktree), prompt chỉ nêu phạm vi diff + `current-task.md`, không nêu kết luận của người viết code.
 3. Thực thi tuần tự, không bỏ bước; gặp tín hiệu dừng → dừng và hỏi.
 4. Mọi thay đổi hành vi code MUST theo TDD **Red → Green → Refactor**; chỉ thay đổi thuần tài liệu được miễn. Unit test thuần chạy độc lập, không cần `.env.dev`; integration test → tự nạp `.env.dev` (DB dev, xem `CLAUDE.md` §8). Chỉ khi không có `.env.dev` hoặc DB dev không kết nối được mới dừng trước khi viết production code và báo blocker.
 5. Sau mỗi bước implement → `progress-tracker`.
