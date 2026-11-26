@@ -2,7 +2,7 @@
 
 > Thiết kế schema PostgreSQL chi tiết từ đặc tả nghiệp vụ trong `data-model.md`
 
-> Cập nhật: 2026-11-25 — đồng bộ V8 (MATCH-002: `match`, `match_venue_option`, `match_time_option`, `cost_custom_item`, `pairing`). 2026-11-25 — đồng bộ V7 (MATCH-001: `match`, `match_request`, `cost_custom_item`, bỏ `chat_message`, thêm `conversation` + `conversation_message`, `idx_team_disbanded_by`). 2026-11-21 — kiểu mọi cột thời gian theo V6 (SYSTEM-002). 2026-11-05 — bảng `team`, `team_member` đồng bộ tới V4 (USER-002)
+> Cập nhật: 2026-11-27 — đồng bộ V9 (REPUTATION-001: `rating`, `report`, thêm `dispute`, `user`/`team` bỏ `total_matches_completed`, `total_matches_confirmed`, `average_rating`, thêm `team.verified_at`). 2026-11-25 — đồng bộ V8 (MATCH-002: `match`, `match_venue_option`, `match_time_option`, `cost_custom_item`, `pairing`). 2026-11-25 — đồng bộ V7 (MATCH-001: `match`, `match_request`, `cost_custom_item`, bỏ `chat_message`, thêm `conversation` + `conversation_message`, `idx_team_disbanded_by`). 2026-11-21 — kiểu mọi cột thời gian theo V6 (SYSTEM-002). 2026-11-05 — bảng `team`, `team_member` đồng bộ tới V4 (USER-002)
 
 ## Conventions
 
@@ -34,9 +34,6 @@ Lưu tài khoản và hồ sơ cá nhân.
 | district_id | UUID | NULL | FK → administrative_unit, cấp phường/xã |
 | phone_number | VARCHAR(20) | NULL | Số điện thoại (OAuth Phone) |
 | reliability_score | INTEGER | NOT NULL | Điểm uy tín 0-100, default 80 |
-| total_matches_completed | INTEGER | NOT NULL | Tổng số trận hoàn thành, default 0 |
-| total_matches_confirmed | INTEGER | NOT NULL | Tổng số trận đã confirmed (mẫu số Completion Rate), default 0 |
-| average_rating | DECIMAL(3,2) | NULL | Rating trung bình 1.00-5.00 |
 | report_count_noshow | INTEGER | NOT NULL | Số lần bị report bùng, default 0 |
 | report_count_bad_play | INTEGER | NOT NULL | Số lần bị report chơi xấu, default 0 |
 | report_count_bad_communication | INTEGER | NOT NULL | Số lần bị report giao tiếp tệ, default 0 |
@@ -54,13 +51,13 @@ Lưu tài khoản và hồ sơ cá nhân.
 
 **Constraints:**
 - CHECK (reliability_score >= 0 AND reliability_score <= 100)
-- CHECK (average_rating IS NULL OR (average_rating >= 1.0 AND average_rating <= 5.0))
-- CHECK (total_matches_completed <= total_matches_confirmed)
 - CHECK (report_count_noshow >= 0)
 - CHECK (report_count_bad_play >= 0)
 - CHECK (report_count_bad_communication >= 0)
 - CHECK (report_count_skill_mismatch >= 0)
 - CHECK (clean_streak >= 0)
+
+V9 bỏ `total_matches_completed`, `total_matches_confirmed`, `average_rating` (cùng CHECK của chúng): Completion Rate và sao trung bình tính khi đọc từ `match`/`rating`/`report`, không lưu bộ đếm.
 
 ### 1.2 Bảng: oauth_account
 
@@ -126,14 +123,12 @@ Danh mục hành chính Việt Nam (tỉnh/quận/phường).
 | disbanded_by | UUID | NULL | FK → user, người giải tán (V4) |
 | version | BIGINT | NOT NULL | Optimistic lock, default 0 (V2) |
 | reliability_score | INTEGER | NOT NULL | Điểm uy tín đội 0-100, default 80 |
-| total_matches_completed | INTEGER | NOT NULL | default 0 |
-| total_matches_confirmed | INTEGER | NOT NULL | default 0 |
-| average_rating | DECIMAL(3,2) | NULL | Rating trung bình 1.00-5.00 |
 | report_count_noshow | INTEGER | NOT NULL | default 0 |
 | report_count_bad_play | INTEGER | NOT NULL | default 0 |
 | report_count_bad_communication | INTEGER | NOT NULL | default 0 |
 | report_count_skill_mismatch | INTEGER | NOT NULL | default 0 |
 | clean_streak | INTEGER | NOT NULL | default 0 |
+| verified_at | TIMESTAMP | NULL | Huy hiệu xác minh (V9) — dữ liệu dẫn xuất: NOT NULL = đang xác minh (thời điểm bắt đầu đạt), NULL = chưa; chỉ ghi bằng câu refresh có điều kiện (sau commit + job đối soát hằng ngày) |
 | created_at | TIMESTAMP | NOT NULL | |
 | updated_at | TIMESTAMP | NOT NULL | |
 
@@ -151,6 +146,8 @@ Danh mục hành chính Việt Nam (tỉnh/quận/phường).
 - `team_status_check`: CHECK (status IN ('ACTIVE', 'INACTIVE', 'DISBANDED')) (V4)
 - `team_disband_consistency_check` (V4): `DISBANDED` ⇔ `disband_reason`, `disbanded_at`, `disbanded_by` đều NOT NULL; trạng thái khác ⇔ cả ba NULL
 - CHECK (reliability_score >= 0 AND reliability_score <= 100)
+
+V9 bỏ `total_matches_completed`, `total_matches_confirmed`, `average_rating` (cùng CHECK của chúng): Completion Rate và sao trung bình tính khi đọc, không lưu bộ đếm.
 
 ### 2.2 Bảng: team_member
 
@@ -184,7 +181,9 @@ Quan hệ nhiều-nhiều user-team với vai trò.
 - CHECK (joined_at IS NULL OR joined_at >= invited_at)
 - CHECK (left_at IS NULL OR left_at >= COALESCE(joined_at, invited_at))
 
-### 2.3 Bảng: team_tag
+### 2.3 Bảng: team_tag (V2 xoá — chỉ giữ lịch sử)
+
+> V2 (USER-001) `DROP TABLE team_tag`; nhãn kỹ năng đội lưu ở `team.skill_levels`. Mô tả dưới là thiết kế V1, không còn trong schema.
 
 Tags/skill levels của đội (tối đa 3 trong 9 nhãn).
 
@@ -490,58 +489,117 @@ INSERT INTO sport (name, is_active) VALUES ('Bóng đá', TRUE);
 | Cột | Kiểu | Nullable | Mô tả |
 |---|---|---|---|
 | id | UUID | NOT NULL | PK |
-| match_id | UUID | NOT NULL | FK → match |
+| match_id | UUID | NOT NULL | FK → match (V9 thêm FK) |
 | rater_type | VARCHAR(20) | NOT NULL | TEAM, INDIVIDUAL |
 | rater_id | UUID | NOT NULL | ID của team hoặc user đánh giá |
 | ratee_type | VARCHAR(20) | NOT NULL | TEAM, INDIVIDUAL |
 | ratee_id | UUID | NOT NULL | ID của team hoặc user được đánh giá |
-| score | DECIMAL(2,1) | NOT NULL | Điểm 1.0 - 5.0 |
-| comment | TEXT | NULL | Bình luận |
-| match_score_home | INTEGER | NULL | Tỷ số (tùy chọn, chỉ lưu kỷ niệm) |
-| match_score_away | INTEGER | NULL | |
+| score | SMALLINT | NULL | Sao nguyên 1..5; NULL khi `is_no_show` (V9: DECIMAL(2,1) NOT NULL → SMALLINT nullable) |
+| is_no_show | BOOLEAN | NOT NULL | "Đội kia không đến", default FALSE (V9) |
+| comment | TEXT | NULL | Bình luận, ≤ 500 ký tự (V9 CHECK) |
+| rater_team_score | INTEGER | NULL | Tỷ số của bên đánh giá (tùy chọn, chỉ lưu kỷ niệm; V9 đổi tên từ `match_score_home`) |
+| ratee_team_score | INTEGER | NULL | Tỷ số của bên được đánh giá (V9 đổi tên từ `match_score_away`) |
+| created_by_user_id | UUID | NOT NULL | FK → user, người gửi đánh giá (V9) |
 | created_at | TIMESTAMP | NOT NULL | |
 
 **Indexes:**
 - PRIMARY KEY (id)
-- UNIQUE (match_id, rater_type, rater_id, ratee_type, ratee_id) -- chống đánh giá trùng
-- INDEX (ratee_type, ratee_id) -- aggregate rating cho team/user
+- `idx_rating_unique` UNIQUE (match_id, rater_type, rater_id, ratee_type, ratee_id) -- chống đánh giá trùng; tra đánh giá theo trận
+- `idx_rating_ratee` INDEX (ratee_type, ratee_id) -- sao trung bình của team/user (tính khi đọc, V9)
+
+**Foreign Keys:**
+- `rating_match_fk` FOREIGN KEY (match_id) REFERENCES match(id) ON DELETE RESTRICT (V9 — V1 thiếu)
+- FOREIGN KEY (created_by_user_id) REFERENCES "user"(id) ON DELETE RESTRICT (V9)
+- `rater_id`, `ratee_id` đa hình (TEAM/INDIVIDUAL) → không FK
 
 **Constraints:**
 - CHECK (rater_type IN ('TEAM', 'INDIVIDUAL'))
 - CHECK (ratee_type IN ('TEAM', 'INDIVIDUAL'))
-- CHECK (score >= 1.0 AND score <= 5.0)
-- CHECK (match_score_home IS NULL OR match_score_home >= 0)
-- CHECK (match_score_away IS NULL OR match_score_away >= 0)
+- `rating_score_check` (V9, thay CHECK 1.0–5.0 của V1): CHECK (score IS NULL OR score BETWEEN 1 AND 5)
+- `rating_rater_team_score_check` (V9 đổi tên từ `rating_match_score_home_check`): CHECK (rater_team_score IS NULL OR rater_team_score >= 0)
+- `rating_ratee_team_score_check` (V9 đổi tên từ `rating_match_score_away_check`): CHECK (ratee_team_score IS NULL OR ratee_team_score >= 0)
+- `rating_no_show_check` (V9): CHECK ((is_no_show AND score IS NULL AND rater_team_score IS NULL AND ratee_team_score IS NULL) OR (NOT is_no_show AND score IS NOT NULL))
+- `rating_team_scores_pair_check` (V9): CHECK ((rater_team_score IS NULL) = (ratee_team_score IS NULL))
+- `rating_comment_length_check` (V9): CHECK (comment IS NULL OR char_length(comment) <= 500)
+- `rating_not_self_check` (V9): CHECK (NOT (rater_type = ratee_type AND rater_id = ratee_id))
 
 ### 4.2 Bảng: report
 
-Report hành vi xấu (4 loại).
+Report hành vi xấu (4 loại). Trạng thái (V9): `AUTO_ACCEPTED` khi gửi (trừ điểm ngay) → report bùng bị phản hồi trong 24 giờ: `DISPUTED` → Admin quyết định `CONFIRMED` / `REJECTED`. Report bùng `AUTO_ACCEPTED` quá 24 giờ hiển thị là `CONFIRMED` (tính khi đọc, không ghi DB).
 
 | Cột | Kiểu | Nullable | Mô tả |
 |---|---|---|---|
 | id | UUID | NOT NULL | PK |
-| match_id | UUID | NOT NULL | FK → match |
+| match_id | UUID | NOT NULL | FK → match (V9 thêm FK) |
 | reporter_type | VARCHAR(20) | NOT NULL | TEAM, INDIVIDUAL |
 | reporter_id | UUID | NOT NULL | ID của team/user report |
 | reported_type | VARCHAR(20) | NOT NULL | TEAM, INDIVIDUAL |
 | reported_id | UUID | NOT NULL | ID của team/user bị report |
 | report_type | VARCHAR(50) | NOT NULL | NOSHOW, BAD_PLAY, BAD_COMMUNICATION, SKILL_MISMATCH |
-| reason | TEXT | NULL | Lý do |
-| status | VARCHAR(20) | NOT NULL | PENDING, CONFIRMED, REJECTED |
-| admin_reviewed_at | TIMESTAMP | NULL | Admin xem xét (chỉ cho tranh chấp bùng) |
+| reason | TEXT | NOT NULL | Lý do, 1..1000 ký tự (V9: NOT NULL) |
+| status | VARCHAR(20) | NOT NULL | `AUTO_ACCEPTED` (default), `DISPUTED`, `CONFIRMED`, `REJECTED` (V9; `PENDING` cũ chuyển `AUTO_ACCEPTED`) |
+| reliability_penalty | INTEGER | NOT NULL | Điểm Reliability thực trừ khi report, ≥ 0, default 0 — Admin bác thì hoàn đúng số này (V9) |
+| created_by_user_id | UUID | NOT NULL | FK → user, người gửi report (V9) |
 | created_at | TIMESTAMP | NOT NULL | |
+| updated_at | TIMESTAMP | NOT NULL | (V9) |
+
+V9 bỏ `admin_reviewed_at` (V1): kết quả xử lý tranh chấp lưu ở `dispute` (§4.3).
 
 **Indexes:**
 - PRIMARY KEY (id)
-- INDEX (match_id)
-- INDEX (reported_type, reported_id, report_type) -- đếm số lần bị report từng loại
-- INDEX (status, created_at) -- admin queue
+- `idx_report_unique` UNIQUE (match_id, reporter_type, reporter_id, reported_type, reported_id, report_type) (V9) -- chống trùng; tra report theo trận (tiền tố `match_id` thay `idx_report_match`)
+- `idx_report_reported_created` INDEX (reported_type, reported_id, created_at DESC, id DESC) (V9) -- danh sách report bên bị report nhận
+- `idx_report_reporter_created` INDEX (reporter_type, reporter_id, created_at DESC, id DESC) (V9) -- danh sách report bên report đã gửi
+- (V9 bỏ `idx_report_match`, `idx_report_reported`, `idx_report_status` — không còn truy vấn lọc theo trạng thái report)
+
+**Foreign Keys:**
+- `report_match_fk` FOREIGN KEY (match_id) REFERENCES match(id) ON DELETE RESTRICT (V9 — V1 thiếu)
+- FOREIGN KEY (created_by_user_id) REFERENCES "user"(id) ON DELETE RESTRICT (V9)
+- `reporter_id`, `reported_id` đa hình (TEAM/INDIVIDUAL) → không FK
 
 **Constraints:**
 - CHECK (reporter_type IN ('TEAM', 'INDIVIDUAL'))
 - CHECK (reported_type IN ('TEAM', 'INDIVIDUAL'))
 - CHECK (report_type IN ('NOSHOW', 'BAD_PLAY', 'BAD_COMMUNICATION', 'SKILL_MISMATCH'))
-- CHECK (status IN ('PENDING', 'CONFIRMED', 'REJECTED'))
+- `report_status_check` (V9): CHECK (status IN ('AUTO_ACCEPTED', 'DISPUTED', 'CONFIRMED', 'REJECTED'))
+- `report_reason_length_check` (V9): CHECK (char_length(reason) BETWEEN 1 AND 1000)
+- CHECK (reliability_penalty >= 0) (V9)
+- `report_not_self_check` (V9): CHECK (NOT (reporter_type = reported_type AND reporter_id = reported_id))
+
+### 4.3 Bảng: dispute
+
+Tranh chấp report bùng (V9): bên bị report gửi phản hồi trong 24 giờ, Admin quyết định. 1:1 với report.
+
+| Cột | Kiểu | Nullable | Mô tả |
+|---|---|---|---|
+| id | UUID | NOT NULL | PK |
+| report_id | UUID | NOT NULL | FK → report |
+| evidence | TEXT | NOT NULL | Phản hồi / bằng chứng của bên bị report, 1..1000 ký tự |
+| created_by_user_id | UUID | NOT NULL | FK → user, người gửi tranh chấp |
+| status | VARCHAR(20) | NOT NULL | `PENDING` (default), `RESOLVED` |
+| decision | VARCHAR(20) | NULL | `CONFIRMED`, `REJECTED` — quyết định Admin |
+| resolution_note | VARCHAR(500) | NULL | Ghi chú Admin, 1..500 ký tự |
+| resolved_by_user_id | UUID | NULL | FK → user, Admin xử lý |
+| resolved_at | TIMESTAMP | NULL | Thời điểm Admin xử lý |
+| created_at | TIMESTAMP | NOT NULL | |
+| updated_at | TIMESTAMP | NOT NULL | |
+
+**Indexes:**
+- PRIMARY KEY (id)
+- `idx_dispute_report` UNIQUE (report_id) -- tối đa một tranh chấp mỗi report
+- `idx_dispute_status_created` INDEX (status, created_at, id) -- hàng chờ Admin (`PENDING` đọc xuôi, `RESOLVED` đọc ngược)
+
+**Foreign Keys:**
+- FOREIGN KEY (report_id) REFERENCES report(id) ON DELETE RESTRICT
+- FOREIGN KEY (created_by_user_id) REFERENCES "user"(id) ON DELETE RESTRICT
+- FOREIGN KEY (resolved_by_user_id) REFERENCES "user"(id) ON DELETE RESTRICT
+
+**Constraints:**
+- CHECK (char_length(evidence) BETWEEN 1 AND 1000)
+- CHECK (status IN ('PENDING', 'RESOLVED'))
+- CHECK (decision IN ('CONFIRMED', 'REJECTED'))
+- CHECK (resolution_note IS NULL OR char_length(resolution_note) BETWEEN 1 AND 500)
+- `dispute_resolution_check`: CHECK ((status = 'PENDING' AND decision IS NULL AND resolution_note IS NULL AND resolved_by_user_id IS NULL AND resolved_at IS NULL) OR (status = 'RESOLVED' AND decision IS NOT NULL AND resolution_note IS NOT NULL AND resolved_by_user_id IS NOT NULL AND resolved_at IS NOT NULL))
 
 ---
 
@@ -816,9 +874,9 @@ Thông báo in-app.
 ### 8.1 Tổng số bảng: 24 bảng
 
 **User & Auth (3):** user, oauth_account, administrative_unit  
-**Team (4):** team, team_member, team_tag, team_captain_history  
-**Match & Pairing (8):** match, match_venue_option, match_time_option, cost_custom_item, match_request, pairing, sport  
-**Rating & Report (2):** rating, report  
+**Team (3):** team, team_member, team_captain_history (`team_tag` V2 xoá)  
+**Match & Pairing (7):** match, match_venue_option, match_time_option, cost_custom_item, match_request, pairing, sport  
+**Rating & Report (3):** rating, report, dispute  
 **Venue (3):** venue, venue_image, venue_report  
 **Mercenary (2):** mercenary_recruitment, mercenary_application  
 **Chat & Notification (3):** conversation, conversation_message, notification
@@ -836,6 +894,8 @@ Các indexes đã được thiết kế để hỗ trợ:
 
 - Tối đa một request ACCEPTED mỗi Match (unique index `idx_match_request_accepted WHERE status = 'ACCEPTED'`, V7)
 - Tối đa một pairing CONFIRMED mỗi Match (unique index `idx_pairing_confirmed WHERE status = 'CONFIRMED'`, V8; thắng race = lần hoàn tất commit trước)
+- Tối đa một report mỗi (trận, bên report, bên bị report, loại) (unique index `idx_report_unique`, V9)
+- Tối đa một tranh chấp mỗi report (unique index `idx_dispute_report`, V9)
 - Một đội chỉ một captain ACTIVE (unique constraint trên team_member)
 - Tối đa 5 ảnh mỗi venue (xử lý ở application layer)
 - Một venue chỉ một ảnh primary (unique constraint WHERE is_primary)
