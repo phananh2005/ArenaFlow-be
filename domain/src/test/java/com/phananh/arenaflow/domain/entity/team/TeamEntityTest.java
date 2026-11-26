@@ -42,8 +42,17 @@ class TeamEntityTest {
     @Test
     void reputationColumnsAreNeverWrittenByDirtyChecking() {
         for (String field : List.of("reliabilityScore", "cleanStreak", "reportCountNoshow", "reportCountBadPlay",
-                "reportCountBadCommunication", "reportCountSkillMismatch")) {
+                "reportCountBadCommunication", "reportCountSkillMismatch", "verifiedAt")) {
             assertThat(ColumnMapping.column(Team.class, field).updatable()).as(field).isFalse();
+        }
+        assertThat(ColumnMapping.column(Team.class, "verifiedAt").insertable()).isFalse();
+        assertThat(ColumnMapping.column(Team.class, "verifiedAt").name()).isEqualTo("verified_at");
+    }
+
+    @Test
+    void derivedMatchCountersAndAverageRatingAreRemoved() {
+        for (String field : List.of("totalMatchesCompleted", "totalMatchesConfirmed", "averageRating")) {
+            assertThat(ColumnMapping.hasField(Team.class, field)).as(field).isFalse();
         }
     }
 

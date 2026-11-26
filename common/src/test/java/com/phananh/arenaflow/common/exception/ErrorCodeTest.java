@@ -95,6 +95,25 @@ class ErrorCodeTest {
     }
 
     @Test
+    void ratingReportAndDisputeErrorsUseApiStatusAndMessage() {
+        assertThat(ErrorCode.RATING_001.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(ErrorCode.RATING_002.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(ErrorCode.RATING_003.getMessage())
+                .isEqualTo("Bạn là đội trưởng của cả hai đội, không thể đánh giá trận này");
+        assertThat(ErrorCode.REPORT_001.getHttpStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(ErrorCode.REPORT_004.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(ErrorCode.REPORT_004.getMessage()).isEqualTo("Bạn đã report đội này với loại này trong trận");
+        assertThat(ErrorCode.REPORT_007.getMessage()).isEqualTo("Đã quá hạn 24 giờ để tranh chấp");
+        assertThat(ErrorCode.REPORT_008.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(ErrorCode.REPORT_009.getHttpStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(ErrorCode.REPORT_010.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(ErrorCode.REPORT_011.getMessage()).isEqualTo("Cuộc trò chuyện này không report theo cách này");
+        assertThat(ErrorCode.DISPUTE_001.getHttpStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(ErrorCode.DISPUTE_002.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(ErrorCode.DISPUTE_002.getMessage()).isEqualTo("Tranh chấp đã được xử lý");
+    }
+
+    @Test
     void disbandedTeamAndCaptainAccountDeletionErrors() {
         assertThat(ErrorCode.TEAM_016.getCode()).isEqualTo("TEAM_016");
         assertThat(ErrorCode.TEAM_016.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);

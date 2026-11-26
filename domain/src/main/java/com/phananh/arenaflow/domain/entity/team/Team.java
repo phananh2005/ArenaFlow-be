@@ -11,7 +11,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -79,17 +78,6 @@ public class Team {
     @Builder.Default
     private Integer reliabilityScore = 80;
 
-    @Column(name = "total_matches_completed", nullable = false)
-    @Builder.Default
-    private Integer totalMatchesCompleted = 0;
-
-    @Column(name = "total_matches_confirmed", nullable = false)
-    @Builder.Default
-    private Integer totalMatchesConfirmed = 0;
-
-    @Column(name = "average_rating", precision = 3, scale = 2)
-    private BigDecimal averageRating;
-
     @Column(name = "report_count_noshow", nullable = false, updatable = false)
     @Builder.Default
     private Integer reportCountNoshow = 0;
@@ -109,6 +97,10 @@ public class Team {
     @Column(name = "clean_streak", nullable = false, updatable = false)
     @Builder.Default
     private Integer cleanStreak = 0;
+
+    /** Thời điểm cấp huy hiệu xác minh gần nhất; null = không có. Chỉ câu refresh huy hiệu có điều kiện ghi cột này. */
+    @Column(name = "verified_at", insertable = false, updatable = false)
+    private LocalDateTime verifiedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Setter(AccessLevel.NONE)

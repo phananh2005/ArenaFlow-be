@@ -6,6 +6,8 @@ import com.phananh.arenaflow.domain.projection.MatchAvailabilityView;
 import com.phananh.arenaflow.domain.projection.DueMatchView;
 import com.phananh.arenaflow.domain.projection.MatchDetailView;
 import com.phananh.arenaflow.domain.projection.MatchSummaryView;
+import com.phananh.arenaflow.domain.projection.RatingContextView;
+import com.phananh.arenaflow.domain.projection.ReportContextView;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -308,4 +310,68 @@ public interface MatchRepository extends JpaRepository<Match, UUID>, MatchReposi
                        @Param("venueAmount") Long venueAmount, @Param("drinksAmount") Long drinksAmount,
                        @Param("depositAmount") Long depositAmount, @Param("depositHolder") String depositHolder,
                        @Param("now") LocalDateTime now);
+
+    /**
+     * Ngữ cảnh gửi đánh giá trong một câu: trận, trạng thái hai đội, người gọi là đội trưởng ACTIVE của phía nào, mỗi
+     * phía đã gửi đánh giá đội ↔ đội chưa. Rỗng = không có trận.
+     */
+    @Query(value = """
+            SELECT m.id AS matchId, m.status AS status,
+                   m.author_team_id AS authorTeamId, m.confirmed_opponent_team_id AS opponentTeamId,
+                   ta.status AS authorTeamStatus, tb.status AS opponentTeamStatus,
+                   EXISTS (SELECT 1 FROM team_member cm WHERE cm.team_id = m.author_team_id AND cm.user_id = :callerId
+                           AND cm.role = 'CAPTAIN' AND cm.status = 'ACTIVE') AS callerAuthorCaptain,
+                   EXISTS (SELECT 1 FROM team_member cm WHERE cm.team_id = m.confirmed_opponent_team_id
+                           AND cm.user_id = :callerId AND cm.role = 'CAPTAIN' AND cm.status = 'ACTIVE') AS callerOpponentCaptain,
+                   EXISTS (SELECT 1 FROM rating r WHERE r.match_id = m.id AND r.rater_type = 'TEAM'
+                           AND r.rater_id = m.author_team_id) AS authorRated,
+                   EXISTS (SELECT 1 FROM rating r WHERE r.match_id = m.id AND r.rater_type = 'TEAM'
+                           AND r.rater_id = m.confirmed_opponent_team_id) AS opponentRated
+            FROM match m
+            JOIN team ta ON ta.id = m.author_team_id
+            LEFT JOIN team tb ON tb.id = m.confirmed_opponent_team_id
+            WHERE m.id = :matchId
+            """, nativeQuery = true)
+    Optional<RatingContextView> findRatingContext(@Param("matchId") UUID matchId, @Param("callerId") UUID callerId);
+
+    /**
+     * Ngữ cảnh gửi report sau trận trong một câu: như ngữ cảnh đánh giá + giờ bắt đầu, tên / ảnh hai đội và mỗi phía đã
+     * report phía kia loại {@code reportType} chưa (tiền tố index chống trùng report).
+     */
+    @Query(value = """
+            SELECT m.id AS matchId, m.status AS status, m.match_start_time AS matchStartTime,
+                   m.author_team_id AS authorTeamId, m.confirmed_opponent_team_id AS opponentTeamId,
+                   ta.status AS authorTeamStatus, tb.status AS opponentTeamStatus,
+                   ta.name AS authorTeamName, ta.avatar_url AS authorTeamAvatarUrl,
+                   tb.name AS opponentTeamName, tb.avatar_url AS opponentTeamAvatarUrl,
+                   EXISTS (SELECT 1 FROM team_member cm WHERE cm.team_id = m.author_team_id AND cm.user_id = :callerId
+                           AND cm.role = 'CAPTAIN' AND cm.status = 'ACTIVE') AS callerAuthorCaptain,
+                   EXISTS (SELECT 1 FROM team_member cm WHERE cm.team_id = m.confirmed_opponent_team_id
+                           AND cm.user_id = :callerId AND cm.role = 'CAPTAIN' AND cm.status = 'ACTIVE') AS callerOpponentCaptain,
+                   EXISTS (SELECT 1 FROM report r WHERE r.match_id = m.id
+                           AND r.reporter_type = 'TEAM' AND r.reporter_id = m.author_team_id
+                           AND r.reported_type = 'TEAM' AND r.reported_id = m.confirmed_opponent_team_id
+                           AND r.report_type = CAST(:reportType AS varchar)) AS authorReportedType,
+                   EXISTS (SELECT 1 FROM report r WHERE r.match_id = m.id
+                           AND r.reporter_type = 'TEAM' AND r.reporter_id = m.confirmed_opponent_team_id
+                           AND r.reported_type = 'TEAM' AND r.reported_id = m.author_team_id
+                           AND r.report_type = CAST(:reportType AS varchar)) AS opponentReportedType
+            FROM match m
+            JOIN team ta ON ta.id = m.author_team_id
+            LEFT JOIN team tb ON tb.id = m.confirmed_opponent_team_id
+            WHERE m.id = :matchId
+            """, nativeQuery = true)
+    Optional<ReportContextView> findReportContext(@Param("matchId") UUID matchId, @Param("callerId") UUID callerId,
+                                                  @Param("reportType") String reportType);
+
+    /**
+     * ARCHIVED → COMPLETED có điều kiện, tăng {@code version} như mọi câu bulk trên kèo. 0 dòng = đội kia vừa hoàn tất
+     * trận trước (READ COMMITTED đánh giá lại điều kiện sau khi chờ khoá dòng) — không phải xung đột.
+     */
+    @Modifying
+    @Query(value = """
+            UPDATE match SET status = 'COMPLETED', version = version + 1, updated_at = :now
+            WHERE id = :id AND status = 'ARCHIVED'
+            """, nativeQuery = true)
+    int completeIfArchived(@Param("id") UUID matchId, @Param("now") LocalDateTime now);
 }

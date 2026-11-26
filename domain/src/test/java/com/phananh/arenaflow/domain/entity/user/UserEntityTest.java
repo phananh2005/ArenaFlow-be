@@ -37,6 +37,13 @@ class UserEntityTest {
     }
 
     @Test
+    void derivedMatchCountersAndAverageRatingAreRemoved() {
+        for (String field : List.of("totalMatchesCompleted", "totalMatchesConfirmed", "averageRating")) {
+            assertThat(ColumnMapping.hasField(User.class, field)).as(field).isFalse();
+        }
+    }
+
+    @Test
     void whenSetWardId_thenAcceptsUUID() {
         User user = User.builder().build();
         UUID wardId = UUID.randomUUID();

@@ -28,9 +28,10 @@ class VietnamLocalDatetimeMigrationTest {
     private static final String VIETNAM_DEFAULT = "AT TIME ZONE 'Asia/Ho_Chi_Minh'";
     /**
      * Cột bị migration sau xoá: bảng chat_message (thay bằng conversation / conversation_message), cột chốt giờ cũ
-     * của match.
+     * của match, giờ Admin duyệt cũ của report (thay bằng tranh chấp).
      */
-    private static final Set<String> DROPPED_AFTER_V6 = Set.of("chat_message.created_at", "match.confirmed_match_time");
+    private static final Set<String> DROPPED_AFTER_V6 = Set.of("chat_message.created_at", "match.confirmed_match_time",
+            "report.admin_reviewed_at");
     /** 22 bảng V6 đổi; loại flyway_schema_history (installed_on do Flyway quản lý). */
     private static final String V6_TABLES = V6TimestampColumns.COLUMNS.keySet().stream()
             .map(table -> "'" + table + "'")
