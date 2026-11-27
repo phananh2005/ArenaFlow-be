@@ -4,6 +4,7 @@ import com.phananh.arenaflow.domain.entity.team.Team;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
+import com.phananh.arenaflow.domain.projection.TeamCaptainContextView;
 import com.phananh.arenaflow.domain.repository.TeamMemberRepository;
 import com.phananh.arenaflow.domain.repository.TeamRepository;
 import lombok.RequiredArgsConstructor;
@@ -83,6 +84,36 @@ public class TeamGuard {
                 .filter(Team.TeamStatus.DISBANDED.name()::equals)
                 .isPresent();
         return new BusinessException(disbanded ? ErrorCode.TEAM_016 : fallback);
+    }
+
+    /**
+     * Một truy vấn: TEAM_001 → TEAM_016 → TEAM_015 → TEAM_002. Trả dữ liệu đã đọc (tên/ảnh/điểm đội, tên người gọi).
+     */
+    public TeamCaptainContextView requireActiveCaptain(UUID teamId, UUID userId) {
+        TeamCaptainContextView ctx = teamRepository.findCaptainContext(teamId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_001));
+        if (Team.TeamStatus.DISBANDED.name().equals(ctx.getStatus())) {
+            throw new BusinessException(ErrorCode.TEAM_016);
+        }
+        if (Team.TeamStatus.INACTIVE.name().equals(ctx.getStatus())) {
+            throw new BusinessException(ErrorCode.TEAM_015);
+        }
+        if (!Boolean.TRUE.equals(ctx.getCaptain())) {
+            throw new BusinessException(ErrorCode.TEAM_002);
+        }
+        return ctx;
+    }
+
+    /** Một truy vấn: TEAM_001 → TEAM_016 → TEAM_002; đội INACTIVE được. */
+    public void requireCaptainAllowInactive(UUID teamId, UUID userId) {
+        TeamCaptainContextView ctx = teamRepository.findCaptainContext(teamId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_001));
+        if (Team.TeamStatus.DISBANDED.name().equals(ctx.getStatus())) {
+            throw new BusinessException(ErrorCode.TEAM_016);
+        }
+        if (!Boolean.TRUE.equals(ctx.getCaptain())) {
+            throw new BusinessException(ErrorCode.TEAM_002);
+        }
     }
 
     /** Caller phải là captain ACTIVE của đội. */

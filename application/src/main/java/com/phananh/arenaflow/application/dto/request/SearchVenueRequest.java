@@ -1,6 +1,7 @@
 package com.phananh.arenaflow.application.dto.request;
 
 import com.phananh.arenaflow.application.service.VenueStatusFilter;
+import com.phananh.arenaflow.application.validation.GeoQuery;
 import com.phananh.arenaflow.application.validation.ValidGeoQuery;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -19,7 +20,7 @@ public record SearchVenueRequest(
         @DecimalMin("-180") @DecimalMax("180") @Digits(integer = 3, fraction = 7) BigDecimal lng,
         @DecimalMin("0.1") @DecimalMax("50") BigDecimal radiusKm,
         @Min(1) Integer page,
-        @Min(1) @Max(100) Integer pageSize) {
+        @Min(1) @Max(100) Integer pageSize) implements GeoQuery {
 
     public SearchVenueRequest {
         q = q == null ? null : q.trim();

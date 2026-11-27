@@ -14,6 +14,7 @@ import com.phananh.arenaflow.domain.repository.TeamMemberRepository;
 import com.phananh.arenaflow.domain.repository.UserRepository;
 import com.phananh.arenaflow.domain.projection.ProfileView;
 import com.phananh.arenaflow.application.service.ProfileService;
+import com.phananh.arenaflow.application.support.mercenary.MercenaryAccountCleanup;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,7 @@ public class ProfileServiceImpl implements ProfileService {
     private final TeamMemberRepository teamMemberRepository;
     private final ConcurrencyConflictRetrier concurrencyConflictRetrier;
     private final ProfileMapper profileMapper;
+    private final MercenaryAccountCleanup mercenaryAccountCleanup;
     private final Clock clock;
 
     @Override
@@ -72,9 +74,11 @@ public class ProfileServiceImpl implements ProfileService {
      *       row này (accept, transfer cho/khỏi user…) phải chờ tới khi transaction kết thúc.</li>
      *   <li>Còn là captain ACTIVE trên dữ liệu đã khoá → {@code 422 USER_003}, rollback, không ghi gì.</li>
      *   <li>Q2 một bulk UPDATE: MEMBER ACTIVE → LEFT, PENDING → REJECTED.</li>
-     *   <li>Q3 soft delete user.</li>
+     *   <li>Q3–Q4 rút mọi đơn mercenary PENDING/APPROVED của trận chưa bắt đầu (bớt số đã duyệt của tin trước, rồi
+     *       đơn); không trừ điểm.</li>
+     *   <li>Q5 soft delete user.</li>
      * </ol>
-     * 3 truy vấn. Không đổi trạng thái đội. Gọi lại khi đã xoá: không lỗi (idempotent).
+     * 5 truy vấn. Không đổi trạng thái đội. Gọi lại khi đã xoá: không lỗi (idempotent).
      */
     @Override
     public void deleteAccount(UUID userId) {
@@ -86,6 +90,8 @@ public class ProfileServiceImpl implements ProfileService {
             }
             LocalDateTime now = LocalDateTime.now(clock);
             teamMemberRepository.leaveAndRejectAllOpen(userId, now);
+            // Rút đơn mercenary của trận chưa bắt đầu (khoá tin rồi đơn), sau bước rời đội và trước khi xoá mềm.
+            mercenaryAccountCleanup.withdrawForDeletedApplicant(userId, LocalDateTime.now(clock));
             userRepository.softDelete(userId, now);
             return null;
         });

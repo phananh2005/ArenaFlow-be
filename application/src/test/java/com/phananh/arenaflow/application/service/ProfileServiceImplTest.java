@@ -15,6 +15,7 @@ import com.phananh.arenaflow.domain.repository.UserRepository;
 import com.phananh.arenaflow.domain.projection.ProfileView;
 import com.phananh.arenaflow.domain.projection.WardView;
 import com.phananh.arenaflow.application.service.impl.ProfileServiceImpl;
+import com.phananh.arenaflow.application.support.mercenary.MercenaryAccountCleanup;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
@@ -55,6 +56,7 @@ class ProfileServiceImplTest {
     private final TeamMemberRepository teamMemberRepository = mock(TeamMemberRepository.class);
     private final ConcurrencyConflictRetrier retrier = mock(ConcurrencyConflictRetrier.class);
     private final ProfileMapper profileMapper = Mappers.getMapper(ProfileMapper.class);
+    private final MercenaryAccountCleanup mercenaryAccountCleanup = mock(MercenaryAccountCleanup.class);
     private final SpelAwareProxyProjectionFactory projections = new SpelAwareProxyProjectionFactory();
     private final UUID userId = UUID.randomUUID();
 
@@ -68,7 +70,7 @@ class ProfileServiceImplTest {
     @SuppressWarnings("unchecked")
     void setUp() {
         service = new ProfileServiceImpl(userRepository, oauthAccountRepository, administrativeUnitRepository,
-                teamMemberRepository, retrier, profileMapper, CLOCK);
+                teamMemberRepository, retrier, profileMapper, mercenaryAccountCleanup, CLOCK);
         when(retrier.execute(any())).thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(0)).get());
     }
 
@@ -153,10 +155,11 @@ class ProfileServiceImplTest {
 
         service.deleteAccount(userId);
 
-        // Q1 khoá → kiểm trên dữ liệu đã khoá → Q2 bulk gộp → Q3 soft delete; không còn bước kiểm lại.
-        InOrder order = inOrder(teamMemberRepository, userRepository);
+        // Q1 khoá → kiểm trên dữ liệu đã khoá → Q2 bulk gộp → rút đơn mercenary (tin rồi đơn) → soft delete.
+        InOrder order = inOrder(teamMemberRepository, mercenaryAccountCleanup, userRepository);
         order.verify(teamMemberRepository).findByUserIdAndStatusInOrderByIdAsc(eq(userId), argThat(ProfileServiceImplTest::isOpen));
         order.verify(teamMemberRepository).leaveAndRejectAllOpen(userId, NOW_VN);
+        order.verify(mercenaryAccountCleanup).withdrawForDeletedApplicant(userId, NOW_VN);
         order.verify(userRepository).softDelete(userId, NOW_VN);
         verifyNoMoreInteractions(teamMemberRepository);
     }

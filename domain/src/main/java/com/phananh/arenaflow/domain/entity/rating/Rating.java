@@ -1,7 +1,14 @@
 package com.phananh.arenaflow.domain.entity.rating;
 
 import com.phananh.arenaflow.common.time.AppTime;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -10,12 +17,13 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Entity đại diện cho rating (đánh giá sau trận)
+ * Đánh giá sau trận — chỉ INSERT + đọc (mọi cột {@code updatable = false}). Đánh giá đội ↔ đội có {@code matchId},
+ * không {@code applicationId}; đánh giá đội ↔ mercenary có {@code applicationId} và đúng một trong {@code matchId} /
+ * {@code externalMatchId}.
  */
 @Entity
 @Table(name = "rating")
@@ -31,34 +39,47 @@ public class Rating {
     @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
 
-    @Column(name = "match_id", nullable = false)
+    @Column(name = "match_id", updatable = false)
     private UUID matchId;
 
+    @Column(name = "external_match_id", updatable = false)
+    private UUID externalMatchId;
+
+    @Column(name = "application_id", updatable = false)
+    private UUID applicationId;
+
     @Enumerated(EnumType.STRING)
-    @Column(name = "rater_type", nullable = false, length = 20)
+    @Column(name = "rater_type", nullable = false, length = 20, updatable = false)
     private RaterType raterType;
 
-    @Column(name = "rater_id", nullable = false)
+    @Column(name = "rater_id", nullable = false, updatable = false)
     private UUID raterId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "ratee_type", nullable = false, length = 20)
+    @Column(name = "ratee_type", nullable = false, length = 20, updatable = false)
     private RateeType rateeType;
 
-    @Column(name = "ratee_id", nullable = false)
+    @Column(name = "ratee_id", nullable = false, updatable = false)
     private UUID rateeId;
 
-    @Column(name = "score", nullable = false, precision = 2, scale = 1)
-    private BigDecimal score;
+    @Column(name = "score", columnDefinition = "SMALLINT", updatable = false)
+    private Integer score;
 
-    @Column(name = "comment", columnDefinition = "TEXT")
+    @Column(name = "is_no_show", nullable = false, updatable = false)
+    @Builder.Default
+    private boolean isNoShow = false;
+
+    @Column(name = "comment", columnDefinition = "TEXT", updatable = false)
     private String comment;
 
-    @Column(name = "match_score_home")
-    private Integer matchScoreHome;
+    @Column(name = "rater_team_score", updatable = false)
+    private Integer raterTeamScore;
 
-    @Column(name = "match_score_away")
-    private Integer matchScoreAway;
+    @Column(name = "ratee_team_score", updatable = false)
+    private Integer rateeTeamScore;
+
+    @Column(name = "created_by_user_id", nullable = false, updatable = false)
+    private UUID createdByUserId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Setter(AccessLevel.NONE)

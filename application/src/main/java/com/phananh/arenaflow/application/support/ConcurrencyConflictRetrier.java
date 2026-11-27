@@ -40,7 +40,7 @@ public class ConcurrencyConflictRetrier {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 return transactionTemplate.execute(status -> operation.get());
-            } catch (ObjectOptimisticLockingFailureException exception) {
+            } catch (ObjectOptimisticLockingFailureException | ConcurrencyConflictException exception) {
                 // thử lại; hết lượt → exhaustedCode sau vòng lặp
             } catch (PessimisticLockingFailureException exception) {
                 if (!isDeadlock(exception)) {

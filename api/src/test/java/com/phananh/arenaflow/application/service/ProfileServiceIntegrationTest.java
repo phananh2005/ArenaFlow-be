@@ -61,7 +61,7 @@ class ProfileServiceIntegrationTest {
     }
 
     @Test
-    void deleteAccountAfterDisbandLeavesRejectsSoftDeletesInThreeQueriesAndIsIdempotent() {
+    void deleteAccountAfterDisbandLeavesRejectsSoftDeletesInFiveQueriesAndIsIdempotent() {
         User captain = saveUser("Disbanding Captain");
         User owner = saveUser("Other Owner");
         Team own = saveTeam("Own", captain);
@@ -82,8 +82,9 @@ class ProfileServiceIntegrationTest {
 
         profileService.deleteAccount(captain.getId());
 
-        // Ngưỡng ghi ≤ 6: S khoá membership mở + U bulk rời đội/từ chối lời mời + U soft delete = 3.
-        assertThat(statistics.getPrepareStatementCount()).isEqualTo(3);
+        // Ngưỡng ghi ≤ 6: S khoá membership mở + U bulk rời đội/từ chối lời mời + U bớt số đã duyệt của tin
+        // + U rút đơn mercenary + U soft delete = 5.
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(5);
         entityManager.clear();
         assertThat(teamRepository.findById(own.getId()).orElseThrow().getStatus()).isEqualTo(Team.TeamStatus.DISBANDED);
         assertThat(teamMemberRepository.findById(membership.getId()).orElseThrow().getStatus())

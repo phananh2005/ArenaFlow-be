@@ -29,4 +29,18 @@ public class AdminAuditLog {
             }
         });
     }
+
+    /** Biến thể trung tính cho mọi loại đối tượng; cùng cơ chế ghi sau commit. */
+    public void afterCommit(String action, UUID adminId, String targetType, UUID targetId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            throw new IllegalStateException("AdminAuditLog requires an active transaction");
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                log.info("Admin action: action={}, adminId={}, targetType={}, targetId={}", action, adminId, targetType,
+                        targetId);
+            }
+        });
+    }
 }

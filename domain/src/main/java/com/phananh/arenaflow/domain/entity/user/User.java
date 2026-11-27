@@ -106,6 +106,10 @@ public class User {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    /** Huy hiệu xác minh cá nhân — dữ liệu dẫn xuất, chỉ câu refresh có điều kiện được ghi. */
+    @Column(name = "verified_at", insertable = false, updatable = false)
+    private LocalDateTime verifiedAt;
+
     /** Gán {@code createdAt} và {@code updatedAt} = giờ hiện tại ({@link AppTime#now()}) khi lưu lần đầu. */
     @PrePersist
     protected void onCreate() {

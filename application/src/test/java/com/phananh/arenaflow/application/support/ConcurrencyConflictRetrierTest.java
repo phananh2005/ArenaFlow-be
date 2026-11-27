@@ -178,6 +178,36 @@ class ConcurrencyConflictRetrierTest {
         assertThat(attempts).hasValue(1);
     }
 
+    @Test
+    void retriesConcurrencyConflictThenSucceeds() {
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
+        AtomicInteger attempts = new AtomicInteger();
+
+        String result = retrier.execute(ErrorCode.MATCH_014, () -> {
+            if (attempts.incrementAndGet() == 1) {
+                throw new ConcurrencyConflictException();
+            }
+            return "ok";
+        });
+
+        assertThat(result).isEqualTo("ok");
+        assertThat(attempts).hasValue(2);
+    }
+
+    @Test
+    void throwsGivenCodeWhenConcurrencyConflictPersists() {
+        ConcurrencyConflictRetrier retrier = new ConcurrencyConflictRetrier(transactionTemplate());
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertThatThrownBy(() -> retrier.execute(ErrorCode.MATCH_014, () -> {
+            attempts.incrementAndGet();
+            throw new ConcurrencyConflictException();
+        }))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MATCH_014));
+        assertThat(attempts).hasValue(3);
+    }
+
     private static CannotAcquireLockException deadlock() {
         return new CannotAcquireLockException("deadlock detected", new SQLException("deadlock detected", "40P01"));
     }
