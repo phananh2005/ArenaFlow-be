@@ -1,6 +1,7 @@
 package com.phananh.arenaflow.domain.repository;
 
 import com.phananh.arenaflow.domain.entity.team.Team;
+import com.phananh.arenaflow.domain.projection.TeamCaptainContextView;
 import com.phananh.arenaflow.domain.projection.TeamDetailView;
 import com.phananh.arenaflow.domain.projection.TeamSummaryView;
 import jakarta.persistence.LockModeType;
@@ -8,6 +9,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -71,4 +73,33 @@ public interface TeamRepository extends JpaRepository<Team, UUID> {
             """,
             nativeQuery = true)
     Page<TeamSummaryView> findSummaries(@Param("status") String status, Pageable pageable);
+
+    /**
+     * Trạng thái đội + cờ {@code userId} là đội trưởng ACTIVE + tên/ảnh/điểm đội + tên/cờ đã xoá của {@code userId},
+     * trong một câu. Đội không tồn tại → empty. Đội đã giải tán không còn đội trưởng ACTIVE nên {@code captain} false.
+     */
+    @Query(value = """
+            SELECT t.status AS status,
+                   EXISTS (SELECT 1 FROM team_member m WHERE m.team_id = t.id AND m.user_id = :userId
+                           AND m.role = 'CAPTAIN' AND m.status = 'ACTIVE') AS captain,
+                   t.name AS name, t.avatar_url AS avatarUrl, t.reliability_score AS reliabilityScore,
+                   u.display_name AS userDisplayName, (u.deleted_at IS NOT NULL) AS userDeleted
+            FROM team t
+            LEFT JOIN "user" u ON u.id = :userId
+            WHERE t.id = :teamId
+            """, nativeQuery = true)
+    Optional<TeamCaptainContextView> findCaptainContext(@Param("teamId") UUID teamId, @Param("userId") UUID userId);
+
+    /**
+     * Cộng/trừ điểm uy tín nguyên tử, chặn trong [0, 100]; {@code breaksCleanStreak} đặt chuỗi trận sạch về 0 trong
+     * cùng câu. Không tăng version: cột điểm không ghi qua entity nên không xung đột với sửa đội.
+     */
+    @Modifying
+    @Query(value = """
+            UPDATE team SET reliability_score = LEAST(100, GREATEST(0, reliability_score + :delta)),
+                   clean_streak = CASE WHEN :breaksCleanStreak THEN 0 ELSE clean_streak END
+            WHERE id = :id
+            """, nativeQuery = true)
+    int adjustReliability(@Param("id") UUID id, @Param("delta") int delta,
+                          @Param("breaksCleanStreak") boolean breaksCleanStreak);
 }

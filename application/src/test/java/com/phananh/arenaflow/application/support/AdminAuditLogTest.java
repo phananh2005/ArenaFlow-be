@@ -41,6 +41,20 @@ class AdminAuditLogTest {
     }
 
     @Test
+    void neutralOverloadWritesTargetTypeAndIdAfterCommit(CapturedOutput output) {
+        UUID sportId = UUID.randomUUID();
+        TransactionSynchronizationManager.initSynchronization();
+
+        auditLog.afterCommit(AdminAuditLog.SET_SPORT_ACTIVE, adminId, "SPORT", sportId);
+        assertThat(output.getAll()).doesNotContain("SET_SPORT_ACTIVE");
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+        assertThat(output.getAll()).containsOnlyOnce("Admin action: action=SET_SPORT_ACTIVE, adminId=" + adminId
+                + ", targetType=SPORT, targetId=" + sportId);
+    }
+
+    @Test
     void writesNothingWhenTransactionRollsBack(CapturedOutput output) {
         TransactionSynchronizationManager.initSynchronization();
 

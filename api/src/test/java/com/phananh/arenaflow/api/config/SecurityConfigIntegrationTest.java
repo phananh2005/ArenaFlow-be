@@ -74,6 +74,15 @@ class SecurityConfigIntegrationTest {
     }
 
     @Test
+    void realtimeHandshakePathIsPublicAndIgnoresStaleBearerHeader() throws Exception {
+        String refresh = tokenService.issueRefreshToken(UUID.randomUUID());
+
+        // SockJS info endpoint của /ws: không 401 dù header Bearer không hợp lệ (xác thực ở STOMP CONNECT).
+        mockMvc.perform(get("/ws/info").header("Authorization", "Bearer " + refresh))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void forbidsUserOnAdminPathWithAuth004() throws Exception {
         String access = tokenService.issueAccessToken(UUID.randomUUID(), User.Role.USER);
 

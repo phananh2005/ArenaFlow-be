@@ -17,6 +17,7 @@ import com.phananh.arenaflow.application.service.VenueStatusFilter;
 import com.phananh.arenaflow.application.support.AdminAuditLog;
 import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
+import com.phananh.arenaflow.application.support.GeoBoundingBox;
 import com.phananh.arenaflow.application.support.DataIntegrityViolations;
 import com.phananh.arenaflow.application.support.LikePatterns;
 import com.phananh.arenaflow.application.support.VenueGuard;
@@ -128,10 +129,9 @@ public class VenueServiceImpl implements VenueService {
             double lat = request.lat().doubleValue();
             double lng = request.lng().doubleValue();
             double radiusKm = request.radiusKm().doubleValue();
-            double latitudeDelta = radiusKm / 111.32d;
-            double longitudeDelta = radiusKm / (111.32d * Math.cos(Math.toRadians(lat)));
-            venues = venueRepository.searchNearbyActive(qPattern, lat, lng, radiusKm, lat - latitudeDelta,
-                    lat + latitudeDelta, lng - longitudeDelta, lng + longitudeDelta, pageable);
+            GeoBoundingBox box = GeoBoundingBox.around(lat, lng, radiusKm);
+            venues = venueRepository.searchNearbyActive(qPattern, lat, lng, radiusKm, box.minLat(), box.maxLat(),
+                    box.minLng(), box.maxLng(), pageable);
         }
         return PageResponse.from(venues, venueMapper::toSummary, request.page(), request.pageSize());
     }

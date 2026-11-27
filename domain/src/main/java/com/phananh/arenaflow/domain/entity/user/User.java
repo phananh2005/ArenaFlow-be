@@ -62,7 +62,8 @@ public class User {
     @Column(name = "phone_number", length = 20)
     private String phoneNumber;
 
-    @Column(name = "reliability_score", nullable = false)
+    /** Chỉ ghi bằng câu UPDATE nguyên tử (cộng/trừ, chặn [0,100]) để dirty checking không ghi đè điểm. */
+    @Column(name = "reliability_score", nullable = false, updatable = false)
     @Builder.Default
     private Integer reliabilityScore = 80;
 
