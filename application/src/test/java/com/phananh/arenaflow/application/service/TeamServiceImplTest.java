@@ -1,5 +1,7 @@
 package com.phananh.arenaflow.application.service;
 
+import org.springframework.context.ApplicationEventPublisher;
+import com.phananh.arenaflow.application.event.team.CaptainTransferredEvent;
 import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
 import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.dto.request.CreateTeamRequest;
@@ -79,11 +81,14 @@ class TeamServiceImplTest {
 
     private TeamServiceImpl service;
 
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
         service = new TeamServiceImpl(userRepository, teamRepository, teamMemberRepository, historyRepository,
-                retrier, teamMapper, new PageRequestFactory(), new TeamGuard(teamRepository, teamMemberRepository), CLOCK);
+                retrier, teamMapper, new PageRequestFactory(), new TeamGuard(teamRepository, teamMemberRepository),
+                eventPublisher, CLOCK);
         when(retrier.execute(any())).thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(0)).get());
         when(teamRepository.save(any(Team.class))).thenAnswer(invocation -> withId(invocation.getArgument(0), teamId));
     }
@@ -373,5 +378,28 @@ class TeamServiceImplTest {
 
         assertError(() -> service.transferCaptain(teamId, captainId, new TransferCaptainRequest(memberId, null)),
                 ErrorCode.TEAM_016);
+    }
+
+    @Test
+    void transferCaptainPublishesCaptainTransferred() {
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.ACTIVE)));
+        when(teamMemberRepository.findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE))
+                .thenReturn(Optional.of(member(captainId, TeamMember.Role.CAPTAIN)));
+        when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(teamId, memberId, TeamMember.Status.ACTIVE))
+                .thenReturn(Optional.of(member(memberId, TeamMember.Role.MEMBER)));
+
+        service.transferCaptain(teamId, captainId, new TransferCaptainRequest(memberId, null));
+
+        verify(eventPublisher).publishEvent(new CaptainTransferredEvent(teamId, memberId, captainId, NOW_VN));
+    }
+
+    @Test
+    void failedTransferDoesNotPublish() {
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.INACTIVE)));
+
+        assertError(() -> service.transferCaptain(teamId, captainId, new TransferCaptainRequest(memberId, null)),
+                ErrorCode.TEAM_015);
+
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 }

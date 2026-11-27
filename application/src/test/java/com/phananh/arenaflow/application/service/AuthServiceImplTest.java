@@ -1,5 +1,7 @@
 package com.phananh.arenaflow.application.service;
 
+import org.springframework.context.ApplicationEventPublisher;
+import com.phananh.arenaflow.application.event.user.UserRegisteredEvent;
 import com.phananh.arenaflow.application.support.security.JwtProperties;
 import com.phananh.arenaflow.application.dto.request.OAuthLoginRequest;
 import com.phananh.arenaflow.application.dto.request.RefreshTokenRequest;
@@ -24,7 +26,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -53,10 +59,15 @@ class AuthServiceImplTest {
 
     private AuthServiceImpl service;
 
+    /** 10:00 giờ Việt Nam. */
+    private static final LocalDateTime EVENT_TIME = LocalDateTime.of(2026, 11, 21, 10, 0);
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+    private final Clock clock = Clock.fixed(Instant.parse("2026-11-21T03:00:00Z"), ZoneId.systemDefault());
+
     @BeforeEach
     void setUp() {
         service = new AuthServiceImpl(userRepository, oauthAccountRepository, jwtTokenService, jwtProperties,
-                transactionTemplate);
+                transactionTemplate, eventPublisher, clock);
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User user = invocation.getArgument(0);
             ReflectionTestUtils.setField(user, "id", UUID.fromString("0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"));
@@ -189,5 +200,28 @@ class AuthServiceImplTest {
         assertThatThrownBy(() -> service.refresh(new RefreshTokenRequest(jwtTokenService.issueRefreshToken(deletedUser))))
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_003));
+    }
+
+    @Test
+    void registrationPublishesUserRegisteredEventInsideTheCreateTransaction() {
+        when(oauthAccountRepository.findAuthView(any(), anyString())).thenReturn(Optional.empty());
+
+        AuthResult result = service.loginWithOAuth(new OAuthLoginRequest("GOOGLE", "token", "event@example.com"));
+
+        verify(eventPublisher).publishEvent(new UserRegisteredEvent(result.body().userId(), EVENT_TIME));
+    }
+
+    @Test
+    void loginOfExistingAccountOrLostRegistrationRaceDoesNotPublish() {
+        UUID winner = UUID.randomUUID();
+        when(oauthAccountRepository.findAuthView(OAuthAccount.Provider.google, "race2@example.com"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(authView(winner, "USER", false)));
+        when(oauthAccountRepository.saveAndFlush(any(OAuthAccount.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        service.loginWithOAuth(new OAuthLoginRequest("GOOGLE", "t", "race2@example.com"));
+
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 }

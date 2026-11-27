@@ -22,7 +22,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.context.ApplicationEventPublisher;
+import com.phananh.arenaflow.application.event.user.UserRegisteredEvent;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -45,6 +49,8 @@ public class AuthServiceImpl implements AuthService {
     private final JwtTokenService jwtTokenService;
     private final JwtProperties jwtProperties;
     private final TransactionTemplate transactionTemplate;
+    private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     @Override
     public AuthResult loginWithOAuth(OAuthLoginRequest request) {
@@ -120,6 +126,8 @@ public class AuthServiceImpl implements AuthService {
                 .build();
         // Flush để vi phạm unique (đăng ký song song) ném ra ngay tại bước ghi này, không dồn tới lúc commit.
         oauthAccountRepository.saveAndFlush(account);
+        // Phát trong transaction tạo tài khoản: đăng ký song song đụng unique thì rollback và không phát.
+        eventPublisher.publishEvent(new UserRegisteredEvent(saved.getId(), LocalDateTime.now(clock)));
         return saved.getId();
     }
 

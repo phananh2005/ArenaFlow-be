@@ -47,6 +47,14 @@ class ErrorCodeTest {
     }
 
     @Test
+    void notificationErrors() {
+        assertThat(ErrorCode.NOTIFICATION_001.getHttpStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(ErrorCode.NOTIFICATION_001.getMessage()).isEqualTo("Thông báo không tồn tại");
+        assertThat(ErrorCode.NOTIFICATION_002.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(ErrorCode.NOTIFICATION_002.getMessage()).isEqualTo("Thông báo mốc không hợp lệ, vui lòng tải lại");
+    }
+
+    @Test
     void disbandedTeamAndCaptainAccountDeletionErrors() {
         assertThat(ErrorCode.TEAM_016.getCode()).isEqualTo("TEAM_016");
         assertThat(ErrorCode.TEAM_016.getHttpStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);

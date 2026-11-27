@@ -1,5 +1,7 @@
 package com.phananh.arenaflow.application.service;
 
+import org.springframework.context.ApplicationEventPublisher;
+import com.phananh.arenaflow.application.event.team.TeamStatusChangedByAdminEvent;
 import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
 import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.dto.request.MarkInactiveRequest;
@@ -27,6 +29,10 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -54,12 +60,17 @@ class AdminTeamServiceImplTest {
 
     private AdminTeamServiceImpl service;
 
+    /** 10:00 giờ Việt Nam. */
+    private static final LocalDateTime EVENT_TIME = LocalDateTime.of(2026, 11, 21, 10, 0);
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+    private final Clock clock = Clock.fixed(Instant.parse("2026-11-21T03:00:00Z"), ZoneId.systemDefault());
+
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
         service = new AdminTeamServiceImpl(teamRepository, teamMemberRepository, retrier, teamMapper,
                 Mappers.getMapper(MembershipMapper.class), new PageRequestFactory(),
-                new TeamGuard(teamRepository, teamMemberRepository));
+                new TeamGuard(teamRepository, teamMemberRepository), eventPublisher, clock);
         when(retrier.execute(any())).thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(0)).get());
         when(teamRepository.findDetailById(teamId)).thenReturn(Optional.of(projections.createProjection(
                 TeamDetailView.class, Map.of("teamId", teamId, "skillLevels", "[]", "memberCount", 1L,
@@ -190,5 +201,28 @@ class AdminTeamServiceImplTest {
         when(teamRepository.findCurrentStatusById(teamId)).thenReturn(Optional.of("DISBANDED"));
 
         assertError(() -> service.reactivate(teamId), ErrorCode.TEAM_016);
+    }
+
+    @Test
+    void markInactiveAndReactivatePublishStatusChange() {
+        Team team = team(Team.TeamStatus.ACTIVE);
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team));
+        when(teamMemberRepository.findByTeamIdAndRoleAndStatus(teamId, TeamMember.Role.CAPTAIN, TeamMember.Status.ACTIVE))
+                .thenReturn(Optional.of(TeamMember.builder().build()));
+
+        service.markInactive(teamId, new MarkInactiveRequest("Vi phạm"));
+        service.reactivate(teamId);
+
+        verify(eventPublisher).publishEvent(new TeamStatusChangedByAdminEvent(teamId, Team.TeamStatus.INACTIVE, EVENT_TIME));
+        verify(eventPublisher).publishEvent(new TeamStatusChangedByAdminEvent(teamId, Team.TeamStatus.ACTIVE, EVENT_TIME));
+    }
+
+    @Test
+    void rejectedStatusChangeDoesNotPublish() {
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.INACTIVE)));
+
+        assertError(() -> service.markInactive(teamId, new MarkInactiveRequest("x")), ErrorCode.TEAM_011);
+
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 }

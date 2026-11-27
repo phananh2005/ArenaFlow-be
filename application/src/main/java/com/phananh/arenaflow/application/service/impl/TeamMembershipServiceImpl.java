@@ -19,6 +19,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
+import com.phananh.arenaflow.application.event.team.TeamInvitationCreatedEvent;
+import com.phananh.arenaflow.application.event.team.TeamInvitationRespondedEvent;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -42,6 +45,7 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
     private final MembershipMapper membershipMapper;
     private final PageRequestFactory pageRequestFactory;
     private final TeamGuard teamGuard;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     /**
@@ -68,7 +72,10 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
                     .build();
             try {
                 // Flush ngay để bắt vi phạm unique trong try (mời trùng song song) thay vì lúc commit.
-                return membershipMapper.toInvitation(teamMemberRepository.saveAndFlush(invitation), team.getName());
+                TeamMember saved = teamMemberRepository.saveAndFlush(invitation);
+                eventPublisher.publishEvent(new TeamInvitationCreatedEvent(saved.getId(), teamId, request.userId(),
+                        LocalDateTime.now(clock)));
+                return membershipMapper.toInvitation(saved, team.getName());
             } catch (DataIntegrityViolationException concurrentInvite) {
                 // Unique (team_id, user_id) WHERE status IN ('PENDING','ACTIVE') — mời trùng song song.
                 throw new BusinessException(ErrorCode.TEAM_003);
@@ -84,6 +91,8 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
             invitation.setStatus(TeamMember.Status.ACTIVE);
             invitation.setJoinedAt(LocalDateTime.now(clock));
             teamMemberRepository.save(invitation);
+            eventPublisher.publishEvent(new TeamInvitationRespondedEvent(invitationId, invitation.getTeamId(), true,
+                    LocalDateTime.now(clock)));
             // Hibernate tự flush thay đổi trên trước native query đọc lại response.
             return teamMemberRepository.findMemberViewById(invitationId).map(membershipMapper::toMember)
                     .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_004));
@@ -97,6 +106,8 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
             TeamMember invitation = pendingInvitationOf(invitationId, userId);
             invitation.setStatus(TeamMember.Status.REJECTED);
             teamMemberRepository.save(invitation);
+            eventPublisher.publishEvent(new TeamInvitationRespondedEvent(invitationId, invitation.getTeamId(), false,
+                    LocalDateTime.now(clock)));
             return null;
         });
     }

@@ -14,7 +14,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Entity đại diện cho notification (thông báo in-app)
+ * Thông báo in-app. Chỉ dùng để kiểm schema và đọc lẻ: mọi INSERT đi qua câu ghi gom lô của repository
+ * (id do {@code uuidv7()} sinh, {@code created_at} truyền từ {@code Clock}), mọi UPDATE qua câu {@code @Modifying}.
  */
 @Entity
 @Table(name = "notification")
@@ -33,8 +34,9 @@ public class Notification {
     @Column(name = "recipient_user_id", nullable = false)
     private UUID recipientUserId;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false, length = 50)
-    private String type;
+    private Type type;
 
     @Column(name = "title", nullable = false, length = 200)
     private String title;
@@ -42,8 +44,9 @@ public class Notification {
     @Column(name = "body", nullable = false, columnDefinition = "TEXT")
     private String body;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "reference_type", length = 50)
-    private String referenceType;
+    private ReferenceType referenceType;
 
     @Column(name = "reference_id")
     private UUID referenceId;
@@ -60,5 +63,24 @@ public class Notification {
     @PrePersist
     protected void onCreate() {
         createdAt = AppTime.now();
+    }
+
+    /** Loại thông báo — khớp CHECK {@code notification_type_check}. */
+    public enum Type {
+        WELCOME, TEAM_INVITATION, TEAM_INVITATION_ACCEPTED, TEAM_INVITATION_REJECTED,
+        CAPTAIN_TRANSFERRED, TEAM_MARKED_INACTIVE, TEAM_REACTIVATED,
+        MATCH_REQUEST_RECEIVED, REQUEST_WITHDRAWN, REQUEST_ACCEPTED, REQUEST_REJECTED, REQUEST_SUPERSEDED, REQUEST_EXPIRED,
+        PAIRING_NEW, PAIRING_SUPERSEDED, PAIRING_EXPIRED,
+        MATCH_CONFIRMED, MATCH_CANCELLED, MATCH_EXPIRED, REMINDER_BEFORE_MATCH, MATCH_COMPLETED, MERCENARY_RATING_REMINDER,
+        RATING_RECEIVED, REPORT_RECEIVED, REPORT_DISPUTED, DISPUTE_RESOLVED, DISPUTE_CREATED,
+        VERIFICATION_BADGE_GRANTED, VERIFICATION_BADGE_REVOKED,
+        MERCENARY_APPLICATION, MERCENARY_APPLICATION_APPROVED, MERCENARY_APPLICATION_REJECTED,
+        MERCENARY_WITHDRAWN, MERCENARY_GAME_CANCELLED,
+        VENUE_ADMIN_ALERT
+    }
+
+    /** Màn hình liên quan mà {@code referenceId} trỏ tới — khớp CHECK {@code notification_reference_type_check}. */
+    public enum ReferenceType {
+        MATCH, PAIRING, TEAM, TEAM_INVITATION, USER, VENUE, REPORT, DISPUTE, MERCENARY_DISPUTE, MERCENARY_APPLICATION
     }
 }

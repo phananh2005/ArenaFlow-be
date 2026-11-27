@@ -1,5 +1,8 @@
 package com.phananh.arenaflow.application.service;
 
+import org.springframework.context.ApplicationEventPublisher;
+import com.phananh.arenaflow.application.event.team.TeamInvitationCreatedEvent;
+import com.phananh.arenaflow.application.event.team.TeamInvitationRespondedEvent;
 import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
 import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.dto.request.InviteMemberRequest;
@@ -69,11 +72,14 @@ class TeamMembershipServiceImplTest {
 
     private TeamMembershipServiceImpl service;
 
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
         service = new TeamMembershipServiceImpl(userRepository, teamMemberRepository, retrier,
-                membershipMapper, new PageRequestFactory(), new TeamGuard(teamRepository, teamMemberRepository), CLOCK);
+                membershipMapper, new PageRequestFactory(), new TeamGuard(teamRepository, teamMemberRepository),
+                eventPublisher, CLOCK);
         when(retrier.execute(any())).thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(0)).get());
     }
 
@@ -294,5 +300,51 @@ class TeamMembershipServiceImplTest {
         when(teamRepository.findCurrentStatusById(teamId)).thenReturn(Optional.of("DISBANDED"));
 
         assertError(() -> service.leaveTeam(teamId, inviteeId), ErrorCode.TEAM_016);
+    }
+
+    @Test
+    void inviteMemberPublishesInvitationCreatedOnlyOnSuccess() {
+        givenActiveTeamWithCaptain();
+        when(userRepository.findByIdAndDeletedAtIsNull(inviteeId)).thenReturn(Optional.of(User.builder().build()));
+        when(teamMemberRepository.saveAndFlush(any(TeamMember.class)))
+                .thenAnswer(invocation -> withId(invocation.getArgument(0), invitationId));
+
+        service.inviteMember(teamId, captainId, new InviteMemberRequest(inviteeId));
+
+        verify(eventPublisher).publishEvent(new TeamInvitationCreatedEvent(invitationId, teamId, inviteeId, NOW_VN));
+
+        when(teamMemberRepository.saveAndFlush(any(TeamMember.class)))
+                .thenThrow(new DataIntegrityViolationException("idx_team_member_pending_or_active"));
+        assertError(() -> service.inviteMember(teamId, captainId, new InviteMemberRequest(inviteeId)),
+                ErrorCode.TEAM_003);
+        verify(eventPublisher).publishEvent(any(Object.class));
+    }
+
+    @Test
+    void acceptAndRejectPublishInvitationResponded() {
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team(Team.TeamStatus.ACTIVE)));
+        when(teamMemberRepository.findById(invitationId)).thenReturn(Optional.of(
+                member(invitationId, inviteeId, TeamMember.Role.MEMBER, TeamMember.Status.PENDING)));
+        when(teamMemberRepository.findMemberViewById(invitationId)).thenReturn(Optional.of(
+                projections.createProjection(MemberView.class, Map.of("memberId", invitationId,
+                        "displayName", "Invitee", "userDeleted", false, "status", "ACTIVE"))));
+
+        service.acceptInvitation(invitationId, inviteeId);
+        verify(eventPublisher).publishEvent(new TeamInvitationRespondedEvent(invitationId, teamId, true, NOW_VN));
+
+        when(teamMemberRepository.findById(invitationId)).thenReturn(Optional.of(
+                member(invitationId, inviteeId, TeamMember.Role.MEMBER, TeamMember.Status.PENDING)));
+        service.rejectInvitation(invitationId, inviteeId);
+        verify(eventPublisher).publishEvent(new TeamInvitationRespondedEvent(invitationId, teamId, false, NOW_VN));
+    }
+
+    @Test
+    void failedAcceptOrRejectDoesNotPublish() {
+        when(teamMemberRepository.findById(invitationId)).thenReturn(Optional.empty());
+
+        assertError(() -> service.acceptInvitation(invitationId, inviteeId), ErrorCode.TEAM_004);
+        assertError(() -> service.rejectInvitation(invitationId, inviteeId), ErrorCode.TEAM_004);
+
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 }

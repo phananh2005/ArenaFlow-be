@@ -28,6 +28,8 @@ import com.phananh.arenaflow.application.support.TeamGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
+import com.phananh.arenaflow.application.event.team.CaptainTransferredEvent;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -53,6 +55,7 @@ public class TeamServiceImpl implements TeamService {
     private final TeamMapper teamMapper;
     private final PageRequestFactory pageRequestFactory;
     private final TeamGuard teamGuard;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     /** S user, I team, I captain member, I history; response dựng từ dữ liệu đã có (memberCount = 1). */
@@ -161,6 +164,8 @@ public class TeamServiceImpl implements TeamService {
                     .reason(request.reason())
                     .transferredAt(now)
                     .build());
+            eventPublisher.publishEvent(new CaptainTransferredEvent(teamId, request.newCaptainId(), userId,
+                    LocalDateTime.now(clock)));
             return new CaptainTransferResponse(teamId, userId, request.newCaptainId(), request.reason(), now);
         });
     }

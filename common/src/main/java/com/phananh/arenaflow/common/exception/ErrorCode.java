@@ -51,6 +51,8 @@ public enum ErrorCode {
     SYS_001("SYS_001", HttpStatus.NOT_FOUND, "Không tìm thấy tài nguyên"),
     SYS_002("SYS_002", HttpStatus.METHOD_NOT_ALLOWED, "Phương thức không được hỗ trợ"),
     SYS_003("SYS_003", HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Kiểu nội dung không được hỗ trợ"),
+    NOTIFICATION_001("NOTIFICATION_001", HttpStatus.NOT_FOUND, "Thông báo không tồn tại"),
+    NOTIFICATION_002("NOTIFICATION_002", HttpStatus.UNPROCESSABLE_ENTITY, "Thông báo mốc không hợp lệ, vui lòng tải lại"),
     SYS_004("SYS_004", HttpStatus.BAD_REQUEST, "Yêu cầu không hợp lệ"),
     SYS_005("SYS_005", HttpStatus.INTERNAL_SERVER_ERROR, "Đã xảy ra lỗi hệ thống");
 

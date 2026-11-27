@@ -22,7 +22,11 @@ import com.phananh.arenaflow.application.support.TeamGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
+import com.phananh.arenaflow.application.event.team.TeamStatusChangedByAdminEvent;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -36,6 +40,8 @@ public class AdminTeamServiceImpl implements AdminTeamService {
     private final MembershipMapper membershipMapper;
     private final PageRequestFactory pageRequestFactory;
     private final TeamGuard teamGuard;
+    private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     /** (retry) S team → TEAM_001 → TEAM_016 → đã INACTIVE TEAM_011 → U (@Version) → S detail. */
     @Override
@@ -48,6 +54,8 @@ public class AdminTeamServiceImpl implements AdminTeamService {
             team.setStatus(Team.TeamStatus.INACTIVE);
             team.setInactiveReason(request.reason().trim());
             teamRepository.save(team);
+            eventPublisher.publishEvent(new TeamStatusChangedByAdminEvent(teamId, Team.TeamStatus.INACTIVE,
+                    LocalDateTime.now(clock)));
             // Hibernate tự flush thay đổi trên trước native query đọc lại response.
             return adminDetail(teamId);
         });
@@ -68,6 +76,8 @@ public class AdminTeamServiceImpl implements AdminTeamService {
             team.setStatus(Team.TeamStatus.ACTIVE);
             team.setInactiveReason(null);
             teamRepository.save(team);
+            eventPublisher.publishEvent(new TeamStatusChangedByAdminEvent(teamId, Team.TeamStatus.ACTIVE,
+                    LocalDateTime.now(clock)));
             // Hibernate tự flush thay đổi trên trước native query đọc lại response.
             return adminDetail(teamId);
         });
