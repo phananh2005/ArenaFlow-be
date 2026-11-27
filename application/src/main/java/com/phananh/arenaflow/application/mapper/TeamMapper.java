@@ -3,9 +3,11 @@ package com.phananh.arenaflow.application.mapper;
 import com.phananh.arenaflow.application.dto.response.AdminTeamResponse;
 import com.phananh.arenaflow.application.dto.response.AdminTeamSummaryResponse;
 import com.phananh.arenaflow.application.dto.response.CaptainHistoryResponse;
+import com.phananh.arenaflow.application.dto.response.MyTeamResponse;
 import com.phananh.arenaflow.application.dto.response.TeamResponse;
 import com.phananh.arenaflow.application.dto.response.TeamSummaryResponse;
 import com.phananh.arenaflow.domain.projection.CaptainHistoryView;
+import com.phananh.arenaflow.domain.projection.MyTeamView;
 import com.phananh.arenaflow.domain.projection.TeamDetailView;
 import com.phananh.arenaflow.domain.projection.TeamSummaryView;
 import org.mapstruct.Mapper;
@@ -49,4 +51,9 @@ public interface TeamMapper {
     @Mapping(target = "toUserName",
             expression = "java(MapperSupport.maskName(view.getToUserName(), view.getToUserDeleted()))")
     CaptainHistoryResponse toResponse(CaptainHistoryView view);
+
+    /** Đội của tôi: che tên đội trưởng đã xoá tài khoản; role, joinedAt là của người gọi. */
+    @Mapping(target = "captainName",
+            expression = "java(MapperSupport.maskName(view.getCaptainName(), view.getCaptainDeleted()))")
+    MyTeamResponse toMyTeam(MyTeamView view);
 }

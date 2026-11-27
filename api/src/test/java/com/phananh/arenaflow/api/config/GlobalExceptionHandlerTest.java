@@ -2,6 +2,7 @@ package com.phananh.arenaflow.api.config;
 
 import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
+import com.phananh.arenaflow.common.exception.RateLimitExceededException;
 
 import jakarta.validation.constraints.Min;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.web.server.ResponseStatusException;
@@ -27,6 +29,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -141,8 +144,42 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
     }
 
+    @Test
+    void rateLimitExceededReturns429WithRetryAfterHeaderAndStandardEnvelope(CapturedOutput output) throws Exception {
+        mockMvc.perform(get("/test/rate-limited"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "7"))
+                .andExpect(jsonPath("$.error.code").value("USER_007"))
+                .andExpect(jsonPath("$.error.message").value("Bạn tìm quá nhanh, vui lòng thử lại sau"))
+                .andExpect(jsonPath("$.error.details").doesNotExist())
+                .andExpect(jsonPath("$.error.path").value("/test/rate-limited"));
+
+        // 4xx → WARN kèm mã lỗi + path như lỗi nghiệp vụ khác.
+        assertThat(output.getOut()).contains("WARN").contains("USER_007").contains("/test/rate-limited");
+    }
+
+    @Test
+    void queryTimeoutFallsBackTo500Sys005(CapturedOutput output) throws Exception {
+        mockMvc.perform(get("/test/query-timeout"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error.code").value("SYS_005"))
+                .andExpect(header().doesNotExist("Retry-After"));
+
+        assertThat(output.getOut()).contains("ERROR").contains("QueryTimeoutException");
+    }
+
     @RestController
     static class FailingController {
+        @GetMapping("/test/rate-limited")
+        void throwRateLimited() {
+            throw new RateLimitExceededException(ErrorCode.USER_007, 7);
+        }
+
+        @GetMapping("/test/query-timeout")
+        void throwQueryTimeout() {
+            throw new QueryTimeoutException("statement cancelled");
+        }
+
         @GetMapping("/test/status-409")
         void throwConflictStatus() {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "internal reason");

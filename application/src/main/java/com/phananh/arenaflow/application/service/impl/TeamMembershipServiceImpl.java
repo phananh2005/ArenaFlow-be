@@ -3,8 +3,11 @@ package com.phananh.arenaflow.application.service.impl;
 import com.phananh.arenaflow.application.support.ConcurrencyConflictRetrier;
 import com.phananh.arenaflow.application.support.PageRequestFactory;
 import com.phananh.arenaflow.application.dto.request.InviteMemberRequest;
+import com.phananh.arenaflow.application.dto.response.InvitationCandidateResponse;
+import com.phananh.arenaflow.application.dto.response.InvitationCandidatesResponse;
 import com.phananh.arenaflow.application.dto.response.InvitationResponse;
 import com.phananh.arenaflow.application.dto.response.MemberResponse;
+import com.phananh.arenaflow.application.dto.response.MyInvitationResponse;
 import com.phananh.arenaflow.application.dto.response.PageResponse;
 import com.phananh.arenaflow.domain.entity.team.Team;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
@@ -14,7 +17,9 @@ import com.phananh.arenaflow.application.mapper.MembershipMapper;
 import com.phananh.arenaflow.domain.repository.TeamMemberRepository;
 import com.phananh.arenaflow.domain.repository.UserRepository;
 import com.phananh.arenaflow.application.service.TeamMembershipService;
+import com.phananh.arenaflow.application.support.InvitationSearchQuery;
 import com.phananh.arenaflow.application.support.TeamGuard;
+import com.phananh.arenaflow.domain.projection.InvitationCandidateView;
 import org.springframework.dao.DataIntegrityViolationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -35,6 +40,9 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
 
     private static final List<TeamMember.Status> OPEN_MEMBERSHIP =
             List.of(TeamMember.Status.PENDING, TeamMember.Status.ACTIVE);
+
+    /** Số gợi ý tối đa khi tìm người để mời; truy vấn lấy thêm 1 dòng để biết còn người khớp. */
+    static final int MAX_CANDIDATES = 20;
 
     private final UserRepository userRepository;
     private final TeamMemberRepository teamMemberRepository;
@@ -140,5 +148,48 @@ public class TeamMembershipServiceImpl implements TeamMembershipService {
             throw new BusinessException(ErrorCode.TEAM_006);
         }
         return invitation;
+    }
+
+    /**
+     * Thứ tự kiểm: phân loại q (số điện thoại sai → USER_005, không truy vấn) → nhánh tên: bỏ dấu bằng hàm SQL của
+     * index rồi lọc token (dưới 2 ký tự → USER_006) → đội ACTIVE (TEAM_001/016/015) → người gọi là đội trưởng
+     * (TEAM_002) → tìm LIMIT 21 để biết còn người khớp ngoài 20 gợi ý. Nhánh số điện thoại 3 truy vấn, nhánh tên 4.
+     * Không log q (có thể là số điện thoại của người khác).
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public InvitationCandidatesResponse searchInvitationCandidates(UUID teamId, UUID callerId, String q) {
+        InvitationSearchQuery query = InvitationSearchQuery.parse(q);
+        if (query instanceof InvitationSearchQuery.Name name) {
+            query = InvitationSearchQuery.ofFolded(userRepository.foldName(name.raw()));
+        }
+        teamGuard.activeTeam(teamId);
+        teamGuard.requireCaptain(teamId, callerId);
+        int limit = MAX_CANDIDATES + 1;
+        List<InvitationCandidateView> rows = switch (query) {
+            case InvitationSearchQuery.Phone phone ->
+                    userRepository.searchCandidatesByPhone(teamId, callerId, phone.phoneNumber(), limit);
+            case InvitationSearchQuery.FoldedName folded ->
+                    userRepository.searchCandidatesByName(teamId, callerId, folded.tsQuery(), folded.prefix(), limit);
+            case InvitationSearchQuery.Name name -> throw new IllegalStateException("Tên chưa được chuẩn hoá");
+        };
+        boolean hasMore = rows.size() > MAX_CANDIDATES;
+        List<InvitationCandidateResponse> items = rows.stream()
+                .limit(MAX_CANDIDATES)
+                .map(membershipMapper::toCandidate)
+                .toList();
+        return new InvitationCandidatesResponse(items, hasMore);
+    }
+
+    /** S người gọi còn hoạt động (USER_001) → S trang → S đếm (bỏ khi trang đầu chưa đầy). */
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<MyInvitationResponse> listMyInvitations(UUID userId, int page, int pageSize) {
+        if (!userRepository.existsByIdAndDeletedAtIsNull(userId)) {
+            throw new BusinessException(ErrorCode.USER_001);
+        }
+        return PageResponse.from(
+                teamMemberRepository.findMyPendingInvitations(userId, pageRequestFactory.create(page, pageSize)),
+                membershipMapper::toMyInvitation, page, pageSize);
     }
 }

@@ -8,6 +8,7 @@ import com.phananh.arenaflow.application.dto.request.TransferCaptainRequest;
 import com.phananh.arenaflow.application.dto.request.UpdateTeamRequest;
 import com.phananh.arenaflow.application.dto.response.CaptainHistoryResponse;
 import com.phananh.arenaflow.application.dto.response.CaptainTransferResponse;
+import com.phananh.arenaflow.application.dto.response.MyTeamResponse;
 import com.phananh.arenaflow.application.dto.response.PageResponse;
 import com.phananh.arenaflow.application.dto.response.TeamResponse;
 import com.phananh.arenaflow.application.dto.response.TeamSummaryResponse;
@@ -22,6 +23,7 @@ import com.phananh.arenaflow.domain.repository.TeamCaptainHistoryRepository;
 import com.phananh.arenaflow.domain.repository.TeamMemberRepository;
 import com.phananh.arenaflow.domain.repository.TeamRepository;
 import com.phananh.arenaflow.domain.repository.UserRepository;
+import com.phananh.arenaflow.application.service.MyTeamRoleFilter;
 import com.phananh.arenaflow.application.service.TeamService;
 import com.phananh.arenaflow.application.service.TeamStatusFilter;
 import com.phananh.arenaflow.application.support.TeamGuard;
@@ -205,5 +207,18 @@ public class TeamServiceImpl implements TeamService {
     private static String disbandReason(DisbandTeamRequest request) {
         String reason = request == null || request.reason() == null ? "" : request.reason().trim();
         return reason.isEmpty() ? DEFAULT_DISBAND_REASON : reason;
+    }
+
+    /** S người gọi còn hoạt động (USER_001) → S trang → S đếm (bỏ khi trang đầu chưa đầy). */
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<MyTeamResponse> listMyTeams(UUID userId, MyTeamRoleFilter role, int page, int pageSize) {
+        if (!userRepository.existsByIdAndDeletedAtIsNull(userId)) {
+            throw new BusinessException(ErrorCode.USER_001);
+        }
+        String roleValue = role == null ? null : role.name();
+        return PageResponse.from(
+                teamMemberRepository.findMyTeams(userId, roleValue, pageRequestFactory.create(page, pageSize)),
+                teamMapper::toMyTeam, page, pageSize);
     }
 }

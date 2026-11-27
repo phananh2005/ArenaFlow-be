@@ -8,6 +8,7 @@ import com.phananh.arenaflow.application.dto.request.UpdateTeamRequest;
 import com.phananh.arenaflow.application.dto.response.ApiResponse;
 import com.phananh.arenaflow.application.dto.response.CaptainHistoryResponse;
 import com.phananh.arenaflow.application.dto.response.CaptainTransferResponse;
+import com.phananh.arenaflow.application.dto.response.InvitationCandidatesResponse;
 import com.phananh.arenaflow.application.dto.response.InvitationResponse;
 import com.phananh.arenaflow.application.dto.response.MemberResponse;
 import com.phananh.arenaflow.application.dto.response.PageResponse;
@@ -17,9 +18,12 @@ import com.phananh.arenaflow.api.security.CurrentUser;
 import com.phananh.arenaflow.application.service.TeamMembershipService;
 import com.phananh.arenaflow.application.service.TeamService;
 import com.phananh.arenaflow.application.service.TeamStatusFilter;
+import com.phananh.arenaflow.application.support.InvitationSearchRateLimiter;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -44,6 +48,20 @@ public class TeamController {
 
     private final TeamService teamService;
     private final TeamMembershipService membershipService;
+    private final InvitationSearchRateLimiter invitationSearchRateLimiter;
+
+    /**
+     * Đội trưởng tìm người để mời. Giới hạn số lần gọi kiểm ở đây, trước khi vào service: lần bị chặn (429) không mở
+     * transaction, không mượn kết nối DB; mọi lần đã qua kiểm tra tham số đều được đếm, kể cả lần lỗi nghiệp vụ.
+     */
+    @GetMapping("/{teamId}/invitation-candidates")
+    public ResponseEntity<ApiResponse<InvitationCandidatesResponse>> searchInvitationCandidates(
+            @PathVariable UUID teamId,
+            @CurrentUser UUID currentUserId,
+            @RequestParam @NotBlank @Size(max = 100) String q) {
+        invitationSearchRateLimiter.acquire(currentUserId);
+        return ResponseEntity.ok(ApiResponse.of(membershipService.searchInvitationCandidates(teamId, currentUserId, q)));
+    }
 
     @PostMapping
     public ResponseEntity<ApiResponse<TeamResponse>> createTeam(@CurrentUser UUID currentUserId,

@@ -3,6 +3,8 @@ package com.phananh.arenaflow.domain.repository;
 import com.phananh.arenaflow.domain.entity.team.TeamMember;
 import com.phananh.arenaflow.domain.projection.MemberHistoryView;
 import com.phananh.arenaflow.domain.projection.MemberView;
+import com.phananh.arenaflow.domain.projection.MyInvitationView;
+import com.phananh.arenaflow.domain.projection.MyTeamView;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -116,4 +118,54 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
               AND (status = 'PENDING' OR (status = 'ACTIVE' AND role = 'MEMBER'))
             """, nativeQuery = true)
     int leaveAndRejectAllOpen(@Param("userId") UUID userId, @Param("now") LocalDateTime now);
+
+    /**
+     * Lời mời PENDING gửi tới {@code userId} của đội chưa giải tán (giải tán đã chuyển PENDING sang REJECTED; điều
+     * kiện đội là lớp an toàn), kèm đội trưởng ACTIVE hiện tại (cờ đã xoá để mapper che tên) và số thành viên ACTIVE.
+     * Sắp invited_at mới nhất trước, rồi id giảm dần.
+     */
+    @Query(value = """
+            SELECT m.id AS invitationId, m.invited_at AS invitedAt,
+                   t.id AS teamId, t.name AS teamName, t.avatar_url AS avatarUrl, t.skill_levels AS skillLevels,
+                   t.status AS status, cu.display_name AS captainName, (cu.deleted_at IS NOT NULL) AS captainDeleted,
+                   (SELECT COUNT(*) FROM team_member am WHERE am.team_id = t.id AND am.status = 'ACTIVE') AS memberCount
+            FROM team_member m
+            JOIN team t ON t.id = m.team_id
+            LEFT JOIN team_member cm ON cm.team_id = t.id AND cm.role = 'CAPTAIN' AND cm.status = 'ACTIVE'
+            LEFT JOIN "user" cu ON cu.id = cm.user_id
+            WHERE m.user_id = :userId AND m.status = 'PENDING' AND t.status <> 'DISBANDED'
+            ORDER BY m.invited_at DESC, m.id DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM team_member m JOIN team t ON t.id = m.team_id
+            WHERE m.user_id = :userId AND m.status = 'PENDING' AND t.status <> 'DISBANDED'
+            """,
+            nativeQuery = true)
+    Page<MyInvitationView> findMyPendingInvitations(@Param("userId") UUID userId, Pageable pageable);
+
+    /**
+     * Đội {@code userId} đang là thành viên ACTIVE (tư cách ACTIVE ⇒ đội chưa giải tán). {@code role} null = mọi vai
+     * trò; "CAPTAIN" = đúng tập đội đang chặn xoá tài khoản. Đọc không khoá (khác method PESSIMISTIC_WRITE của luồng
+     * xoá tài khoản). Sắp đội làm đội trưởng trước, rồi joined_at mới nhất, rồi team id giảm dần.
+     */
+    @Query(value = """
+            SELECT t.id AS teamId, t.name AS teamName, t.avatar_url AS avatarUrl, t.skill_levels AS skillLevels,
+                   t.status AS status, cu.display_name AS captainName, (cu.deleted_at IS NOT NULL) AS captainDeleted,
+                   (SELECT COUNT(*) FROM team_member am WHERE am.team_id = t.id AND am.status = 'ACTIVE') AS memberCount,
+                   m.role AS role, m.joined_at AS joinedAt
+            FROM team_member m
+            JOIN team t ON t.id = m.team_id
+            LEFT JOIN team_member cm ON cm.team_id = t.id AND cm.role = 'CAPTAIN' AND cm.status = 'ACTIVE'
+            LEFT JOIN "user" cu ON cu.id = cm.user_id
+            WHERE m.user_id = :userId AND m.status = 'ACTIVE'
+              AND (CAST(:role AS VARCHAR) IS NULL OR m.role = CAST(:role AS VARCHAR))
+            ORDER BY CASE WHEN m.role = 'CAPTAIN' THEN 0 ELSE 1 END, m.joined_at DESC, t.id DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM team_member m
+            WHERE m.user_id = :userId AND m.status = 'ACTIVE'
+              AND (CAST(:role AS VARCHAR) IS NULL OR m.role = CAST(:role AS VARCHAR))
+            """,
+            nativeQuery = true)
+    Page<MyTeamView> findMyTeams(@Param("userId") UUID userId, @Param("role") String role, Pageable pageable);
 }

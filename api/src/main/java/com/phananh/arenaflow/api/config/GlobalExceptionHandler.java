@@ -5,6 +5,7 @@ import com.phananh.arenaflow.common.exception.BusinessException;
 import com.phananh.arenaflow.common.exception.ErrorCode;
 import com.phananh.arenaflow.common.exception.ErrorEnvelope;
 import com.phananh.arenaflow.common.exception.ErrorResponse;
+import com.phananh.arenaflow.common.exception.RateLimitExceededException;
 import com.phananh.arenaflow.common.exception.ValidationError;
 import com.phananh.arenaflow.common.time.AppTime;
 
@@ -13,6 +14,7 @@ import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.ResponseEntity;
@@ -49,6 +51,20 @@ public class GlobalExceptionHandler {
         log.warn("Business error {} at {}", errorCode.getCode(), request.getRequestURI());
         return ResponseEntity.status(errorCode.getHttpStatus())
                 .body(new ErrorEnvelope(ErrorResponse.from(errorCode, exception.getDetails(), request.getRequestURI())));
+    }
+
+    /**
+     * Vượt giới hạn số lần gọi: envelope như lỗi nghiệp vụ kèm header {@code Retry-After} (giây). Cụ thể hơn
+     * {@link BusinessException} nên được ưu tiên. Chỉ log mã lỗi + path, không log người gọi hay tham số tìm kiếm.
+     */
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ErrorEnvelope> handleRateLimitExceeded(
+            RateLimitExceededException exception, HttpServletRequest request) {
+        ErrorCode errorCode = exception.getErrorCode();
+        log.warn("Business error {} at {}", errorCode.getCode(), request.getRequestURI());
+        return ResponseEntity.status(errorCode.getHttpStatus())
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(exception.getRetryAfterSeconds()))
+                .body(new ErrorEnvelope(ErrorResponse.from(errorCode, null, request.getRequestURI())));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
