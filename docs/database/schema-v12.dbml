@@ -1,0 +1,649 @@
+// ArenaFlow Database Schema — trạng thái sau V12 (bản nháp MVP)
+// Dựng trực tiếp từ SQL migration:
+//   V1–V8  : api/src/main/resources/db/migration trên main (04b6136)
+//   V9     : feature/REPUTATION-001-reputation-impl   (worktree, CHƯA commit)
+//   V10    : feature/MERCENARY-001-mercenary-impl     (worktree, CHƯA commit)
+//   V11    : feature/NOTIFICATION-001-notification-impl (worktree, CHƯA commit)
+//   V12    : feature/USER-003-user-discovery-impl     (worktree, CHƯA commit)
+// V9–V12 còn có thể đổi khi review / tích hợp → file này là bản nháp, không thay docs/database/schema.dbml.
+// Cột thời gian: timestamp (không múi giờ) giờ Việt Nam theo V6; DEFAULT now() AT TIME ZONE 'Asia/Ho_Chi_Minh'.
+// ON DELETE không ghi = NO ACTION; DESC trong index ghi ở note (DBML không biểu diễn được).
+// Use at: https://dbdiagram.io
+
+Project ArenaFlow {
+  database_type: 'PostgreSQL'
+  Note: '''
+    ArenaFlow - Nền tảng kết nối đội bóng (schema V12).
+    Hàm (V12): user_name_fold(text) → text IMMUTABLE (NFC → lower → bỏ dấu tiếng Việt → ký tự ngoài [a-z0-9] thành dấu cách);
+    user_name_search_vector(text) → tsvector = to_tsvector('simple', user_name_fold(name)).
+  '''
+}
+
+// ================================================================
+// 1. User & Authentication
+// ================================================================
+
+Table administrative_unit {
+  id uuid [pk]
+  name varchar(100) [not null]
+  level varchar(20) [not null, note: 'province, ward (V2 bỏ district)']
+  parent_id uuid [ref: > administrative_unit.id, note: 'ON DELETE RESTRICT; CHECK ward phải có parent (V2)']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  indexes {
+    parent_id [name: 'idx_administrative_unit_parent']
+    level [name: 'idx_administrative_unit_level']
+  }
+}
+
+Table user {
+  id uuid [pk]
+  display_name varchar(100) [not null]
+  avatar_url varchar(500)
+  bio text
+  preferred_position varchar(50)
+  date_of_birth date
+  gender varchar(20)
+  ward_id uuid [ref: > administrative_unit.id, note: 'V2: đổi tên từ district_id; ON DELETE RESTRICT']
+  phone_number varchar(20)
+  role varchar(20) [not null, default: 'USER', note: 'V2; USER, ADMIN']
+  reliability_score integer [not null, default: 80, note: '0-100']
+  report_count_noshow integer [not null, default: 0, note: '>= 0']
+  report_count_bad_play integer [not null, default: 0, note: '>= 0']
+  report_count_bad_communication integer [not null, default: 0, note: '>= 0']
+  report_count_skill_mismatch integer [not null, default: 0, note: '>= 0']
+  clean_streak integer [not null, default: 0, note: '>= 0']
+  verified_at timestamp [note: 'V10; huy hiệu cá nhân (dẫn xuất, chỉ ghi bằng câu refresh có điều kiện)']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  deleted_at timestamp
+
+  Note: 'V9 bỏ total_matches_completed, total_matches_confirmed, average_rating (tính khi đọc)'
+
+  indexes {
+    phone_number [unique, name: 'idx_user_phone_unique', note: 'WHERE phone_number IS NOT NULL AND deleted_at IS NULL']
+    ward_id [name: 'idx_user_ward', note: 'V2']
+    deleted_at [name: 'idx_user_deleted']
+    id [name: 'idx_user_active_admin', note: 'V11; WHERE role = ADMIN AND deleted_at IS NULL']
+    (`user_name_search_vector(display_name)`) [name: 'idx_user_name_search', note: 'V12; USING GIN, WHERE deleted_at IS NULL — tìm tên khớp đầu từ']
+  }
+}
+
+Table oauth_account {
+  id uuid [pk]
+  user_id uuid [not null, ref: > user.id, note: 'ON DELETE CASCADE']
+  provider varchar(50) [not null, note: 'google, facebook, phone']
+  provider_user_id varchar(255) [not null]
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  indexes {
+    (provider, provider_user_id) [unique, name: 'idx_oauth_account_provider']
+    user_id [name: 'idx_oauth_account_user']
+  }
+}
+
+// ================================================================
+// 2. Team
+// ================================================================
+
+Table team {
+  id uuid [pk]
+  name varchar(100) [not null]
+  created_by uuid [not null, ref: > user.id, note: 'ON DELETE RESTRICT']
+  avatar_url varchar(500)
+  description text
+  status varchar(20) [not null, default: 'ACTIVE', note: 'ACTIVE, INACTIVE, DISBANDED (V4)']
+  skill_levels text [not null, default: '[]', note: 'V2; JSON array nhãn']
+  inactive_reason varchar(500) [note: 'V2; lý do admin khoá, giữ nguyên khi giải tán']
+  disband_reason varchar(100) [note: 'V4; NOT NULL khi DISBANDED']
+  disbanded_at timestamp [note: 'V4; NOT NULL khi DISBANDED']
+  disbanded_by uuid [ref: > user.id, note: 'V4; NOT NULL khi DISBANDED; ON DELETE RESTRICT']
+  version bigint [not null, default: 0, note: 'V2; optimistic lock']
+  reliability_score integer [not null, default: 80, note: '0-100']
+  report_count_noshow integer [not null, default: 0, note: '>= 0']
+  report_count_bad_play integer [not null, default: 0, note: '>= 0']
+  report_count_bad_communication integer [not null, default: 0, note: '>= 0']
+  report_count_skill_mismatch integer [not null, default: 0, note: '>= 0']
+  clean_streak integer [not null, default: 0, note: '>= 0']
+  verified_at timestamp [note: 'V9; huy hiệu xác minh đội (dẫn xuất)']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  Note: '''
+    CHECK team_disband_consistency_check (V4): DISBANDED ⇔ disband_reason, disbanded_at, disbanded_by đều NOT NULL.
+    V9 bỏ total_matches_completed, total_matches_confirmed, average_rating (tính khi đọc).
+  '''
+
+  indexes {
+    created_by [name: 'idx_team_created_by']
+    (status, created_at) [name: 'idx_team_status_created', note: 'V2; created_at DESC (thay idx_team_status)']
+    disbanded_by [name: 'idx_team_disbanded_by', note: 'V7; WHERE disbanded_by IS NOT NULL']
+  }
+}
+
+Table team_member {
+  id uuid [pk]
+  team_id uuid [not null, ref: > team.id, note: 'ON DELETE CASCADE']
+  user_id uuid [not null, ref: > user.id, note: 'ON DELETE CASCADE']
+  role varchar(20) [not null, note: 'CAPTAIN, MEMBER']
+  status varchar(20) [not null, note: 'PENDING, ACTIVE, LEFT, REJECTED (V2)']
+  invited_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  joined_at timestamp [note: 'CHECK >= invited_at']
+  left_at timestamp [note: 'CHECK >= COALESCE(joined_at, invited_at)']
+  version bigint [not null, default: 0, note: 'V2; optimistic lock']
+
+  indexes {
+    (team_id, user_id) [unique, name: 'idx_team_member_pending_or_active', note: 'V2; WHERE status IN (PENDING, ACTIVE)']
+    (team_id, role, status) [name: 'idx_team_member_team_role']
+    (user_id, status) [name: 'idx_team_member_user']
+  }
+}
+
+Table team_captain_history {
+  id uuid [pk]
+  team_id uuid [not null, ref: > team.id, note: 'ON DELETE CASCADE']
+  from_user_id uuid [ref: > user.id, note: 'ON DELETE SET NULL']
+  to_user_id uuid [not null, ref: > user.id, note: 'ON DELETE RESTRICT']
+  reason varchar(500) [note: 'V2']
+  transferred_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  indexes {
+    (team_id, transferred_at) [name: 'idx_team_captain_history', note: 'transferred_at DESC']
+  }
+}
+
+// team_tag: V2 DROP TABLE
+
+// ================================================================
+// 3. Sport
+// ================================================================
+
+Table sport {
+  id uuid [pk]
+  name varchar(50) [not null, unique]
+  is_active boolean [not null, default: true]
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  Note: 'Dữ liệu ban đầu: Bóng đá'
+}
+
+// ================================================================
+// 4. Venue
+// ================================================================
+
+Table venue {
+  id uuid [pk]
+  name varchar(200) [not null]
+  address text [not null]
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+  created_by_type varchar(20) [not null, note: 'ADMIN, USER']
+  created_by_user_id uuid [ref: > user.id, note: 'ON DELETE RESTRICT (V5); NOT NULL khi created_by_type = USER']
+  ward_id uuid [ref: > administrative_unit.id, note: 'V5; ON DELETE RESTRICT; NULL chỉ cho địa điểm cũ — service bắt buộc khi thêm/sửa']
+  phone varchar(20)
+  website varchar(500)
+  venue_type varchar(50) [note: 'V5 CHECK: FIVE_A_SIDE, SEVEN_A_SIDE, ELEVEN_A_SIDE']
+  status varchar(20) [not null, default: 'ACTIVE', note: 'ACTIVE, INACTIVE; V5 CHECK: INACTIVE ⇔ admin_verified_inactive_at NOT NULL']
+  last_selected_at timestamp
+  admin_verified_inactive_at timestamp
+  version bigint [not null, default: 0, note: 'V5; @Version + khoá dòng khi ghi ảnh']
+  stale_alerted_at timestamp [note: 'V5; cổng cảnh báo 180 ngày']
+  closure_alerted_at timestamp [note: 'V5; cổng cảnh báo report CLOSED']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  indexes {
+    (latitude, longitude, status) [name: 'idx_venue_location', note: 'WHERE status = ACTIVE']
+    (status, last_selected_at) [name: 'idx_venue_last_selected']
+    (status, name, id) [name: 'idx_venue_status_name', note: 'V5']
+    ward_id [name: 'idx_venue_ward', note: 'V5']
+    created_by_user_id [name: 'idx_venue_created_by']
+  }
+}
+
+Table venue_image {
+  id uuid [pk]
+  venue_id uuid [not null, ref: > venue.id, note: 'ON DELETE CASCADE']
+  image_url varchar(500) [not null]
+  public_id varchar(255) [not null, note: 'V5; Cloudinary public ID; dòng cũ = legacy/<id>']
+  is_primary boolean [not null, default: false]
+  display_order integer [not null, note: '> 0']
+  uploaded_by uuid [ref: > user.id, note: 'ON DELETE SET NULL']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  indexes {
+    (venue_id, is_primary) [unique, name: 'idx_venue_image_primary', note: 'WHERE is_primary = TRUE']
+    (venue_id, display_order) [name: 'idx_venue_image_order']
+    public_id [unique, name: 'uq_venue_image_public_id', note: 'V5']
+  }
+}
+
+Table venue_report {
+  id uuid [pk]
+  venue_id uuid [not null, ref: > venue.id, note: 'ON DELETE CASCADE']
+  reporter_id uuid [not null, ref: > user.id, note: 'ON DELETE RESTRICT (V5)']
+  reason varchar(20) [not null, note: 'V5: CLOSED, WRONG_INFO, OTHER (TEXT → VARCHAR(20))']
+  detail text [note: 'V5']
+  status varchar(20) [not null, default: 'PENDING', note: 'V5: PENDING, VERIFIED, REJECTED']
+  handled_by uuid [ref: > user.id, note: 'V5; ON DELETE RESTRICT; CHECK NULL ⇔ status = PENDING']
+  handled_at timestamp [note: 'V5; CHECK NULL ⇔ status = PENDING']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  indexes {
+    (venue_id, created_at) [name: 'idx_venue_report_venue', note: 'created_at DESC']
+    reporter_id [name: 'idx_venue_report_reporter']
+    (status, created_at) [name: 'idx_venue_report_status_created', note: 'V5; created_at DESC']
+    (reporter_id, venue_id, reason) [unique, name: 'uq_venue_report_pending', note: 'V5; WHERE status = PENDING']
+  }
+}
+
+// ================================================================
+// 5. Match & Pairing
+// ================================================================
+
+Table match {
+  id uuid [pk]
+  type varchar(20) [not null, note: 'HAS_VENUE, NEED_VENUE']
+  author_team_id uuid [not null, ref: > team.id, note: 'ON DELETE RESTRICT']
+  status varchar(20) [not null, default: 'OPEN', note: 'OPEN, CONFIRMED, ARCHIVED, COMPLETED, EXPIRED, CANCELLED']
+  sport_id uuid [not null, ref: > sport.id, note: 'ON DELETE RESTRICT']
+  format varchar(20) [note: 'V7: FIVE_A_SIDE, SEVEN_A_SIDE, ELEVEN_A_SIDE; NOT NULL khi HAS_VENUE']
+  skill_levels text [not null, default: '[]', note: 'V7; JSON array nhãn trình độ']
+  age_note text
+  match_nature text
+  venue_id uuid [ref: > venue.id, note: 'ON DELETE RESTRICT; HAS_VENUE: bắt buộc; NEED_VENUE: NULL ⇔ chưa ghép (V8)']
+  match_start_time timestamp [not null]
+  match_end_time timestamp [not null, note: 'CHECK > match_start_time']
+  expires_at timestamp [not null, note: 'CHECK <= match_start_time']
+  search_lat decimal(10,7) [note: 'Không dùng (V8 bỏ idx_match_search_gps)']
+  search_lng decimal(10,7) [note: 'Không dùng']
+  search_radius_km decimal(5,2) [note: 'Không dùng']
+  cost_type varchar(50) [note: 'V7 CHECK: VENUE_ONLY, DRINKS_ONLY, BOTH']
+  cost_split varchar(50) [note: 'V7 CHECK: FIFTY_FIFTY, SEVENTY_THIRTY_HOME, SEVENTY_THIRTY_LOSER, LOSER_PAYS_DRINKS']
+  cost_venue_amount bigint [note: 'V7 CHECK > 0']
+  cost_drinks_amount bigint [note: 'V7 CHECK > 0']
+  cost_deposit_amount bigint [note: 'V8; chỉ NEED_VENUE; CHECK > 0']
+  cost_deposit_holder varchar(100) [note: 'V8 CHECK: chỉ có khi có cost_deposit_amount']
+  confirmed_opponent_team_id uuid [ref: > team.id, note: 'ON DELETE RESTRICT; NOT NULL khi CONFIRMED']
+  cancelled_by_team_id uuid [ref: > team.id, note: 'ON DELETE RESTRICT; NOT NULL khi CANCELLED']
+  cancelled_at timestamp [note: 'NOT NULL khi CANCELLED']
+  cancel_reason varchar(500) [note: 'V7']
+  version bigint [not null, default: 0, note: 'V7; optimistic lock']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  Note: '''
+    CHECK: match_type_venue_check (V8), match_deposit_check (V8), match_format_check, match_has_venue_format_check,
+    match_cost_type_check, match_cost_split_check, match_cost_amount_check (V7).
+    V8 bỏ confirmed_venue_id, confirmed_match_time.
+  '''
+
+  indexes {
+    (author_team_id, status) [name: 'idx_match_author_status']
+    (confirmed_opponent_team_id, status) [name: 'idx_match_opponent_status', note: 'V7']
+    (status, expires_at) [name: 'idx_match_expiry']
+    (status, match_end_time) [name: 'idx_match_archived']
+    (sport_id, status, match_start_time) [name: 'idx_match_sport']
+    (match_start_time, id) [name: 'idx_match_open_start', note: 'V7; WHERE status = OPEN']
+    match_start_time [name: 'idx_match_confirmed_start', note: 'V11; WHERE status = CONFIRMED — job nhắc trước trận']
+  }
+}
+
+Table match_venue_option {
+  id uuid [pk]
+  match_id uuid [not null, ref: > match.id, note: 'ON DELETE CASCADE']
+  venue_id uuid [not null, ref: > venue.id, note: 'ON DELETE RESTRICT']
+  display_order integer [not null, note: 'V8; 1..5']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  indexes {
+    (match_id, venue_id) [unique, name: 'match_venue_option_match_venue_key', note: 'V8; đích FK phương án của pairing']
+    (match_id, display_order) [unique, name: 'match_venue_option_match_order_key', note: 'V8']
+    venue_id [name: 'idx_match_venue_option_venue', note: 'V8']
+  }
+}
+
+Table match_time_option {
+  id uuid [pk]
+  match_id uuid [not null, ref: > match.id, note: 'ON DELETE CASCADE']
+  proposed_start_time timestamp [not null]
+  proposed_end_time timestamp [not null, note: 'V8 CHECK > proposed_start_time']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  indexes {
+    (match_id, id) [unique, name: 'match_time_option_match_id_key', note: 'V8; đích FK phương án của pairing']
+    (match_id, proposed_start_time) [unique, name: 'match_time_option_match_start_key', note: 'V8']
+  }
+}
+
+Table cost_custom_item {
+  id uuid [pk]
+  match_id uuid [ref: > match.id, note: 'ON DELETE CASCADE; V8 bỏ NOT NULL']
+  pairing_id uuid [note: 'V8; FK pairing ON DELETE CASCADE']
+  item_name varchar(100) [not null]
+  amount bigint [not null, note: 'V7 CHECK > 0']
+  display_order integer [not null, note: 'V7; > 0']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  Note: 'V8 CHECK cost_custom_item_owner_check: đúng một trong match_id, pairing_id khác NULL'
+
+  indexes {
+    (match_id, display_order) [unique, name: 'idx_cost_custom_item_order', note: 'V7']
+    (pairing_id, display_order) [unique, name: 'idx_cost_custom_item_pairing_order', note: 'V8']
+  }
+}
+
+Ref: cost_custom_item.pairing_id > pairing.id [delete: cascade]
+
+Table match_request {
+  id uuid [pk]
+  match_id uuid [not null, ref: > match.id, note: 'ON DELETE CASCADE']
+  requester_team_id uuid [not null, ref: > team.id, note: 'ON DELETE RESTRICT']
+  status varchar(20) [not null, default: 'PENDING', note: 'PENDING, ACCEPTED, REJECTED, WITHDRAWN, SUPERSEDED, EXPIRED']
+  reason varchar(500) [note: 'V7; lý do từ chối hoặc rút']
+  requested_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  responded_at timestamp [note: 'NOT NULL khi REJECTED']
+  withdrawn_at timestamp [note: 'NOT NULL khi WITHDRAWN']
+
+  indexes {
+    (match_id, requester_team_id) [unique, name: 'idx_match_request_active', note: 'WHERE status NOT IN (WITHDRAWN, EXPIRED)']
+    match_id [unique, name: 'idx_match_request_accepted', note: 'V7; WHERE status = ACCEPTED']
+    (match_id, status) [name: 'idx_match_request_match']
+    (requester_team_id, status) [name: 'idx_match_request_requester']
+  }
+}
+
+Table pairing {
+  id uuid [pk]
+  match_id uuid [not null, ref: > match.id, note: 'ON DELETE CASCADE']
+  interested_team_id uuid [not null, ref: > team.id, note: 'ON DELETE RESTRICT']
+  status varchar(20) [not null, default: 'NEGOTIATING', note: 'NEGOTIATING, CONFIRMED, EXPIRED, SUPERSEDED']
+  revision integer [not null, default: 0, note: 'V8; CHECK >= 0']
+  proposed_venue_id uuid [note: 'V8; cùng cặp với proposed_time_option_id']
+  proposed_time_option_id uuid [note: 'V8']
+  cost_type varchar(50) [note: 'V8 CHECK: VENUE_ONLY, DRINKS_ONLY, BOTH']
+  cost_split varchar(50) [note: 'V8 CHECK: FIFTY_FIFTY, SEVENTY_THIRTY_HOME, SEVENTY_THIRTY_LOSER, LOSER_PAYS_DRINKS']
+  cost_venue_amount bigint [note: 'V8 CHECK > 0']
+  cost_drinks_amount bigint [note: 'V8 CHECK > 0']
+  cost_deposit_amount bigint [note: 'V8 CHECK > 0']
+  cost_deposit_holder varchar(100) [note: 'V8 CHECK: chỉ có khi có cost_deposit_amount']
+  author_confirmed_at timestamp
+  interested_confirmed_at timestamp
+  final_confirmed_at timestamp
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`, note: 'V8']
+
+  Note: '''
+    CHECK: CONFIRMED ⇒ 3 mốc xác nhận NOT NULL (V1); pairing_proposal_pair_check, pairing_confirmed_proposal_check,
+    pairing_revision_check, pairing_cost_type_check, pairing_cost_split_check, pairing_cost_amount_check (V8).
+  '''
+
+  indexes {
+    (match_id, interested_team_id) [unique, name: 'idx_pairing_active', note: 'WHERE status NOT IN (EXPIRED, SUPERSEDED)']
+    (match_id, status) [name: 'idx_pairing_match']
+    (interested_team_id, status) [name: 'idx_pairing_team']
+    match_id [unique, name: 'idx_pairing_confirmed', note: 'V8; WHERE status = CONFIRMED']
+  }
+}
+
+Ref pairing_proposed_venue: pairing.(match_id, proposed_venue_id) > match_venue_option.(match_id, venue_id)
+Ref pairing_proposed_time: pairing.(match_id, proposed_time_option_id) > match_time_option.(match_id, id)
+
+// ================================================================
+// 6. External match (V10)
+// ================================================================
+
+Table external_match {
+  id uuid [pk]
+  team_id uuid [not null, ref: > team.id, note: 'ON DELETE RESTRICT']
+  venue_id uuid [not null, ref: > venue.id, note: 'ON DELETE RESTRICT']
+  match_start_time timestamp [not null]
+  match_end_time timestamp [not null, note: 'CHECK > match_start_time']
+  skill_levels text [not null, default: '[]']
+  opponent_name varchar(100)
+  status varchar(20) [not null, default: 'SCHEDULED', note: 'SCHEDULED, CANCELLED']
+  cancelled_at timestamp [note: 'CHECK: NOT NULL ⇔ CANCELLED']
+  created_by_user_id uuid [not null, ref: > user.id, note: 'ON DELETE RESTRICT']
+  version bigint [not null, default: 0]
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  Note: 'V10: trận ngoài hệ thống do đội trưởng khai báo (dùng cho tuyển mercenary)'
+
+  indexes {
+    (team_id, match_start_time, id) [name: 'idx_external_match_team', note: 'V10']
+    match_end_time [name: 'idx_external_match_cancelled', note: 'V10; WHERE status = CANCELLED']
+    match_start_time [name: 'idx_external_match_scheduled_start', note: 'V11; WHERE status = SCHEDULED']
+    match_end_time [name: 'idx_external_match_scheduled_end', note: 'V11; WHERE status = SCHEDULED — nhắc mercenary đánh giá']
+  }
+}
+
+// ================================================================
+// 7. Rating, Report & Dispute
+// ================================================================
+
+Table rating {
+  id uuid [pk]
+  match_id uuid [ref: > match.id, note: 'V9 FK ON DELETE RESTRICT; V10 bỏ NOT NULL']
+  external_match_id uuid [ref: > external_match.id, note: 'V10; ON DELETE RESTRICT']
+  application_id uuid [ref: > mercenary_application.id, note: 'V10; ON DELETE RESTRICT; có khi cặp đội ↔ mercenary']
+  rater_type varchar(20) [not null, note: 'TEAM, INDIVIDUAL']
+  rater_id uuid [not null, note: 'FK logic tới team hoặc user']
+  ratee_type varchar(20) [not null, note: 'TEAM, INDIVIDUAL']
+  ratee_id uuid [not null, note: 'FK logic tới team hoặc user']
+  score smallint [note: 'V9: DECIMAL → SMALLINT, bỏ NOT NULL; 1..5; NULL khi is_no_show']
+  is_no_show boolean [not null, default: false, note: 'V9; "đội kia không đến"']
+  comment text [note: 'V9 CHECK <= 500 ký tự']
+  rater_team_score integer [note: 'V9: đổi tên từ match_score_home; >= 0']
+  ratee_team_score integer [note: 'V9: đổi tên từ match_score_away; >= 0']
+  created_by_user_id uuid [not null, ref: > user.id, note: 'V9; ON DELETE RESTRICT']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  Note: '''
+    CHECK V9: rating_score_check, rating_no_show_check, rating_team_scores_pair_check, rating_comment_length_check, rating_not_self_check.
+    CHECK V10: rating_game_check (đúng một trong match_id, external_match_id), rating_application_check, rating_mercenary_fields_check.
+  '''
+
+  indexes {
+    (match_id, rater_type, rater_id, ratee_type, ratee_id) [unique, name: 'idx_rating_unique']
+    (ratee_type, ratee_id) [name: 'idx_rating_ratee']
+    (application_id, rater_type) [unique, name: 'idx_rating_mercenary_unique', note: 'V10; WHERE application_id IS NOT NULL']
+  }
+}
+
+Table report {
+  id uuid [pk]
+  match_id uuid [ref: > match.id, note: 'V9 FK ON DELETE RESTRICT; V10 bỏ NOT NULL']
+  external_match_id uuid [ref: > external_match.id, note: 'V10; ON DELETE RESTRICT']
+  application_id uuid [ref: > mercenary_application.id, note: 'V10; ON DELETE RESTRICT']
+  reporter_type varchar(20) [not null, note: 'TEAM, INDIVIDUAL']
+  reporter_id uuid [not null, note: 'FK logic tới team hoặc user']
+  reported_type varchar(20) [not null, note: 'TEAM, INDIVIDUAL']
+  reported_id uuid [not null, note: 'FK logic tới team hoặc user']
+  report_type varchar(50) [not null, note: 'NOSHOW, BAD_PLAY, BAD_COMMUNICATION, SKILL_MISMATCH']
+  reason text [not null, note: 'V9: NOT NULL, 1..1000 ký tự']
+  status varchar(20) [not null, default: 'AUTO_ACCEPTED', note: 'V9: AUTO_ACCEPTED, DISPUTED, CONFIRMED, REJECTED']
+  reliability_penalty integer [not null, default: 0, note: 'V9; điểm thực trừ, >= 0']
+  created_by_user_id uuid [not null, ref: > user.id, note: 'V9; ON DELETE RESTRICT']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`, note: 'V9']
+
+  Note: '''
+    V9 bỏ admin_reviewed_at. CHECK V9: report_status_check, report_reason_length_check, report_not_self_check.
+    CHECK V10: report_game_check, report_application_check.
+  '''
+
+  indexes {
+    (match_id, reporter_type, reporter_id, reported_type, reported_id, report_type) [unique, name: 'idx_report_unique', note: 'V9']
+    (reported_type, reported_id, created_at, id) [name: 'idx_report_reported_created', note: 'V9; created_at DESC, id DESC']
+    (reporter_type, reporter_id, created_at, id) [name: 'idx_report_reporter_created', note: 'V9; created_at DESC, id DESC']
+    (external_match_id, reporter_type, reporter_id, reported_type, reported_id, report_type) [unique, name: 'idx_report_external_unique', note: 'V10; WHERE external_match_id IS NOT NULL']
+    application_id [name: 'idx_report_application', note: 'V10; WHERE application_id IS NOT NULL']
+  }
+}
+
+Table dispute {
+  id uuid [pk]
+  report_id uuid [not null, ref: - report.id, note: 'ON DELETE RESTRICT; 1:1 với report']
+  evidence text [not null, note: '1..1000 ký tự']
+  created_by_user_id uuid [not null, ref: > user.id, note: 'ON DELETE RESTRICT']
+  status varchar(20) [not null, default: 'PENDING', note: 'PENDING, RESOLVED']
+  decision varchar(20) [note: 'CONFIRMED, REJECTED']
+  resolution_note varchar(500) [note: '1..500 ký tự']
+  resolved_by_user_id uuid [ref: > user.id, note: 'ON DELETE RESTRICT']
+  resolved_at timestamp
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  Note: 'V9. CHECK dispute_resolution_check: PENDING ⇔ decision, resolution_note, resolved_by_user_id, resolved_at đều NULL; RESOLVED ⇔ đều NOT NULL'
+
+  indexes {
+    report_id [unique, name: 'idx_dispute_report']
+    (status, created_at, id) [name: 'idx_dispute_status_created']
+  }
+}
+
+// ================================================================
+// 8. Mercenary
+// ================================================================
+
+Table mercenary_recruitment {
+  id uuid [pk]
+  match_id uuid [ref: > match.id, note: 'ON DELETE CASCADE; V10 bỏ NOT NULL']
+  external_match_id uuid [ref: > external_match.id, note: 'V10; ON DELETE RESTRICT']
+  team_id uuid [not null, ref: > team.id, note: 'ON DELETE RESTRICT']
+  position varchar(50) [not null, note: 'Thủ môn, Hậu vệ, Tiền vệ, Tiền đạo']
+  quantity_needed integer [not null, note: '> 0']
+  quantity_approved integer [not null, default: 0, note: '0..quantity_needed']
+  status varchar(20) [not null, default: 'OPEN', note: 'OPEN, FILLED, EXPIRED, CLOSED']
+  created_by_user_id uuid [not null, ref: > user.id, note: 'V10; ON DELETE RESTRICT']
+  closed_at timestamp [note: 'V10; CHECK NOT NULL ⇔ CLOSED']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  updated_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  Note: 'CHECK V10: mercenary_recruitment_game_check (đúng một trong match_id, external_match_id), mercenary_recruitment_closed_check. V10 bỏ idx_mercenary_recruitment_search, idx_mercenary_recruitment_match'
+
+  indexes {
+    (team_id, status) [name: 'idx_mercenary_recruitment_team']
+    (match_id, team_id, position) [unique, name: 'idx_mercenary_recruitment_match_position', note: 'V10; WHERE status IN (OPEN, FILLED) AND match_id IS NOT NULL']
+    (external_match_id, position) [unique, name: 'idx_mercenary_recruitment_external_position', note: 'V10; WHERE status IN (OPEN, FILLED) AND external_match_id IS NOT NULL']
+    match_id [name: 'idx_mercenary_recruitment_match_all', note: 'V10; WHERE match_id IS NOT NULL']
+    external_match_id [name: 'idx_mercenary_recruitment_external_all', note: 'V10; WHERE external_match_id IS NOT NULL']
+  }
+}
+
+Table mercenary_application {
+  id uuid [pk]
+  recruitment_id uuid [not null, ref: > mercenary_recruitment.id, note: 'ON DELETE CASCADE']
+  applicant_id uuid [not null, ref: > user.id, note: 'ON DELETE RESTRICT']
+  status varchar(20) [not null, default: 'PENDING', note: 'PENDING, APPROVED, REJECTED, WITHDRAWN']
+  applied_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+  responded_at timestamp [note: 'NOT NULL khi APPROVED/REJECTED']
+  withdrawn_at timestamp [note: 'NOT NULL khi WITHDRAWN']
+  game_cancel_notified_at timestamp [note: 'V10; đã báo mercenary APPROVED về việc trận bị huỷ']
+
+  indexes {
+    (recruitment_id, applicant_id) [unique, name: 'idx_mercenary_application_active', note: 'WHERE status NOT IN (WITHDRAWN, REJECTED)']
+    (recruitment_id, status) [name: 'idx_mercenary_application_recruitment']
+    (applicant_id, status) [name: 'idx_mercenary_application_applicant']
+    recruitment_id [name: 'idx_mercenary_application_cancel_notice', note: 'V10; WHERE status = APPROVED AND game_cancel_notified_at IS NULL']
+  }
+}
+
+// ================================================================
+// 9. Chat
+// ================================================================
+
+Table conversation {
+  id uuid [pk]
+  context_type varchar(30) [not null, note: 'TEAM_MATCH (V7), MERCENARY_APPLICATION (V10)']
+  match_id uuid [ref: > match.id, note: 'ON DELETE RESTRICT']
+  external_match_id uuid [ref: > external_match.id, note: 'V10; ON DELETE RESTRICT']
+  application_id uuid [ref: > mercenary_application.id, note: 'V10; ON DELETE RESTRICT; NOT NULL ⇔ MERCENARY_APPLICATION']
+  party_a_type varchar(10) [not null, note: 'TEAM, USER']
+  party_a_id uuid [not null, note: 'Đội tạo kèo / đội tuyển']
+  party_b_type varchar(10) [not null, note: 'TEAM, USER']
+  party_b_id uuid [not null, note: 'Đội tham gia (TEAM_MATCH) hoặc ứng viên (USER)']
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  Note: '''
+    V7 (thay chat_message của V1). CHECK V7: conversation_team_match_check, conversation_parties_check.
+    CHECK V10: conversation_context_type_check, conversation_application_check, conversation_game_check (đúng một trong match_id, external_match_id),
+    conversation_mercenary_parties_check (MERCENARY_APPLICATION ⇒ A = TEAM, B = USER).
+  '''
+
+  indexes {
+    (match_id, party_b_id) [unique, name: 'idx_conversation_team_match', note: 'V7; WHERE context_type = TEAM_MATCH']
+    party_a_id [name: 'idx_conversation_party_a', note: 'V7']
+    party_b_id [name: 'idx_conversation_party_b', note: 'V7']
+    application_id [unique, name: 'idx_conversation_application', note: 'V10; WHERE application_id IS NOT NULL']
+    match_id [name: 'idx_conversation_match', note: 'V10; WHERE match_id IS NOT NULL']
+    external_match_id [name: 'idx_conversation_external_match', note: 'V10; WHERE external_match_id IS NOT NULL']
+  }
+}
+
+Table conversation_message {
+  id uuid [pk]
+  conversation_id uuid [not null, ref: > conversation.id, note: 'ON DELETE CASCADE']
+  sender_party varchar(1) [not null, note: 'A, B']
+  sender_user_id uuid [not null, ref: > user.id, note: 'ON DELETE RESTRICT']
+  message text [not null, note: 'char_length 1..1000']
+  is_read boolean [not null, default: false]
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  indexes {
+    (conversation_id, created_at, id) [name: 'idx_conversation_message_time', note: 'V7']
+    (conversation_id, sender_party) [name: 'idx_conversation_message_unread', note: 'V7; WHERE NOT is_read']
+  }
+}
+
+// ================================================================
+// 10. Notification & Reminder
+// ================================================================
+
+Table notification {
+  id uuid [pk]
+  recipient_user_id uuid [not null, ref: > user.id, note: 'ON DELETE CASCADE']
+  type varchar(50) [not null, note: 'V11: 35 loại — xem Note bảng']
+  title varchar(200) [not null]
+  body text [not null]
+  reference_type varchar(50) [note: 'V11: MATCH, PAIRING, TEAM, TEAM_INVITATION, USER, VENUE, REPORT, DISPUTE, MERCENARY_DISPUTE, MERCENARY_APPLICATION']
+  reference_id uuid [note: 'V11 CHECK: NULL ⇔ reference_type NULL']
+  is_read boolean [not null, default: false]
+  created_at timestamp [not null, default: `now() AT TIME ZONE 'Asia/Ho_Chi_Minh'`]
+
+  Note: '''
+    type (V11): WELCOME, TEAM_INVITATION, TEAM_INVITATION_ACCEPTED, TEAM_INVITATION_REJECTED,
+    CAPTAIN_TRANSFERRED, TEAM_MARKED_INACTIVE, TEAM_REACTIVATED,
+    MATCH_REQUEST_RECEIVED, REQUEST_WITHDRAWN, REQUEST_ACCEPTED, REQUEST_REJECTED, REQUEST_SUPERSEDED, REQUEST_EXPIRED,
+    PAIRING_NEW, PAIRING_SUPERSEDED, PAIRING_EXPIRED,
+    MATCH_CONFIRMED, MATCH_CANCELLED, MATCH_EXPIRED, REMINDER_BEFORE_MATCH, MATCH_COMPLETED, MERCENARY_RATING_REMINDER,
+    RATING_RECEIVED, REPORT_RECEIVED, REPORT_DISPUTED, DISPUTE_RESOLVED, DISPUTE_CREATED,
+    VERIFICATION_BADGE_GRANTED, VERIFICATION_BADGE_REVOKED,
+    MERCENARY_APPLICATION, MERCENARY_APPLICATION_APPROVED, MERCENARY_APPLICATION_REJECTED,
+    MERCENARY_WITHDRAWN, MERCENARY_GAME_CANCELLED, VENUE_ADMIN_ALERT.
+    CHECK V11: notification_type_check, notification_reference_type_check, notification_reference_check.
+  '''
+
+  indexes {
+    (recipient_user_id, created_at, id) [name: 'idx_notification_recipient_time', note: 'V11; created_at DESC, id DESC (thay idx_notification_recipient)']
+    (recipient_user_id, created_at, id) [name: 'idx_notification_recipient_unread', note: 'V11; created_at DESC, id DESC; WHERE NOT is_read']
+    created_at [name: 'idx_notification_retention', note: 'Job xoá 30 ngày']
+  }
+}
+
+Table match_reminder {
+  id uuid [pk]
+  kind varchar(20) [not null, note: 'BEFORE_START, AFTER_END']
+  match_id uuid [ref: > match.id, note: 'ON DELETE RESTRICT']
+  external_match_id uuid [ref: > external_match.id, note: 'ON DELETE RESTRICT']
+  sent_at timestamp [not null]
+
+  Note: 'V11: dấu "đã nhắc" — một dòng mỗi (kèo / trận ngoài, loại nhắc). CHECK match_reminder_game_check: đúng một trong match_id, external_match_id'
+
+  indexes {
+    (match_id, kind) [unique, name: 'idx_match_reminder_match', note: 'WHERE match_id IS NOT NULL']
+    (external_match_id, kind) [unique, name: 'idx_match_reminder_external', note: 'WHERE external_match_id IS NOT NULL']
+    sent_at [name: 'idx_match_reminder_sent']
+  }
+}

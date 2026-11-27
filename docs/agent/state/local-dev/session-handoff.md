@@ -1,35 +1,50 @@
 ---
 dev: local-dev
-saved: 2026-11-23 01:04
-task: SYSTEM-002 — chuẩn hoá ngày giờ LocalDateTime / TIMESTAMP giờ Việt Nam (V6)
+saved: 2026-11-27 (cuối phiên)
+task: Tích hợp 6 nhánh song song lên main — đã merge MATCH-001 (#87), MATCH-002 (#88), REPUTATION-001 (#89); kế tiếp MERCENARY-001 (V10)
 status: in_progress
 ---
 
 ## Đang làm dở
-- Task: SYSTEM-002 (nhánh `feature/SYSTEM-002-local-datetime`, mọi thay đổi **chưa commit**, đã rebase lên `origin/main` 5e17d63).
-- Bước hiện tại: `code-reviewer` lượt 5 xong (0C / 1 MAJOR / 2 MINOR) — **chờ user trả lời câu 1/2: M1 áp quy tắc Javadoc (#82) cho SYSTEM-002 tới đâu** (A đủ theo quy tắc ~90 chỗ — đề xuất / B chỉ code mới `GlobalExceptionHandler.path`, `ClockConfigTest` / C = B + method sửa có logic). Câu 2/2 dự kiến: getter của projection interface có miễn Javadoc không.
-- m13 (`api/src/test/.../venue/AdminVenueControllerTest.java:91` `NOW()` trần → `(now() AT TIME ZONE 'Asia/Ho_Chi_Minh')`) và m14 (bảng "Lệch thiết kế" dòng #8 ghi `jvmArguments` → `systemPropertyVariables`) đã đề xuất sửa luôn, **chưa sửa**, chưa được user xác nhận riêng.
+- Task: đưa 6 nhánh code song song (worktree `.claude/worktrees/agent-*`) lên `main`, lần lượt theo migration V7 → V12. `current-task.md` ở repo chính là task cũ (USER-001 liveness, `done`) — task điều phối nằm ở file này + `pending-review-questions.md`.
+- **Đã merge REPUTATION-001 (V9):** PR [#89](https://github.com/phananh2005/ArenaFlow-be/pull/89) squash → `origin/main` `e708b62` (2026-11-27); sau đó merge PR #90 (`e69fbec`, `code-reviewer` luôn chạy bằng subagent); `main` local đã ở `e69fbec`. Chi tiết từng bước P7 (TDD, test, 5 lượt code-reviewer, 5 lượt architect-reviewer): `progress.md` / `current-task.md` **trong worktree** `agent-ae20f7ae909465469` (KHÔNG commit — user chọn).
+- **Bước hiện tại:** chưa bắt đầu **MERCENARY-001** (V10).
 
-## File đang sửa (git status lúc handoff)
-- 127 mục: toàn bộ code SYSTEM-002 (22 entity, 9 projection, repository, DTO, service, mapper, `GlobalExceptionHandler`, 2 scheduler, test các module) — `git status --short` để xem đủ.
-- File mới chưa track: `api/.../config/ClockConfig.java`, `JsonNumberConfig.java`, `JsonTimeConfig.java`; `api/.../db/migration/V6__vietnam_local_datetime.sql`; `common/.../time/` (`AppTime` + test); test `ClockConfigTest`, `JsonMapperIntegrationTest`, `JsonTestSupport`, `NoExplicitTimeZoneTest`, `RequestBodyReadErrorTest`, `LocalDatetimeProjectionRepositoryTest`, `migration/V6TimestampColumns`, `VietnamLocalDatetimeMigrationScriptTest`, `VietnamLocalDatetimeMigrationTest`, `EntityTimeTypesTest`; state `pending-review-questions.md`.
-- Sửa gần nhất (2026-11-23): root `pom.xml` (surefire `argLine`), `api/pom.xml` (spring-boot `systemPropertyVariables user.timezone`), `AppTimeTest`, `ErrorResponseTest`, `NoExplicitTimeZoneTest`, Javadoc 3 method bean.
+| Nhánh | Worktree | Trạng thái |
+|---|---|---|
+| `feature/MATCH-001-match-flow-a-impl` | `agent-ae792d52783b81019` (thừa) | ĐÃ MERGE #87 (V7) |
+| `feature/MATCH-002-match-flow-b-impl` | `agent-afe2f2ada6a54efbf` (thừa) | ĐÃ MERGE #88 (V8) |
+| `feature/REPUTATION-001-reputation-impl` | `agent-ae20f7ae909465469` (thừa; còn 2 file state chưa commit) | ĐÃ MERGE #89 (V9) |
+| `feature/MERCENARY-001-mercenary-impl` | `agent-a5be6d5ff61e51a83` (base `89d252f`) | **Kế tiếp** — chờ hỏi `M1–M4`, `m1–m7`, `C1–C3` + checklist tích hợp |
+| `feature/NOTIFICATION-001-notification-impl` | `agent-a84f87c0d85615cd5` | Chờ hỏi `m1–m7`, `Q1–Q4` |
+| `feature/USER-003-user-discovery-impl` | `agent-a39625570a485474c` | Chờ hỏi `CRITICAL C1` V12, `m1–m5` |
+
+## File đang sửa (git status lúc handoff — repo chính, nhánh `main` @ `e69fbec`)
+- `M docs/agent/state/local-dev/current-task.md`, `pending-review-questions.md`, `progress.md`, `session-handoff.md`, `tech-debt.md` (state điều phối, không commit)
+- `?? docs/database/schema-v12.dbml` — **không do phiên này tạo** (ghi 2026-11-26 15:41), để nguyên; hỏi user (có thể tài liệu tham khảo USER-003 V12).
+- `git stash` (giữ, không tự xoá): `stash@{0}` "wip-handoff: cất trước khi áp refs/wip/main (2026-11-25 14:30)"; `stash@{1}` của `docs/USER-003-state-cleanup`.
 
 ## Quyết định / context quan trọng
-- 2026-11-22/23 VENUE-001 sửa: PR #81 đã merge (`c5584d0`) — `VENUE_017` 403 (phone/website chỉ Admin), `VENUE_018` 400 (`GET /venues` chỉ ACTIVE), `GET /api/v1/admin/venues`, `LikePatterns`; SRS v1.14, design v6.0. 3 test DB của #81 chưa chạy (tích hợp). Task VENUE vẫn `in_progress` vì vậy.
-- PR #82 đã merge (`5e17d63`): Javadoc bắt buộc mọi class/method `src/main` (miễn Lombok, accessor record), class test có Javadoc; comment file cấu hình (§2.6). Áp code mới/sửa; backfill trên `refactor/javadoc-backfill` sau khi các nhánh song song merge (gồm comment `application.properties` + `.env.example` hiện có). `.env.dev` đã comment.
-- SYSTEM-002 lượt 3: M1 → A (sửa `AppTime.ZONE` ở 5 worktree khi tích hợp); m6/m8/m12 ghim `user.timezone` ở surefire + spring-boot plugin; m9/m11 `NoExplicitTimeZoneTest`.
-- Rebase 6 worktree: user chọn **B** — để sau khi SYSTEM-002 merge (mô phỏng conflict: state + `ErrorCode`/`ErrorCodeTest`; MATCH-001 thêm `VenueServiceImpl` — giữ `GeoBoundingBox`, gọi `searchNearbyActive`).
-- Quy tắc mới từ #80: sửa chức năng đã có → xong vòng lặp design (design → `architect-reviewer` → sửa code → `code-reviewer`) **rồi mới** cập nhật SRS.
-- Chi tiết finding / quyết định: `docs/agent/state/local-dev/pending-review-questions.md`; bảng "Lệch thiết kế" (9 dòng) trong `current-task.md`.
+- **DB dev chung đang ở Flyway V9** (áp 2026-11-26 khi test REPUTATION-001). `main` đã có V9 → chạy được. 3 worktree còn lại (base `89d252f`) không khởi động với DB dev tới khi rebase lên `e708b62`.
+- **Quy trình mỗi nhánh** (user duyệt): hỏi từng câu review lượt 1 → xem trước conflict bằng commit tạm + `git merge-tree` → hỏi user cách gộp (REPUTATION: user cho agent tự gộp theo nhóm: bản tạm → bản main; cùng thêm → giữ cả hai; state → giữ bản nhánh) → lập kế hoạch P7 vào `current-task.md` worktree, chờ duyệt → TDD → chạy toàn bộ test (DB dev) → `code-reviewer` → cập nhật design một lần → `architect-reviewer` lặp tới 0 finding → `docs/database/*` theo migration → commit `feat` + `docs` (không commit state) → push → PR → merge squash khi user yêu cầu.
+- **Lệnh test DB:** `. <repo chính>/.env.dev && export DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD JWT_SECRET CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET CLOUDINARY_FOLDER && ./mvnw -Duser.timezone=Asia/Ho_Chi_Minh …` — **KHÔNG `set -a`** (export cả `SPRINGDOC_ENABLED` → `SecurityConfigIntegrationTest.apiDocsAreDisabledByDefault` fail). Chạy test **foreground** (chạy nền bị ngắt khi phiên kết thúc), chia theo lớp nếu lâu.
+- **Bài học kỹ thuật (ADR-0013 / ADR-0003 Sửa đổi 2026-11-27):** ở READ COMMITTED, câu cập nhật uy tín còn đọc bảng khác để quyết định → khoá dòng ở câu riêng trước; cột của chính dòng đọc trong CTE `locked` hoặc dòng đích UPDATE, không quét bảng lần hai. Áp cho MERCENARY-001 `applyMercenaryCompletion` (`"user"`).
+- **Checklist MERCENARY-001** (trong `pending-review-questions.md` mục MERCENARY-001 + REPUTATION-001 CCD §11): khoá `"user"` câu riêng (+1 truy vấn, 2.18 4 → 5/W6 — hỏi user); REPUTATION-001 2.1 nay **6/W6** (không thêm truy vấn được); tên method mới `find/count{Received,Sent}Reports`, `findAdminDisputesOldestFirst/NewestFirst`; thêm test 2.10 chat mercenary → `REPORT_011`, người ngoài → `CHAT_003`; sửa PF/CCD MERCENARY dòng trỏ `[cần xác nhận #12]`/#6 đã đóng.
+- Mỗi migration sau xoá cột có trong V6 → thêm vào `DROPPED_AFTER_V6` của `VietnamLocalDatetimeMigrationTest` (đã có `chat_message.created_at`, `match.confirmed_match_time`, `report.admin_reviewed_at`).
+- Hook guard chặn lệnh bash chứa chuỗi `DROP TABLE` (kể cả trong văn bản) → viết script ra file scratchpad. File docs có thể CRLF → script thay chuỗi phải theo kiểu xuống dòng của file.
+- User muốn hỏi **từng câu một**, kèm ví dụ code/dữ liệu cụ thể, giải thích dễ hiểu; khi user hỏi "chưa hiểu" → giải thích rồi hỏi lại đúng câu đó.
+- Tech-debt mới: #12 sổ đăng ký `ConversationAccessPolicy` lặp (`ReportServiceImpl` vs `ConversationServiceImpl`).
 
 ## Blockers
-- Test cần DB (SYSTEM-002 + 3 test của #81) **chỉ chạy trên Neon branch riêng ở giai đoạn tích hợp** — cần xin phép user; NEVER chạy Flyway/test DB trên DB dev chung (`.env.dev`) trước khi SYSTEM-002 merge. V1 không chạy được trên schema trống — hỏi user khi tích hợp.
-- Push nhánh SYSTEM-002 sau này cần `--force-with-lease` (remote còn commit docs cũ đã squash vào #77) — chỉ khi user yêu cầu.
+- _không có_
 
 ## Việc tiếp theo
-- [ ] Nhận câu trả lời M1 (A/B/C) → hỏi câu 2/2 (projection getter) nếu cần → sửa M1 + m13 + m14 → chạy unit test → `code-reviewer` phần sửa.
-- [ ] Vòng lặp design SYSTEM-002: cập nhật ADR-0017, CCD §2.2/§2.3/§2.5/§6.1/§8 một lần theo bảng "Lệch thiết kế"; convention §6.2 + `docs/agent/README.md:132` trên nhánh `chore/` → `architect-reviewer` → SRS nếu ảnh hưởng.
-- [ ] Commit SYSTEM-002 (khi user yêu cầu) → tích hợp: Neon branch, chạy V6→V12, test DB; rebase 6 worktree theo quy tắc M1.
-- [ ] Câu chéo mã Q2 (MATCH-001 khoá toàn bộ cột uy tín `updatable = false`) — chưa trả lời.
-- [ ] Duyệt câu hỏi 6 nhánh song song (USER-003 CRITICAL V12, MATCH-002, REPUTATION-001, MERCENARY-001, NOTIFICATION-001, MATCH-001) — từng câu một.
+- [ ] Hỏi user về `docs/database/schema-v12.dbml` (chưa track, không do phiên này tạo).
+- [ ] MERCENARY-001 (V10): hỏi từng câu `M1–M4`, `m1–m7`, `C1–C3` (`pending-review-questions.md`) + checklist tích hợp → xem trước conflict khi rebase lên `e708b62` → hỏi cách gộp → P7 như REPUTATION-001.
+- [ ] Sau đó NOTIFICATION-001 (V11) → USER-003 (V12, CRITICAL C1).
+- [ ] Hỏi user: xoá worktree thừa `agent-ae792d52783b81019` (MATCH-001), `agent-afe2f2ada6a54efbf` (MATCH-002), `agent-ae20f7ae909465469` (REPUTATION-001) (giữ nhánh; chỉ khi user đồng ý).
+- [ ] Nhánh `chore/agent-framework-*`: `CLOUDINARY_*` + cảnh báo không `set -a` trong lệnh test DB (`CLAUDE.md` §8); REPUTATION-001 CCD §11: `api-convention.md` §5/§6 (2.10, domain RATING/REPORT/DISPUTE), `convention-backend.md` §1 (`support/reputation/`), `docs/agent/CLAUDE.md` §2 (dòng REPUTATION-001 đã có — kiểm lại); lỗ hổng `publish-spec.cjs` chép nguyên comment HTML sang repo FE.
+- [ ] Chờ user trả lời: giữ hay đổi quy tắc "developer tự đặt câu hỏi khi thiết kế bỏ ngỏ" (đổi → `workflow-adapt`).
+- [ ] (Tuỳ user) AC kịch bản lỗi thời hạn kèo B (UC-M02) vào SRS.
+- [ ] (Để sau) Chỗ đặt record / enum trong `application/service/`.
+- [ ] User xác nhận Render dev chạy bản mới khi redeploy từ `main` `e708b62`.

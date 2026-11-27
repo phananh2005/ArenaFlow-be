@@ -8,11 +8,11 @@
 |---|---|---|
 | SYSTEM-002 | m4 (A), m5 (tách) đã sửa; bỏ zone tường minh đã sửa, review lượt 3: 0C / 1 MAJOR (điều phối tích hợp) / 4 MINOR chờ duyệt | Không |
 | USER-003 | **DỪNG** — chờ duyệt CRITICAL V12 | Có |
-| MATCH-002 | **DỪNG** — review lượt 1: 0C / 1 MAJOR (test đếm truy vấn) / 5 MINOR chờ duyệt | Có (MAJOR chặn commit) |
+| MATCH-002 | **ĐÃ MERGE** (PR #88 `04b6136`, 2026-11-26) — V8 (DB dev đã V8), design MATCH-002 v3.1 / MATCH-001 v3.2, `docs/database/*` V8, SRS v1.15; 796 test PASS; `code-reviewer` lượt 3 0C/0M, `architect-reviewer` lượt 2 0C/0M/0m | Không |
 | NOTIFICATION-001 | Review lượt 1 đạt (0C/0M), 7 MINOR chờ duyệt; chờ tích hợp | Không |
 | REPUTATION-001 | **DỪNG** — review lượt 1: 0C / 2 MAJOR / 3 MINOR chờ duyệt | Có (MAJOR chặn commit) |
 | MERCENARY-001 | **DỪNG** — review lượt 1: 0C / 4 MAJOR / 7 MINOR chờ duyệt | Có (MAJOR chặn commit) |
-| MATCH-001 | **DỪNG** — review lượt 1: 0C / 1 MAJOR code (+1 MAJOR = blocker tích hợp) / 7 MINOR chờ duyệt | Có (MAJOR chặn commit) |
+| MATCH-001 | **ĐÃ MERGE** (PR #87 `bb6fc49`, 2026-11-25) — V7, design v3.1 (`USER-001` v5.3, `VENUE-001` v6.2, `docs/database/*`), unit + integration test DB dev PASS, `code-reviewer` lượt 2 & `architect-reviewer` 0C/0M/0m | Không |
 
 ## Chéo mã — đã quyết
 
@@ -20,11 +20,16 @@
 
 - **Jackson ép số thập phân → số nguyên (REPUTATION M2, MERCENARY, MATCH-001 m5; có sẵn trên `main`: `AddVenueImageRequest.version`)** — user quyết 2026-11-21: **phương án A (toàn ứng dụng)**, làm trên **SYSTEM-002** (sở hữu cấu hình Jackson + `bodyField`; merge đầu tiên → 6 nhánh rebase tự có). Ghi "Lệch thiết kế" SYSTEM-002 + bổ sung CCD. Các nhánh khác KHÔNG sửa cục bộ field; khi tích hợp kiểm lại test 400 của field mình. Chốt: **chặt** — `4.5`, `4.0`, chuỗi `"4"` đều 400. **Đã làm** trên SYSTEM-002 (`JsonNumberConfig`, Lệch thiết kế #7), unit PASS, chờ `code-reviewer`.
 
+- **Khoá cột uy tín `updatable = false` (MATCH-001 M1 + MERCENARY-001 M4)** — user quyết 2026-11-24: **A** — sửa trên nhánh **MATCH-001** (merge đầu, V7): `Team` và `User` khoá đủ 6 cột `reliability_score`, `clean_streak`, `report_count_noshow`, `report_count_bad_play`, `report_count_bad_communication`, `report_count_skill_mismatch` + test metadata cột (TDD) + sửa comment `TeamRepository.java:95` + ghi "Lệch thiết kế" MATCH-001 (CCD §6 chỉ ghi `reliabilityScore`). REPUTATION-001 / MERCENARY-001 khi rebase lấy bản `main` (bỏ bản tạm). Chưa sửa.
+
 ## MATCH-001 đợt 1 (worktree `.claude/worktrees/agent-ae792d52783b81019`, nhánh `feature/MATCH-001-match-flow-a-impl`) — câu hỏi không chặn của developer
 
 - **#1** Frame ERROR của STOMP (lệch #8): đích sai mẫu → `SYS_004`, client SEND → `SYS_002`, lỗi không rõ → `SYS_005`. Giữ các mã này?
+  - **User quyết 2026-11-24: A** — giữ nguyên code hiện tại (`SYS_004` đích SUBSCRIBE sai mẫu, `SYS_002` client SEND, `SYS_005` lỗi không rõ) và bổ sung vào `MATCH-001/API_Spec.md` §1.7 + CCD §4.15 khi cập nhật design (đồng thời chốt luôn **m1** bên dưới).
 - **#2** Khi tích hợp kiểm job vẫn chạy trên pool `scheduling-*` (lệch #7: thêm bean `taskScheduler` vì STOMP thêm `TaskScheduler` làm Boot không tự tạo scheduler).
+  - **User quyết 2026-11-25: A** — giữ `@Bean(name = "taskScheduler")` trong `SchedulingConfig.java`, cập nhật `MATCH-001/Component_Class_Design.md` §8 (lệch #7), và thêm test integration kiểm tra bean `taskScheduler` nhận đúng `poolSize = 5` & prefix `scheduling-`.
 - **#16** (từ kế hoạch) Đếm `chat_message` trên Neon dev trước khi chạy V7.
+  - **User quyết 2026-11-25: A** (cùng **m6**) — thêm khối `DO $$ ... IF EXISTS (SELECT 1 FROM chat_message LIMIT 1) THEN RAISE EXCEPTION ... $$` trước `DROP TABLE chat_message;` trong `V7__match_flow_a_lifecycle.sql` (+ cập nhật `MATCH-001/Component_Class_Design.md` §5.1 và test trong `MatchFlowAMigrationTest`).
 - TDD tự báo: Phase 3, 4, 7 viết test trước nhưng không chạy riêng bước Red.
 - Lệch thiết kế: 10 mục (trong current-task.md của worktree), gồm `LocalDateTimeParamConverter` từ chối offset ở query param, `DueMatchView` chưa có `type` (đợt MATCH-002).
 - Dependency: Boot 4.0.9 kéo spring-websocket 7.0.10, có `.withSockJS()` và `setSelectorHeaderName`.
@@ -39,15 +44,25 @@ Unit reviewer chạy lại: common 13 / domain 21 / application 306, 0 lỗi. S�
 
 #### MINOR
 - **m1** `api/.../realtime/StompAuthChannelInterceptor.java:124, :160` (lệch #8, = câu #1 ở trên): mã `SYS_002`/`SYS_004` trong header `message` của frame ERROR là hợp đồng FE thấy → bổ sung API_Spec §1.7 sau khi user chốt. `SYS_002` mang nghĩa HTTP 405.
+  - **User quyết 2026-11-24: A** (cùng câu #1) — giữ `SYS_004`/`SYS_002`/`SYS_005`, bổ sung `MATCH-001/API_Spec.md` §1.7 + CCD §4.15 khi cập nhật design.
 - **m2** `api/.../config/WebMvcConfig.java:20-22` (lệch #6): `LocalDateTimeParamConverter` đặt lên đầu `GenericConversionService` → ghi đè mọi `@DateTimeFormat(pattern=…)` trên `LocalDateTime` toàn ứng dụng; thuộc SYSTEM-002 §2.5 → ghi "Phụ thuộc tạm" để khi tích hợp không có 2 cơ chế song song.
+  - **User quyết 2026-11-25: A** — giữ nguyên `LocalDateTimeParamConverter` trong `WebMvcConfig.java` và cập nhật `MATCH-001/Component_Class_Design.md` §2 & §7 (lệch #6; SYSTEM-002 đã merge và giao phần này cho MATCH-001 nên không trùng).
 - **m3** `StompAuthChannelInterceptor.java:9` import `StompCommand` không dùng.
+  - **User quyết 2026-11-25: A** — xoá dòng `import org.springframework.messaging.simp.stomp.StompCommand;` thừa.
 - **m4** `StompAuthChannelInterceptor.java:97-98` regex nhận UUID viết hoa → SUBSCRIBE `/topic/conversations/ABC…` qua phân quyền nhưng gateway publish chữ thường → client không bao giờ nhận frame, không lỗi. Chỉ nhận `[0-9a-f]` hoặc chuẩn hoá chữ thường.
+  - **User quyết 2026-11-25: A** — sửa regex `CONVERSATION_TOPIC` chỉ nhận chữ thường `[0-9a-f]` (bỏ `A-F`) + thêm test TDD trong `StompAuthChannelInterceptorTest` (UUID viết hoa → `SYS_004`).
 - **m5** [Unverified] Chéo mã Jackson: `UpdateCostAgreementRequest`, `CostCustomItemRequest` (`venueAmount`, `drinksAmount`, `customItems[].amount` kiểu `Long`) — `600000.5` có thể thành `600000` thay vì 400. Quyết chung với REPUTATION-001 M2.
 - **m6** `api/.../db/migration/V7__match_flow_a_lifecycle.sql:36` `DROP TABLE chat_message` không chốt chặn → thêm `DO $$ … IF EXISTS (SELECT 1 FROM chat_message) THEN RAISE EXCEPTION …` để "khác 0 thì dừng" trên mọi môi trường (rủi ro thấp: chưa có code ghi bảng này).
+  - **User quyết 2026-11-25: A** (cùng câu #16) — thêm chốt chặn `DO $$ ... IF EXISTS ... RAISE EXCEPTION` vào `V7__match_flow_a_lifecycle.sql` + cập nhật CCD §5.1 + test migration.
 - **m7** TDD: Phase 3, 4, 7 không chạy Red riêng → ghi `progress.md`, chấp nhận có ghi chú.
+  - **User quyết 2026-11-25: A** — chấp nhận kết quả hiện tại (đã ghi chú trong `progress.md`).
 - Chéo mã: snapshot CTE không áp dụng; `""` cho `LocalDateTime` → vẫn 400 sau SYSTEM-002.
 
 ## MERCENARY-001 (worktree `.claude/worktrees/agent-a5be6d5ff61e51a83`, nhánh `feature/MERCENARY-001-mercenary-impl`) — câu hỏi không chặn của developer
+
+- **Checklist tích hợp (architect-reviewer REPUTATION-001 v2.1, 2026-11-27):** REPUTATION-001 2.1 hoàn tất nay **6/W6** (MERCENARY-001 PF dòng ~215 R-2.1 "5 / W6", ~408, CCD ~260 "giữ 5 truy vấn" — mọi truy vấn thêm vào 2.1 sẽ vượt W6 → hỏi user khi tích hợp); tên method REPUTATION-001 v2.1 (`find/count{Received,Sent}Reports`, `findAdminDisputesOldestFirst/NewestFirst`) thay tên cũ ở MERCENARY-001 CCD ~287; ADR-0003/0013 Sửa đổi 2026-11-27 áp cho `applyMercenaryCompletion` (khoá `"user"` câu riêng, +1 truy vấn — cần user quyết).
+- **Checklist tích hợp (từ REPUTATION-001 design v2.1, 2026-11-27):** MERCENARY-001 `Processing_Flow.md` dòng ~383 còn trỏ REPUTATION-001 `[cần xác nhận #12]` (chấp nhận race) — #12 đã bỏ: hoàn tất trận phải khoá đội bằng câu riêng (`lockForReputation`) trước câu cập nhật đọc bảng `report`. [Inference] `applyMercenaryCompletion` theo mẫu cũ có thể gặp cùng race → khi tích hợp kiểm + race test; dòng ~421 trỏ #6 (đã đóng).
+- **Checklist tích hợp (từ REPUTATION-001 review lượt 2 MINOR 2, 2026-11-26):** khi thêm `ContextType` mercenary + policy → thêm test 2.10: chat mercenary → `REPORT_011`; người không tham gia → `CHAT_003` (trước `REPORT_011`) — phần ma trận PF §3.3a còn thiếu của `ConversationReportControllerTest`.
 
 - **C1** 2.8 nhận thêm `status=ACTIVE` ngoài hợp đồng (dùng chung enum với 2.9). Giữ, hay tách enum riêng để trả 400?
 - **C2** Test tích hợp chưa viết (để tích hợp): luồng kèo, race, controller, khối chat, trận sạch của đội.
@@ -77,6 +92,8 @@ Unit reviewer chạy lại (offline): 236 test, 0 fail. V10 khớp CCD §5.1; s�
 
 ## REPUTATION-001 (worktree `.claude/worktrees/agent-ae20f7ae909465469`, nhánh `feature/REPUTATION-001-reputation-impl`) — câu hỏi không chặn của developer
 
+> **ĐÃ MERGE** PR [#89](https://github.com/phananh2005/ArenaFlow-be/pull/89) squash → `origin/main` `e708b62` (2026-11-27). Mọi câu bên dưới đã chốt; mục MERCENARY-001 (checklist) còn hiệu lực.
+
 - **Q1** `score: 4.5` có thể bị Jackson ép thành 4 thay vì 400 — kiểm trong `ReputationControllerTest` khi tích hợp.
 - **Q2** Nếu SQL thật `ConversationSql` (MATCH-001) dùng `:now` → `findChatReportContext` phải thêm tham số `now`.
 - **Q3** Trên nhánh này 2.5 CAS 0 dòng → 500 thay vì thử lại, tới khi có retrier MATCH-002 (dự kiến).
@@ -88,13 +105,29 @@ Unit reviewer chạy lại: exit 0, 0 failure. Hợp đồng 2.1–2.10, V9, `up
 
 #### MAJOR — chặn commit
 - **M1** [Inference — ngữ nghĩa READ COMMITTED, chưa chạy DB] `domain/src/main/java/com/phananh/arenaflow/domain/repository/TeamRepository.java:166-184` `applyReportPenalty`: CTE `counted` lấy `next_count` từ lần quét `team t` riêng (snapshot đầu câu), không từ dòng đã khoá ở `locked`. Hai report cùng loại vào một đội đồng thời (vd `NOSHOW`, đếm 0): Tx2 chờ khoá xong có `old_score` mới nhưng `next_count` cũ → trừ 5 thay vì 8; `reliability_penalty` lưu sai bậc (lệch bảng §1.3, mâu thuẫn PF §5). Sửa: tính `next_count` ngay trong `locked` (`… CASE … END + 1 AS next_count FROM team WHERE id = :id FOR NO KEY UPDATE`), bỏ `counted`; thêm test hai giao dịch đồng thời khác trận cùng loại vào `TeamReputationRepositoryTest` (`[cần xác nhận #6]` chưa viết).
+  - **User chốt 2026-11-26: SỬA.** TDD: test 2 giao dịch đồng thời (DB dev) Red trước — kỳ vọng 80 → 75 → 67 (NOSHOW bậc 1, bậc 2) → tính `next_count` trong `locked`, bỏ `counted`.
 - **M2** (đã kiểm bằng Jackson 3.1.7) `application/src/main/java/com/phananh/arenaflow/application/dto/request/CreateRatingRequest.java:12`: `{"score":4.5}` → `score=4`, trả 201 thay vì 400 theo API 2.1. Xác nhận câu Q1 ở trên là lỗi thật. Phương án: (a) cục bộ — deserializer riêng cho `score` từ chối số thập phân, hoặc nhận `BigDecimal`/`Number` rồi `ValidRatingValidator` kiểm `scale == 0`; (b) đổi `CoercionConfig` toàn ứng dụng (cần user duyệt — ảnh hưởng mọi field số nguyên của mọi mã).
+  - **User chốt 2026-11-26: KIỂM SAU REBASE, không thêm code.** Worktree đã có `JsonNumberConfig` (SYSTEM-002 #84, chặn Float/String vào field số nguyên toàn ứng dụng) + `ReputationControllerTest` đã có ca `{"score":4.5}` → 400. Sau rebase chạy test (DB dev): PASS → đóng M2; FAIL → hỏi lại user.
   - **Lưu ý chéo mã (coordinator):** [Inference] mọi field `int`/`Integer` trong request của các mã khác cũng bị ép `4.5 → 4` tương tự; nên quyết một lần ở mức toàn ứng dụng hay từng field.
 
 #### MINOR
 - **m1** Grep "Bản tạm" phân biệt hoa thường bỏ sót 4 file viết "bản tạm": `domain/.../entity/team/Team.java:77`, `domain/.../repository/MatchRepository.java:16`, `application/.../service/ReliabilityReason.java:5`, `application/.../service/ReputationService.java:11` → thống nhất cách viết hoặc grep `-i` khi tích hợp.
 - **m2** `application/.../service/impl/ReportServiceImpl.java:177-182` (lệch #11): nhánh "không policy và không `TEAM_MATCH`" → `REPORT_011` thành code chết sau MERCENARY-001; nhánh thiếu policy `TEAM_MATCH` ném `IllegalStateException` → 2.10 trả 500 trên nhánh này tới khi có MATCH-001. Ghi chú để xoá khi tích hợp.
 - **m3** [Unverified] `progress.md` chỉ ghi "Red quan sát được", không có output.
+- **User chốt 2026-11-26 (MINOR):**
+  - **m1:** không sửa chữ; khi tích hợp `grep -rni "bản tạm" --include=*.java .` → xử lý từng chỗ → cuối cùng 0 kết quả.
+  - **m2:** khi rebase, gộp nhánh `policy == null` thành 1 dòng `throw new IllegalStateException("Thiếu policy cho loại cuộc trò chuyện " + ctx.getContextType())`; giữ `if (!teamMatch) → REPORT_011` (TDD). Main `04b6136`: `ContextType` chỉ có `TEAM_MATCH`, đã có `TeamMatchConversationPolicy`.
+  - **m3:** chấp nhận; mọi bước TDD mới của REPUTATION-001 ghi `progress.md` kèm output Red/Green thật.
+
+### code-reviewer lượt 2 (gộp conflict `ef092df` + P7) — 0 CRITICAL / 1 MAJOR / 2 MINOR — USER ĐÃ CHỐT 2026-11-26
+- Gộp conflict: không rơi logic / trùng method / sai chữ ký; P7 đúng hướng; unit reviewer chạy lại PASS.
+- **MAJOR** [Inference, chưa tái hiện] `TeamRepository#applyCompletion` (CTE `calc`): `NOT EXISTS (report …)` đọc ảnh chụp đầu câu; report bùng trừ điểm commit trong lúc hoàn tất trận chờ khoá đội → chuỗi trận sạch = 1 thay vì 0 (chạm mốc sớm một trận). Thiết kế PF §5 `[cần xác nhận #12]` từng chấp nhận. **User chốt: SỬA + race test** — Red trước (race test kiểu M1, kỳ vọng `clean_streak = 0`) → tách 2 câu: khoá đội `ORDER BY id FOR NO KEY UPDATE` rồi `UPDATE … RETURNING`; NFS 2.1 hoàn tất 5 → 6 (W6); cập nhật PF §5 / CCD ở Bước 4.
+- **MINOR 1** sổ đăng ký policy lặp (`ReportServiceImpl` vs `ConversationServiceImpl`) → **tech-debt #12**.
+- **MINOR 2** nhánh `REPORT_011` không còn test (chưa có loại chat thứ hai) → **checklist MERCENARY-001** (mục dưới).
+- MAJOR đã sửa (race test Red `expected: 0 but was: 1` → `lockForReputation` trước `applyCompletion`; NFS 2.1 = 6/W6).
+
+### code-reviewer lượt 3 (phần sửa MAJOR) — 0C / 0M / 1 MINOR — USER CHỌN SỬA 2026-11-27
+- MINOR: thông báo `awaitBlockedOnLock` ghi cứng "penalty session" → đã đổi trung tính; code-reviewer lượt 4 cho dòng đó.
 
 - **Rủi ro môi trường:** agent lỡ `install` module `common` vào `~/.m2` dùng chung một lần → lệnh `-pl <module>` không kèm `-am` ở worktree khác có thể lấy nhầm artifact `common` này. Các lệnh đều dùng `-am` nên [Inference] ảnh hưởng thấp; khi tích hợp chạy build từ gốc.
 
@@ -143,13 +176,35 @@ Unit reviewer chạy lại: 72/72 PASS. Code production đúng API_Spec + thứ 
 
 ### MAJOR — chặn commit
 - **M1** `api/src/test/java/com/phananh/arenaflow/application/service/PairingNfsQueryCountTest.java:79-82`: 2.2 và 2.3 assert `isEqualTo(3)` với `pageSize = 20`, chỉ 1 pairing → Spring Data bỏ câu count ở trang đầu chưa đầy → đo được 2, test fail khi tích hợp; cũng không đo ca xấu nhất. Sửa: `pageSize = 1` (trang đầy, count luôn chạy) như `VenueNfsQueryCountTest:86-90, 150-152`.
+  - **User quyết 2026-11-25: A** — đổi `pageSize` `20` → `1` ở cả 2 lời gọi `listMatchPairings` / `listTeamPairings` (dòng 79-82), giữ `isEqualTo(3)` để đo ca xấu nhất (trang đầy → `PageableExecutionUtils.getPage` luôn chạy `countQuery`). Chưa sửa (sửa sau khi chốt hết câu MATCH-002).
 
 ### MINOR
 - **m1** `application/.../dto/request/UpdatePairingCostAgreementRequest.java:33-34`, `PairingServiceImpl.java:234`: `@OneOf` của `costType`/`costSplit` không cho `""` → FE gửi `""` (= không nhập theo MATCH-001 API_Spec §1.1) nhận 400. Tiền lệ VENUE: cho `""` vào `@OneOf`, service đổi `null`. Đối chiếu `UpdateCostAgreementRequest` của MATCH-001 khi tích hợp.
+  - **User quyết 2026-11-25: A** — sửa **cả** `UpdatePairingCostAgreementRequest` (MATCH-002) **và** `UpdateCostAgreementRequest` (MATCH-001, đã merge, cùng lỗi) trên nhánh MATCH-002: compact constructor record đổi `""`/khoảng trắng → `null` cho `costType`, `costSplit` (validator quan hệ field + service chỉ thấy `null`). Không đổi spec (MATCH-001 API_Spec §1.1 đã quy định `""` = không nhập). TDD: test gửi `""` → 200, lưu `null` cho cả 2.6 (MATCH-002) và 2.4 (MATCH-001). Chưa sửa.
 - **m2** `api/src/test/.../domain/repository/PairingRepositoryTest.java:144-155`: lần gọi đầu `finalizeConfirmation` đã đổi `other` sang `SUPERSEDED` → assert sau lần gọi 2 luôn đúng, tên test sai hành vi → assert kết quả lần đầu `containsExactly(other)` hoặc tách 2 kịch bản.
+  - **User quyết 2026-11-25: A** — tách 2 test dữ liệu riêng: (1) revision đúng, gọi 1 lần → `containsExactlyInAnyOrder(chosen, other)`, chosen `CONFIRMED` + `final_confirmed_at = NOW`, other `SUPERSEDED`; (2) revision lệch → `containsExactly(other)`, chosen vẫn `NEGOTIATING`, tên/ghi chú nêu service phải ném lỗi để rollback. Chưa sửa.
 - **m3** `application/src/test/.../PairingServiceImplTest.java:133, 161`: mock `saveAndFlush` trả entity chưa có id → `PairingCreatedEvent.pairingId` so `null` với `null`, không kiểm thật → stub gán id.
+  - **User quyết 2026-11-25: A** — stub `saveAndFlush` gán hằng `PAIRING_ID` (`p.setId(...)`, như stub `conversationRepository.save`), assert event bằng `new PairingCreatedEvent(PAIRING_ID, …)` + `response.pairingId() == PAIRING_ID` (cả dòng 133 và 161). Chưa sửa.
 - **m4** `api/src/test/.../PairingConfirmRaceTest.java:67-70, 89-93`: thiếu kiểm "đúng một `MatchConfirmedEvent`" khi hai phía xác nhận song song và "lệnh thua nhận `PAIRING_005`" ở ca X–P/X–Q (PF §5).
+  - **User quyết 2026-11-25: A** — (1) `@TestConfiguration` listener `@TransactionalEventListener(AFTER_COMMIT)` đếm `MatchConfirmedEvent` theo `matchId` → assert đúng 1 mỗi kèo ở cả 2 test race; (2) test X–P/X–Q: đúng 1 `"CONFIRMED"`, mọi kết quả còn lại ∈ {`NEGOTIATING`, `PAIRING_005`}. Cần kiểm khi sửa: event có `matchId()` [Inference], listener bắt được event từ thread executor [Unverified — bước Red xác nhận]. Chưa sửa.
 - **m5** `domain/.../repository/PairingRepository.java:252` `expireNegotiatingByMatchIds` `IN (:matchIds)` [Inference] danh sách rỗng → `IN ()` lỗi cú pháp; chưa có caller (điểm cắm #6, P7) → chặn rỗng như `VenueSelectionServiceImpl.markSelected`.
+  - **User quyết 2026-11-25: A** — khi cắm vào job hết hạn MATCH-001 (`MatchLifecycleJobServiceImpl.expireDueMatches`): TDD viết test repository gọi `expireNegotiatingByMatchIds(List.of(), NOW)` để xác định thực tế; lỗi → chặn rỗng ở chỗ gọi (như `markSelected`) + unit test "rỗng → không gọi repository"; không lỗi (trả 0) → giữ test làm bằng chứng, không thêm chốt chặn. **Đã làm 2026-11-25:** test DB PASS — rỗng trả 0, không lỗi → không thêm chốt chặn.
+
+**MATCH-002: đã chốt đủ 6/6 câu (M1, m1–m5) — 2026-11-25.**
+
+### code-reviewer lượt 2 (sau tích hợp, 2026-11-25) — 0 CRITICAL / 1 MAJOR / 2 MINOR — ĐÃ DUYỆT, ĐÃ SỬA (M1, m1); m2 → tech-debt
+
+**code-reviewer lượt 3 (phần sửa, 2026-11-25): 0C / 0M / 1m.** m1: thiếu test HTTP `customItems: [null]` → **User quyết B**: chấp nhận (đường ánh xạ lỗi giống `costSplit`/`venueAmount` đã có test HTTP). Cổng review code MATCH-002 đạt; còn bước đối chiếu + cập nhật design → `architect-reviewer`.
+
+Phạm vi: toàn bộ thay đổi chưa commit của worktree (sau P7.10, 796 test PASS). Không đề xuất sửa V8.
+
+- **M1** (chặn commit) `customItems: [null]` → 500 thay vì 400: `PairingServiceImpl.java:241` + `MatchServiceImpl.java:210` (luồng A — lỗi có sẵn trên `main`, `MatchServiceImpl` HEAD dòng 160) gọi `item.itemName().trim()` trên phần tử null; `List<@Valid CostCustomItemRequest>` không chặn null. Cách 1: `List<@NotNull @Valid …>` (lỗi gắn `customItems[i]`); cách 2: kiểm trong `ValidCostAgreementValidator`, gắn `customItems` (như user chốt cho `venueOptionIds`/`timeOptions`). Chưa tái hiện bằng test.
+  - **User quyết 2026-11-25: B** — kiểm phần tử null trong `ValidCostAgreementValidator` (dùng chung 2 request qua `CostAgreementFields.customItems()`), lỗi gắn `customItems`; TDD test "phần tử null → 400" cho cả `UpdateCostAgreementRequest` (luồng A, sửa luôn lỗi có sẵn) và `UpdatePairingCostAgreementRequest`. Chưa sửa.
+- **m1** `PairingServiceImpl.blankToNull` (365-371) trùng `MatchServiceImpl.trimToNull`; 2 dòng dựng mảng `names`/`amounts` lặp ở 2 service → gom helper.
+  - **User quyết 2026-11-25: B** — xoá `PairingServiceImpl.blankToNull`, gọi `MatchServiceImpl.trimToNull` (tiền lệ `MatchRequestServiceImpl`); 2 dòng dựng mảng giữ nguyên. Chưa sửa.
+- **m2** [Inference] `MatchRepository.searchOpenNearby` (100-111, 168-176): `LEFT JOIN venue` + `LATERAL` + `OR` theo `type` có thể duyệt mọi kèo OPEN thay vì dùng `idx_venue_location` → `EXPLAIN ANALYZE`; nếu duyệt toàn bộ thì tách `UNION ALL` A/B.
+  - Đo 2026-11-25 (`EXPLAIN ANALYZE`, test tạm đã xoá): DB dev rỗng (0 match/venue) → thời gian vô nghĩa; hình dạng kế hoạch: bản cũ (`main`) và bản mới đều đi `idx_match_open_start` (mọi kèo OPEN) rồi mới lọc hộp — không bản nào dùng `idx_venue_location` → không hồi quy so với `main`.
+  - **User quyết 2026-11-25: A** — giữ code; ghi tech-debt "tìm kèo theo toạ độ đọc mọi kèo OPEN (cả luồng A có sẵn)" vào MATCH-001 `Processing_Flow.md` §9 (Rủi ro vận hành) ở bước cập nhật design: đo `EXPLAIN` khi có dữ liệu lớn, chậm → tách `UNION ALL` / index.
 
 ## SYSTEM-002 (repo chính, nhánh `feature/SYSTEM-002-local-datetime`) — code-reviewer lượt 1 — ĐÃ DUYỆT 2026-11-21
 
@@ -278,3 +333,13 @@ Reviewer chạy lại 13 lớp unit liên quan: PASS.
 - **User quyết 2026-11-23: sửa** m4 — đã sửa hàng metadata ADR-0004. → architect-reviewer lượt 3.
 - architect-reviewer lượt 3 (m4): 0 finding — **vòng lặp design liveness xong**, không ảnh hưởng SRS.
 - 2026-11-23 debug UptimeRobot 401: tái hiện trên Render dev — `HEAD /actuator/health/liveness` → 401, `GET` → 200; nguyên nhân `SecurityConfig.java:48` chỉ permitAll `GET`. User chọn **đổi cấu hình UptimeRobot** (Keyword / GET), không đổi code.
+
+### code-reviewer lượt 4 (dòng sửa MINOR lượt 3) — 0C / 0M / 0m — ĐẠT. Vòng code-reviewer REPUTATION-001 P7 xong (2026-11-27).
+
+### architect-reviewer lượt 1 (design v2.0 → v2.1) — 0C / 1 MAJOR / 7 MINOR — USER CHỐT 2026-11-27; không ảnh hưởng SRS
+- **M1** khoá câu riêng (`lockForReputation`) trái văn bản ADR-0003 (Sửa đổi 2026-11-12, "một câu … không giữ khoá qua nhiều câu") + ADR-0013 ("một câu SQL mỗi thay đổi"); CCD §10 chưa ghi → **SỬA**: dòng lệch có chủ đích CCD §10 + "Sửa đổi 2026-11-27" ADR-0013 và câu tương ứng ADR-0003 (câu cập nhật uy tín còn đọc bảng khác để quyết định → khoá dòng ở câu trước; cột của chính dòng đọc trong CTE `locked`) — trong commit `docs(REPUTATION-001)` của PR này.
+- **m1** PF §5 trường hợp (b) thiếu (ví dụ 80/chuỗi 4/bùng 2: (a) 70 · (b) 82) → **SỬA PF + race test (b)** (hoàn tất giữ khoá, report chờ → 82 / chuỗi 0 / bộ đếm 1).
+- **m2 + m4** câu chữ CHANGELOG [v2.1] hàng #2, #3 → **SỬA** theo đề xuất.
+- **m3** comment HTML NFS trong CHANGELOG tới được repo FE (publish-spec chép nguyên) → **XOÁ** comment.
+- **m5** 3 ca mercenary PF §3.3a → **ĐÁNH DẤU** "khi MERCENARY-001 có policy và V10".
+- **m6 + m7** CCD §5.2 ghi chú khoá CTE `applyCompletion`; PF §2.1 "Q6 / Q5 / Q4 tuỳ nhánh" → **SỬA**.
